@@ -1,26 +1,34 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
+import { getClinicMetrics, startOfDay, addDays } from "@/lib/metrics";
+import { ClinicMetricsCard } from "@/components/ClinicMetricsCard";
 
 export const dynamic = "force-dynamic";
 
-export default async function ClinicsListPage() {
+export default async function ClinicsOverviewPage() {
   const clinics = await prisma.clinic.findMany({
     orderBy: { createdAt: "desc" },
-    include: {
-      instagramAccount: true,
-      googleCalendarAccount: true,
-      _count: {
-        select: {
-          conversations: { where: { status: { in: ["NEW", "IN_CONVERSATION"] } } },
-        },
-      },
-    },
+    include: { instagramAccount: true, googleCalendarAccount: true },
   });
+
+  const now = new Date();
+  const todayStart = startOfDay(now);
+  const last7Start = addDays(todayStart, -6);
+
+  const cards = await Promise.all(
+    clinics.map(async (clinic) => {
+      const [today, last7Days] = await Promise.all([
+        getClinicMetrics(clinic.id, todayStart, addDays(todayStart, 1)),
+        getClinicMetrics(clinic.id, last7Start, addDays(todayStart, 1)),
+      ]);
+      return { clinic, today, last7Days };
+    })
+  );
 
   return (
     <div>
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-xl font-semibold tracking-tight">Clínicas</h1>
+        <h1 className="text-xl font-semibold tracking-tight">Painel</h1>
         <Link
           href="/crm/clinicas/nova"
           className="rounded-lg bg-vexo-accent px-3 py-1.5 text-sm font-medium text-white hover:opacity-90"
@@ -29,37 +37,21 @@ export default async function ClinicsListPage() {
         </Link>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {clinics.map((clinic) => (
-          <Link
+      <div className="grid gap-4 lg:grid-cols-2">
+        {cards.map(({ clinic, today, last7Days }) => (
+          <ClinicMetricsCard
             key={clinic.id}
+            name={clinic.name}
             href={`/crm/clinicas/${clinic.id}`}
-            className="rounded-xl border border-vexo-border bg-vexo-surface p-4 transition hover:border-vexo-accent"
-          >
-            <div className="mb-2 flex items-center justify-between">
-              <h2 className="font-medium">{clinic.name}</h2>
-              <span
-                className={`h-2 w-2 rounded-full ${clinic.active ? "bg-emerald-400" : "bg-vexo-muted"}`}
-                title={clinic.active ? "Ativa" : "Inativa"}
-              />
-            </div>
-            <p className="mb-3 text-xs text-vexo-muted">{clinic.slug}</p>
-            <div className="flex flex-wrap gap-2 text-xs">
-              <span
-                className={`rounded-full border px-2 py-0.5 ${clinic.instagramAccount ? "border-emerald-500/30 text-emerald-300" : "border-vexo-border text-vexo-muted"}`}
-              >
-                Instagram {clinic.instagramAccount ? "conectado" : "pendente"}
-              </span>
-              <span
-                className={`rounded-full border px-2 py-0.5 ${clinic.googleCalendarAccount ? "border-emerald-500/30 text-emerald-300" : "border-vexo-border text-vexo-muted"}`}
-              >
-                Calendar {clinic.googleCalendarAccount ? "conectado" : "pendente"}
-              </span>
-            </div>
-            <p className="mt-3 text-sm text-vexo-muted">
-              {clinic._count.conversations} conversa(s) ativa(s)
-            </p>
-          </Link>
+            active={clinic.active}
+            connections={{
+              instagramConnected: Boolean(clinic.instagramAccount),
+              instagramUsername: clinic.instagramAccount?.igUsername,
+              calendarConnected: Boolean(clinic.googleCalendarAccount),
+            }}
+            today={today}
+            last7Days={last7Days}
+          />
         ))}
 
         {clinics.length === 0 && (

@@ -89,6 +89,16 @@ export async function createClientLogin(clinicId: string, formData: FormData) {
   revalidatePath(`/crm/clinicas/${clinicId}`);
 }
 
+export async function removeClientLogin(clinicId: string, userId: string) {
+  await requireInternalSession();
+
+  // Só remove se o usuário realmente pertencer a essa clínica e for CLIENT —
+  // evita que o formulário seja usado pra apagar qualquer usuário por id.
+  await prisma.user.deleteMany({ where: { id: userId, clinicId, role: "CLIENT" } });
+
+  revalidatePath(`/crm/clinicas/${clinicId}`);
+}
+
 export async function setConversationStatus(
   conversationId: string,
   status: "IN_CONVERSATION" | "LOST" | "FOLLOW_UP"

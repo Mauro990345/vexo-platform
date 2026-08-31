@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { StatusBadge } from "@/components/StatusBadge";
-import { updateClinicSettings, createClientLogin, logApproach } from "../actions";
+import { updateClinicSettings, createClientLogin, removeClientLogin, logApproach } from "../actions";
 
 export const dynamic = "force-dynamic";
 
@@ -202,50 +202,61 @@ export default async function ClinicDetailPage({
             </button>
           </form>
 
-          <form
-            action={createClientLogin.bind(null, clinic.id)}
-            className="space-y-3 rounded-xl border border-vexo-border bg-vexo-surface p-5"
-          >
-            <h2 className="text-sm font-medium text-vexo-muted">Login do painel do cliente</h2>
-            <input
-              name="name"
-              placeholder="Nome do responsável"
-              required
-              className="w-full rounded-lg border border-vexo-border bg-vexo-bg px-3 py-2 text-sm outline-none focus:border-vexo-accent"
-            />
-            <input
-              name="email"
-              type="email"
-              placeholder="E-mail"
-              required
-              className="w-full rounded-lg border border-vexo-border bg-vexo-bg px-3 py-2 text-sm outline-none focus:border-vexo-accent"
-            />
-            <input
-              name="password"
-              type="password"
-              placeholder="Senha (mín. 8 caracteres)"
-              required
-              minLength={8}
-              className="w-full rounded-lg border border-vexo-border bg-vexo-bg px-3 py-2 text-sm outline-none focus:border-vexo-accent"
-            />
-            <button
-              type="submit"
-              className="w-full rounded-lg border border-vexo-border px-3 py-2 text-sm font-medium hover:border-vexo-accent"
-            >
-              Criar acesso
-            </button>
-          </form>
+          <div className="space-y-3 rounded-xl border border-vexo-border bg-vexo-surface p-5">
+            <h2 className="text-sm font-medium text-vexo-muted">Contas</h2>
+            <p className="text-xs text-vexo-muted">
+              Login do painel do cliente — permanente, sem expiração. Revogado removendo o acesso
+              abaixo.
+            </p>
 
-          {clinic.users.length > 0 && (
-            <div className="rounded-xl border border-vexo-border bg-vexo-surface p-5">
-              <h3 className="mb-2 text-sm font-medium text-vexo-muted">Acessos existentes</h3>
-              <ul className="space-y-1 text-sm">
+            {clinic.users.length > 0 && (
+              <ul className="divide-y divide-vexo-border rounded-lg border border-vexo-border">
                 {clinic.users.map((u) => (
-                  <li key={u.id}>{u.name} · {u.email}</li>
+                  <li key={u.id} className="flex items-center justify-between px-3 py-2 text-sm">
+                    <div>
+                      <p>{u.name}</p>
+                      <p className="text-xs text-vexo-muted">{u.email}</p>
+                    </div>
+                    <form action={removeClientLogin.bind(null, clinic.id, u.id)}>
+                      <button className="rounded-md border border-vexo-border px-2 py-1 text-xs text-red-400 hover:border-red-500/40">
+                        Remover acesso
+                      </button>
+                    </form>
+                  </li>
                 ))}
               </ul>
-            </div>
-          )}
+            )}
+
+            <form action={createClientLogin.bind(null, clinic.id)} className="space-y-2 pt-1">
+              <input
+                name="name"
+                placeholder="Nome do responsável"
+                required
+                className="w-full rounded-lg border border-vexo-border bg-vexo-bg px-3 py-2 text-sm outline-none focus:border-vexo-accent"
+              />
+              <input
+                name="email"
+                type="email"
+                placeholder="E-mail"
+                required
+                className="w-full rounded-lg border border-vexo-border bg-vexo-bg px-3 py-2 text-sm outline-none focus:border-vexo-accent"
+              />
+              <input
+                name="password"
+                type="password"
+                placeholder="Senha (mín. 8 caracteres)"
+                required
+                minLength={8}
+                className="w-full rounded-lg border border-vexo-border bg-vexo-bg px-3 py-2 text-sm outline-none focus:border-vexo-accent"
+              />
+              <button
+                type="submit"
+                className="w-full rounded-lg border border-vexo-border px-3 py-2 text-sm font-medium hover:border-vexo-accent"
+              >
+                Criar acesso
+              </button>
+            </form>
+          </div>
         </div>
       </section>
     </div>
