@@ -282,7 +282,33 @@ model FollowUpLog {
   triggeredAt DateTime  @default(now())
   respondedAt DateTime?
 
+  // Progresso na sequência configurável (FollowUpStep). Posição (índice, base
+  // 0) do último passo já enviado nesta execução do follow-up — null enquanto
+  // nenhum passo foi enviado ainda.
+  lastStepIndex  Int?
+  lastStepSentAt DateTime?
+
   @@index([conversationId])
+}
+
+// Sequência de follow-up configurável pelo CRM interno (/crm/follow-up).
+// Única e global (usada por todas as clínicas) — alimenta o job de
+// follow-up já existente (src/lib/follow-up.ts), não é uma automação nova.
+// `order` é só a chave de ordenação; a posição (0-based) da lista ordenada é
+// o que referencia FollowUpLog.lastStepIndex.
+model FollowUpStep {
+  id    String @id @default(cuid())
+  order Int    @unique
+
+  // Dias desde o gatilho (lead sumiu ou faltou) para o primeiro passo;
+  // dias desde o envio do passo anterior para os demais.
+  offsetDays Int
+
+  content       String  @db.Text
+  attachmentUrl String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 // A primeira mensagem é sempre enviada manualmente por Mauro, fora da

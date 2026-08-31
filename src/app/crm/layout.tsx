@@ -8,7 +8,10 @@ export default async function CrmLayout({ children }: { children: React.ReactNod
     <AppShell
       title="CRM"
       userLabel={`${session.user.name} · ${session.user.role === "INTERNAL_ADMIN" ? "Admin" : "Equipe"}`}
-      navItems={[{ href: "/crm", label: "Clínicas" }]}
+      navItems={[
+        { href: "/crm", label: "Clínicas" },
+        { href: "/crm/follow-up", label: "Follow-up" },
+      ]}
     >
       {children}
     </AppShell>

@@ -33,6 +33,7 @@ src/
     crm/                         CRM interno (Mauro/equipe) — não paginado ao cliente
       clinicas/                  lista, criação, configuração por clínica
       conversas/[id]/            histórico de conversa, escalonamento, resposta manual
+      follow-up/                 sequência de follow-up (global, alimenta o job de follow-up)
     dashboard/                   painel do cliente (somente leitura, escopado por clinicId)
     api/
       auth/[...nextauth]/        NextAuth
