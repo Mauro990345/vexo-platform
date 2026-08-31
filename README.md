@@ -72,6 +72,19 @@ Postgres:
 1. **`web`** — usa `railway.json` (build Nixpacks, `npm run prisma:migrate && npm run start`).
 2. **`worker`** — mesmo repo, start command customizado: `npm run prisma:generate && npm run worker`.
 
+### Criando o primeiro admin sem Railway CLI
+
+Em vez de `railway run npm run prisma:seed`, dá pra criar o primeiro usuário
+interno admin direto pela interface:
+
+1. Configure `ADMIN_SETUP_TOKEN` (qualquer valor aleatório, ex:
+   `openssl rand -hex 32`) nas variáveis do serviço `web` e faça redeploy.
+2. Acesse `https://<seu-domínio>/setup` e preencha nome/e-mail/senha + o
+   token.
+3. A tela se desabilita sozinha assim que o admin é criado (checa se já
+   existe um `INTERNAL_ADMIN` no banco). Depois disso, pode remover
+   `ADMIN_SETUP_TOKEN` das variáveis.
+
 Configure as variáveis de ambiente (ver `.env.example`) em ambos os serviços.
 `DATABASE_URL` deve apontar para o plugin Postgres do projeto Railway.
 
