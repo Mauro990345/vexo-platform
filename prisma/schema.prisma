@@ -1,0 +1,329 @@
+// VEXO — schema de dados multi-tenant
+// Cada Clinic é um tenant isolado (conversas, leads, integrações, usuários).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Tenancy / usuários
+// ---------------------------------------------------------------------------
+
+enum UserRole {
+  INTERNAL_ADMIN // Mauro / equipe M8 Growth — acesso total ao CRM
+  INTERNAL_STAFF // secretária/atendente interna — acesso ao CRM
+  CLIENT // login da clínica — painel somente leitura
+}
+
+model Clinic {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  timezone  String   @default("America/Sao_Paulo")
+  active    Boolean  @default(true)
+
+  // Piloto 21D
+  pilotStartedAt DateTime?
+  pilotEndsAt    DateTime?
+
+  // Contato para escalonamento humano e resumo semanal
+  notifyWhatsappNumber String? // Mauro/secretária desta clínica
+  clientWhatsappNumber String? // número da clínica p/ resumo semanal
+
+  // Prompt de conversação (fornecido pelo Mauro, por clínica)
+  aiSystemPrompt String? @db.Text
+
+  // Vídeo fixo do médico explicando o primeiro atendimento (gravado uma vez,
+  // reenviado automaticamente a cada agendamento confirmado)
+  welcomeVideoUrl String?
+
+  reminderConfig  ReminderConfig?
+  instagramAccount InstagramAccount?
+  googleCalendarAccount GoogleCalendarAccount?
+
+  users         User[]
+  leads         Lead[]
+  conversations Conversation[]
+  appointments  Appointment[]
+  weeklySummaries WeeklySummary[]
+  approachLogs  ApproachLog[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([active])
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  role         UserRole
+
+  // Nulo para usuários internos (acesso a todas as clínicas)
+  clinicId String?
+  clinic   Clinic? @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([clinicId])
+}
+
+// ---------------------------------------------------------------------------
+// Integrações (OAuth) — nunca armazenar senha, apenas tokens revogáveis
+// ---------------------------------------------------------------------------
+
+model InstagramAccount {
+  id       String @id @default(cuid())
+  clinicId String @unique
+  clinic   Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  igUserId        String // ID do usuário/página profissional no Instagram
+  igUsername       String?
+  facebookPageId   String
+
+  accessTokenEnc   String   @db.Text // token de página, criptografado em repouso
+  tokenExpiresAt   DateTime?
+
+  connectedAt DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model GoogleCalendarAccount {
+  id       String @id @default(cuid())
+  clinicId String @unique
+  clinic   Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  googleAccountEmail String
+  calendarId         String @default("primary")
+
+  accessTokenEnc  String   @db.Text
+  refreshTokenEnc String   @db.Text
+  tokenExpiresAt  DateTime?
+
+  connectedAt DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// ---------------------------------------------------------------------------
+// Leads / conversas / mensagens
+// ---------------------------------------------------------------------------
+
+enum ConversationStatus {
+  NEW // novo contato — lead respondeu à primeira mensagem manual
+  IN_CONVERSATION // em conversa com a IA
+  SCHEDULED // agendamento confirmado
+  FOLLOW_UP // sumiu / não compareceu — em fluxo de reengajamento
+  LOST // não retomou após follow-up
+  NEEDS_HUMAN // escalonado — IA parou de responder
+}
+
+model Lead {
+  id       String @id @default(cuid())
+  clinicId String
+  clinic   Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  igScopedId String // IGSID — identificador do lead escopado à conta da clínica
+  igUsername String?
+  name       String? // nome usado na abordagem manual do Mauro
+  phone      String?
+
+  conversations Conversation[]
+  appointments  Appointment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([clinicId, igScopedId])
+  @@index([clinicId])
+}
+
+model Conversation {
+  id       String @id @default(cuid())
+  clinicId String
+  clinic   Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  leadId String
+  lead   Lead   @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  status        ConversationStatus @default(NEW)
+  needsHumanReason String? @db.Text
+
+  lastLeadMessageAt DateTime?
+  lastAiMessageAt   DateTime?
+  lastMessageAt     DateTime?
+
+  messages     Message[]
+  appointments Appointment[]
+  followUps    FollowUpLog[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([clinicId, status])
+  @@index([leadId])
+}
+
+enum MessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum MessageSender {
+  LEAD
+  AI
+  HUMAN
+  SYSTEM // ex: vídeo de boas-vindas, lembrete
+}
+
+enum MessageStatus {
+  PENDING // aguardando horário de envio (timing adaptativo)
+  SENT
+  FAILED
+}
+
+model Message {
+  id             String @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  direction MessageDirection
+  sender    MessageSender
+  content   String           @db.Text
+  mediaUrl  String? // ex: vídeo do médico
+
+  igMessageId String?
+
+  status      MessageStatus @default(SENT)
+  scheduledFor DateTime? // usado por mensagens OUTBOUND com delay adaptativo
+  sentAt       DateTime?
+  failReason   String?
+
+  createdAt DateTime @default(now())
+
+  @@index([conversationId, createdAt])
+  @@index([status, scheduledFor])
+}
+
+// ---------------------------------------------------------------------------
+// Agendamentos / lembretes / follow-up
+// ---------------------------------------------------------------------------
+
+enum AppointmentStatus {
+  SCHEDULED
+  CONFIRMED
+  COMPLETED
+  NO_SHOW
+  CANCELLED
+}
+
+model Appointment {
+  id       String @id @default(cuid())
+  clinicId String
+  clinic   Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  leadId String
+  lead   Lead   @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  scheduledAt DateTime
+  googleEventId String?
+
+  status       AppointmentStatus @default(SCHEDULED)
+  welcomeVideoSentAt DateTime?
+
+  reminderLogs ReminderLog[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([clinicId, scheduledAt])
+  @@index([status])
+}
+
+// Configuração de lembretes por clínica (padrão: 24h e 3h antes)
+model ReminderConfig {
+  id       String @id @default(cuid())
+  clinicId String @unique
+  clinic   Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  hoursBefore Int[] @default([24, 3])
+
+  updatedAt DateTime @updatedAt
+}
+
+model ReminderLog {
+  id            String @id @default(cuid())
+  appointmentId String
+  appointment   Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+
+  hoursBefore Int
+  sentAt      DateTime @default(now())
+  channel     String   @default("instagram")
+
+  @@unique([appointmentId, hoursBefore])
+}
+
+model FollowUpLog {
+  id             String @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  reason      String // "sumiu_na_conversa" | "nao_compareceu"
+  triggeredAt DateTime  @default(now())
+  respondedAt DateTime?
+
+  @@index([conversationId])
+}
+
+// A primeira mensagem é sempre enviada manualmente por Mauro, fora da
+// plataforma (ver especificação — nenhuma automação de disparo em massa).
+// Este registro é apenas um contador manual para alimentar o painel do
+// cliente e o resumo semanal com o número de abordagens feitas.
+model ApproachLog {
+  id       String @id @default(cuid())
+  clinicId String
+  clinic   Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  loggedDate DateTime // data da abordagem (meia-noite, timezone da clínica)
+  count      Int
+
+  createdAt DateTime @default(now())
+
+  @@index([clinicId, loggedDate])
+}
+
+// ---------------------------------------------------------------------------
+// Resumo semanal (WhatsApp, sexta-feira)
+// ---------------------------------------------------------------------------
+
+model WeeklySummary {
+  id       String @id @default(cuid())
+  clinicId String
+  clinic   Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  weekStart DateTime
+  weekEnd   DateTime
+
+  approachedCount Int
+  respondedCount  Int
+  scheduledCount  Int
+  noShowCount     Int
+  completedCount  Int
+
+  sentAt   DateTime?
+  sendError String?
+
+  createdAt DateTime @default(now())
+
+  @@unique([clinicId, weekStart])
+}
