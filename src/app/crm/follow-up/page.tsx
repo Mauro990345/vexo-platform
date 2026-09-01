@@ -1,9 +1,11 @@
 import { prisma } from "@/lib/prisma";
+import type { FollowUpStep, FollowUpTrigger } from "@prisma/client";
 import {
   addFollowUpStep,
   updateFollowUpStep,
   deleteFollowUpStep,
   moveFollowUpStep,
+  updateFollowUpSettings,
 } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -13,29 +15,17 @@ function preview(text: string, max = 70): string {
   return oneLine.length > max ? `${oneLine.slice(0, max)}…` : oneLine;
 }
 
-export default async function FollowUpPage() {
-  const steps = await prisma.followUpStep.findMany({ orderBy: { order: "asc" } });
-
+function StepList({
+  steps,
+  trigger,
+  firstStepLabel,
+}: {
+  steps: FollowUpStep[];
+  trigger: FollowUpTrigger;
+  firstStepLabel: string;
+}) {
   return (
-    <div className="max-w-2xl space-y-6">
-      <div>
-        <h1 className="text-xl font-semibold tracking-tight">Sequência de follow-up</h1>
-        <p className="mt-1 text-sm text-vexo-muted">
-          Essa sequência é única e vale pra todas as clínicas. Ela alimenta o job de follow-up
-          que já roda automaticamente: quando um lead some no meio da conversa ou não comparece a
-          um agendamento, o passo 1 é enviado depois do número de dias configurado abaixo; os
-          passos seguintes são enviados respeitando o espaçamento desde o passo anterior. A
-          sequência para assim que o lead responder. Clique num passo pra editar.
-        </p>
-        {steps.length === 0 && (
-          <p className="mt-3 rounded-lg border border-vexo-border bg-vexo-surface p-3 text-xs text-vexo-muted">
-            Nenhum passo configurado ainda — enquanto isso, o sistema usa uma mensagem padrão
-            única (imediata) pra não ficar mudo. Assim que você adicionar passos aqui, eles
-            substituem esse padrão.
-          </p>
-        )}
-      </div>
-
+    <div className="space-y-4">
       <div className="space-y-2">
         {steps.map((step, i) => (
           <details key={step.id} className="group rounded-xl border border-vexo-border bg-vexo-surface">
@@ -85,7 +75,7 @@ export default async function FollowUpPage() {
               <form action={updateFollowUpStep.bind(null, step.id)} className="space-y-3">
                 <div>
                   <label className="mb-1.5 block text-sm text-vexo-muted">
-                    {i === 0 ? "Enviado quantos dias após o lead sumir ou faltar" : "Enviado quantos dias após o passo anterior"}
+                    {i === 0 ? firstStepLabel : "Enviado quantos dias após o passo anterior"}
                   </label>
                   <input
                     name="offsetDays"
@@ -132,17 +122,12 @@ export default async function FollowUpPage() {
         ))}
       </div>
 
-      <form
-        action={addFollowUpStep}
-        className="space-y-3 rounded-xl border border-dashed border-vexo-border p-4"
-      >
-        <h2 className="text-sm font-medium text-vexo-muted">
-          Adicionar passo {steps.length + 1}
-        </h2>
+      <form action={addFollowUpStep.bind(null, trigger)} className="space-y-3 rounded-xl border border-dashed border-vexo-border p-4">
+        <h3 className="text-sm font-medium text-vexo-muted">Adicionar passo {steps.length + 1}</h3>
 
         <div>
           <label className="mb-1.5 block text-sm text-vexo-muted">
-            {steps.length === 0 ? "Enviado quantos dias após o lead sumir ou faltar" : "Enviado quantos dias após o passo anterior"}
+            {steps.length === 0 ? firstStepLabel : "Enviado quantos dias após o passo anterior"}
           </label>
           <input
             name="offsetDays"
@@ -183,6 +168,107 @@ export default async function FollowUpPage() {
           Adicionar passo
         </button>
       </form>
+    </div>
+  );
+}
+
+export default async function FollowUpPage() {
+  const [silenceSteps, noShowSteps, settings] = await Promise.all([
+    prisma.followUpStep.findMany({ where: { trigger: "SILENCE" }, orderBy: { order: "asc" } }),
+    prisma.followUpStep.findMany({ where: { trigger: "NO_SHOW" }, orderBy: { order: "asc" } }),
+    prisma.followUpSettings.findUnique({ where: { id: "singleton" } }),
+  ]);
+  const silenceHours = settings?.silenceHours ?? 24;
+
+  return (
+    <div className="max-w-2xl space-y-10">
+      <div>
+        <h1 className="text-xl font-semibold tracking-tight">Follow-up</h1>
+        <p className="mt-1 text-sm text-vexo-muted">
+          Duas sequências independentes, cada uma com seus próprios passos. Vale pra todas as
+          clínicas. Clique num passo pra editar.
+        </p>
+      </div>
+
+      <section className="space-y-4">
+        <div>
+          <h2 className="text-base font-medium">Parou de responder</h2>
+          <p className="mt-1 text-sm text-vexo-muted">
+            Gatilho automático: se o lead não responder dentro do prazo abaixo, o sistema detecta
+            sozinho pela última mensagem da conversa e dispara essa sequência — sem precisar de
+            nenhuma ação manual. Só vale antes do agendamento acontecer; depois que o lead agenda,
+            esse gatilho para de valer e quem cuida dele é a sequência de lembretes/não
+            compareceu.
+          </p>
+        </div>
+
+        <form
+          action={updateFollowUpSettings}
+          className="flex flex-wrap items-end gap-3 rounded-xl border border-vexo-border bg-vexo-surface p-4"
+        >
+          <div>
+            <label className="mb-1.5 block text-sm text-vexo-muted" htmlFor="silenceHours">
+              Considerar que o lead parou de responder depois de
+            </label>
+            <div className="flex items-center gap-2">
+              <input
+                id="silenceHours"
+                name="silenceHours"
+                type="number"
+                min={1}
+                required
+                defaultValue={silenceHours}
+                className="w-24 rounded-lg border border-vexo-border bg-vexo-bg px-3 py-2 text-sm outline-none focus:border-vexo-accent"
+              />
+              <span className="text-sm text-vexo-muted">horas</span>
+            </div>
+          </div>
+          <button
+            type="submit"
+            className="rounded-lg border border-vexo-border px-3 py-2 text-sm font-medium hover:border-vexo-accent"
+          >
+            Salvar prazo
+          </button>
+        </form>
+
+        {silenceSteps.length === 0 && (
+          <p className="rounded-lg border border-vexo-border bg-vexo-surface p-3 text-xs text-vexo-muted">
+            Nenhum passo configurado ainda — enquanto isso, o sistema usa uma mensagem padrão
+            única (imediata) pra não ficar mudo.
+          </p>
+        )}
+
+        <StepList
+          steps={silenceSteps}
+          trigger="SILENCE"
+          firstStepLabel="Enviado quantas horas/dias após o lead parar de responder"
+        />
+      </section>
+
+      <section className="space-y-4">
+        <div>
+          <h2 className="text-base font-medium">Não compareceu</h2>
+          <p className="mt-1 text-sm text-vexo-muted">
+            Gatilho manual: só quem está na clínica sabe se o paciente veio ou não, então essa
+            sequência só é disparada pelo botão <strong>"Não compareceu"</strong> na tela do
+            agendamento — nunca automaticamente. Não tem folga escondida: você marca quando puder,
+            sem pressa.
+          </p>
+        </div>
+
+        {noShowSteps.length === 0 && (
+          <p className="rounded-lg border border-vexo-border bg-vexo-surface p-3 text-xs text-vexo-muted">
+            Nenhum passo configurado ainda — enquanto isso, o sistema usa uma mensagem padrão
+            única, enviada no dia seguinte à marcação.
+          </p>
+        )}
+
+        <StepList
+          steps={noShowSteps}
+          trigger="NO_SHOW"
+          firstStepLabel="Enviado quantos dias após marcar como não compareceu"
+        />
+      </section>
     </div>
   );
 }

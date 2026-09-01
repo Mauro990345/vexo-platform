@@ -2,7 +2,14 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { StatusBadge } from "@/components/StatusBadge";
-import { updateClinicSettings, createClientLogin, removeClientLogin, logApproach } from "../actions";
+import {
+  updateClinicSettings,
+  createClientLogin,
+  removeClientLogin,
+  logApproach,
+  markAppointmentAttended,
+  markAppointmentMissed,
+} from "../actions";
 
 export const dynamic = "force-dynamic";
 
@@ -23,7 +30,10 @@ export default async function ClinicDetailPage({
       reminderConfig: true,
       users: { where: { role: "CLIENT" } },
       conversations: {
-        include: { lead: true },
+        include: {
+          lead: true,
+          appointments: { orderBy: { scheduledAt: "desc" }, take: 1 },
+        },
         orderBy: { lastMessageAt: "desc" },
       },
     },
@@ -73,20 +83,47 @@ export default async function ClinicDetailPage({
                 <span className="text-xs text-vexo-muted">{byStatus[status]?.length ?? 0}</span>
               </div>
               <div className="space-y-2">
-                {byStatus[status]?.slice(0, 8).map((conv) => (
-                  <Link
-                    key={conv.id}
-                    href={`/crm/conversas/${conv.id}`}
-                    className="block rounded-lg border border-vexo-border bg-vexo-bg p-2 text-xs transition hover:border-vexo-accent"
-                  >
-                    <p className="font-medium">{conv.lead.name ?? conv.lead.igUsername ?? "Lead"}</p>
-                    <p className="mt-0.5 text-vexo-muted">
-                      {conv.lastMessageAt
-                        ? new Date(conv.lastMessageAt).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })
-                        : "—"}
-                    </p>
-                  </Link>
-                ))}
+                {byStatus[status]?.slice(0, 8).map((conv) => {
+                  const appt = conv.appointments[0];
+                  return (
+                    <div key={conv.id} className="rounded-lg border border-vexo-border bg-vexo-bg p-2 text-xs">
+                      <Link href={`/crm/conversas/${conv.id}`} className="block transition hover:text-vexo-accent">
+                        <p className="font-medium">{conv.lead.name ?? conv.lead.igUsername ?? "Lead"}</p>
+                        <p className="mt-0.5 text-vexo-muted">
+                          {conv.lastMessageAt
+                            ? new Date(conv.lastMessageAt).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })
+                            : "—"}
+                        </p>
+                      </Link>
+
+                      {status === "SCHEDULED" && appt && (
+                        <div className="mt-2 border-t border-vexo-border pt-2">
+                          <p className="mb-1.5 font-medium">
+                            {appt.scheduledAt.toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                          </p>
+                          {appt.status === "SCHEDULED" || appt.status === "CONFIRMED" ? (
+                            <div className="flex gap-1.5">
+                              <form action={markAppointmentAttended.bind(null, appt.id)} className="flex-1">
+                                <button className="w-full rounded-md border border-emerald-500/30 bg-emerald-500/15 px-2 py-1.5 font-medium text-emerald-300 hover:bg-emerald-500/25">
+                                  ✓ Compareceu
+                                </button>
+                              </form>
+                              <form action={markAppointmentMissed.bind(null, appt.id)} className="flex-1">
+                                <button className="w-full rounded-md border border-red-500/30 bg-red-500/15 px-2 py-1.5 font-medium text-red-300 hover:bg-red-500/25">
+                                  ✗ Não compareceu
+                                </button>
+                              </form>
+                            </div>
+                          ) : (
+                            <p className="text-vexo-muted">
+                              {appt.status === "COMPLETED" ? "✓ Compareceu" : appt.status === "NO_SHOW" ? "✗ Não compareceu" : appt.status}
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           ))}

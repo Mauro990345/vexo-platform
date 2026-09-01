@@ -273,32 +273,46 @@ model ReminderLog {
   @@unique([appointmentId, hoursBefore])
 }
 
+// Duas sequências de follow-up independentes, cada uma com seu próprio
+// gatilho:
+//  - SILENCE: automático — o lead para de responder ANTES de agendar
+//    (ver FollowUpSettings.silenceHours). Deixa de valer assim que a
+//    conversa chega a SCHEDULED; a partir daí é só lembrete/no-show.
+//  - NO_SHOW: manual — só a secretária sabe se o paciente compareceu, então
+//    só é ativado pelo botão "Não compareceu" (ver src/lib/appointments.ts
+//    e a tela do agendamento), nunca por detecção automática.
+enum FollowUpTrigger {
+  SILENCE
+  NO_SHOW
+}
+
 model FollowUpLog {
   id             String @id @default(cuid())
   conversationId String
   conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 
-  reason      String // "sumiu_na_conversa" | "nao_compareceu"
+  trigger     FollowUpTrigger
   triggeredAt DateTime  @default(now())
   respondedAt DateTime?
 
-  // Progresso na sequência configurável (FollowUpStep). Posição (índice, base
-  // 0) do último passo já enviado nesta execução do follow-up — null enquanto
-  // nenhum passo foi enviado ainda.
+  // Progresso na sequência configurável (FollowUpStep, mesmo trigger).
+  // Posição (índice, base 0) do último passo já enviado nesta execução do
+  // follow-up — null enquanto nenhum passo foi enviado ainda.
   lastStepIndex  Int?
   lastStepSentAt DateTime?
 
   @@index([conversationId])
 }
 
-// Sequência de follow-up configurável pelo CRM interno (/crm/follow-up).
-// Única e global (usada por todas as clínicas) — alimenta o job de
-// follow-up já existente (src/lib/follow-up.ts), não é uma automação nova.
-// `order` é só a chave de ordenação; a posição (0-based) da lista ordenada é
-// o que referencia FollowUpLog.lastStepIndex.
+// Sequência de follow-up configurável pelo CRM interno (/crm/follow-up) —
+// uma lista por trigger (SILENCE e NO_SHOW são independentes, cada uma com
+// seus próprios passos). Global (usada por todas as clínicas). `order` é só
+// chave de ordenação dentro do trigger; a posição (0-based) da lista
+// ordenada é o que referencia FollowUpLog.lastStepIndex.
 model FollowUpStep {
-  id    String @id @default(cuid())
-  order Int    @unique
+  id      String          @id @default(cuid())
+  trigger FollowUpTrigger
+  order   Int
 
   // Dias desde o gatilho (lead sumiu ou faltou) para o primeiro passo;
   // dias desde o envio do passo anterior para os demais.
@@ -309,6 +323,16 @@ model FollowUpStep {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@unique([trigger, order])
+}
+
+// Configuração global do gatilho automático "parou de responder". Linha
+// única (id fixo "singleton").
+model FollowUpSettings {
+  id           String   @id @default("singleton")
+  silenceHours Int      @default(24)
+  updatedAt    DateTime @updatedAt
 }
 
 // A primeira mensagem é sempre enviada manualmente por Mauro, fora da

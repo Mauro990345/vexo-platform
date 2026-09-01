@@ -33,7 +33,7 @@ src/
     crm/                         CRM interno (Mauro/equipe) — não paginado ao cliente
       clinicas/                  lista, criação, configuração por clínica
       conversas/[id]/            histórico de conversa, escalonamento, resposta manual
-      follow-up/                 sequência de follow-up (global, alimenta o job de follow-up)
+      follow-up/                 duas sequências de follow-up (parou de responder / não compareceu)
     dashboard/                   painel do cliente (somente leitura, escopado por clinicId)
     api/
       auth/[...nextauth]/        NextAuth
@@ -46,7 +46,8 @@ src/
     scheduler.ts                 timing adaptativo de resposta (delay fixo + espelhamento)
     dispatch.ts                  envia mensagens PENDING cujo horário chegou
     reminders.ts                 lembretes configuráveis (padrão 24h/3h antes)
-    follow-up.ts                 detecta silêncio na conversa e não comparecimento
+    follow-up.ts                 gatilho automático "parou de responder" (antes do agendamento)
+    appointments.ts               marca comparecimento (botão manual, sem detecção automática)
     weekly-summary.ts            resumo semanal via WhatsApp (sextas-feiras)
     instagram.ts / google-calendar.ts / whatsapp.ts   wrappers de integração
     crypto.ts                    criptografia (AES-256-GCM) de tokens OAuth em repouso

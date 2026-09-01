@@ -243,7 +243,7 @@ async function main() {
       ],
     });
     await prisma.followUpLog.create({
-      data: { conversationId: conv.id, reason: "sumiu_na_conversa", triggeredAt: t2 },
+      data: { conversationId: conv.id, trigger: "SILENCE", triggeredAt: t2 },
     });
   }
 

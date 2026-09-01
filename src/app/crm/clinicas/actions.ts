@@ -5,6 +5,8 @@ import { redirect } from "next/navigation";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { requireInternalSession } from "@/lib/session";
+import { markAppointmentNoShow } from "@/lib/follow-up";
+import { markAppointmentCompleted } from "@/lib/appointments";
 
 function slugify(name: string): string {
   return name
@@ -115,6 +117,28 @@ export async function setConversationStatus(
   });
   revalidatePath(`/crm/conversas/${conversationId}`);
   revalidatePath(`/crm/clinicas/${conversation.clinicId}`);
+}
+
+// As duas ações abaixo são a única coisa que a secretária precisa fazer na
+// plataforma no dia a dia — por isso ficam expostas direto no card do
+// agendamento (pipeline e tela da conversa), nunca atrás de configuração.
+
+export async function markAppointmentAttended(appointmentId: string) {
+  await requireInternalSession();
+  const appt = await markAppointmentCompleted(appointmentId);
+  if (appt) {
+    revalidatePath(`/crm/clinicas/${appt.clinicId}`);
+    revalidatePath(`/crm/conversas/${appt.conversationId}`);
+  }
+}
+
+export async function markAppointmentMissed(appointmentId: string) {
+  await requireInternalSession();
+  const appt = await markAppointmentNoShow(appointmentId);
+  if (appt) {
+    revalidatePath(`/crm/clinicas/${appt.clinicId}`);
+    revalidatePath(`/crm/conversas/${appt.conversationId}`);
+  }
 }
 
 export async function logApproach(clinicId: string, formData: FormData) {
