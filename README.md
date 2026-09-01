@@ -105,8 +105,11 @@ ambiente, e que ainda dependem de você:
    `business_management` (App Review da Meta é obrigatório para produção).
 3. **Credenciais Google OAuth** (Console do Google Cloud) com a Calendar API
    habilitada.
-4. **Instância da Evolution API** self-hosted e conectada a um número de
-   WhatsApp.
+4. **Evolution API** self-hosted rodando (só `EVOLUTION_API_URL` e
+   `EVOLUTION_API_KEY` são globais). Cada clínica pareia seu próprio número
+   de WhatsApp via QR code em `/crm/clinicas/[id]/whatsapp` (ou pelo próprio
+   painel da clínica, em `/dashboard/whatsapp`) — não existe mais uma
+   instância única compartilhada.
 5. **Vídeo de boas-vindas** de cada clínica, hospedado em uma URL pública
    (`Clinic.welcomeVideoUrl`), gravado uma única vez pelo médico.
 6. Conectar Instagram e Google Calendar de cada clínica pelo botão em

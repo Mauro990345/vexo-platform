@@ -21,7 +21,12 @@ export function ClinicMetricsCard({
   name: string;
   href?: string;
   active?: boolean;
-  connections?: { instagramConnected: boolean; instagramUsername?: string | null; calendarConnected: boolean };
+  connections?: {
+    instagramConnected: boolean;
+    instagramUsername?: string | null;
+    calendarConnected: boolean;
+    whatsappConnected?: boolean;
+  };
   today: PeriodMetrics;
   last7Days: PeriodMetrics;
 }) {
@@ -49,6 +54,13 @@ export function ClinicMetricsCard({
             >
               Calendar {connections.calendarConnected ? "conectado" : "pendente"}
             </span>
+            {connections.whatsappConnected !== undefined && (
+              <span
+                className={`rounded-full border px-2 py-0.5 ${connections.whatsappConnected ? "border-emerald-500/30 text-emerald-300" : "border-vexo-border text-vexo-muted"}`}
+              >
+                WhatsApp {connections.whatsappConnected ? "conectado" : "pendente"}
+              </span>
+            )}
           </div>
         )}
       </div>

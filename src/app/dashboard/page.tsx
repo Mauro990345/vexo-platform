@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { requireClientSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { getClinicMetrics, startOfDay, addDays } from "@/lib/metrics";
@@ -26,6 +27,15 @@ export default async function ClientDashboardPage() {
         <h1 className="text-lg font-semibold tracking-tight">Painel</h1>
         <p className="text-sm text-vexo-muted">Acompanhamento em tempo real das abordagens no Instagram.</p>
       </div>
+
+      {clinic.whatsappStatus !== "open" && (
+        <Link
+          href="/dashboard/whatsapp"
+          className="block rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-200 hover:bg-amber-500/15"
+        >
+          ⚠️ WhatsApp não conectado — clique para conectar e receber os avisos da equipe.
+        </Link>
+      )}
 
       <ClinicMetricsCard name={clinic.name} today={today} last7Days={last7Days} />
     </div>

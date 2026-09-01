@@ -132,18 +132,23 @@ export async function handleInboundInstagramMessage(event: InboundInstagramEvent
     });
 
     if (clinic.notifyWhatsappNumber) {
-      try {
-        await sendWhatsappMessage(
-          clinic.notifyWhatsappNumber,
-          formatEscalationAlert({
-            clinicName: clinic.name,
-            leadName: lead.name ?? lead.igUsername ?? "lead sem nome",
-            reason: signal.needsHumanReason ?? "não especificado",
-            conversationUrl: `${process.env.APP_URL ?? ""}/crm/conversas/${conversation.id}`,
-          })
-        );
-      } catch (err) {
-        console.error("[vexo] Falha ao notificar escalonamento via WhatsApp:", err);
+      if (!clinic.whatsappInstanceName) {
+        console.warn(`[vexo] Clínica ${clinic.id} sem WhatsApp conectado — notificação de escalonamento pulada.`);
+      } else {
+        try {
+          await sendWhatsappMessage(
+            clinic.whatsappInstanceName,
+            clinic.notifyWhatsappNumber,
+            formatEscalationAlert({
+              clinicName: clinic.name,
+              leadName: lead.name ?? lead.igUsername ?? "lead sem nome",
+              reason: signal.needsHumanReason ?? "não especificado",
+              conversationUrl: `${process.env.APP_URL ?? ""}/crm/conversas/${conversation.id}`,
+            })
+          );
+        } catch (err) {
+          console.error("[vexo] Falha ao notificar escalonamento via WhatsApp:", err);
+        }
       }
     }
     return;

@@ -48,6 +48,7 @@ export default async function ClinicsOverviewPage() {
               instagramConnected: Boolean(clinic.instagramAccount),
               instagramUsername: clinic.instagramAccount?.igUsername,
               calendarConnected: Boolean(clinic.googleCalendarAccount),
+              whatsappConnected: clinic.whatsappStatus === "open",
             }}
             today={today}
             last7Days={last7Days}

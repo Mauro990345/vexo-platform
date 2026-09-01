@@ -23,6 +23,11 @@ export async function sendWeeklySummaries(): Promise<{ sent: number; failed: num
     });
     if (existing?.sentAt) continue; // já enviado para esta semana
 
+    if (!clinic.whatsappInstanceName) {
+      console.warn(`[vexo] Clínica ${clinic.name} sem WhatsApp conectado — resumo semanal pulado.`);
+      continue;
+    }
+
     const metrics = await getClinicMetrics(clinic.id, weekStart, weekEnd);
 
     const baseData = {
@@ -38,6 +43,7 @@ export async function sendWeeklySummaries(): Promise<{ sent: number; failed: num
 
     try {
       await sendWhatsappMessage(
+        clinic.whatsappInstanceName,
         clinic.clientWhatsappNumber!,
         formatWeeklySummaryMessage({
           clinicName: clinic.name,

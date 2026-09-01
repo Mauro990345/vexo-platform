@@ -35,6 +35,17 @@ model Clinic {
   notifyWhatsappNumber String? // Mauro/secretária desta clínica
   clientWhatsappNumber String? // número da clínica p/ resumo semanal
 
+  // Instância própria na Evolution API — cada clínica tem seu próprio
+  // WhatsApp, pareado via QR code (ver src/lib/whatsapp-connection.ts).
+  // Default (na criação) é o slug da clínica; pode ser renomeado antes do
+  // primeiro pareamento, ex. pra reaproveitar uma instância já validada.
+  whatsappInstanceName    String?   @unique
+  // Último estado confirmado via GET /instance/connectionState — "open" |
+  // "connecting" | "close" | "unknown". Não é live: só atualiza quando
+  // alguém abre a tela de conexão ou clica em "verificar conexão".
+  whatsappStatus          String?
+  whatsappStatusCheckedAt DateTime?
+
   // Prompt de conversação (fornecido pelo Mauro, por clínica)
   aiSystemPrompt String? @db.Text
 

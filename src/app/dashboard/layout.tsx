@@ -12,6 +12,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
         { href: "/dashboard", label: "Visão geral" },
         { href: "/dashboard/conversas", label: "Conversas" },
         { href: "/dashboard/agendamentos", label: "Agendamentos" },
+        { href: "/dashboard/whatsapp", label: "WhatsApp" },
       ]}
     >
       {children}

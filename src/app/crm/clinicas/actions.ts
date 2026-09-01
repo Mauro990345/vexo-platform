@@ -6,6 +6,7 @@ import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { requireInternalSession } from "@/lib/session";
 import { setAppointmentAttendance } from "@/lib/appointments";
+import { disconnectWhatsapp, renameWhatsappInstance } from "@/lib/whatsapp-connection";
 
 function slugify(name: string): string {
   return name
@@ -22,10 +23,16 @@ export async function createClinic(formData: FormData) {
   const name = String(formData.get("name") ?? "").trim();
   if (!name) throw new Error("Nome da clínica é obrigatório.");
 
+  const slug = slugify(name) + "-" + Math.random().toString(36).slice(2, 6);
+
   const clinic = await prisma.clinic.create({
     data: {
       name,
-      slug: slugify(name) + "-" + Math.random().toString(36).slice(2, 6),
+      slug,
+      // Nome padrão da instância na Evolution API — pode ser trocado antes
+      // do primeiro pareamento em /crm/clinicas/[id]/whatsapp (ex. pra
+      // reaproveitar uma instância já validada).
+      whatsappInstanceName: slug,
       pilotStartedAt: new Date(),
       pilotEndsAt: new Date(Date.now() + 21 * 24 * 60 * 60 * 1000),
       reminderConfig: { create: { hoursBefore: [24, 3] } },
@@ -149,6 +156,21 @@ export async function logApproach(clinicId: string, formData: FormData) {
   });
 
   revalidatePath(`/crm/clinicas/${clinicId}`);
+}
+
+export async function renameWhatsappInstanceAction(clinicId: string, formData: FormData) {
+  await requireInternalSession();
+  const instanceName = String(formData.get("instanceName") ?? "");
+  await renameWhatsappInstance(clinicId, instanceName);
+  revalidatePath(`/crm/clinicas/${clinicId}/whatsapp`);
+}
+
+export async function disconnectWhatsappAction(clinicId: string) {
+  await requireInternalSession();
+  await disconnectWhatsapp(clinicId);
+  revalidatePath(`/crm/clinicas/${clinicId}/whatsapp`);
+  revalidatePath(`/crm/clinicas/${clinicId}`);
+  revalidatePath("/crm");
 }
 
 export async function sendHumanReply(conversationId: string, formData: FormData) {

@@ -42,9 +42,11 @@ export async function processReminders(): Promise<{ sent: number }> {
         scheduledAt: appt.scheduledAt,
       });
 
+      const canUseWhatsapp = Boolean(appt.lead.phone && appt.clinic.whatsappInstanceName);
+
       try {
-        if (appt.lead.phone) {
-          await sendWhatsappMessage(appt.lead.phone, text);
+        if (canUseWhatsapp) {
+          await sendWhatsappMessage(appt.clinic.whatsappInstanceName, appt.lead.phone!, text);
         } else if (appt.clinic.instagramAccount) {
           await sendInstagramMessage({
             pageAccessTokenEnc: appt.clinic.instagramAccount.accessTokenEnc,
@@ -57,7 +59,7 @@ export async function processReminders(): Promise<{ sent: number }> {
         }
 
         await prisma.reminderLog.create({
-          data: { appointmentId: appt.id, hoursBefore, channel: appt.lead.phone ? "whatsapp" : "instagram" },
+          data: { appointmentId: appt.id, hoursBefore, channel: canUseWhatsapp ? "whatsapp" : "instagram" },
         });
         sent++;
       } catch (err) {

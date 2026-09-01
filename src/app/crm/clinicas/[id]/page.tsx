@@ -63,6 +63,12 @@ export default async function ClinicDetailPage({
             >
               {clinic.googleCalendarAccount ? `Calendar: ${clinic.googleCalendarAccount.googleAccountEmail}` : "Conectar Google Calendar"}
             </a>
+            <Link
+              href={`/crm/clinicas/${clinic.id}/whatsapp`}
+              className={`rounded-lg border px-3 py-1.5 text-xs font-medium ${clinic.whatsappStatus === "open" ? "border-emerald-500/30 text-emerald-300" : "border-vexo-accent text-vexo-accent"}`}
+            >
+              {clinic.whatsappStatus === "open" ? "WhatsApp: conectado" : "Conectar WhatsApp"}
+            </Link>
           </div>
         </div>
         {searchParams.instagram === "erro" && (

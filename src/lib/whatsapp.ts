@@ -1,23 +1,28 @@
 // Integração com WhatsApp via Evolution API (self-hosted).
 // Usada para: lembretes de agendamento (fallback), resumo semanal e
-// notificação de escalonamento para Mauro/secretária.
+// notificação de escalonamento — cada clínica tem sua própria instância
+// (ver Clinic.whatsappInstanceName e src/lib/whatsapp-connection.ts), então
+// quem envia sempre informa qual instância usar.
 
-function evolutionConfig() {
+export function evolutionBaseConfig() {
   const baseUrl = process.env.EVOLUTION_API_URL;
   const apiKey = process.env.EVOLUTION_API_KEY;
-  const instance = process.env.EVOLUTION_API_INSTANCE;
-  if (!baseUrl || !apiKey || !instance) {
-    throw new Error("Evolution API não configurada (EVOLUTION_API_URL/KEY/INSTANCE).");
+  if (!baseUrl || !apiKey) {
+    throw new Error("Evolution API não configurada (EVOLUTION_API_URL/EVOLUTION_API_KEY).");
   }
-  return { baseUrl: baseUrl.replace(/\/$/, ""), apiKey, instance };
+  return { baseUrl: baseUrl.replace(/\/$/, ""), apiKey };
 }
 
-export async function sendWhatsappMessage(phoneE164: string, text: string): Promise<void> {
-  const { baseUrl, apiKey, instance } = evolutionConfig();
+export async function sendWhatsappMessage(instanceName: string | null | undefined, phoneE164: string, text: string): Promise<void> {
+  if (!instanceName) {
+    throw new Error("Clínica sem WhatsApp conectado (nenhuma instância configurada).");
+  }
+
+  const { baseUrl, apiKey } = evolutionBaseConfig();
 
   const number = phoneE164.replace(/\D/g, "");
 
-  const res = await fetch(`${baseUrl}/message/sendText/${instance}`, {
+  const res = await fetch(`${baseUrl}/message/sendText/${instanceName}`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
