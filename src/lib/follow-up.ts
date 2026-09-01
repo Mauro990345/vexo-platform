@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { classifyConversation } from "@/lib/anthropic";
-import { toChatHistory } from "@/lib/conversation-pipeline";
+import { toChatHistory } from "@/lib/chat-history";
+import { nextValidSendTime } from "@/lib/follow-up-window";
 
 // Duas sequências de follow-up independentes (ver FollowUpTrigger no schema):
 //
@@ -13,18 +14,26 @@ import { toChatHistory } from "@/lib/conversation-pipeline";
 //    já chegaram a uma conclusão natural (ex: recusa explícita).
 //
 //  - NO_SHOW: manual — só a secretária sabe se o paciente compareceu, o
-//    sistema não tem como saber sozinho. Disparado exclusivamente pelo botão
-//    "Não compareceu" na tela do agendamento (ver markAppointmentNoShow
-//    abaixo e src/app/crm/clinicas/actions.ts) — não há nenhuma detecção
-//    automática por tempo decorrido.
+//    sistema não tem como saber sozinho. Disparado pela chave "Compareceu /
+//    Não compareceu" na tela do agendamento (ver src/lib/appointments.ts) —
+//    não há nenhuma detecção automática por tempo decorrido.
 //
 // As mensagens enviadas seguem a sequência configurável em FollowUpStep
-// (editável em /crm/follow-up, uma lista por trigger). Cada log de follow-up
-// avança pela sequência do seu próprio trigger a cada execução do worker, e
-// para de avançar assim que o lead responde (ver conversation-pipeline.ts,
-// que marca FollowUpLog.respondedAt e volta a conversa pra IN_CONVERSATION).
+// (editável em /crm/follow-up, uma lista por trigger), e só saem dentro da
+// janela de envio configurável (ver follow-up-window.ts) — fora da janela,
+// o horário de envio é adiado pra próxima ocorrência válida em vez de
+// disparar na hora.
+//
+// Cada log de follow-up avança pela sequência do seu próprio trigger a cada
+// execução do worker, e para de avançar assim que o lead responde: ver
+// cancelPendingFollowUp, chamada tanto por conversation-pipeline.ts (lead
+// respondeu) quanto por appointments.ts (secretária desmarcou "não
+// compareceu").
 
 const DEFAULT_SILENCE_HOURS = 24;
+const DEFAULT_WINDOW_DAYS = [1, 2, 3, 4, 5];
+const DEFAULT_WINDOW_START_MINUTE = 8 * 60;
+const DEFAULT_WINDOW_END_MINUTE = 18 * 60;
 
 // Usados somente enquanto a clínica ainda não configurou nenhum passo em
 // /crm/follow-up para aquele trigger — garante que o follow-up nunca fique
@@ -45,20 +54,45 @@ const DEFAULT_NO_SHOW_STEPS: typeof DEFAULT_SILENCE_STEPS = [
   },
 ];
 
-async function getSilenceHours(): Promise<number> {
+async function getSettings() {
   const settings = await prisma.followUpSettings.findUnique({ where: { id: "singleton" } });
-  return settings?.silenceHours ?? DEFAULT_SILENCE_HOURS;
+  return {
+    silenceHours: settings?.silenceHours ?? DEFAULT_SILENCE_HOURS,
+    windowDays: settings?.windowDays?.length ? settings.windowDays : DEFAULT_WINDOW_DAYS,
+    windowStartMinute: settings?.windowStartMinute ?? DEFAULT_WINDOW_START_MINUTE,
+    windowEndMinute: settings?.windowEndMinute ?? DEFAULT_WINDOW_END_MINUTE,
+  };
 }
 
-async function triggerFollowUp(conversationId: string, trigger: "SILENCE" | "NO_SHOW") {
+// Move a conversa pra FOLLOW_UP e abre um log — chamada tanto pela detecção
+// automática de silêncio quanto pela marcação manual de "não compareceu"
+// (src/lib/appointments.ts).
+export async function triggerFollowUp(conversationId: string, trigger: "SILENCE" | "NO_SHOW") {
   await prisma.$transaction([
     prisma.conversation.update({ where: { id: conversationId }, data: { status: "FOLLOW_UP" } }),
     prisma.followUpLog.create({ data: { conversationId, trigger } }),
   ]);
 }
 
+// Interrompe qualquer follow-up em andamento numa conversa: fecha os logs
+// abertos (o dispatcher para de avançá-los) e cancela mensagens já
+// enfileiradas (status PENDING) que ainda não saíram de fato — sem isso,
+// uma mensagem que já tinha sido posta na fila pelo worker ainda seria
+// enviada mesmo depois do lead responder ou da secretária desmarcar.
+export async function cancelPendingFollowUp(conversationId: string, at: Date = new Date()) {
+  await prisma.$transaction([
+    prisma.followUpLog.updateMany({
+      where: { conversationId, respondedAt: null },
+      data: { respondedAt: at },
+    }),
+    prisma.message.deleteMany({
+      where: { conversationId, status: "PENDING", sender: "AI" },
+    }),
+  ]);
+}
+
 async function processSilentConversations(): Promise<number> {
-  const silenceHours = await getSilenceHours();
+  const { silenceHours } = await getSettings();
   const silenceThreshold = new Date(Date.now() - silenceHours * 60 * 60 * 1000);
 
   // status: IN_CONVERSATION exclui de propósito quem já agendou (SCHEDULED)
@@ -84,28 +118,15 @@ async function processSilentConversations(): Promise<number> {
   return triggered;
 }
 
-// Marca um agendamento como "não compareceu" e dispara a sequência NO_SHOW —
-// único jeito de disparar esse trigger (não há detecção automática por
-// tempo). Usado pelo botão manual da secretária em /crm (ver
-// src/app/crm/clinicas/actions.ts). Guard contra reprocessar um agendamento
-// já resolvido.
-export async function markAppointmentNoShow(appointmentId: string) {
-  const appt = await prisma.appointment.findUnique({ where: { id: appointmentId } });
-  if (!appt || (appt.status !== "SCHEDULED" && appt.status !== "CONFIRMED")) return null;
-
-  const updated = await prisma.appointment.update({ where: { id: appointmentId }, data: { status: "NO_SHOW" } });
-  await triggerFollowUp(appt.conversationId, "NO_SHOW");
-  return updated;
-}
-
 function addDays(date: Date, days: number): Date {
   return new Date(date.getTime() + days * 24 * 60 * 60 * 1000);
 }
 
 async function dispatchFollowUpSteps(): Promise<number> {
-  const [silenceSteps, noShowSteps] = await Promise.all([
+  const [silenceSteps, noShowSteps, settings] = await Promise.all([
     prisma.followUpStep.findMany({ where: { trigger: "SILENCE" }, orderBy: { order: "asc" } }),
     prisma.followUpStep.findMany({ where: { trigger: "NO_SHOW" }, orderBy: { order: "asc" } }),
+    getSettings(),
   ]);
 
   const openLogs = await prisma.followUpLog.findMany({
@@ -132,6 +153,11 @@ async function dispatchFollowUpSteps(): Promise<number> {
       : addDays(log.triggeredAt, nextStep.offsetDays);
     if (now < dueAt) continue;
 
+    // O passo já venceu (dueAt <= now) — mas o envio de fato só acontece
+    // dentro da janela configurada; fora dela, adia pra próxima ocorrência
+    // válida em vez de disparar na hora.
+    const sendAt = nextValidSendTime(now, settings.windowDays, settings.windowStartMinute, settings.windowEndMinute);
+
     const messagesToCreate = [];
     if (nextStep.content) {
       messagesToCreate.push({
@@ -140,7 +166,7 @@ async function dispatchFollowUpSteps(): Promise<number> {
         sender: "AI" as const,
         content: nextStep.content,
         status: "PENDING" as const,
-        scheduledFor: now,
+        scheduledFor: sendAt,
       });
     }
     if (nextStep.attachmentUrl) {
@@ -154,7 +180,7 @@ async function dispatchFollowUpSteps(): Promise<number> {
         // Se já existe uma mensagem de texto no mesmo passo, o anexo chega
         // logo em seguida, como duas mensagens separadas (limite da API do
         // Instagram: não dá pra combinar texto + anexo numa única mensagem).
-        scheduledFor: nextStep.content ? new Date(now.getTime() + 5_000) : now,
+        scheduledFor: nextStep.content ? new Date(sendAt.getTime() + 5_000) : sendAt,
       });
     }
 
@@ -162,6 +188,10 @@ async function dispatchFollowUpSteps(): Promise<number> {
       ...messagesToCreate.map((data) => prisma.message.create({ data })),
       prisma.followUpLog.update({
         where: { id: log.id },
+        // lastStepSentAt marca o momento em que o passo foi PROCESSADO (pra
+        // contar o espaçamento até o próximo a partir daqui), não o horário
+        // de envio real — assim o espaçamento entre passos não fica maior só
+        // porque um deles teve que esperar a janela abrir.
         data: { lastStepIndex: nextIndex, lastStepSentAt: now },
       }),
     ]);

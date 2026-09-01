@@ -6,6 +6,7 @@ import {
   deleteFollowUpStep,
   moveFollowUpStep,
   updateFollowUpSettings,
+  updateFollowUpWindow,
 } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -14,6 +15,22 @@ function preview(text: string, max = 70): string {
   const oneLine = text.replace(/\s+/g, " ").trim();
   return oneLine.length > max ? `${oneLine.slice(0, max)}…` : oneLine;
 }
+
+function minutesToTime(minutes: number): string {
+  const h = Math.floor(minutes / 60).toString().padStart(2, "0");
+  const m = (minutes % 60).toString().padStart(2, "0");
+  return `${h}:${m}`;
+}
+
+const WEEKDAY_LABELS = [
+  { value: 0, label: "Dom" },
+  { value: 1, label: "Seg" },
+  { value: 2, label: "Ter" },
+  { value: 3, label: "Qua" },
+  { value: 4, label: "Qui" },
+  { value: 5, label: "Sex" },
+  { value: 6, label: "Sáb" },
+];
 
 function StepList({
   steps,
@@ -179,6 +196,9 @@ export default async function FollowUpPage() {
     prisma.followUpSettings.findUnique({ where: { id: "singleton" } }),
   ]);
   const silenceHours = settings?.silenceHours ?? 24;
+  const windowDays = settings?.windowDays?.length ? settings.windowDays : [1, 2, 3, 4, 5];
+  const windowStart = minutesToTime(settings?.windowStartMinute ?? 8 * 60);
+  const windowEnd = minutesToTime(settings?.windowEndMinute ?? 18 * 60);
 
   return (
     <div className="max-w-2xl space-y-10">
@@ -189,6 +209,79 @@ export default async function FollowUpPage() {
           clínicas. Clique num passo pra editar.
         </p>
       </div>
+
+      <section className="space-y-3">
+        <div>
+          <h2 className="text-base font-medium">Janela de envio</h2>
+          <p className="mt-1 text-sm text-vexo-muted">
+            Vale para as duas sequências abaixo. Mensagens de follow-up só saem dentro desses dias
+            e horário — se o gatilho acontecer fora da janela, a mensagem espera até a próxima
+            janela válida em vez de disparar na hora.
+          </p>
+        </div>
+
+        <form
+          action={updateFollowUpWindow}
+          className="space-y-3 rounded-xl border border-vexo-border bg-vexo-surface p-4"
+        >
+          <div>
+            <label className="mb-1.5 block text-sm text-vexo-muted">Dias da semana</label>
+            <div className="flex flex-wrap gap-2">
+              {WEEKDAY_LABELS.map((day) => (
+                <label
+                  key={day.value}
+                  className="flex items-center gap-1.5 rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5 text-sm has-[:checked]:border-vexo-accent has-[:checked]:text-vexo-accent"
+                >
+                  <input
+                    type="checkbox"
+                    name="windowDays"
+                    value={day.value}
+                    defaultChecked={windowDays.includes(day.value)}
+                    className="rounded border-vexo-border"
+                  />
+                  {day.label}
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-end gap-3">
+            <div>
+              <label className="mb-1.5 block text-sm text-vexo-muted" htmlFor="windowStart">
+                Das
+              </label>
+              <input
+                id="windowStart"
+                name="windowStart"
+                type="time"
+                required
+                defaultValue={windowStart}
+                className="rounded-lg border border-vexo-border bg-vexo-bg px-3 py-2 text-sm outline-none focus:border-vexo-accent"
+              />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-sm text-vexo-muted" htmlFor="windowEnd">
+                às
+              </label>
+              <input
+                id="windowEnd"
+                name="windowEnd"
+                type="time"
+                required
+                defaultValue={windowEnd}
+                className="rounded-lg border border-vexo-border bg-vexo-bg px-3 py-2 text-sm outline-none focus:border-vexo-accent"
+              />
+            </div>
+            <button
+              type="submit"
+              className="rounded-lg border border-vexo-border px-3 py-2 text-sm font-medium hover:border-vexo-accent"
+            >
+              Salvar janela
+            </button>
+          </div>
+          <p className="text-xs text-vexo-muted">Horário de Brasília.</p>
+        </form>
+      </section>
 
       <section className="space-y-4">
         <div>

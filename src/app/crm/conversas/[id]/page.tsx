@@ -2,12 +2,8 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { StatusBadge } from "@/components/StatusBadge";
-import {
-  setConversationStatus,
-  sendHumanReply,
-  markAppointmentAttended,
-  markAppointmentMissed,
-} from "../../clinicas/actions";
+import { AttendanceToggle } from "@/components/AttendanceToggle";
+import { setConversationStatus, sendHumanReply } from "../../clinicas/actions";
 
 export const dynamic = "force-dynamic";
 
@@ -113,28 +109,9 @@ export default async function ConversationDetailPage({ params }: { params: { id:
                 minute: "2-digit",
               })}
             </p>
-            {appointment.status === "SCHEDULED" || appointment.status === "CONFIRMED" ? (
-              <div className="mt-3 flex gap-2">
-                <form action={markAppointmentAttended.bind(null, appointment.id)} className="flex-1">
-                  <button className="w-full rounded-lg border border-emerald-500/30 bg-emerald-500/15 px-3 py-2 text-xs font-medium text-emerald-300 hover:bg-emerald-500/25">
-                    ✓ Compareceu
-                  </button>
-                </form>
-                <form action={markAppointmentMissed.bind(null, appointment.id)} className="flex-1">
-                  <button className="w-full rounded-lg border border-red-500/30 bg-red-500/15 px-3 py-2 text-xs font-medium text-red-300 hover:bg-red-500/25">
-                    ✗ Não compareceu
-                  </button>
-                </form>
-              </div>
-            ) : (
-              <p className="mt-1 text-vexo-muted">
-                {appointment.status === "COMPLETED"
-                  ? "✓ Compareceu"
-                  : appointment.status === "NO_SHOW"
-                    ? "✗ Não compareceu"
-                    : appointment.status}
-              </p>
-            )}
+            <div className="mt-3">
+              <AttendanceToggle appointmentId={appointment.id} status={appointment.status} />
+            </div>
           </div>
         )}
 

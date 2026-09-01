@@ -332,7 +332,17 @@ model FollowUpStep {
 model FollowUpSettings {
   id           String   @id @default("singleton")
   silenceHours Int      @default(24)
-  updatedAt    DateTime @updatedAt
+
+  // Janela de envio (horário de Brasília, ver src/lib/follow-up-window.ts) —
+  // mensagens de follow-up só saem dentro dela; fora, esperam a próxima
+  // ocorrência válida em vez de disparar na hora. windowDays usa a convenção
+  // do Date.getDay(): 0=domingo .. 6=sábado. Minutos são desde a meia-noite
+  // (ex: 480 = 08:00, 1080 = 18:00).
+  windowDays        Int[] @default([1, 2, 3, 4, 5])
+  windowStartMinute Int   @default(480)
+  windowEndMinute   Int   @default(1080)
+
+  updatedAt DateTime @updatedAt
 }
 
 // A primeira mensagem é sempre enviada manualmente por Mauro, fora da

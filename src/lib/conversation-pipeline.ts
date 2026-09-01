@@ -1,14 +1,13 @@
 import { prisma } from "@/lib/prisma";
-import {
-  classifyConversation,
-  generateLeadReply,
-  type ChatTurn,
-  type CalendarTool,
-} from "@/lib/anthropic";
+import { classifyConversation, generateLeadReply, type CalendarTool } from "@/lib/anthropic";
 import { checkAvailability, createCalendarEvent } from "@/lib/google-calendar";
 import { computeAdaptiveDelaySeconds } from "@/lib/scheduler";
 import { DEFAULT_CONVERSATION_SYSTEM_PROMPT } from "@/lib/default-prompt";
 import { sendWhatsappMessage, formatEscalationAlert } from "@/lib/whatsapp";
+import { cancelPendingFollowUp } from "@/lib/follow-up";
+import { toChatHistory } from "@/lib/chat-history";
+
+export { toChatHistory } from "@/lib/chat-history";
 
 export type InboundInstagramEvent = {
   igUserId: string; // ID da conta profissional do Instagram da clínica (destinatária)
@@ -18,21 +17,6 @@ export type InboundInstagramEvent = {
   timestamp: Date;
   igMessageId?: string;
 };
-
-export function toChatHistory(
-  messages: { sender: string; content: string }[]
-): ChatTurn[] {
-  const turns: ChatTurn[] = [];
-  for (const m of messages) {
-    if (m.sender === "LEAD") {
-      turns.push({ role: "user", content: m.content });
-    } else if (m.sender === "AI" || m.sender === "HUMAN") {
-      turns.push({ role: "assistant", content: m.content });
-    }
-    // SYSTEM (ex: vídeo enviado) não entra no contexto de diálogo do modelo.
-  }
-  return turns;
-}
 
 function buildAvailabilityCheck(clinicId: string): CalendarTool["checkAvailability"] {
   return async ({ dateFrom, dateTo }) => {
@@ -121,15 +105,16 @@ export async function handleInboundInstagramMessage(event: InboundInstagramEvent
         status: conversation.status === "NEW" || reopeningFromFollowUp ? "IN_CONVERSATION" : conversation.status,
       },
     }),
-    ...(reopeningFromFollowUp
-      ? [
-          prisma.followUpLog.updateMany({
-            where: { conversationId: conversation.id, respondedAt: null },
-            data: { respondedAt: event.timestamp },
-          }),
-        ]
-      : []),
   ]);
+
+  // Lead respondeu durante uma sequência de follow-up ativa: fecha o(s) log(s)
+  // aberto(s) e cancela qualquer mensagem de follow-up já enfileirada (mas
+  // ainda não enviada de fato) — sem isso, um passo que o worker já tinha
+  // colocado na fila segundos antes ainda sairia mesmo com o lead já tendo
+  // respondido.
+  if (reopeningFromFollowUp) {
+    await cancelPendingFollowUp(conversation.id, event.timestamp);
+  }
 
   const history = await prisma.message.findMany({
     where: { conversationId: conversation.id },

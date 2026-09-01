@@ -1,0 +1,4 @@
+-- AlterTable
+ALTER TABLE "FollowUpSettings" ADD COLUMN     "windowDays" INTEGER[] DEFAULT ARRAY[1, 2, 3, 4, 5]::INTEGER[],
+ADD COLUMN     "windowEndMinute" INTEGER NOT NULL DEFAULT 1080,
+ADD COLUMN     "windowStartMinute" INTEGER NOT NULL DEFAULT 480;

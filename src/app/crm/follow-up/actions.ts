@@ -100,3 +100,41 @@ export async function updateFollowUpSettings(formData: FormData) {
 
   revalidatePath("/crm/follow-up");
 }
+
+function parseTimeToMinutes(value: string, label: string): number {
+  const match = /^(\d{1,2}):(\d{2})$/.exec(value);
+  if (!match) throw new Error(`${label} inválido — use o formato HH:MM.`);
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (hours > 23 || minutes > 59) throw new Error(`${label} inválido.`);
+  return hours * 60 + minutes;
+}
+
+// Janela de envio — vale pras duas sequências (SILENCE e NO_SHOW). Fora
+// dela, o horário de envio é adiado pra próxima ocorrência válida em vez de
+// disparar na hora (ver nextValidSendTime em src/lib/follow-up-window.ts).
+export async function updateFollowUpWindow(formData: FormData) {
+  await requireInternalSession();
+
+  const windowDays = formData
+    .getAll("windowDays")
+    .map((v) => parseInt(String(v), 10))
+    .filter((v) => Number.isFinite(v));
+  if (windowDays.length === 0) {
+    throw new Error("Selecione pelo menos um dia da semana.");
+  }
+
+  const windowStartMinute = parseTimeToMinutes(String(formData.get("windowStart") ?? ""), "Horário inicial");
+  const windowEndMinute = parseTimeToMinutes(String(formData.get("windowEnd") ?? ""), "Horário final");
+  if (windowStartMinute >= windowEndMinute) {
+    throw new Error("O horário inicial precisa ser antes do horário final.");
+  }
+
+  await prisma.followUpSettings.upsert({
+    where: { id: "singleton" },
+    update: { windowDays, windowStartMinute, windowEndMinute },
+    create: { id: "singleton", windowDays, windowStartMinute, windowEndMinute },
+  });
+
+  revalidatePath("/crm/follow-up");
+}

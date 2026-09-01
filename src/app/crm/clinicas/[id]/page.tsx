@@ -2,13 +2,13 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { StatusBadge } from "@/components/StatusBadge";
+import { AttendanceToggle } from "@/components/AttendanceToggle";
 import {
   updateClinicSettings,
   createClientLogin,
   removeClientLogin,
   logApproach,
-  markAppointmentAttended,
-  markAppointmentMissed,
+  setAppointmentAttendanceAction,
 } from "../actions";
 
 export const dynamic = "force-dynamic";
@@ -101,24 +101,7 @@ export default async function ClinicDetailPage({
                           <p className="mb-1.5 font-medium">
                             {appt.scheduledAt.toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
                           </p>
-                          {appt.status === "SCHEDULED" || appt.status === "CONFIRMED" ? (
-                            <div className="flex gap-1.5">
-                              <form action={markAppointmentAttended.bind(null, appt.id)} className="flex-1">
-                                <button className="w-full rounded-md border border-emerald-500/30 bg-emerald-500/15 px-2 py-1.5 font-medium text-emerald-300 hover:bg-emerald-500/25">
-                                  ✓ Compareceu
-                                </button>
-                              </form>
-                              <form action={markAppointmentMissed.bind(null, appt.id)} className="flex-1">
-                                <button className="w-full rounded-md border border-red-500/30 bg-red-500/15 px-2 py-1.5 font-medium text-red-300 hover:bg-red-500/25">
-                                  ✗ Não compareceu
-                                </button>
-                              </form>
-                            </div>
-                          ) : (
-                            <p className="text-vexo-muted">
-                              {appt.status === "COMPLETED" ? "✓ Compareceu" : appt.status === "NO_SHOW" ? "✗ Não compareceu" : appt.status}
-                            </p>
-                          )}
+                          <AttendanceToggle appointmentId={appt.id} status={appt.status} />
                         </div>
                       )}
                     </div>
