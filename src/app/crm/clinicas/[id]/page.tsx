@@ -96,7 +96,7 @@ export default async function ClinicDetailPage({
                         </p>
                       </Link>
 
-                      {status === "SCHEDULED" && appt && (
+                      {appt && (
                         <div className="mt-2 border-t border-vexo-border pt-2">
                           <p className="mb-1.5 font-medium">
                             {appt.scheduledAt.toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
