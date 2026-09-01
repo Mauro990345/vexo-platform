@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import type { ConversationStatus } from "@prisma/client";
 import { classifyConversation } from "@/lib/anthropic";
 import { toChatHistory } from "@/lib/chat-history";
 import { nextValidSendTime } from "@/lib/follow-up-window";
@@ -79,7 +80,11 @@ export async function triggerFollowUp(conversationId: string, trigger: "SILENCE"
 // enfileiradas (status PENDING) que ainda não saíram de fato — sem isso,
 // uma mensagem que já tinha sido posta na fila pelo worker ainda seria
 // enviada mesmo depois do lead responder ou da secretária desmarcar.
-export async function cancelPendingFollowUp(conversationId: string, at: Date = new Date()) {
+export async function cancelPendingFollowUp(
+  conversationId: string,
+  at: Date = new Date(),
+  newConversationStatus?: ConversationStatus
+) {
   await prisma.$transaction([
     prisma.followUpLog.updateMany({
       where: { conversationId, respondedAt: null },
@@ -88,6 +93,9 @@ export async function cancelPendingFollowUp(conversationId: string, at: Date = n
     prisma.message.deleteMany({
       where: { conversationId, status: "PENDING", sender: "AI" },
     }),
+    ...(newConversationStatus
+      ? [prisma.conversation.update({ where: { id: conversationId }, data: { status: newConversationStatus } })]
+      : []),
   ]);
 }
 
@@ -131,6 +139,18 @@ async function dispatchFollowUpSteps(): Promise<number> {
 
   const openLogs = await prisma.followUpLog.findMany({
     where: { respondedAt: null, conversation: { status: "FOLLOW_UP" } },
+    include: {
+      conversation: {
+        select: {
+          lastLeadMessageAt: true,
+          appointments: {
+            where: { status: { in: ["SCHEDULED", "CONFIRMED"] } },
+            select: { id: true },
+            take: 1,
+          },
+        },
+      },
+    },
   });
 
   let dispatched = 0;
@@ -152,6 +172,22 @@ async function dispatchFollowUpSteps(): Promise<number> {
       ? addDays(log.lastStepSentAt, nextStep.offsetDays)
       : addDays(log.triggeredAt, nextStep.offsetDays);
     if (now < dueAt) continue;
+
+    // Confere de novo, bem no momento de enviar, se o lead já respondeu ou
+    // já tem agendamento marcado desde o último passo — normalmente isso já
+    // teria cancelado o follow-up antes (ver cancelPendingFollowUp, chamada
+    // assim que a resposta/o agendamento chega), mas essa segunda checagem
+    // não confia cegamente nisso: cobre corrida entre o worker e o evento
+    // que cancela, e qualquer forma futura de confirmar agendamento que não
+    // passe por um dos pontos que já cancelam.
+    const sinceRef = log.lastStepSentAt ?? log.triggeredAt;
+    const leadReplied = Boolean(log.conversation.lastLeadMessageAt && log.conversation.lastLeadMessageAt > sinceRef);
+    const rescheduled = log.conversation.appointments.length > 0;
+
+    if (leadReplied || rescheduled) {
+      await cancelPendingFollowUp(log.conversationId, now, rescheduled ? "SCHEDULED" : "IN_CONVERSATION");
+      continue;
+    }
 
     // O passo já venceu (dueAt <= now) — mas o envio de fato só acontece
     // dentro da janela configurada; fora dela, adia pra próxima ocorrência
