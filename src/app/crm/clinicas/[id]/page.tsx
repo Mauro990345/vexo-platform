@@ -82,8 +82,8 @@ export default async function ClinicDetailPage({
                 <StatusBadge status={status} />
                 <span className="text-xs text-vexo-muted">{byStatus[status]?.length ?? 0}</span>
               </div>
-              <div className="space-y-2">
-                {byStatus[status]?.slice(0, 8).map((conv) => {
+              <div className="max-h-[28rem] space-y-2 overflow-y-auto pr-0.5">
+                {byStatus[status]?.map((conv) => {
                   const appt = conv.appointments[0];
                   return (
                     <div key={conv.id} className="rounded-lg border border-vexo-border bg-vexo-bg p-2 text-xs">
