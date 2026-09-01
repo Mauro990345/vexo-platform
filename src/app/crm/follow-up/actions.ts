@@ -3,7 +3,6 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireInternalSession } from "@/lib/session";
-import { uploadAttachment, deleteAttachment } from "@/lib/storage";
 
 // Sequência de follow-up: global, alimenta diretamente o job existente em
 // src/lib/follow-up.ts (dispatchFollowUpSteps). `order` é só chave de
@@ -23,9 +22,7 @@ export async function addFollowUpStep(formData: FormData) {
   const content = String(formData.get("content") ?? "").trim();
   if (!content) throw new Error("O texto da mensagem é obrigatório.");
   const offsetDays = readOffsetDays(formData);
-
-  const file = formData.get("attachmentFile");
-  const attachmentUrl = file instanceof File && file.size > 0 ? await uploadAttachment(file, "follow-up") : null;
+  const attachmentUrl = String(formData.get("attachmentUrl") ?? "").trim() || null;
 
   const last = await prisma.followUpStep.findFirst({ orderBy: { order: "desc" } });
   await prisma.followUpStep.create({
@@ -41,20 +38,7 @@ export async function updateFollowUpStep(stepId: string, formData: FormData) {
   const content = String(formData.get("content") ?? "").trim();
   if (!content) throw new Error("O texto da mensagem é obrigatório.");
   const offsetDays = readOffsetDays(formData);
-
-  const existing = await prisma.followUpStep.findUniqueOrThrow({ where: { id: stepId } });
-  let attachmentUrl = existing.attachmentUrl;
-
-  const file = formData.get("attachmentFile");
-  const removeAttachment = formData.get("removeAttachment") === "on";
-
-  if (file instanceof File && file.size > 0) {
-    attachmentUrl = await uploadAttachment(file, "follow-up");
-    if (existing.attachmentUrl) await deleteAttachment(existing.attachmentUrl).catch(() => {});
-  } else if (removeAttachment && existing.attachmentUrl) {
-    await deleteAttachment(existing.attachmentUrl).catch(() => {});
-    attachmentUrl = null;
-  }
+  const attachmentUrl = String(formData.get("attachmentUrl") ?? "").trim() || null;
 
   await prisma.followUpStep.update({ where: { id: stepId }, data: { content, attachmentUrl, offsetDays } });
   revalidatePath("/crm/follow-up");
@@ -62,8 +46,7 @@ export async function updateFollowUpStep(stepId: string, formData: FormData) {
 
 export async function deleteFollowUpStep(stepId: string) {
   await requireInternalSession();
-  const deleted = await prisma.followUpStep.delete({ where: { id: stepId } });
-  if (deleted.attachmentUrl) await deleteAttachment(deleted.attachmentUrl).catch(() => {});
+  await prisma.followUpStep.delete({ where: { id: stepId } });
   revalidatePath("/crm/follow-up");
 }
 

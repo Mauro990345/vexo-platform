@@ -89,39 +89,6 @@ interno admin direto pela interface:
 Configure as variáveis de ambiente (ver `.env.example`) em ambos os serviços.
 `DATABASE_URL` deve apontar para o plugin Postgres do projeto Railway.
 
-### Upload de anexos (sequência de follow-up)
-
-Os anexos de imagem/vídeo da sequência de follow-up (`/crm/follow-up`) são
-enviados por upload direto (não é mais colar URL) e ficam guardados num
-bucket compatível com S3 — a plataforma reenvia a partir de lá quando o
-passo da sequência é disparado. **Recomendado: Cloudflare R2**, porque não
-cobra egress (você não paga toda vez que o Instagram busca o arquivo).
-
-Passo a passo com R2 (grátis até 10GB/mês):
-
-1. Crie uma conta em [dash.cloudflare.com](https://dash.cloudflare.com) → **R2**.
-2. Crie um bucket (ex: `vexo-uploads`).
-3. Nas configurações do bucket, ative **Public Access** via subdomínio `r2.dev`
-   — isso te dá uma URL do tipo `https://pub-xxxxxxxx.r2.dev`.
-4. Em **R2 → Manage API Tokens**, crie um token com permissão de leitura/escrita
-   só nesse bucket. Anote Access Key ID, Secret Access Key e o Account ID.
-5. Configure no serviço `web` do Railway:
-   ```
-   S3_ENDPOINT=https://<account-id>.r2.cloudflarestorage.com
-   S3_REGION=auto
-   S3_BUCKET=vexo-uploads
-   S3_ACCESS_KEY_ID=<gerado no passo 4>
-   S3_SECRET_ACCESS_KEY=<gerado no passo 4>
-   S3_PUBLIC_BASE_URL=https://pub-xxxxxxxx.r2.dev
-   ```
-
-Qualquer outro provedor S3-compatível funciona do mesmo jeito (AWS S3,
-Backblaze B2, DigitalOcean Spaces) — só ajustar `S3_ENDPOINT`/`S3_REGION`
-e usar a URL pública correspondente em `S3_PUBLIC_BASE_URL`. Sem essas
-variáveis configuradas, a tela continua funcionando normalmente para
-passos só de texto — o upload de anexo especificamente retorna um erro
-claro até isso ser configurado.
-
 ## O que precisa ser preenchido antes de operar uma clínica real
 
 Nada disso é "mockado" no código — são pontos de configuração reais que a

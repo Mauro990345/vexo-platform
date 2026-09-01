@@ -13,14 +13,6 @@ function preview(text: string, max = 70): string {
   return oneLine.length > max ? `${oneLine.slice(0, max)}…` : oneLine;
 }
 
-function attachmentFileName(url: string): string {
-  try {
-    return decodeURIComponent(url.split("/").pop() ?? url);
-  } catch {
-    return url;
-  }
-}
-
 export default async function FollowUpPage() {
   const steps = await prisma.followUpStep.findMany({ orderBy: { order: "asc" } });
 
@@ -117,27 +109,15 @@ export default async function FollowUpPage() {
                 </div>
 
                 <div>
-                  <label className="mb-1.5 block text-sm text-vexo-muted">Anexo (imagem ou vídeo)</label>
-                  {step.attachmentUrl && (
-                    <div className="mb-2 flex items-center justify-between rounded-lg border border-vexo-border bg-vexo-bg px-3 py-2 text-xs">
-                      <a href={step.attachmentUrl} target="_blank" rel="noreferrer" className="truncate text-vexo-accent hover:underline">
-                        {attachmentFileName(step.attachmentUrl)}
-                      </a>
-                      <label className="ml-3 flex shrink-0 items-center gap-1.5 text-vexo-muted">
-                        <input type="checkbox" name="removeAttachment" className="rounded border-vexo-border" />
-                        Remover
-                      </label>
-                    </div>
-                  )}
+                  <label className="mb-1.5 block text-sm text-vexo-muted">
+                    Anexo (opcional — URL de imagem ou vídeo)
+                  </label>
                   <input
-                    name="attachmentFile"
-                    type="file"
-                    accept="image/*,video/*"
-                    className="w-full rounded-lg border border-vexo-border bg-vexo-bg px-3 py-2 text-sm outline-none file:mr-3 file:rounded-md file:border-0 file:bg-vexo-accent file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-white"
+                    name="attachmentUrl"
+                    defaultValue={step.attachmentUrl ?? ""}
+                    placeholder="https://..."
+                    className="w-full rounded-lg border border-vexo-border bg-vexo-bg px-3 py-2 text-sm outline-none focus:border-vexo-accent"
                   />
-                  <p className="mt-1 text-xs text-vexo-muted">
-                    {step.attachmentUrl ? "Selecione um arquivo pra substituir o anexo atual." : "Opcional — máx. 25MB."}
-                  </p>
                 </div>
 
                 <button
@@ -186,14 +166,14 @@ export default async function FollowUpPage() {
         </div>
 
         <div>
-          <label className="mb-1.5 block text-sm text-vexo-muted">Anexo (imagem ou vídeo, opcional)</label>
+          <label className="mb-1.5 block text-sm text-vexo-muted">
+            Anexo (opcional — URL de imagem ou vídeo)
+          </label>
           <input
-            name="attachmentFile"
-            type="file"
-            accept="image/*,video/*"
-            className="w-full rounded-lg border border-vexo-border bg-vexo-bg px-3 py-2 text-sm outline-none file:mr-3 file:rounded-md file:border-0 file:bg-vexo-accent file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-white"
+            name="attachmentUrl"
+            placeholder="https://..."
+            className="w-full rounded-lg border border-vexo-border bg-vexo-bg px-3 py-2 text-sm outline-none focus:border-vexo-accent"
           />
-          <p className="mt-1 text-xs text-vexo-muted">Máx. 25MB.</p>
         </div>
 
         <button
