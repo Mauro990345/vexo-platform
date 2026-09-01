@@ -8,6 +8,19 @@ import {
 
 export const dynamic = "force-dynamic";
 
+function preview(text: string, max = 70): string {
+  const oneLine = text.replace(/\s+/g, " ").trim();
+  return oneLine.length > max ? `${oneLine.slice(0, max)}…` : oneLine;
+}
+
+function attachmentFileName(url: string): string {
+  try {
+    return decodeURIComponent(url.split("/").pop() ?? url);
+  } catch {
+    return url;
+  }
+}
+
 export default async function FollowUpPage() {
   const steps = await prisma.followUpStep.findMany({ orderBy: { order: "asc" } });
 
@@ -20,7 +33,7 @@ export default async function FollowUpPage() {
           que já roda automaticamente: quando um lead some no meio da conversa ou não comparece a
           um agendamento, o passo 1 é enviado depois do número de dias configurado abaixo; os
           passos seguintes são enviados respeitando o espaçamento desde o passo anterior. A
-          sequência para assim que o lead responder.
+          sequência para assim que o lead responder. Clique num passo pra editar.
         </p>
         {steps.length === 0 && (
           <p className="mt-3 rounded-lg border border-vexo-border bg-vexo-surface p-3 text-xs text-vexo-muted">
@@ -31,12 +44,29 @@ export default async function FollowUpPage() {
         )}
       </div>
 
-      <div className="space-y-3">
+      <div className="space-y-2">
         {steps.map((step, i) => (
-          <div key={step.id} className="rounded-xl border border-vexo-border bg-vexo-surface p-4">
-            <div className="mb-3 flex items-center justify-between">
-              <span className="text-sm font-medium">Passo {i + 1}</span>
-              <div className="flex items-center gap-1">
+          <details key={step.id} className="group rounded-xl border border-vexo-border bg-vexo-surface">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3">
+              <div className="flex min-w-0 items-center gap-3">
+                <span className="shrink-0 rounded-full border border-vexo-border px-2 py-0.5 text-xs text-vexo-muted">
+                  Passo {i + 1}
+                </span>
+                <span className="shrink-0 text-xs text-vexo-muted">
+                  {i === 0 ? `dia ${step.offsetDays}` : `+${step.offsetDays}d`}
+                </span>
+                <span className="truncate text-sm">{preview(step.content)}</span>
+                {step.attachmentUrl && (
+                  <span className="shrink-0 text-xs text-vexo-muted" title="Tem anexo">
+                    📎
+                  </span>
+                )}
+              </div>
+              <span className="shrink-0 text-xs text-vexo-muted transition group-open:rotate-180">▾</span>
+            </summary>
+
+            <div className="border-t border-vexo-border p-4">
+              <div className="mb-3 flex items-center justify-end gap-1">
                 <form action={moveFollowUpStep.bind(null, step.id, "up")}>
                   <button
                     disabled={i === 0}
@@ -59,54 +89,66 @@ export default async function FollowUpPage() {
                   </button>
                 </form>
               </div>
+
+              <form action={updateFollowUpStep.bind(null, step.id)} className="space-y-3">
+                <div>
+                  <label className="mb-1.5 block text-sm text-vexo-muted">
+                    {i === 0 ? "Enviado quantos dias após o lead sumir ou faltar" : "Enviado quantos dias após o passo anterior"}
+                  </label>
+                  <input
+                    name="offsetDays"
+                    type="number"
+                    min={0}
+                    required
+                    defaultValue={step.offsetDays}
+                    className="w-28 rounded-lg border border-vexo-border bg-vexo-bg px-3 py-2 text-sm outline-none focus:border-vexo-accent"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-sm text-vexo-muted">Texto da mensagem</label>
+                  <textarea
+                    name="content"
+                    rows={3}
+                    required
+                    defaultValue={step.content}
+                    className="w-full rounded-lg border border-vexo-border bg-vexo-bg px-3 py-2 text-sm outline-none focus:border-vexo-accent"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-sm text-vexo-muted">Anexo (imagem ou vídeo)</label>
+                  {step.attachmentUrl && (
+                    <div className="mb-2 flex items-center justify-between rounded-lg border border-vexo-border bg-vexo-bg px-3 py-2 text-xs">
+                      <a href={step.attachmentUrl} target="_blank" rel="noreferrer" className="truncate text-vexo-accent hover:underline">
+                        {attachmentFileName(step.attachmentUrl)}
+                      </a>
+                      <label className="ml-3 flex shrink-0 items-center gap-1.5 text-vexo-muted">
+                        <input type="checkbox" name="removeAttachment" className="rounded border-vexo-border" />
+                        Remover
+                      </label>
+                    </div>
+                  )}
+                  <input
+                    name="attachmentFile"
+                    type="file"
+                    accept="image/*,video/*"
+                    className="w-full rounded-lg border border-vexo-border bg-vexo-bg px-3 py-2 text-sm outline-none file:mr-3 file:rounded-md file:border-0 file:bg-vexo-accent file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-white"
+                  />
+                  <p className="mt-1 text-xs text-vexo-muted">
+                    {step.attachmentUrl ? "Selecione um arquivo pra substituir o anexo atual." : "Opcional — máx. 25MB."}
+                  </p>
+                </div>
+
+                <button
+                  type="submit"
+                  className="rounded-lg border border-vexo-border px-3 py-1.5 text-xs font-medium hover:border-vexo-accent"
+                >
+                  Salvar passo {i + 1}
+                </button>
+              </form>
             </div>
-
-            <form action={updateFollowUpStep.bind(null, step.id)} className="space-y-3">
-              <div>
-                <label className="mb-1.5 block text-sm text-vexo-muted">
-                  {i === 0 ? "Enviado quantos dias após o lead sumir ou faltar" : "Enviado quantos dias após o passo anterior"}
-                </label>
-                <input
-                  name="offsetDays"
-                  type="number"
-                  min={0}
-                  required
-                  defaultValue={step.offsetDays}
-                  className="w-28 rounded-lg border border-vexo-border bg-vexo-bg px-3 py-2 text-sm outline-none focus:border-vexo-accent"
-                />
-              </div>
-
-              <div>
-                <label className="mb-1.5 block text-sm text-vexo-muted">Texto da mensagem</label>
-                <textarea
-                  name="content"
-                  rows={3}
-                  required
-                  defaultValue={step.content}
-                  className="w-full rounded-lg border border-vexo-border bg-vexo-bg px-3 py-2 text-sm outline-none focus:border-vexo-accent"
-                />
-              </div>
-
-              <div>
-                <label className="mb-1.5 block text-sm text-vexo-muted">
-                  Anexo (opcional — URL de imagem ou vídeo)
-                </label>
-                <input
-                  name="attachmentUrl"
-                  defaultValue={step.attachmentUrl ?? ""}
-                  placeholder="https://..."
-                  className="w-full rounded-lg border border-vexo-border bg-vexo-bg px-3 py-2 text-sm outline-none focus:border-vexo-accent"
-                />
-              </div>
-
-              <button
-                type="submit"
-                className="rounded-lg border border-vexo-border px-3 py-1.5 text-xs font-medium hover:border-vexo-accent"
-              >
-                Salvar passo {i + 1}
-              </button>
-            </form>
-          </div>
+          </details>
         ))}
       </div>
 
@@ -144,14 +186,14 @@ export default async function FollowUpPage() {
         </div>
 
         <div>
-          <label className="mb-1.5 block text-sm text-vexo-muted">
-            Anexo (opcional — URL de imagem ou vídeo)
-          </label>
+          <label className="mb-1.5 block text-sm text-vexo-muted">Anexo (imagem ou vídeo, opcional)</label>
           <input
-            name="attachmentUrl"
-            placeholder="https://..."
-            className="w-full rounded-lg border border-vexo-border bg-vexo-bg px-3 py-2 text-sm outline-none focus:border-vexo-accent"
+            name="attachmentFile"
+            type="file"
+            accept="image/*,video/*"
+            className="w-full rounded-lg border border-vexo-border bg-vexo-bg px-3 py-2 text-sm outline-none file:mr-3 file:rounded-md file:border-0 file:bg-vexo-accent file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-white"
           />
+          <p className="mt-1 text-xs text-vexo-muted">Máx. 25MB.</p>
         </div>
 
         <button
