@@ -37,9 +37,10 @@ export async function createWhatsappInstance(instanceName: string): Promise<void
   }
 }
 
-export async function fetchWhatsappQr(
-  instanceName: string
-): Promise<{ qrBase64: string | null; pairingCode: string | null }> {
+// O pareamento também retorna um "pairingCode" (equivalente a uma chave de
+// sessão) — deliberadamente não o expomos aqui: só o QR visual sai desta
+// função, pra não correr o risco de alguém exibir esse valor em algum lugar.
+export async function fetchWhatsappQr(instanceName: string): Promise<{ qrBase64: string | null }> {
   const { baseUrl, apiKey } = evolutionBaseConfig();
 
   const res = await fetch(`${baseUrl}/instance/connect/${instanceName}`, {
@@ -52,10 +53,7 @@ export async function fetchWhatsappQr(
   }
 
   const data = await res.json();
-  return {
-    qrBase64: normalizeQrBase64(data?.base64 ?? data?.qrcode?.base64 ?? data?.qr),
-    pairingCode: data?.pairingCode ?? data?.code ?? null,
-  };
+  return { qrBase64: normalizeQrBase64(data?.base64 ?? data?.qrcode?.base64 ?? data?.qr) };
 }
 
 export async function fetchWhatsappConnectionState(instanceName: string): Promise<WhatsappConnectionState> {

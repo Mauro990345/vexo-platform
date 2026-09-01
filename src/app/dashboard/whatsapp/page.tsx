@@ -22,14 +22,12 @@ export default async function ClientWhatsappPage() {
 
   let instanceName = clinic.whatsappInstanceName ?? clinic.slug;
   let qrBase64: string | null = null;
-  let pairingCode: string | null = null;
 
   if (status !== "open") {
     try {
       const qr = await ensureWhatsappQrForClinic(clinicId);
       instanceName = qr.instanceName;
       qrBase64 = qr.qrBase64;
-      pairingCode = qr.pairingCode;
     } catch (err) {
       statusError = statusError ?? (err instanceof Error ? err.message : "Erro ao gerar QR code.");
     }
@@ -48,7 +46,6 @@ export default async function ClientWhatsappPage() {
         instanceName={instanceName}
         status={status}
         qrBase64={qrBase64}
-        pairingCode={pairingCode}
         statusError={statusError}
         refreshHref="/dashboard/whatsapp"
         disconnectAction={disconnectWhatsappClientAction}

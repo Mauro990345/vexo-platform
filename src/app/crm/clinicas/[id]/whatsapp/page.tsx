@@ -24,7 +24,6 @@ export default async function ClinicWhatsappPage({ params }: { params: { id: str
 
   let instanceName = clinic.whatsappInstanceName ?? clinic.slug;
   let qrBase64: string | null = null;
-  let pairingCode: string | null = null;
 
   // QR expira em segundos — só busca (e só falha visivelmente) quando ainda
   // não está conectado; já conectado não precisa de QR nenhum.
@@ -33,7 +32,6 @@ export default async function ClinicWhatsappPage({ params }: { params: { id: str
       const qr = await ensureWhatsappQrForClinic(clinic.id);
       instanceName = qr.instanceName;
       qrBase64 = qr.qrBase64;
-      pairingCode = qr.pairingCode;
     } catch (err) {
       statusError = statusError ?? (err instanceof Error ? err.message : "Erro ao gerar QR code.");
     }
@@ -53,7 +51,6 @@ export default async function ClinicWhatsappPage({ params }: { params: { id: str
         instanceName={instanceName}
         status={status}
         qrBase64={qrBase64}
-        pairingCode={pairingCode}
         statusError={statusError}
         refreshHref={`/crm/clinicas/${clinic.id}/whatsapp`}
         disconnectAction={disconnectWhatsappAction.bind(null, clinic.id)}

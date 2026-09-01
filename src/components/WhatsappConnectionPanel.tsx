@@ -23,7 +23,6 @@ export function WhatsappConnectionPanel({
   instanceName,
   status,
   qrBase64,
-  pairingCode,
   statusError,
   refreshHref,
   disconnectAction,
@@ -32,7 +31,6 @@ export function WhatsappConnectionPanel({
   instanceName: string;
   status: WhatsappConnectionState;
   qrBase64: string | null;
-  pairingCode: string | null;
   statusError: string | null;
   refreshHref: string;
   disconnectAction?: (formData: FormData) => Promise<void>;
@@ -79,12 +77,6 @@ export function WhatsappConnectionPanel({
             />
           ) : (
             <p className="text-sm text-vexo-muted">Não foi possível gerar o QR code agora.</p>
-          )}
-
-          {pairingCode && (
-            <p className="text-center text-xs text-vexo-muted">
-              Código de pareamento: <span className="font-mono">{pairingCode}</span>
-            </p>
           )}
 
           <p className="text-xs text-vexo-muted">

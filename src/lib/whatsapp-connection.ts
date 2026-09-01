@@ -39,7 +39,7 @@ export async function refreshWhatsappStatus(clinicId: string): Promise<WhatsappC
 
 export async function ensureWhatsappQrForClinic(
   clinicId: string
-): Promise<{ instanceName: string; qrBase64: string | null; pairingCode: string | null }> {
+): Promise<{ instanceName: string; qrBase64: string | null }> {
   const instanceName = await ensureInstanceName(clinicId);
 
   await createWhatsappInstance(instanceName);
