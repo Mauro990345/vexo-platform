@@ -142,6 +142,8 @@ export async function handleInboundInstagramMessage(event: InboundInstagramEvent
             formatEscalationAlert({
               clinicName: clinic.name,
               leadName: lead.name ?? lead.igUsername ?? "lead sem nome",
+              leadPhone: lead.phone,
+              leadIgUsername: lead.igUsername,
               reason: signal.needsHumanReason ?? "não especificado",
               conversationUrl: `${process.env.APP_URL ?? ""}/crm/conversas/${conversation.id}`,
             })

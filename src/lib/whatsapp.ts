@@ -67,13 +67,25 @@ export function formatWeeklySummaryMessage(params: {
 export function formatEscalationAlert(params: {
   clinicName: string;
   leadName: string;
+  leadPhone?: string | null;
+  leadIgUsername?: string | null;
   reason: string;
   conversationUrl: string;
 }): string {
+  // Sem isso, a secretária vê o aviso mas não tem como iniciar contato fora
+  // da plataforma — telefone é preferido (permite ligar/chamar no WhatsApp
+  // direto), caindo pro @ do Instagram quando o lead nunca informou telefone.
+  const contact = params.leadPhone
+    ? params.leadPhone
+    : params.leadIgUsername
+      ? `@${params.leadIgUsername} (Instagram)`
+      : "não informado";
+
   return [
     `*VEXO — conversa precisa de atenção humana*`,
     `Clínica: ${params.clinicName}`,
     `Lead: ${params.leadName}`,
+    `Contato: ${contact}`,
     `Motivo: ${params.reason}`,
     params.conversationUrl,
   ].join("\n");
