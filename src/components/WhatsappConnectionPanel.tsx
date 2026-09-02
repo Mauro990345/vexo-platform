@@ -39,11 +39,11 @@ export function WhatsappConnectionPanel({
   const isOpen = status === "open";
 
   return (
-    <div className="space-y-4 rounded-2xl border border-vexo-border bg-vexo-surface p-5">
+    <div className="space-y-3 rounded-2xl border border-vexo-border bg-vexo-surface p-4">
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-medium text-vexo-muted">WhatsApp</h2>
         <span
-          className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium ${STATUS_CLASSES[status]}`}
+          className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-medium ${STATUS_CLASSES[status]}`}
         >
           <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-current" />
           {STATUS_LABELS[status]}
@@ -59,7 +59,7 @@ export function WhatsappConnectionPanel({
       )}
 
       {isOpen ? (
-        <div className="space-y-3">
+        <div className="space-y-2.5">
           <p className="text-sm">WhatsApp conectado e pronto para enviar notificações.</p>
           {disconnectAction && (
             <form action={disconnectAction}>
@@ -70,13 +70,13 @@ export function WhatsappConnectionPanel({
           )}
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-2.5">
           {qrBase64 ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={qrBase64}
               alt="QR code do WhatsApp"
-              className="mx-auto h-56 w-56 rounded-lg border border-vexo-border bg-white p-2"
+              className="mx-auto h-40 w-40 rounded-lg border border-vexo-border bg-white p-1.5"
             />
           ) : (
             <p className="text-sm text-vexo-muted">Não foi possível gerar o QR code agora.</p>
@@ -98,7 +98,7 @@ export function WhatsappConnectionPanel({
       )}
 
       {renameAction && !isOpen && (
-        <form action={renameAction} className="space-y-1.5 border-t border-vexo-border pt-3">
+        <form action={renameAction} className="space-y-1.5 border-t border-vexo-border pt-2.5">
           <label className="block text-xs text-vexo-muted" htmlFor="instanceName">
             Nome da instância (avançado — ex: reaproveitar uma já conectada)
           </label>

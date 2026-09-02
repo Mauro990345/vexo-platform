@@ -10,6 +10,11 @@ import type { FollowUpTrigger } from "@prisma/client";
 // src/lib/follow-up.ts (dispatchFollowUpSteps) — não é uma automação nova.
 // `order` é só chave de ordenação dentro do trigger; a posição da lista
 // ordenada é o que importa pra lógica do job.
+//
+// revalidatePath usa "layout" (não o path exato) porque essa mesma config
+// é renderizada em duas rotas diferentes — /crm/follow-up (global) e
+// /crm/clinicas/[id]/follow-up (dentro do contexto de uma clínica) — e as
+// duas precisam refletir a mudança, não só a que originou a ação.
 
 function readOffsetDays(formData: FormData): number {
   const offsetDays = parseInt(String(formData.get("offsetDays") ?? ""), 10);
@@ -32,7 +37,7 @@ export async function addFollowUpStep(trigger: FollowUpTrigger, formData: FormDa
     data: { trigger, order: (last?.order ?? -1) + 1, content, attachmentUrl, offsetDays },
   });
 
-  revalidatePath("/crm/follow-up");
+  revalidatePath("/crm", "layout");
 }
 
 export async function updateFollowUpStep(stepId: string, formData: FormData) {
@@ -44,13 +49,13 @@ export async function updateFollowUpStep(stepId: string, formData: FormData) {
   const attachmentUrl = String(formData.get("attachmentUrl") ?? "").trim() || null;
 
   await prisma.followUpStep.update({ where: { id: stepId }, data: { content, attachmentUrl, offsetDays } });
-  revalidatePath("/crm/follow-up");
+  revalidatePath("/crm", "layout");
 }
 
 export async function deleteFollowUpStep(stepId: string) {
   await requireInternalSession();
   await prisma.followUpStep.delete({ where: { id: stepId } });
-  revalidatePath("/crm/follow-up");
+  revalidatePath("/crm", "layout");
 }
 
 export async function moveFollowUpStep(stepId: string, direction: "up" | "down") {
@@ -81,7 +86,7 @@ export async function moveFollowUpStep(stepId: string, direction: "up" | "down")
     prisma.followUpStep.update({ where: { id: a.id }, data: { order: b.order } }),
   ]);
 
-  revalidatePath("/crm/follow-up");
+  revalidatePath("/crm", "layout");
 }
 
 export async function updateFollowUpSettings(formData: FormData) {
@@ -98,7 +103,7 @@ export async function updateFollowUpSettings(formData: FormData) {
     create: { id: "singleton", silenceHours },
   });
 
-  revalidatePath("/crm/follow-up");
+  revalidatePath("/crm", "layout");
 }
 
 function parseTimeToMinutes(value: string, label: string): number {
@@ -136,5 +141,5 @@ export async function updateFollowUpWindow(formData: FormData) {
     create: { id: "singleton", windowDays, windowStartMinute, windowEndMinute },
   });
 
-  revalidatePath("/crm/follow-up");
+  revalidatePath("/crm", "layout");
 }

@@ -34,11 +34,11 @@ export default async function ClinicGoogleCalendarPage({
         </p>
       )}
 
-      <div className="space-y-4 rounded-2xl border border-vexo-border bg-vexo-surface p-5">
+      <div className="space-y-3 rounded-2xl border border-vexo-border bg-vexo-surface p-4">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-medium text-vexo-muted">Google Calendar</h2>
           <span
-            className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium ${
+            className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-medium ${
               connected ? "border-emerald-500/30 text-emerald-300" : "border-vexo-border text-vexo-muted"
             }`}
           >

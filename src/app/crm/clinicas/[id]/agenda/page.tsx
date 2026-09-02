@@ -82,18 +82,23 @@ export default async function ClinicAgendaPage({
       </div>
 
       <div className="overflow-x-auto rounded-2xl border border-vexo-border bg-vexo-surface">
-        <div className="grid min-w-[880px] grid-cols-[52px_repeat(7,1fr)]">
+        {/* minmax(0,1fr), não só 1fr — sem o minmax, uma track de grid ainda
+            assume "auto" como mínimo, deixando o card de agendamento (ou o
+            texto dentro dele) esticar aquela coluna além da fração igual
+            que as outras colunas recebem. min-w-0 nas células é reforço,
+            não substitui isso. */}
+        <div className="grid min-w-[760px] grid-cols-[44px_repeat(7,minmax(0,1fr))]">
           <div className="border-b border-r border-vexo-border" />
           {days.map((d, i) => (
-            <div key={i} className="border-b border-r border-vexo-border px-2 py-2 text-center last:border-r-0">
+            <div key={i} className="min-w-0 border-b border-r border-vexo-border px-1.5 py-1.5 text-center last:border-r-0">
               <p className="text-[10px] font-semibold uppercase tracking-wide text-vexo-muted">{WEEKDAY_LABELS[i]}</p>
-              <p className="text-sm font-semibold">{d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}</p>
+              <p className="truncate text-xs font-semibold">{d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}</p>
             </div>
           ))}
 
           {HOURS.map((hour) => (
             <Fragment key={hour}>
-              <div className="border-b border-r border-vexo-border px-1 py-2 text-right text-[11px] text-vexo-muted">
+              <div className="border-b border-r border-vexo-border px-1 py-1 text-right text-[10px] text-vexo-muted">
                 {String(hour).padStart(2, "0")}h
               </div>
               {days.map((d, i) => {
@@ -107,13 +112,13 @@ export default async function ClinicAgendaPage({
                 return (
                   <div
                     key={i}
-                    className="min-w-0 min-h-[52px] space-y-1 overflow-hidden border-b border-r border-vexo-border p-1 last:border-r-0"
+                    className="min-w-0 min-h-[38px] space-y-0.5 overflow-hidden border-b border-r border-vexo-border p-1 last:border-r-0"
                   >
                     {cellAppointments.map((a) => (
                       <Link
                         key={a.id}
                         href={`/crm/conversas/${a.conversationId}`}
-                        className={`block min-w-0 space-y-0.5 rounded-md border border-l-[3px] border-vexo-border bg-vexo-surface2 p-1.5 text-[11px] transition hover:border-vexo-accent ${appointmentStatusBorderClass(a.status)}`}
+                        className={`block min-w-0 space-y-0.5 rounded-md border border-l-[3px] border-vexo-border bg-vexo-surface2 p-1 text-[10px] transition hover:border-vexo-accent ${appointmentStatusBorderClass(a.status)}`}
                       >
                         <p className="truncate font-medium">{a.lead.name ?? a.lead.igUsername ?? "Lead"}</p>
                         <p className="truncate text-vexo-muted">
