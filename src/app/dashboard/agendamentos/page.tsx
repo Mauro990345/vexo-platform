@@ -11,6 +11,26 @@ const STATUS_LABELS: Record<string, string> = {
   CANCELLED: "Cancelado",
 };
 
+// Cores próprias (não reaproveita StatusBadge — aquele componente é pro
+// enum de status da CONVERSA, um domínio diferente de AppointmentStatus).
+const STATUS_CLASSES: Record<string, string> = {
+  SCHEDULED: "border-emerald-500/30 text-emerald-300",
+  CONFIRMED: "border-emerald-500/30 text-emerald-300",
+  COMPLETED: "border-vexo-accent/30 text-vexo-accent",
+  NO_SHOW: "border-red-500/30 text-red-300",
+  CANCELLED: "border-vexo-border text-vexo-muted",
+};
+
+function AppointmentStatusBadge({ status }: { status: string }) {
+  const classes = STATUS_CLASSES[status] ?? "border-vexo-border text-vexo-muted";
+  return (
+    <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium ${classes}`}>
+      <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-current" />
+      {STATUS_LABELS[status] ?? status}
+    </span>
+  );
+}
+
 export default async function ClientAppointmentsPage() {
   const session = await requireClientSession();
   const clinicId = session.user.clinicId as string;
@@ -25,7 +45,7 @@ export default async function ClientAppointmentsPage() {
   return (
     <div>
       <h1 className="mb-6 text-lg font-semibold tracking-tight">Agendamentos</h1>
-      <div className="overflow-x-auto rounded-xl border border-vexo-border bg-vexo-surface">
+      <div className="overflow-x-auto rounded-2xl border border-vexo-border bg-vexo-surface">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-vexo-border text-left text-xs text-vexo-muted">
@@ -36,8 +56,8 @@ export default async function ClientAppointmentsPage() {
           </thead>
           <tbody className="divide-y divide-vexo-border">
             {appointments.map((a) => (
-              <tr key={a.id}>
-                <td className="px-4 py-3">{a.lead.name ?? a.lead.igUsername ?? "Lead"}</td>
+              <tr key={a.id} className="transition hover:bg-vexo-surface2">
+                <td className="px-4 py-3 font-medium">{a.lead.name ?? a.lead.igUsername ?? "Lead"}</td>
                 <td className="px-4 py-3 text-vexo-muted">
                   {a.scheduledAt.toLocaleString("pt-BR", {
                     day: "2-digit",
@@ -46,7 +66,9 @@ export default async function ClientAppointmentsPage() {
                     minute: "2-digit",
                   })}
                 </td>
-                <td className="px-4 py-3">{STATUS_LABELS[a.status] ?? a.status}</td>
+                <td className="px-4 py-3">
+                  <AppointmentStatusBadge status={a.status} />
+                </td>
               </tr>
             ))}
             {appointments.length === 0 && (

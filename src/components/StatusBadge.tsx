@@ -19,8 +19,9 @@ const COLORS: Record<string, string> = {
 export function StatusBadge({ status }: { status: string }) {
   return (
     <span
-      className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium ${COLORS[status] ?? ""}`}
+      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium ${COLORS[status] ?? ""}`}
     >
+      <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-current" />
       {LABELS[status] ?? status}
     </span>
   );

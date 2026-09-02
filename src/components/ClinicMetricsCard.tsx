@@ -31,35 +31,26 @@ export function ClinicMetricsCard({
   last7Days: PeriodMetrics;
 }) {
   const content = (
-    <div className="rounded-xl border border-vexo-border bg-vexo-surface p-4 sm:p-5">
+    <div className="rounded-2xl border border-vexo-border bg-vexo-surface p-4 transition hover:border-vexo-borderStrong sm:p-5">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           {active !== undefined && (
             <span
-              className={`h-2 w-2 rounded-full ${active ? "bg-emerald-400" : "bg-vexo-muted"}`}
+              className={`h-2 w-2 shrink-0 rounded-full ${active ? "bg-emerald-400" : "bg-vexo-muted"}`}
               title={active ? "Ativa" : "Inativa"}
             />
           )}
           <h2 className="font-medium">{name}</h2>
         </div>
         {connections && (
-          <div className="flex flex-wrap gap-2 text-xs">
-            <span
-              className={`rounded-full border px-2 py-0.5 ${connections.instagramConnected ? "border-emerald-500/30 text-emerald-300" : "border-vexo-border text-vexo-muted"}`}
-            >
-              Instagram {connections.instagramConnected ? `@${connections.instagramUsername ?? "conectado"}` : "pendente"}
-            </span>
-            <span
-              className={`rounded-full border px-2 py-0.5 ${connections.calendarConnected ? "border-emerald-500/30 text-emerald-300" : "border-vexo-border text-vexo-muted"}`}
-            >
-              Calendar {connections.calendarConnected ? "conectado" : "pendente"}
-            </span>
+          <div className="flex flex-wrap gap-1.5 text-xs">
+            <ConnectionBadge
+              connected={connections.instagramConnected}
+              label={connections.instagramConnected ? `@${connections.instagramUsername ?? "conectado"}` : "Instagram"}
+            />
+            <ConnectionBadge connected={connections.calendarConnected} label="Calendar" />
             {connections.whatsappConnected !== undefined && (
-              <span
-                className={`rounded-full border px-2 py-0.5 ${connections.whatsappConnected ? "border-emerald-500/30 text-emerald-300" : "border-vexo-border text-vexo-muted"}`}
-              >
-                WhatsApp {connections.whatsappConnected ? "conectado" : "pendente"}
-              </span>
+              <ConnectionBadge connected={connections.whatsappConnected} label="WhatsApp" />
             )}
           </div>
         )}
@@ -97,8 +88,21 @@ export function ClinicMetricsCard({
   if (!href) return content;
 
   return (
-    <Link href={href} className="block transition hover:opacity-90">
+    <Link href={href} className="block">
       {content}
     </Link>
+  );
+}
+
+function ConnectionBadge({ connected, label }: { connected: boolean; label: string }) {
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 ${
+        connected ? "border-emerald-500/30 text-emerald-300" : "border-vexo-border text-vexo-muted"
+      }`}
+    >
+      <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${connected ? "bg-emerald-400" : "bg-vexo-muted"}`} />
+      {label}
+    </span>
   );
 }

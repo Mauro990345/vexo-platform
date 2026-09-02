@@ -92,7 +92,7 @@ export default async function ClinicDetailPage({
                 {byStatus[status]?.map((conv) => {
                   const appt = conv.appointments[0];
                   return (
-                    <div key={conv.id} className="rounded-lg border border-vexo-border bg-vexo-bg p-2 text-xs">
+                    <div key={conv.id} className="overflow-hidden rounded-lg border border-vexo-border bg-vexo-bg p-2 text-xs">
                       <Link href={`/crm/conversas/${conv.id}`} className="block transition hover:text-vexo-accent">
                         <p className="font-medium">{conv.lead.name ?? conv.lead.igUsername ?? "Lead"}</p>
                         <p className="mt-0.5 text-vexo-muted">
@@ -122,7 +122,7 @@ export default async function ClinicDetailPage({
       <section className="grid gap-6 lg:grid-cols-2">
         <form
           action={updateClinicSettings.bind(null, clinic.id)}
-          className="space-y-4 rounded-xl border border-vexo-border bg-vexo-surface p-5"
+          className="space-y-4 rounded-2xl border border-vexo-border bg-vexo-surface p-5"
         >
           <h2 className="text-sm font-medium text-vexo-muted">Configuração</h2>
 
@@ -207,7 +207,7 @@ export default async function ClinicDetailPage({
         <div className="space-y-4">
           <form
             action={logApproach.bind(null, clinic.id)}
-            className="flex items-end gap-2 rounded-xl border border-vexo-border bg-vexo-surface p-5"
+            className="flex items-end gap-2 rounded-2xl border border-vexo-border bg-vexo-surface p-5"
           >
             <div className="flex-1">
               <label className="mb-1.5 block text-sm" htmlFor="count">
@@ -228,7 +228,7 @@ export default async function ClinicDetailPage({
             </button>
           </form>
 
-          <div className="space-y-3 rounded-xl border border-vexo-border bg-vexo-surface p-5">
+          <div className="space-y-3 rounded-2xl border border-vexo-border bg-vexo-surface p-5">
             <h2 className="text-sm font-medium text-vexo-muted">Contas</h2>
             <p className="text-xs text-vexo-muted">
               Login do painel do cliente — permanente, sem expiração. Revogado removendo o acesso

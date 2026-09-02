@@ -18,9 +18,9 @@ export default async function ClientConversationsPage() {
   return (
     <div>
       <h1 className="mb-6 text-lg font-semibold tracking-tight">Conversas</h1>
-      <div className="divide-y divide-vexo-border rounded-xl border border-vexo-border bg-vexo-surface">
+      <div className="divide-y divide-vexo-border rounded-2xl border border-vexo-border bg-vexo-surface">
         {conversations.map((conv) => (
-          <div key={conv.id} className="flex items-center justify-between px-4 py-3">
+          <div key={conv.id} className="flex items-center justify-between px-4 py-3 transition hover:bg-vexo-surface2">
             <div>
               <p className="text-sm font-medium">{conv.lead.name ?? conv.lead.igUsername ?? "Lead"}</p>
               <p className="text-xs text-vexo-muted">

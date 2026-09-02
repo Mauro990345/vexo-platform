@@ -45,7 +45,7 @@ function StepList({
     <div className="space-y-4">
       <div className="space-y-2">
         {steps.map((step, i) => (
-          <details key={step.id} className="group rounded-xl border border-vexo-border bg-vexo-surface">
+          <details key={step.id} className="group rounded-2xl border border-vexo-border bg-vexo-surface">
             <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3">
               <div className="flex min-w-0 items-center gap-3">
                 <span className="shrink-0 rounded-full border border-vexo-border px-2 py-0.5 text-xs text-vexo-muted">
@@ -139,7 +139,7 @@ function StepList({
         ))}
       </div>
 
-      <form action={addFollowUpStep.bind(null, trigger)} className="space-y-3 rounded-xl border border-dashed border-vexo-border p-4">
+      <form action={addFollowUpStep.bind(null, trigger)} className="space-y-3 rounded-2xl border border-dashed border-vexo-border p-4">
         <h3 className="text-sm font-medium text-vexo-muted">Adicionar passo {steps.length + 1}</h3>
 
         <div>
@@ -222,7 +222,7 @@ export default async function FollowUpPage() {
 
         <form
           action={updateFollowUpWindow}
-          className="space-y-3 rounded-xl border border-vexo-border bg-vexo-surface p-4"
+          className="space-y-3 rounded-2xl border border-vexo-border bg-vexo-surface p-4"
         >
           <div>
             <label className="mb-1.5 block text-sm text-vexo-muted">Dias da semana</label>
@@ -297,7 +297,7 @@ export default async function FollowUpPage() {
 
         <form
           action={updateFollowUpSettings}
-          className="flex flex-wrap items-end gap-3 rounded-xl border border-vexo-border bg-vexo-surface p-4"
+          className="flex flex-wrap items-end gap-3 rounded-2xl border border-vexo-border bg-vexo-surface p-4"
         >
           <div>
             <label className="mb-1.5 block text-sm text-vexo-muted" htmlFor="silenceHours">

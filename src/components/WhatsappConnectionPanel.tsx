@@ -39,10 +39,13 @@ export function WhatsappConnectionPanel({
   const isOpen = status === "open";
 
   return (
-    <div className="space-y-4 rounded-xl border border-vexo-border bg-vexo-surface p-5">
+    <div className="space-y-4 rounded-2xl border border-vexo-border bg-vexo-surface p-5">
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-medium text-vexo-muted">WhatsApp</h2>
-        <span className={`rounded-full border px-2.5 py-0.5 text-xs font-medium ${STATUS_CLASSES[status]}`}>
+        <span
+          className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium ${STATUS_CLASSES[status]}`}
+        >
+          <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-current" />
           {STATUS_LABELS[status]}
         </span>
       </div>

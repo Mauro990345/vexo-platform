@@ -49,7 +49,7 @@ export default async function ConversationDetailPage({ params }: { params: { id:
           </div>
         )}
 
-        <div className="space-y-3 rounded-xl border border-vexo-border bg-vexo-surface p-4">
+        <div className="space-y-3 rounded-2xl border border-vexo-border bg-vexo-surface p-4">
           {conversation.messages.map((m) => (
             <div key={m.id} className={`flex ${m.direction === "INBOUND" ? "justify-start" : "justify-end"}`}>
               <div
@@ -92,14 +92,14 @@ export default async function ConversationDetailPage({ params }: { params: { id:
       </div>
 
       <aside className="space-y-4">
-        <div className="rounded-xl border border-vexo-border bg-vexo-surface p-4 text-sm">
+        <div className="rounded-2xl border border-vexo-border bg-vexo-surface p-4 text-sm">
           <h2 className="mb-2 text-xs font-medium uppercase tracking-wide text-vexo-muted">Lead</h2>
           <p>{conversation.lead.name ?? "Sem nome"}</p>
           <p className="text-vexo-muted">@{conversation.lead.igUsername ?? "—"}</p>
         </div>
 
         {appointment && (
-          <div className="rounded-xl border border-vexo-border bg-vexo-surface p-4 text-sm">
+          <div className="rounded-2xl border border-vexo-border bg-vexo-surface p-4 text-sm">
             <h2 className="mb-2 text-xs font-medium uppercase tracking-wide text-vexo-muted">Agendamento</h2>
             <p>
               {appointment.scheduledAt.toLocaleString("pt-BR", {
