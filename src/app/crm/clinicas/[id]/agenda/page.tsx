@@ -3,7 +3,7 @@ import { Fragment } from "react";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireInternalSession } from "@/lib/session";
-import { AppointmentStatusBadge } from "@/components/AppointmentStatusBadge";
+import { AppointmentStatusBadge, appointmentStatusBorderClass } from "@/components/AppointmentStatusBadge";
 
 export const dynamic = "force-dynamic";
 
@@ -105,18 +105,21 @@ export default async function ClinicAgendaPage({
                     a.scheduledAt.getHours() === hour
                 );
                 return (
-                  <div key={i} className="min-h-[52px] space-y-1 border-b border-r border-vexo-border p-1 last:border-r-0">
+                  <div
+                    key={i}
+                    className="min-w-0 min-h-[52px] space-y-1 overflow-hidden border-b border-r border-vexo-border p-1 last:border-r-0"
+                  >
                     {cellAppointments.map((a) => (
                       <Link
                         key={a.id}
                         href={`/crm/conversas/${a.conversationId}`}
-                        className="block space-y-0.5 rounded-md border border-vexo-border bg-vexo-surface2 p-1.5 text-[11px] transition hover:border-vexo-accent"
+                        className={`block min-w-0 space-y-0.5 rounded-md border border-l-[3px] border-vexo-border bg-vexo-surface2 p-1.5 text-[11px] transition hover:border-vexo-accent ${appointmentStatusBorderClass(a.status)}`}
                       >
                         <p className="truncate font-medium">{a.lead.name ?? a.lead.igUsername ?? "Lead"}</p>
-                        <p className="text-vexo-muted">
+                        <p className="truncate text-vexo-muted">
                           {a.scheduledAt.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
                         </p>
-                        <AppointmentStatusBadge status={a.status} />
+                        <AppointmentStatusBadge status={a.status} compact />
                       </Link>
                     ))}
                   </div>
