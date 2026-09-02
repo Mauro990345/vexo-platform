@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { StatCard } from "@/components/StatCard";
+import { ResponseRateRing } from "@/components/ResponseRateRing";
 
 type PeriodMetrics = {
   approached: number;
@@ -62,10 +63,12 @@ export function ClinicMetricsCard({
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             <StatCard label="Abordados" value={String(today.approached)} />
             <StatCard label="Responderam" value={String(today.responded)} />
-            <StatCard
-              label="Taxa de resposta"
-              value={today.responseRate !== null ? `${Math.round(today.responseRate * 100)}%` : "—"}
-            />
+            <div className="rounded-xl border border-vexo-border bg-vexo-surface2 p-4">
+              <p className="text-xs font-medium text-vexo-muted">Taxa de resposta</p>
+              <div className="mt-1.5">
+                <ResponseRateRing value={today.responseRate} />
+              </div>
+            </div>
             <StatCard label="Agendados" value={String(today.scheduled)} />
           </div>
         </div>

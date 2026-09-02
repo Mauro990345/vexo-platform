@@ -6,14 +6,16 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
+        // Cinza-escuro AZULADO (slate), não preto neutro — a referência é
+        // explícita sobre isso: fundo com leve matiz azul, não um preto puro.
         vexo: {
-          bg: "#0a0a0c",
-          surface: "#131316",
-          surface2: "#1a1a1f",
-          border: "#232327",
-          borderStrong: "#333338",
-          muted: "#94949e",
-          fg: "#f5f5f7",
+          bg: "#0b0f17",
+          surface: "#141a24",
+          surface2: "#1b222e",
+          border: "#232c3a",
+          borderStrong: "#33404f",
+          muted: "#8b96a8",
+          fg: "#f1f4f8",
           accent: "#3b82f6",
           accentFg: "#ffffff",
         },
