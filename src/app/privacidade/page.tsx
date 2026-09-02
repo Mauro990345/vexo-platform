@@ -106,8 +106,8 @@ export default function PrivacyPolicyPage() {
             <h2 className="mb-2 text-base font-semibold">8. Contato</h2>
             <p>
               Dúvidas sobre esta política ou sobre o tratamento dos seus dados:{" "}
-              <a href="mailto:privacidade@vexo.com.br" className="text-vexo-accent hover:underline">
-                privacidade@vexo.com.br
+              <a href="mailto:laurafonseca121@gmail.com" className="text-vexo-accent hover:underline">
+                laurafonseca121@gmail.com
               </a>
             </p>
           </section>

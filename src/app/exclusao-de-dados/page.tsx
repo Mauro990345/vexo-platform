@@ -28,8 +28,8 @@ export default function DataDeletionPage() {
             <h2 className="mb-2 text-base font-semibold">Como solicitar</h2>
             <p className="mb-3">
               Envie um e-mail para{" "}
-              <a href="mailto:privacidade@vexo.com.br" className="text-vexo-accent hover:underline">
-                privacidade@vexo.com.br
+              <a href="mailto:laurafonseca121@gmail.com" className="text-vexo-accent hover:underline">
+                laurafonseca121@gmail.com
               </a>{" "}
               com o assunto "Exclusão de dados", informando:
             </p>
