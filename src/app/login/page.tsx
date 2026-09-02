@@ -3,6 +3,7 @@
 import { useState, type FormEvent } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -86,6 +87,16 @@ export default function LoginPage() {
             {loading ? "Entrando..." : "Entrar"}
           </button>
         </form>
+
+        <p className="mt-4 text-center text-xs text-vexo-muted">
+          <Link href="/privacidade" className="hover:text-vexo-fg">
+            Política de Privacidade
+          </Link>
+          {" · "}
+          <Link href="/exclusao-de-dados" className="hover:text-vexo-fg">
+            Exclusão de Dados
+          </Link>
+        </p>
       </div>
     </main>
   );
