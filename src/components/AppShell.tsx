@@ -35,7 +35,7 @@ export function AppShell({
 
   return (
     <div className="flex min-h-screen">
-      <aside className="hidden w-60 shrink-0 flex-col border-r border-vexo-border bg-vexo-bg sm:flex">
+      <aside className="hidden w-60 shrink-0 flex-col border-r border-vexo-border bg-vexo-surface sm:flex">
         <Link href="/" className="flex items-center gap-2.5 px-5 py-5">
           <span className="h-7 w-7 shrink-0 rounded-lg bg-vexo-accent" />
           <div className="min-w-0">
@@ -76,7 +76,7 @@ export function AppShell({
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex items-center justify-between border-b border-vexo-border bg-vexo-bg px-4 py-3 sm:hidden">
+        <header className="flex items-center justify-between border-b border-vexo-border bg-vexo-surface px-4 py-3 sm:hidden">
           <Link href="/" className="flex items-center gap-2">
             <span className="h-6 w-6 rounded-md bg-vexo-accent" />
             <span className="text-sm font-semibold tracking-tight">VEXO</span>
