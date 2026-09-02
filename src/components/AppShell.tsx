@@ -43,10 +43,15 @@ function NavLink({ item, active }: { item: NavItem; active: boolean }) {
 export function AppShell({
   navGroups,
   userLabel,
+  contextHeader,
   children,
 }: {
   navGroups: NavGroup[];
   userLabel: string;
+  // Área de "troca de contexto" abaixo do logo (ex: nome da clínica atual +
+  // link "← Clínicas") — igual ao seletor de subconta de plataformas tipo
+  // GHL/Olympus. Omitido nas telas globais do CRM.
+  contextHeader?: React.ReactNode;
   children: React.ReactNode;
 }) {
   const pathname = usePathname() ?? "";
@@ -63,6 +68,8 @@ export function AppShell({
             <p className="mt-1 truncate text-[11px] leading-none text-vexo-muted">M8 Growth</p>
           </div>
         </Link>
+
+        {contextHeader && <div className="px-3 pb-2">{contextHeader}</div>}
 
         <nav className="flex-1 space-y-4 px-3 py-2">
           {navGroups.map((group) => (

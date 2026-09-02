@@ -1,4 +1,4 @@
-import { createClinic } from "../actions";
+import { createClinic } from "@/app/crm/clinicas/actions";
 
 export default function NewClinicPage() {
   return (
@@ -23,8 +23,8 @@ export default function NewClinicPage() {
           Criar clínica
         </button>
         <p className="text-xs text-vexo-muted">
-          Após criar, conecte o Instagram e o Google Calendar, cole o prompt de conversação e
-          crie o login do painel do cliente na página da clínica.
+          Após criar, entre na clínica pra conectar o Instagram e o Google Calendar, colar o
+          prompt de conversação e criar o login do painel do cliente.
         </p>
       </form>
     </div>

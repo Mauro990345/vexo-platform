@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireInternalSession } from "@/lib/session";
@@ -39,9 +38,6 @@ export default async function ClinicWhatsappPage({ params }: { params: { id: str
 
   return (
     <div className="max-w-md space-y-4">
-      <Link href={`/crm/clinicas/${clinic.id}`} className="text-xs text-vexo-muted hover:text-vexo-fg">
-        ← {clinic.name}
-      </Link>
       <h1 className="text-lg font-semibold tracking-tight">Conectar WhatsApp</h1>
       <p className="text-sm text-vexo-muted">
         Usado para notificar a secretária quando um lead precisa de atendimento humano.

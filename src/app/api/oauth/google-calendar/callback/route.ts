@@ -33,12 +33,12 @@ export async function GET(req: NextRequest) {
     });
 
     return NextResponse.redirect(
-      `${process.env.APP_URL ?? ""}/crm/clinicas/${parsedState.clinicId}?calendar=conectado`
+      `${process.env.APP_URL ?? ""}/crm/clinicas/${parsedState.clinicId}/google-calendar?status=conectado`
     );
   } catch (err) {
     console.error("[vexo] Falha no callback OAuth do Google Calendar:", err);
     return NextResponse.redirect(
-      `${process.env.APP_URL ?? ""}/crm/clinicas/${parsedState.clinicId}?calendar=erro`
+      `${process.env.APP_URL ?? ""}/crm/clinicas/${parsedState.clinicId}/google-calendar?status=erro`
     );
   }
 }

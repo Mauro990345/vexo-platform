@@ -1,5 +1,4 @@
 import { notFound } from "next/navigation";
-import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { StatusBadge } from "@/components/StatusBadge";
 import { AttendanceToggle } from "@/components/AttendanceToggle";
@@ -26,14 +25,9 @@ export default async function ConversationDetailPage({ params }: { params: { id:
     <div className="grid gap-6 lg:grid-cols-[1fr_280px]">
       <div>
         <div className="mb-4 flex items-center justify-between">
-          <div>
-            <Link href={`/crm/clinicas/${conversation.clinicId}`} className="text-xs text-vexo-muted hover:text-vexo-fg">
-              ← {conversation.clinic.name}
-            </Link>
-            <h1 className="mt-1 text-lg font-semibold">
-              {conversation.lead.name ?? conversation.lead.igUsername ?? "Lead"}
-            </h1>
-          </div>
+          <h1 className="text-lg font-semibold">
+            {conversation.lead.name ?? conversation.lead.igUsername ?? "Lead"}
+          </h1>
           <StatusBadge status={conversation.status} />
         </div>
 
