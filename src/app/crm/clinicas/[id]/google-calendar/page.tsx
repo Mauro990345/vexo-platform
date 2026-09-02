@@ -22,9 +22,9 @@ export default async function ClinicGoogleCalendarPage({
   const connected = Boolean(clinic.googleCalendarAccount);
 
   return (
-    <div className="max-w-md space-y-4">
-      <h1 className="text-lg font-semibold tracking-tight">Conectar Google Calendar</h1>
-      <p className="text-sm text-vexo-muted">
+    <div className="max-w-sm space-y-3">
+      <h1 className="text-base font-semibold tracking-tight">Conectar Google Calendar</h1>
+      <p className="text-xs text-vexo-muted">
         Usado pra IA consultar horários livres e criar os agendamentos confirmados com os leads.
       </p>
 
@@ -34,7 +34,7 @@ export default async function ClinicGoogleCalendarPage({
         </p>
       )}
 
-      <div className="space-y-3 rounded-2xl border border-vexo-border bg-vexo-surface p-4">
+      <div className="space-y-2.5 rounded-xl border border-vexo-border bg-vexo-surface p-3.5">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-medium text-vexo-muted">Google Calendar</h2>
           <span
@@ -48,16 +48,16 @@ export default async function ClinicGoogleCalendarPage({
         </div>
 
         {connected ? (
-          <p className="text-sm">
+          <p className="text-xs">
             Conta conectada: <span className="font-medium">{clinic.googleCalendarAccount!.googleAccountEmail}</span>
           </p>
         ) : (
-          <p className="text-sm text-vexo-muted">Nenhuma conta do Google Calendar conectada ainda.</p>
+          <p className="text-xs text-vexo-muted">Nenhuma conta do Google Calendar conectada ainda.</p>
         )}
 
         <a
           href={`/api/oauth/google-calendar/start?clinicId=${clinic.id}`}
-          className="block w-full rounded-lg border border-vexo-accent px-3 py-2 text-center text-sm font-medium text-vexo-accent hover:bg-vexo-accent/10"
+          className="block w-full rounded-lg border border-vexo-accent px-2.5 py-1.5 text-center text-xs font-medium text-vexo-accent hover:bg-vexo-accent/10"
         >
           {connected ? "Reconectar" : "Conectar Google Calendar"}
         </a>

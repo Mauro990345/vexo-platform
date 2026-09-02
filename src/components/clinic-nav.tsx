@@ -35,7 +35,7 @@ export function buildClinicNavGroups(clinicId: string): NavGroup[] {
     {
       label: "Configurações",
       items: [
-        { href: `${base}/configuracoes`, label: "Ajustes", icon: <Settings className="h-4 w-4 shrink-0" strokeWidth={2} /> },
+        { href: `${base}/configuracoes`, label: "Automação", icon: <Settings className="h-4 w-4 shrink-0" strokeWidth={2} /> },
       ],
     },
   ];

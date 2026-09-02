@@ -39,7 +39,7 @@ export function WhatsappConnectionPanel({
   const isOpen = status === "open";
 
   return (
-    <div className="space-y-3 rounded-2xl border border-vexo-border bg-vexo-surface p-4">
+    <div className="space-y-2.5 rounded-xl border border-vexo-border bg-vexo-surface p-3.5">
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-medium text-vexo-muted">WhatsApp</h2>
         <span
@@ -59,30 +59,30 @@ export function WhatsappConnectionPanel({
       )}
 
       {isOpen ? (
-        <div className="space-y-2.5">
-          <p className="text-sm">WhatsApp conectado e pronto para enviar notificações.</p>
+        <div className="space-y-2">
+          <p className="text-xs">WhatsApp conectado e pronto para enviar notificações.</p>
           {disconnectAction && (
             <form action={disconnectAction}>
-              <button className="rounded-lg border border-vexo-border px-3 py-1.5 text-xs text-vexo-muted hover:border-red-500/40 hover:text-red-300">
+              <button className="rounded-lg border border-vexo-border px-2.5 py-1.5 text-xs text-vexo-muted hover:border-red-500/40 hover:text-red-300">
                 Desconectar
               </button>
             </form>
           )}
         </div>
       ) : (
-        <div className="space-y-2.5">
+        <div className="space-y-2">
           {qrBase64 ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={qrBase64}
               alt="QR code do WhatsApp"
-              className="mx-auto h-40 w-40 rounded-lg border border-vexo-border bg-white p-1.5"
+              className="mx-auto h-28 w-28 rounded-lg border border-vexo-border bg-white p-1"
             />
           ) : (
-            <p className="text-sm text-vexo-muted">Não foi possível gerar o QR code agora.</p>
+            <p className="text-xs text-vexo-muted">Não foi possível gerar o QR code agora.</p>
           )}
 
-          <p className="text-xs text-vexo-muted">
+          <p className="text-[11px] leading-normal text-vexo-muted">
             No celular que vai receber as notificações: WhatsApp → Aparelhos conectados → Conectar um
             aparelho, e escaneie o código acima. Ele expira em segundos — se não der tempo, clique em
             "Atualizar" para gerar um novo.
@@ -90,7 +90,7 @@ export function WhatsappConnectionPanel({
 
           <a
             href={refreshHref}
-            className="block w-full rounded-lg border border-vexo-border px-3 py-2 text-center text-xs font-medium hover:border-vexo-accent"
+            className="block w-full rounded-lg border border-vexo-border px-2.5 py-1.5 text-center text-xs font-medium hover:border-vexo-accent"
           >
             Atualizar / verificar conexão
           </a>
@@ -98,20 +98,20 @@ export function WhatsappConnectionPanel({
       )}
 
       {renameAction && !isOpen && (
-        <form action={renameAction} className="space-y-1.5 border-t border-vexo-border pt-2.5">
-          <label className="block text-xs text-vexo-muted" htmlFor="instanceName">
+        <form action={renameAction} className="space-y-1.5 border-t border-vexo-border pt-2">
+          <label className="block text-[11px] text-vexo-muted" htmlFor="instanceName">
             Nome da instância (avançado — ex: reaproveitar uma já conectada)
           </label>
-          <div className="flex gap-2">
+          <div className="flex gap-1.5">
             <input
               id="instanceName"
               name="instanceName"
               defaultValue={instanceName}
               pattern="[a-z0-9-]+"
               title="Apenas letras minúsculas, números e hífen"
-              className="flex-1 rounded-lg border border-vexo-border bg-vexo-bg px-2 py-1.5 text-xs font-mono outline-none focus:border-vexo-accent"
+              className="flex-1 rounded-lg border border-vexo-border bg-vexo-bg px-2 py-1 text-xs font-mono outline-none focus:border-vexo-accent"
             />
-            <button className="rounded-lg border border-vexo-border px-3 py-1.5 text-xs hover:border-vexo-accent">
+            <button className="rounded-lg border border-vexo-border px-2.5 py-1 text-xs hover:border-vexo-accent">
               Salvar
             </button>
           </div>

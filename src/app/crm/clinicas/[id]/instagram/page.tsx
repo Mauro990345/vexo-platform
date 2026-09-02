@@ -22,9 +22,9 @@ export default async function ClinicInstagramPage({
   const connected = Boolean(clinic.instagramAccount);
 
   return (
-    <div className="max-w-md space-y-4">
-      <h1 className="text-lg font-semibold tracking-tight">Conectar Instagram</h1>
-      <p className="text-sm text-vexo-muted">
+    <div className="max-w-sm space-y-3">
+      <h1 className="text-base font-semibold tracking-tight">Conectar Instagram</h1>
+      <p className="text-xs text-vexo-muted">
         Canal onde a IA conversa com os leads da clínica — mensagens recebidas no Direct viram
         atendimento automático.
       </p>
@@ -35,7 +35,7 @@ export default async function ClinicInstagramPage({
         </p>
       )}
 
-      <div className="space-y-3 rounded-2xl border border-vexo-border bg-vexo-surface p-4">
+      <div className="space-y-2.5 rounded-xl border border-vexo-border bg-vexo-surface p-3.5">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-medium text-vexo-muted">Instagram</h2>
           <span
@@ -49,16 +49,16 @@ export default async function ClinicInstagramPage({
         </div>
 
         {connected ? (
-          <p className="text-sm">
+          <p className="text-xs">
             Conta conectada: <span className="font-medium">@{clinic.instagramAccount!.igUsername ?? "conectado"}</span>
           </p>
         ) : (
-          <p className="text-sm text-vexo-muted">Nenhuma conta do Instagram conectada ainda.</p>
+          <p className="text-xs text-vexo-muted">Nenhuma conta do Instagram conectada ainda.</p>
         )}
 
         <a
           href={`/api/oauth/instagram/start?clinicId=${clinic.id}`}
-          className="block w-full rounded-lg border border-vexo-accent px-3 py-2 text-center text-sm font-medium text-vexo-accent hover:bg-vexo-accent/10"
+          className="block w-full rounded-lg border border-vexo-accent px-2.5 py-1.5 text-center text-xs font-medium text-vexo-accent hover:bg-vexo-accent/10"
         >
           {connected ? "Reconectar" : "Conectar Instagram"}
         </a>

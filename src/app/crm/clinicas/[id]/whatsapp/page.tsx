@@ -37,9 +37,9 @@ export default async function ClinicWhatsappPage({ params }: { params: { id: str
   }
 
   return (
-    <div className="max-w-md space-y-4">
-      <h1 className="text-lg font-semibold tracking-tight">Conectar WhatsApp</h1>
-      <p className="text-sm text-vexo-muted">
+    <div className="max-w-sm space-y-3">
+      <h1 className="text-base font-semibold tracking-tight">Conectar WhatsApp</h1>
+      <p className="text-xs text-vexo-muted">
         Usado para notificar a secretária quando um lead precisa de atendimento humano.
       </p>
 
