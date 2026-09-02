@@ -16,7 +16,7 @@ export default async function CrmGlobalLayout({ children }: { children: React.Re
         {
           label: "Operação",
           items: [
-            { href: "/crm", label: "Clínicas", icon: <Building2 className="h-4 w-4 shrink-0" strokeWidth={2} /> },
+            { href: "/crm", label: "Contas", icon: <Building2 className="h-4 w-4 shrink-0" strokeWidth={2} /> },
             { href: "/crm/follow-up", label: "Follow-up", icon: <Repeat className="h-4 w-4 shrink-0" strokeWidth={2} /> },
           ],
         },

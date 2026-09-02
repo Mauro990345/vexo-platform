@@ -4,21 +4,21 @@
 // início do arco no topo em vez de à direita (padrão de gráfico de "%").
 export function ResponseRateRing({ value }: { value: number | null }) {
   const pct = value !== null ? Math.round(value * 100) : null;
-  const radius = 16;
+  const radius = 12;
   const circumference = 2 * Math.PI * radius;
   const offset = pct !== null ? circumference * (1 - Math.min(pct, 100) / 100) : circumference;
 
   return (
-    <div className="flex items-center gap-3">
-      <svg width="40" height="40" viewBox="0 0 40 40" className="-rotate-90 shrink-0" aria-hidden="true">
-        <circle cx="20" cy="20" r={radius} fill="none" strokeWidth="4" className="stroke-vexo-border" />
+    <div className="flex items-center gap-2">
+      <svg width="30" height="30" viewBox="0 0 30 30" className="-rotate-90 shrink-0" aria-hidden="true">
+        <circle cx="15" cy="15" r={radius} fill="none" strokeWidth="3.5" className="stroke-vexo-border" />
         {pct !== null && (
           <circle
-            cx="20"
-            cy="20"
+            cx="15"
+            cy="15"
             r={radius}
             fill="none"
-            strokeWidth="4"
+            strokeWidth="3.5"
             strokeDasharray={circumference}
             strokeDashoffset={offset}
             strokeLinecap="round"
@@ -26,7 +26,7 @@ export function ResponseRateRing({ value }: { value: number | null }) {
           />
         )}
       </svg>
-      <p className="text-[1.75rem] font-semibold leading-none tracking-tight">{pct !== null ? `${pct}%` : "—"}</p>
+      <p className="text-xl font-semibold leading-none tracking-tight">{pct !== null ? `${pct}%` : "—"}</p>
     </div>
   );
 }

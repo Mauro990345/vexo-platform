@@ -35,7 +35,7 @@ export default async function ClinicLayout({
         <div className="rounded-lg bg-vexo-surface2 px-2.5 py-2">
           <Link href="/crm" className="flex items-center gap-1 text-xs text-vexo-muted hover:text-vexo-fg">
             <ChevronLeft className="h-3.5 w-3.5 shrink-0" strokeWidth={2} />
-            Clínicas
+            Contas
           </Link>
           <p className="mt-1 truncate text-sm font-medium">{clinic.name}</p>
         </div>

@@ -32,8 +32,8 @@ export function ClinicMetricsCard({
   last7Days: PeriodMetrics;
 }) {
   const content = (
-    <div className="rounded-2xl border border-vexo-border bg-vexo-surface p-4 transition hover:border-vexo-borderStrong sm:p-5">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+    <div className="rounded-2xl border border-vexo-border bg-vexo-surface p-3 transition hover:border-vexo-borderStrong sm:p-4">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           {active !== undefined && (
             <span
@@ -57,15 +57,15 @@ export function ClinicMetricsCard({
         )}
       </div>
 
-      <div className="space-y-4">
+      <div className="space-y-2.5">
         <div>
-          <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-vexo-muted">Hoje</h3>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <h3 className="mb-1.5 text-[10px] font-medium uppercase tracking-wide text-vexo-muted">Hoje</h3>
+          <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
             <StatCard label="Abordados" value={String(today.approached)} />
             <StatCard label="Responderam" value={String(today.responded)} />
-            <div className="rounded-xl border border-vexo-border bg-vexo-surface2 p-4">
-              <p className="text-xs font-medium text-vexo-muted">Taxa de resposta</p>
-              <div className="mt-1.5">
+            <div className="rounded-lg border border-vexo-border bg-vexo-surface2 p-2.5">
+              <p className="truncate text-[11px] font-medium text-vexo-muted">Taxa de resposta</p>
+              <div className="mt-1">
                 <ResponseRateRing value={today.responseRate} />
               </div>
             </div>
@@ -74,10 +74,10 @@ export function ClinicMetricsCard({
         </div>
 
         <div>
-          <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-vexo-muted">
+          <h3 className="mb-1.5 text-[10px] font-medium uppercase tracking-wide text-vexo-muted">
             Últimos 7 dias
           </h3>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
             <StatCard label="Abordados" value={String(last7Days.approached)} />
             <StatCard label="Responderam" value={String(last7Days.responded)} />
             <StatCard label="Compareceram" value={String(last7Days.completed)} />
