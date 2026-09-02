@@ -25,7 +25,7 @@ function NavLink({ item, active }: { item: NavItem; active: boolean }) {
   return (
     <Link
       href={item.href}
-      className={`flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium transition ${
+      className={`flex items-center gap-2 rounded-lg px-2 py-1.5 text-[13px] font-medium transition ${
         active
           ? "bg-vexo-accent/15 text-vexo-accent"
           : "text-vexo-muted hover:bg-vexo-surface2 hover:text-vexo-fg"
@@ -60,21 +60,21 @@ export function AppShell({
 
   return (
     <div className="flex min-h-screen">
-      <aside className="hidden w-60 shrink-0 flex-col border-r border-vexo-border bg-vexo-surface sm:flex">
-        <Link href="/" className="flex items-center gap-2.5 px-5 py-5">
-          <span className="h-7 w-7 shrink-0 rounded-lg bg-vexo-accent" />
+      <aside className="hidden w-52 shrink-0 flex-col border-r border-vexo-border bg-vexo-surface sm:flex">
+        <Link href="/" className="flex items-center gap-2 px-4 py-4">
+          <span className="h-6 w-6 shrink-0 rounded-lg bg-vexo-accent" />
           <div className="min-w-0">
-            <p className="text-sm font-semibold leading-none tracking-tight">VEXO</p>
-            <p className="mt-1 truncate text-[11px] leading-none text-vexo-muted">M8 Growth</p>
+            <p className="text-xs font-semibold leading-none tracking-tight">VEXO</p>
+            <p className="mt-1 truncate text-[10px] leading-none text-vexo-muted">M8 Growth</p>
           </div>
         </Link>
 
-        {contextHeader && <div className="px-3 pb-2">{contextHeader}</div>}
+        {contextHeader && <div className="px-2.5 pb-2">{contextHeader}</div>}
 
-        <nav className="flex-1 space-y-4 px-3 py-2">
+        <nav className="flex-1 space-y-3 px-2.5 py-1.5">
           {navGroups.map((group) => (
             <div key={group.label} className="space-y-0.5">
-              <p className="px-2.5 pb-1.5 pt-1 text-[10px] font-semibold uppercase tracking-wider text-vexo-muted">
+              <p className="px-2 pb-1 pt-0.5 text-[9px] font-semibold uppercase tracking-wider text-vexo-muted">
                 {group.label}
               </p>
               {group.items.map((item) => (
@@ -84,9 +84,9 @@ export function AppShell({
           ))}
         </nav>
 
-        <div className="border-t border-vexo-border p-3">
-          <div className="flex items-center justify-between gap-2 rounded-lg px-2 py-1.5">
-            <span className="truncate text-xs text-vexo-muted">{userLabel}</span>
+        <div className="border-t border-vexo-border p-2.5">
+          <div className="flex items-center justify-between gap-2 rounded-lg px-1.5 py-1">
+            <span className="truncate text-[11px] text-vexo-muted">{userLabel}</span>
             <SignOutButton />
           </div>
         </div>

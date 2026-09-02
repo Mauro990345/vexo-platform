@@ -19,23 +19,23 @@ export function buildClinicNavGroups(clinicId: string): NavGroup[] {
     {
       label: "Operação",
       items: [
-        { href: base, label: "Pipeline", icon: <Columns3 className="h-4 w-4 shrink-0" strokeWidth={2} /> },
-        { href: `${base}/follow-up`, label: "Follow-up", icon: <Repeat className="h-4 w-4 shrink-0" strokeWidth={2} /> },
-        { href: `${base}/agenda`, label: "Agenda", icon: <CalendarDays className="h-4 w-4 shrink-0" strokeWidth={2} /> },
+        { href: base, label: "Pipeline", icon: <Columns3 className="h-3.5 w-3.5 shrink-0" strokeWidth={2} /> },
+        { href: `${base}/follow-up`, label: "Follow-up", icon: <Repeat className="h-3.5 w-3.5 shrink-0" strokeWidth={2} /> },
+        { href: `${base}/agenda`, label: "Agenda", icon: <CalendarDays className="h-3.5 w-3.5 shrink-0" strokeWidth={2} /> },
       ],
     },
     {
       label: "Conexões",
       items: [
-        { href: `${base}/whatsapp`, label: "WhatsApp", icon: <MessageCircle className="h-4 w-4 shrink-0" strokeWidth={2} /> },
-        { href: `${base}/instagram`, label: "Instagram", icon: <AtSign className="h-4 w-4 shrink-0" strokeWidth={2} /> },
-        { href: `${base}/google-calendar`, label: "Google Calendar", icon: <Calendar className="h-4 w-4 shrink-0" strokeWidth={2} /> },
+        { href: `${base}/whatsapp`, label: "WhatsApp", icon: <MessageCircle className="h-3.5 w-3.5 shrink-0" strokeWidth={2} /> },
+        { href: `${base}/instagram`, label: "Instagram", icon: <AtSign className="h-3.5 w-3.5 shrink-0" strokeWidth={2} /> },
+        { href: `${base}/google-calendar`, label: "Google Calendar", icon: <Calendar className="h-3.5 w-3.5 shrink-0" strokeWidth={2} /> },
       ],
     },
     {
       label: "Configurações",
       items: [
-        { href: `${base}/configuracoes`, label: "Automação", icon: <Settings className="h-4 w-4 shrink-0" strokeWidth={2} /> },
+        { href: `${base}/configuracoes`, label: "Automação", icon: <Settings className="h-3.5 w-3.5 shrink-0" strokeWidth={2} /> },
       ],
     },
   ];

@@ -16,15 +16,15 @@ export default async function DashboardLayout({ children }: { children: React.Re
         {
           label: "Operação",
           items: [
-            { href: "/dashboard", label: "Visão geral", icon: <Home className="h-4 w-4 shrink-0" strokeWidth={2} /> },
-            { href: "/dashboard/conversas", label: "Conversas", icon: <MessagesSquare className="h-4 w-4 shrink-0" strokeWidth={2} /> },
-            { href: "/dashboard/agendamentos", label: "Agendamentos", icon: <CalendarDays className="h-4 w-4 shrink-0" strokeWidth={2} /> },
+            { href: "/dashboard", label: "Visão geral", icon: <Home className="h-3.5 w-3.5 shrink-0" strokeWidth={2} /> },
+            { href: "/dashboard/conversas", label: "Conversas", icon: <MessagesSquare className="h-3.5 w-3.5 shrink-0" strokeWidth={2} /> },
+            { href: "/dashboard/agendamentos", label: "Agendamentos", icon: <CalendarDays className="h-3.5 w-3.5 shrink-0" strokeWidth={2} /> },
           ],
         },
         {
           label: "Conexões",
           items: [
-            { href: "/dashboard/whatsapp", label: "WhatsApp", icon: <MessageCircle className="h-4 w-4 shrink-0" strokeWidth={2} /> },
+            { href: "/dashboard/whatsapp", label: "WhatsApp", icon: <MessageCircle className="h-3.5 w-3.5 shrink-0" strokeWidth={2} /> },
           ],
         },
       ]}

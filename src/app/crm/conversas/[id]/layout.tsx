@@ -30,12 +30,12 @@ export default async function ConversationLayout({
       userLabel={`${session?.user.name} · ${session?.user.role === "INTERNAL_ADMIN" ? "Admin" : "Equipe"}`}
       navGroups={buildClinicNavGroups(conversation.clinicId)}
       contextHeader={
-        <div className="rounded-lg bg-vexo-surface2 px-2.5 py-2">
-          <Link href="/crm" className="flex items-center gap-1 text-xs text-vexo-muted hover:text-vexo-fg">
-            <ChevronLeft className="h-3.5 w-3.5 shrink-0" strokeWidth={2} />
+        <div className="rounded-lg bg-vexo-surface2 px-2 py-1.5">
+          <Link href="/crm" className="flex items-center gap-1 text-[11px] text-vexo-muted hover:text-vexo-fg">
+            <ChevronLeft className="h-3 w-3 shrink-0" strokeWidth={2} />
             Contas
           </Link>
-          <p className="mt-1 truncate text-sm font-medium">{conversation.clinic.name}</p>
+          <p className="mt-0.5 truncate text-xs font-medium">{conversation.clinic.name}</p>
         </div>
       }
     >
