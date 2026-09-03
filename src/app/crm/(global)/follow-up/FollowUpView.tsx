@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import type { FollowUpStep, FollowUpTrigger } from "@prisma/client";
+import { Tabs } from "@/components/Tabs";
 import {
   addFollowUpStep,
   updateFollowUpStep,
@@ -225,7 +226,7 @@ export async function FollowUpView() {
   const adaptiveDelayEnabled = aiSettings?.adaptiveDelayEnabled ?? true;
 
   return (
-    <div className="max-w-lg space-y-6">
+    <div className="max-w-lg space-y-4">
       <div>
         <h1 className="text-base font-semibold tracking-tight">Follow-up</h1>
         <p className="mt-1 text-xs text-vexo-muted">
@@ -234,191 +235,208 @@ export async function FollowUpView() {
         </p>
       </div>
 
-      <section className="space-y-2.5">
-        <div>
-          <h2 className="text-sm font-semibold">Timing de resposta da IA</h2>
-          <p className="mt-1 text-xs text-vexo-muted">
-            Vale pra todas as conversas, não só follow-up. Ligado, a IA espera um tempo
-            calculado (30s a 10min, dependendo de quanto o lead demorou pra responder) antes de
-            enviar a resposta. Desligado — útil enquanto você está testando o sistema — a IA
-            responde quase na hora, sem esperar.
-          </p>
-        </div>
+      <Tabs
+        defaultTabId="geral"
+        tabs={[
+          {
+            id: "geral",
+            label: "Configurações gerais",
+            content: (
+              <div className="space-y-6">
+                <section className="space-y-2.5">
+                  <div>
+                    <h2 className="text-sm font-semibold">Timing de resposta da IA</h2>
+                    <p className="mt-1 text-xs text-vexo-muted">
+                      Vale pra todas as conversas, não só follow-up. Ligado, a IA espera um tempo
+                      calculado (30s a 10min, dependendo de quanto o lead demorou pra responder)
+                      antes de enviar a resposta. Desligado — útil enquanto você está testando o
+                      sistema — a IA responde quase na hora, sem esperar.
+                    </p>
+                  </div>
 
-        <form
-          action={updateAiSettings}
-          className="flex items-center justify-between gap-3 rounded-xl border border-vexo-border bg-vexo-surface p-3.5"
-        >
-          <label className="flex items-center gap-2 text-xs">
-            <input
-              type="checkbox"
-              name="adaptiveDelayEnabled"
-              defaultChecked={adaptiveDelayEnabled}
-              className="rounded border-vexo-border"
-            />
-            Delay adaptativo ativado
-          </label>
-          <button
-            type="submit"
-            className="shrink-0 rounded-lg border border-vexo-accent px-2.5 py-1.5 text-card font-medium text-vexo-accent hover:bg-vexo-accent/10"
-          >
-            Salvar
-          </button>
-        </form>
-      </section>
+                  <form
+                    action={updateAiSettings}
+                    className="flex items-center justify-between gap-3 rounded-xl border border-vexo-border bg-vexo-surface p-3.5"
+                  >
+                    <label className="flex items-center gap-2 text-xs">
+                      <input
+                        type="checkbox"
+                        name="adaptiveDelayEnabled"
+                        defaultChecked={adaptiveDelayEnabled}
+                        className="rounded border-vexo-border"
+                      />
+                      Delay adaptativo ativado
+                    </label>
+                    <button
+                      type="submit"
+                      className="shrink-0 rounded-lg border border-vexo-accent px-2.5 py-1.5 text-card font-medium text-vexo-accent hover:bg-vexo-accent/10"
+                    >
+                      Salvar
+                    </button>
+                  </form>
+                </section>
 
-      <section className="space-y-2.5">
-        <div>
-          <h2 className="text-sm font-semibold">Janela de envio</h2>
-          <p className="mt-1 text-xs text-vexo-muted">
-            Vale para as duas sequências abaixo. Mensagens de follow-up só saem dentro desses dias
-            e horário — se o gatilho acontecer fora da janela, a mensagem espera até a próxima
-            janela válida em vez de disparar na hora.
-          </p>
-        </div>
+                <section className="space-y-2.5">
+                  <div>
+                    <h2 className="text-sm font-semibold">Janela de envio</h2>
+                    <p className="mt-1 text-xs text-vexo-muted">
+                      Vale para as duas sequências de follow-up. Mensagens só saem dentro desses
+                      dias e horário — se o gatilho acontecer fora da janela, a mensagem espera
+                      até a próxima janela válida em vez de disparar na hora.
+                    </p>
+                  </div>
 
-        <form
-          action={updateFollowUpWindow}
-          className="space-y-2.5 rounded-xl border border-vexo-border bg-vexo-surface p-3.5"
-        >
-          <div>
-            <label className="mb-1 block text-xs text-vexo-muted">Dias da semana</label>
-            <div className="flex flex-wrap gap-1.5">
-              {WEEKDAY_LABELS.map((day) => (
-                <label
-                  key={day.value}
-                  className="flex items-center gap-1.5 rounded-lg border border-vexo-border bg-vexo-bg px-2 py-1 text-xs has-[:checked]:border-vexo-accent has-[:checked]:text-vexo-accent"
+                  <form
+                    action={updateFollowUpWindow}
+                    className="space-y-2.5 rounded-xl border border-vexo-border bg-vexo-surface p-3.5"
+                  >
+                    <div>
+                      <label className="mb-1 block text-xs text-vexo-muted">Dias da semana</label>
+                      <div className="flex flex-wrap gap-1.5">
+                        {WEEKDAY_LABELS.map((day) => (
+                          <label
+                            key={day.value}
+                            className="flex items-center gap-1.5 rounded-lg border border-vexo-border bg-vexo-bg px-2 py-1 text-xs has-[:checked]:border-vexo-accent has-[:checked]:text-vexo-accent"
+                          >
+                            <input
+                              type="checkbox"
+                              name="windowDays"
+                              value={day.value}
+                              defaultChecked={windowDays.includes(day.value)}
+                              className="rounded border-vexo-border"
+                            />
+                            {day.label}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-end gap-2.5">
+                      <div>
+                        <label className="mb-1 block text-xs text-vexo-muted" htmlFor="windowStart">
+                          Das
+                        </label>
+                        <input
+                          id="windowStart"
+                          name="windowStart"
+                          type="time"
+                          required
+                          defaultValue={windowStart}
+                          className="rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5 text-xs outline-none focus:border-vexo-accent"
+                        />
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-xs text-vexo-muted" htmlFor="windowEnd">
+                          às
+                        </label>
+                        <input
+                          id="windowEnd"
+                          name="windowEnd"
+                          type="time"
+                          required
+                          defaultValue={windowEnd}
+                          className="rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5 text-xs outline-none focus:border-vexo-accent"
+                        />
+                      </div>
+                      <button
+                        type="submit"
+                        className="rounded-lg border border-vexo-accent px-2.5 py-1.5 text-xs font-medium text-vexo-accent hover:bg-vexo-accent/10"
+                      >
+                        Salvar janela
+                      </button>
+                    </div>
+                    <p className="text-card text-vexo-muted">Horário de Brasília.</p>
+                  </form>
+                </section>
+              </div>
+            ),
+          },
+          {
+            id: "silence",
+            label: "Parou de responder",
+            content: (
+              <section className="space-y-3">
+                <p className="text-xs text-vexo-muted">
+                  Gatilho automático: se o lead não responder dentro do prazo abaixo, o sistema
+                  detecta sozinho pela última mensagem da conversa e dispara essa sequência — sem
+                  precisar de nenhuma ação manual. Só vale antes do agendamento acontecer; depois
+                  que o lead agenda, esse gatilho para de valer e quem cuida dele é a sequência de
+                  lembretes/não compareceu.
+                </p>
+
+                <form
+                  action={updateFollowUpSettings}
+                  className="flex flex-wrap items-end gap-2.5 rounded-xl border border-vexo-border bg-vexo-surface p-3.5"
                 >
-                  <input
-                    type="checkbox"
-                    name="windowDays"
-                    value={day.value}
-                    defaultChecked={windowDays.includes(day.value)}
-                    className="rounded border-vexo-border"
-                  />
-                  {day.label}
-                </label>
-              ))}
-            </div>
-          </div>
+                  <div>
+                    <label className="mb-1 block text-xs text-vexo-muted" htmlFor="silenceHours">
+                      Considerar que o lead parou de responder depois de
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        id="silenceHours"
+                        name="silenceHours"
+                        type="number"
+                        min={1}
+                        required
+                        defaultValue={silenceHours}
+                        className="w-20 rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5 text-xs outline-none focus:border-vexo-accent"
+                      />
+                      <span className="text-xs text-vexo-muted">horas</span>
+                    </div>
+                  </div>
+                  <button
+                    type="submit"
+                    className="rounded-lg border border-vexo-accent px-2.5 py-1.5 text-xs font-medium text-vexo-accent hover:bg-vexo-accent/10"
+                  >
+                    Salvar prazo
+                  </button>
+                </form>
 
-          <div className="flex flex-wrap items-end gap-2.5">
-            <div>
-              <label className="mb-1 block text-xs text-vexo-muted" htmlFor="windowStart">
-                Das
-              </label>
-              <input
-                id="windowStart"
-                name="windowStart"
-                type="time"
-                required
-                defaultValue={windowStart}
-                className="rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5 text-xs outline-none focus:border-vexo-accent"
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-xs text-vexo-muted" htmlFor="windowEnd">
-                às
-              </label>
-              <input
-                id="windowEnd"
-                name="windowEnd"
-                type="time"
-                required
-                defaultValue={windowEnd}
-                className="rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5 text-xs outline-none focus:border-vexo-accent"
-              />
-            </div>
-            <button
-              type="submit"
-              className="rounded-lg border border-vexo-accent px-2.5 py-1.5 text-xs font-medium text-vexo-accent hover:bg-vexo-accent/10"
-            >
-              Salvar janela
-            </button>
-          </div>
-          <p className="text-card text-vexo-muted">Horário de Brasília.</p>
-        </form>
-      </section>
+                {silenceSteps.length === 0 && (
+                  <p className="rounded-lg border border-vexo-border bg-vexo-surface p-2.5 text-card text-vexo-muted">
+                    Nenhum passo configurado ainda — enquanto isso, o sistema usa uma mensagem
+                    padrão única (imediata) pra não ficar mudo.
+                  </p>
+                )}
 
-      <section className="space-y-3">
-        <div>
-          <h2 className="text-sm font-semibold">Parou de responder</h2>
-          <p className="mt-1 text-xs text-vexo-muted">
-            Gatilho automático: se o lead não responder dentro do prazo abaixo, o sistema detecta
-            sozinho pela última mensagem da conversa e dispara essa sequência — sem precisar de
-            nenhuma ação manual. Só vale antes do agendamento acontecer; depois que o lead agenda,
-            esse gatilho para de valer e quem cuida dele é a sequência de lembretes/não
-            compareceu.
-          </p>
-        </div>
+                <StepList
+                  steps={silenceSteps}
+                  trigger="SILENCE"
+                  firstStepLabel="Enviado quantas horas/dias após o lead parar de responder"
+                />
+              </section>
+            ),
+          },
+          {
+            id: "no-show",
+            label: "Não compareceu",
+            content: (
+              <section className="space-y-3">
+                <p className="text-xs text-vexo-muted">
+                  Gatilho manual: só quem está na clínica sabe se o paciente veio ou não, então
+                  essa sequência só é disparada pelo botão <strong>"Não compareceu"</strong> na
+                  tela do agendamento — nunca automaticamente. Não tem folga escondida: você marca
+                  quando puder, sem pressa.
+                </p>
 
-        <form
-          action={updateFollowUpSettings}
-          className="flex flex-wrap items-end gap-2.5 rounded-xl border border-vexo-border bg-vexo-surface p-3.5"
-        >
-          <div>
-            <label className="mb-1 block text-xs text-vexo-muted" htmlFor="silenceHours">
-              Considerar que o lead parou de responder depois de
-            </label>
-            <div className="flex items-center gap-2">
-              <input
-                id="silenceHours"
-                name="silenceHours"
-                type="number"
-                min={1}
-                required
-                defaultValue={silenceHours}
-                className="w-20 rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5 text-xs outline-none focus:border-vexo-accent"
-              />
-              <span className="text-xs text-vexo-muted">horas</span>
-            </div>
-          </div>
-          <button
-            type="submit"
-            className="rounded-lg border border-vexo-accent px-2.5 py-1.5 text-xs font-medium text-vexo-accent hover:bg-vexo-accent/10"
-          >
-            Salvar prazo
-          </button>
-        </form>
+                {noShowSteps.length === 0 && (
+                  <p className="rounded-lg border border-vexo-border bg-vexo-surface p-2.5 text-card text-vexo-muted">
+                    Nenhum passo configurado ainda — enquanto isso, o sistema usa uma mensagem
+                    padrão única, enviada no dia seguinte à marcação.
+                  </p>
+                )}
 
-        {silenceSteps.length === 0 && (
-          <p className="rounded-lg border border-vexo-border bg-vexo-surface p-2.5 text-card text-vexo-muted">
-            Nenhum passo configurado ainda — enquanto isso, o sistema usa uma mensagem padrão
-            única (imediata) pra não ficar mudo.
-          </p>
-        )}
-
-        <StepList
-          steps={silenceSteps}
-          trigger="SILENCE"
-          firstStepLabel="Enviado quantas horas/dias após o lead parar de responder"
-        />
-      </section>
-
-      <section className="space-y-3">
-        <div>
-          <h2 className="text-sm font-semibold">Não compareceu</h2>
-          <p className="mt-1 text-xs text-vexo-muted">
-            Gatilho manual: só quem está na clínica sabe se o paciente veio ou não, então essa
-            sequência só é disparada pelo botão <strong>"Não compareceu"</strong> na tela do
-            agendamento — nunca automaticamente. Não tem folga escondida: você marca quando puder,
-            sem pressa.
-          </p>
-        </div>
-
-        {noShowSteps.length === 0 && (
-          <p className="rounded-lg border border-vexo-border bg-vexo-surface p-2.5 text-card text-vexo-muted">
-            Nenhum passo configurado ainda — enquanto isso, o sistema usa uma mensagem padrão
-            única, enviada no dia seguinte à marcação.
-          </p>
-        )}
-
-        <StepList
-          steps={noShowSteps}
-          trigger="NO_SHOW"
-          firstStepLabel="Enviado quantos dias após marcar como não compareceu"
-        />
-      </section>
+                <StepList
+                  steps={noShowSteps}
+                  trigger="NO_SHOW"
+                  firstStepLabel="Enviado quantos dias após marcar como não compareceu"
+                />
+              </section>
+            ),
+          },
+        ]}
+      />
     </div>
   );
 }
