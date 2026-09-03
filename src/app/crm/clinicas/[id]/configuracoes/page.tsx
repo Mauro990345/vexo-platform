@@ -20,10 +20,10 @@ export default async function ClinicSettingsPage({ params }: { params: { id: str
   if (!clinic) notFound();
 
   return (
-    <div className="max-w-4xl space-y-3">
-      <h1 className="text-lg font-semibold tracking-tight">Automação</h1>
+    <div className="max-w-3xl space-y-2.5">
+      <h1 className="text-base font-semibold tracking-tight">Automação</h1>
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid gap-3 lg:grid-cols-2">
         <form
           action={updateClinicSettings.bind(null, clinic.id)}
           className="space-y-3 rounded-xl border border-vexo-border bg-vexo-surface p-3.5"

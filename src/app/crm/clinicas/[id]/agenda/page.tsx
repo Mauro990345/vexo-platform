@@ -7,6 +7,8 @@ import { AppointmentStatusBadge, appointmentStatusBorderClass } from "@/componen
 
 export const dynamic = "force-dynamic";
 
+// 14 tem que bater com o "repeat(14,...)" de grid-rows mais abaixo — mudou
+// o range de horas, muda os dois juntos.
 const HOURS = Array.from({ length: 14 }, (_, i) => i + 7); // 07h .. 20h
 const WEEKDAY_LABELS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
 
@@ -86,8 +88,16 @@ export default async function ClinicAgendaPage({
             assume "auto" como mínimo, deixando o card de agendamento (ou o
             texto dentro dele) esticar aquela coluna além da fração igual
             que as outras colunas recebem. min-w-0 nas células é reforço,
-            não substitui isso. */}
-        <div className="grid min-w-[760px] grid-cols-[44px_repeat(7,minmax(0,1fr))]">
+            não substitui isso.
+
+            grid-rows fixa cada linha de horário em 56px — sem isso, uma
+            linha de grid é alta o bastante pro seu conteúdo mais alto (a
+            célula com agendamento), e como todas as colunas daquela hora
+            compartilham a MESMA linha, a hora inteira (todos os 7 dias)
+            fica mais alta que uma hora sem agendamento nenhum. O "14" tem
+            que bater com HOURS.length (não dá pra interpolar isso na
+            classe — o Tailwind precisa do valor literal em build time). */}
+        <div className="grid min-w-[760px] grid-cols-[44px_repeat(7,minmax(0,1fr))] grid-rows-[auto_repeat(14,56px)]">
           <div className="border-b border-r border-vexo-border" />
           {days.map((d, i) => (
             <div key={i} className="min-w-0 border-b border-r border-vexo-border px-1.5 py-1.5 text-center last:border-r-0">
@@ -112,7 +122,7 @@ export default async function ClinicAgendaPage({
                 return (
                   <div
                     key={i}
-                    className="min-w-0 min-h-[38px] space-y-0.5 overflow-hidden border-b border-r border-vexo-border p-1 last:border-r-0"
+                    className="min-w-0 space-y-0.5 overflow-hidden border-b border-r border-vexo-border p-1 last:border-r-0"
                   >
                     {cellAppointments.map((a) => (
                       <Link

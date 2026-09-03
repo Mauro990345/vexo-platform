@@ -204,9 +204,9 @@ export async function FollowUpView() {
   const windowEnd = minutesToTime(settings?.windowEndMinute ?? 18 * 60);
 
   return (
-    <div className="max-w-xl space-y-8">
+    <div className="max-w-lg space-y-6">
       <div>
-        <h1 className="text-lg font-semibold tracking-tight">Follow-up</h1>
+        <h1 className="text-base font-semibold tracking-tight">Follow-up</h1>
         <p className="mt-1 text-xs text-vexo-muted">
           Duas sequências independentes, cada uma com seus próprios passos. Vale pra todas as
           clínicas. Clique num passo pra editar.
