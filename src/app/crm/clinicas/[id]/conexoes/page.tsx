@@ -23,8 +23,9 @@ const WHATSAPP_STATUS_DOT: Record<WhatsappConnectionState, string> = {
 
 // Card compacto no formato de referência (grid 3 colunas): ícone+nome em
 // cima, descrição no meio, status + botão na mesma linha embaixo. O card
-// em si não é clicável — só o botão, que leva pra tela dedicada daquele
-// canal (a de WhatsApp tem QR code, as outras completam o OAuth ali).
+// em si não é clicável — só o botão. Instagram e Google Calendar apontam
+// direto pro endpoint que inicia o OAuth (sem página intermediária);
+// WhatsApp continua indo pra tela própria porque precisa mostrar o QR code.
 function ConnectionCard({
   icon,
   iconBg,
@@ -71,12 +72,17 @@ function ConnectionCard({
   );
 }
 
+const CHANNEL_NAMES: Record<string, string> = {
+  instagram: "Instagram",
+  "google-calendar": "Google Calendar",
+};
+
 export default async function ClinicConexoesPage({
   params,
   searchParams,
 }: {
   params: { id: string };
-  searchParams: { status?: string };
+  searchParams: { status?: string; channel?: string };
 }) {
   await requireInternalSession();
 
@@ -109,7 +115,7 @@ export default async function ClinicConexoesPage({
 
       {searchParams.status === "erro" && (
         <p className="rounded-lg border border-red-500/30 bg-red-500/10 p-2 text-xs text-red-300">
-          Falha ao conectar o Instagram. Tente novamente.
+          Falha ao conectar{searchParams.channel ? ` o ${CHANNEL_NAMES[searchParams.channel] ?? searchParams.channel}` : ""}. Tente novamente.
         </p>
       )}
 
@@ -144,7 +150,7 @@ export default async function ClinicConexoesPage({
           connected={googleConnected}
           statusLabel={googleConnected ? "Conectado" : "Não conectado"}
           statusDot={googleConnected ? "bg-emerald-400" : "bg-vexo-muted"}
-          href={`${base}/google-calendar`}
+          href={`/api/oauth/google-calendar/start?clinicId=${clinic.id}`}
         />
       </div>
     </div>
