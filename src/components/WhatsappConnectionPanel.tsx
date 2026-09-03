@@ -44,8 +44,8 @@ export function WhatsappConnectionPanel({
   return (
     <div className="space-y-2.5 rounded-xl border border-vexo-border bg-vexo-surface p-3.5">
       <div className="flex items-center gap-3">
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-500 text-white">
-          <MessageCircle className="h-4 w-4" strokeWidth={2} />
+        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-emerald-500 text-white">
+          <MessageCircle className="h-3.5 w-3.5" strokeWidth={2} />
         </span>
 
         <div className="min-w-0 flex-1">
