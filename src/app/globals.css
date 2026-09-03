@@ -3,16 +3,18 @@
 @tailwind utilities;
 
 /* ---------------------------------------------------------------------------
- * VEXO — Design tokens
- * Fonte única de cores do sistema. Cada variável guarda um "R G B" (sem
- * vírgula, sem rgb()) — é o formato que o Tailwind precisa pra poder aplicar
- * opacidade (ex: bg-vexo-accent/10) em cima de uma variável CSS, ver
- * tailwind.config.ts (cada cor vexo.* referencia uma dessas variáveis via
- * rgb(var(--vexo-x) / <alpha-value>)).
+ * VEXO — Design tokens (valores padrão)
+ * Cada variável guarda um "R G B" (sem vírgula, sem rgb()) — é o formato que
+ * o Tailwind precisa pra poder aplicar opacidade (ex: bg-vexo-accent/10) em
+ * cima de uma variável CSS, ver tailwind.config.ts (cada cor vexo.*
+ * referencia uma dessas variáveis via rgb(var(--vexo-x) / <alpha-value>)).
  *
- * Pra trocar uma cor do sistema, mexe só aqui — não precisa caçar componente
- * por componente. Tabela de referência em português simples: ver PR/commit
- * que introduziu este arquivo.
+ * Estes são os valores PADRÃO/de fábrica. O usuário pode trocar cada cor
+ * visualmente na tela Configurações (/crm/clinicas/[id]/configuracoes) — o
+ * valor salvo fica em ThemeSettings (banco) e é aplicado como style inline
+ * no <html> em src/app/layout.tsx, que sempre sobrescreve o que está aqui.
+ * Pra restaurar o padrão, ver src/lib/theme.ts (THEME_DEFAULTS) — precisa
+ * bater com os valores abaixo.
  * ------------------------------------------------------------------------- */
 :root {
   color-scheme: dark;

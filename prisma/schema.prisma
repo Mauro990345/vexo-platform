@@ -367,6 +367,34 @@ model AiSettings {
   updatedAt            DateTime @updatedAt
 }
 
+// Cores do sistema (design tokens), editáveis visualmente pela tela
+// "Configurações" (ver src/lib/theme.ts para os valores padrão e as
+// descrições de cada campo). Linha única (id fixo "singleton"), mesmo
+// padrão de AiSettings/FollowUpSettings. Cada coluna guarda um hex
+// ("#rrggbb") — é o formato que <input type="color"> usa nativamente;
+// vira "R G B" (pra opacidade do Tailwind funcionar) só na hora de
+// montar o style inline em src/app/layout.tsx.
+model ThemeSettings {
+  id String @id @default("singleton")
+
+  vexoBg           String @default("#0b0f17")
+  vexoSurface      String @default("#141a24")
+  vexoSurface2     String @default("#1b222e")
+  vexoBorder       String @default("#232c3a")
+  vexoBorderStrong String @default("#33404f")
+  vexoMuted        String @default("#8b96a8")
+  vexoFg           String @default("#f1f4f8")
+  vexoAccent       String @default("#3b82f6")
+  vexoAccentFg     String @default("#ffffff")
+  vexoPetrol       String @default("#0B2436")
+  vexoPetrolBorder String @default("#1e4459")
+  vexoSuccess      String @default("#34d399")
+  vexoError        String @default("#f87171")
+  vexoWarning      String @default("#fbbf24")
+
+  updatedAt DateTime @updatedAt
+}
+
 // A primeira mensagem é sempre enviada manualmente por Mauro, fora da
 // plataforma (ver especificação — nenhuma automação de disparo em massa).
 // Este registro é apenas um contador manual para alimentar o painel do
