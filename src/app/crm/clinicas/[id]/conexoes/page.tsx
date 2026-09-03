@@ -4,6 +4,8 @@ import { MessageCircle, AtSign, Calendar } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { requireInternalSession } from "@/lib/session";
 import { refreshWhatsappStatus, type WhatsappConnectionState } from "@/lib/whatsapp-connection";
+import { ConnectOAuthButton } from "@/components/ConnectOAuthButton";
+import { RefreshOnFocus } from "@/components/RefreshOnFocus";
 
 export const dynamic = "force-dynamic";
 
@@ -24,8 +26,11 @@ const WHATSAPP_STATUS_DOT: Record<WhatsappConnectionState, string> = {
 // Card compacto no formato de referência (grid 3 colunas): ícone+nome em
 // cima, descrição no meio, status + botão na mesma linha embaixo. O card
 // em si não é clicável — só o botão. Instagram e Google Calendar apontam
-// direto pro endpoint que inicia o OAuth (sem página intermediária);
-// WhatsApp continua indo pra tela própria porque precisa mostrar o QR code.
+// direto pro endpoint que inicia o OAuth, aberto numa aba nova
+// (openInNewTab) pra não tirar o usuário da tela de Conexões — o status
+// atualiza sozinho ao voltar pra essa aba (ver RefreshOnFocus). WhatsApp
+// continua navegando pra tela própria (mesma aba) porque precisa mostrar
+// o QR code, não é um redirect OAuth de terceiro.
 function ConnectionCard({
   icon,
   iconBg,
@@ -35,6 +40,7 @@ function ConnectionCard({
   statusLabel,
   statusDot,
   href,
+  openInNewTab,
 }: {
   icon: React.ReactNode;
   iconBg: string;
@@ -44,7 +50,10 @@ function ConnectionCard({
   statusLabel: string;
   statusDot: string;
   href: string;
+  openInNewTab?: boolean;
 }) {
+  const buttonLabel = connected ? "Gerenciar" : "Conectar";
+
   return (
     <div className="flex flex-col gap-2 rounded-xl border border-vexo-border bg-vexo-surface p-3.5">
       <div className="flex items-center gap-2.5">
@@ -61,12 +70,16 @@ function ConnectionCard({
           <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${statusDot}`} />
           <span className="truncate">{statusLabel}</span>
         </div>
-        <Link
-          href={href}
-          className="shrink-0 rounded-lg border border-vexo-accent px-2.5 py-1 text-[11px] font-medium text-vexo-accent hover:bg-vexo-accent/10"
-        >
-          {connected ? "Gerenciar" : "Conectar"}
-        </Link>
+        {openInNewTab ? (
+          <ConnectOAuthButton href={href} label={buttonLabel} />
+        ) : (
+          <Link
+            href={href}
+            className="shrink-0 rounded-lg border border-vexo-accent px-2.5 py-1 text-[11px] font-medium text-vexo-accent hover:bg-vexo-accent/10"
+          >
+            {buttonLabel}
+          </Link>
+        )}
       </div>
     </div>
   );
@@ -105,6 +118,8 @@ export default async function ClinicConexoesPage({
 
   return (
     <div className="space-y-3">
+      <RefreshOnFocus />
+
       <div>
         <h1 className="text-base font-semibold tracking-tight">Conexões</h1>
         <p className="mt-0.5 text-xs text-vexo-muted">
@@ -141,6 +156,7 @@ export default async function ClinicConexoesPage({
           }
           statusDot={instagramConnected ? "bg-emerald-400" : "bg-vexo-muted"}
           href={`/api/oauth/instagram/start?clinicId=${clinic.id}`}
+          openInNewTab
         />
         <ConnectionCard
           icon={<Calendar className="h-3.5 w-3.5" strokeWidth={2} />}
@@ -151,6 +167,7 @@ export default async function ClinicConexoesPage({
           statusLabel={googleConnected ? "Conectado" : "Não conectado"}
           statusDot={googleConnected ? "bg-emerald-400" : "bg-vexo-muted"}
           href={`/api/oauth/google-calendar/start?clinicId=${clinic.id}`}
+          openInNewTab
         />
       </div>
     </div>
