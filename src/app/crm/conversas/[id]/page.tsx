@@ -1,4 +1,6 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
+import { ChevronLeft } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { StatusBadge } from "@/components/StatusBadge";
 import { AttendanceToggle } from "@/components/AttendanceToggle";
@@ -20,10 +22,24 @@ export default async function ConversationDetailPage({ params }: { params: { id:
   if (!conversation) notFound();
 
   const appointment = conversation.appointments[0];
+  // Sidebar já tem um "← Contas" pra voltar pro CRM global (ver
+  // contextHeader em conversas/[id]/layout.tsx) — esse aqui é diferente:
+  // volta pra tela ESPECÍFICA da clínica de onde essa conversa foi aberta
+  // (Agenda quando tem agendamento, Pipeline quando não tem).
+  const backHref = appointment ? `/crm/clinicas/${conversation.clinicId}/agenda` : `/crm/clinicas/${conversation.clinicId}`;
+  const backLabel = appointment ? "Agenda" : "Pipeline";
 
   return (
     <div className="grid gap-6 lg:grid-cols-[1fr_280px]">
       <div>
+        <Link
+          href={backHref}
+          className="mb-2 inline-flex items-center gap-1 text-xs text-vexo-muted hover:text-vexo-fg"
+        >
+          <ChevronLeft className="h-3.5 w-3.5 shrink-0" strokeWidth={2} />
+          {backLabel}
+        </Link>
+
         <div className="mb-4 flex items-center justify-between">
           <h1 className="text-lg font-semibold">
             {conversation.lead.name ?? conversation.lead.igUsername ?? "Lead"}

@@ -128,12 +128,10 @@ export default async function ClinicAgendaPage({
                       <Link
                         key={a.id}
                         href={`/crm/conversas/${a.conversationId}`}
-                        className={`flex min-w-0 flex-1 flex-col rounded-md border border-l-[3px] border-vexo-petrolBorder bg-vexo-petrol p-1 text-[10px] text-vexo-fg transition hover:border-vexo-accent ${appointmentStatusBorderClass(a.status)}`}
+                        className={`flex min-w-0 flex-1 flex-col justify-center gap-0.5 rounded-md border border-l-[3px] border-vexo-petrolBorder bg-vexo-petrol p-1 text-[10px] text-vexo-fg transition hover:border-vexo-accent ${appointmentStatusBorderClass(a.status)}`}
                       >
-                        <p className="truncate font-medium">{a.lead.name ?? a.lead.igUsername ?? "Lead"}</p>
-                        {/* flex-1 + items-center centraliza essa linha no espaço
-                            que sobra abaixo do nome, em vez de colar no topo. */}
-                        <div className="flex flex-1 min-w-0 items-center gap-1.5">
+                        <p className="truncate font-medium leading-tight">{a.lead.name ?? a.lead.igUsername ?? "Lead"}</p>
+                        <div className="flex min-w-0 items-center gap-1.5 leading-none">
                           <span className="shrink-0 text-vexo-fg/70">
                             {a.scheduledAt.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
                           </span>
