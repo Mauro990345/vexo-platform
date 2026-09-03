@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { classifyConversation, generateLeadReply, type CalendarTool } from "@/lib/anthropic";
 import { checkAvailability, createCalendarEvent } from "@/lib/google-calendar";
-import { computeAdaptiveDelaySeconds } from "@/lib/scheduler";
+import { computeAdaptiveDelaySeconds, FAST_REPLY_DELAY_SECONDS } from "@/lib/scheduler";
 import { DEFAULT_CONVERSATION_SYSTEM_PROMPT } from "@/lib/default-prompt";
 import { sendWhatsappMessage, formatEscalationAlert } from "@/lib/whatsapp";
 import { cancelPendingFollowUp } from "@/lib/follow-up";
@@ -174,7 +174,10 @@ export async function handleInboundInstagramMessage(event: InboundInstagramEvent
     ? Math.max(0, Math.round((event.timestamp.getTime() - previousAiMessage.sentAt.getTime()) / 1000))
     : null;
 
-  const delaySeconds = computeAdaptiveDelaySeconds(leadResponseTimeSeconds);
+  const aiSettings = await prisma.aiSettings.findUnique({ where: { id: "singleton" } });
+  const delaySeconds = aiSettings?.adaptiveDelayEnabled === false
+    ? FAST_REPLY_DELAY_SECONDS
+    : computeAdaptiveDelaySeconds(leadResponseTimeSeconds);
   const scheduledFor = new Date(Date.now() + delaySeconds * 1000);
 
   await prisma.message.create({

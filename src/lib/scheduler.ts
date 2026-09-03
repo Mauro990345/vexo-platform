@@ -11,6 +11,11 @@
 const ONE_HOUR_SECONDS = 60 * 60;
 const SIX_HOURS_SECONDS = 6 * 60 * 60;
 
+// Usado quando o timing adaptativo está desligado (AiSettings.adaptiveDelayEnabled
+// = false, ver conversation-pipeline.ts) — modo de teste: a IA responde rápido e
+// direto, sem as faixas de espera abaixo.
+export const FAST_REPLY_DELAY_SECONDS = 3;
+
 function randomInRangeSeconds(minSeconds: number, maxSeconds: number): number {
   return Math.round(minSeconds + Math.random() * (maxSeconds - minSeconds));
 }

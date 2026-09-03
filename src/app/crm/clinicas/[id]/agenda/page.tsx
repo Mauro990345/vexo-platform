@@ -67,16 +67,16 @@ export default async function ClinicAgendaPage({
         <div className="flex gap-1.5">
           <Link
             href={`${base}?week=${toDateParam(addDays(weekStart, -7))}`}
-            className="rounded-lg border border-vexo-border px-2.5 py-1 text-xs hover:border-vexo-accent"
+            className="rounded-lg border border-vexo-accent px-2.5 py-1 text-xs text-vexo-accent hover:bg-vexo-accent/10"
           >
             ← Semana
           </Link>
-          <Link href={base} className="rounded-lg border border-vexo-border px-2.5 py-1 text-xs hover:border-vexo-accent">
+          <Link href={base} className="rounded-lg border border-vexo-accent px-2.5 py-1 text-xs text-vexo-accent hover:bg-vexo-accent/10">
             Hoje
           </Link>
           <Link
             href={`${base}?week=${toDateParam(addDays(weekStart, 7))}`}
-            className="rounded-lg border border-vexo-border px-2.5 py-1 text-xs hover:border-vexo-accent"
+            className="rounded-lg border border-vexo-accent px-2.5 py-1 text-xs text-vexo-accent hover:bg-vexo-accent/10"
           >
             Semana →
           </Link>

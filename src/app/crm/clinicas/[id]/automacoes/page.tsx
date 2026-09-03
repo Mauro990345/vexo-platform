@@ -181,7 +181,7 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
               />
               <button
                 type="submit"
-                className="w-full rounded-lg border border-vexo-border px-2.5 py-1.5 text-xs font-medium hover:border-vexo-accent"
+                className="w-full rounded-lg border border-vexo-accent px-2.5 py-1.5 text-xs font-medium text-vexo-accent hover:bg-vexo-accent/10"
               >
                 Criar acesso
               </button>

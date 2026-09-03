@@ -7,6 +7,7 @@ import {
   moveFollowUpStep,
   updateFollowUpSettings,
   updateFollowUpWindow,
+  updateAiSettings,
 } from "./actions";
 
 function preview(text: string, max = 70): string {
@@ -67,7 +68,7 @@ function StepList({
                 <form action={moveFollowUpStep.bind(null, step.id, "up")}>
                   <button
                     disabled={i === 0}
-                    className="rounded-md border border-vexo-border px-1.5 py-1 text-[11px] text-vexo-muted hover:border-vexo-accent hover:text-vexo-fg disabled:opacity-30"
+                    className="rounded-md border border-vexo-accent px-1.5 py-1 text-[11px] text-vexo-accent hover:bg-vexo-accent/10 disabled:opacity-30"
                   >
                     ↑
                   </button>
@@ -75,7 +76,7 @@ function StepList({
                 <form action={moveFollowUpStep.bind(null, step.id, "down")}>
                   <button
                     disabled={i === steps.length - 1}
-                    className="rounded-md border border-vexo-border px-1.5 py-1 text-[11px] text-vexo-muted hover:border-vexo-accent hover:text-vexo-fg disabled:opacity-30"
+                    className="rounded-md border border-vexo-accent px-1.5 py-1 text-[11px] text-vexo-accent hover:bg-vexo-accent/10 disabled:opacity-30"
                   >
                     ↓
                   </button>
@@ -145,7 +146,7 @@ function StepList({
 
                 <button
                   type="submit"
-                  className="rounded-lg border border-vexo-border px-2.5 py-1 text-[11px] font-medium hover:border-vexo-accent"
+                  className="rounded-lg border border-vexo-accent px-2.5 py-1 text-[11px] font-medium text-vexo-accent hover:bg-vexo-accent/10"
                 >
                   Salvar passo {i + 1}
                 </button>
@@ -211,15 +212,17 @@ function StepList({
 // (FollowUpStep/FollowUpSettings não têm clinicId, é compartilhada por
 // todas as clínicas) — só muda a sidebar em volta, não o conteúdo.
 export async function FollowUpView() {
-  const [silenceSteps, noShowSteps, settings] = await Promise.all([
+  const [silenceSteps, noShowSteps, settings, aiSettings] = await Promise.all([
     prisma.followUpStep.findMany({ where: { trigger: "SILENCE" }, orderBy: { order: "asc" } }),
     prisma.followUpStep.findMany({ where: { trigger: "NO_SHOW" }, orderBy: { order: "asc" } }),
     prisma.followUpSettings.findUnique({ where: { id: "singleton" } }),
+    prisma.aiSettings.findUnique({ where: { id: "singleton" } }),
   ]);
   const silenceHours = settings?.silenceHours ?? 24;
   const windowDays = settings?.windowDays?.length ? settings.windowDays : [1, 2, 3, 4, 5];
   const windowStart = minutesToTime(settings?.windowStartMinute ?? 8 * 60);
   const windowEnd = minutesToTime(settings?.windowEndMinute ?? 18 * 60);
+  const adaptiveDelayEnabled = aiSettings?.adaptiveDelayEnabled ?? true;
 
   return (
     <div className="max-w-lg space-y-6">
@@ -230,6 +233,39 @@ export async function FollowUpView() {
           clínicas. Clique num passo pra editar.
         </p>
       </div>
+
+      <section className="space-y-2.5">
+        <div>
+          <h2 className="text-sm font-semibold">Timing de resposta da IA</h2>
+          <p className="mt-1 text-xs text-vexo-muted">
+            Vale pra todas as conversas, não só follow-up. Ligado, a IA espera um tempo
+            calculado (30s a 10min, dependendo de quanto o lead demorou pra responder) antes de
+            enviar a resposta. Desligado — útil enquanto você está testando o sistema — a IA
+            responde quase na hora, sem esperar.
+          </p>
+        </div>
+
+        <form
+          action={updateAiSettings}
+          className="flex items-center justify-between gap-3 rounded-xl border border-vexo-border bg-vexo-surface p-3.5"
+        >
+          <label className="flex items-center gap-2 text-xs">
+            <input
+              type="checkbox"
+              name="adaptiveDelayEnabled"
+              defaultChecked={adaptiveDelayEnabled}
+              className="rounded border-vexo-border"
+            />
+            Delay adaptativo ativado
+          </label>
+          <button
+            type="submit"
+            className="shrink-0 rounded-lg border border-vexo-accent px-2.5 py-1.5 text-[11px] font-medium text-vexo-accent hover:bg-vexo-accent/10"
+          >
+            Salvar
+          </button>
+        </form>
+      </section>
 
       <section className="space-y-2.5">
         <div>
@@ -295,7 +331,7 @@ export async function FollowUpView() {
             </div>
             <button
               type="submit"
-              className="rounded-lg border border-vexo-border px-2.5 py-1.5 text-xs font-medium hover:border-vexo-accent"
+              className="rounded-lg border border-vexo-accent px-2.5 py-1.5 text-xs font-medium text-vexo-accent hover:bg-vexo-accent/10"
             >
               Salvar janela
             </button>
@@ -339,7 +375,7 @@ export async function FollowUpView() {
           </div>
           <button
             type="submit"
-            className="rounded-lg border border-vexo-border px-2.5 py-1.5 text-xs font-medium hover:border-vexo-accent"
+            className="rounded-lg border border-vexo-accent px-2.5 py-1.5 text-xs font-medium text-vexo-accent hover:bg-vexo-accent/10"
           >
             Salvar prazo
           </button>

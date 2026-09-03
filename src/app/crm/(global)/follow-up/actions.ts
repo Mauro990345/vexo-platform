@@ -34,6 +34,24 @@ async function readAttachmentFile(formData: FormData): Promise<File | null> {
   return file instanceof File && file.size > 0 ? file : null;
 }
 
+// Liga/desliga o delay artificial de resposta da IA (ver
+// computeAdaptiveDelaySeconds em src/lib/scheduler.ts). Desligado é usado
+// pra testar o sistema sem esperar as faixas de 30s-10min — a IA passa a
+// responder quase na hora (FAST_REPLY_DELAY_SECONDS).
+export async function updateAiSettings(formData: FormData) {
+  await requireInternalSession();
+
+  const adaptiveDelayEnabled = formData.get("adaptiveDelayEnabled") === "on";
+
+  await prisma.aiSettings.upsert({
+    where: { id: "singleton" },
+    update: { adaptiveDelayEnabled },
+    create: { id: "singleton", adaptiveDelayEnabled },
+  });
+
+  revalidatePath("/crm", "layout");
+}
+
 export async function addFollowUpStep(trigger: FollowUpTrigger, formData: FormData) {
   await requireInternalSession();
 

@@ -93,7 +93,7 @@ export function WhatsappConnectionPanel({
 
           <a
             href={refreshHref}
-            className="block w-full rounded-lg border border-vexo-border px-2.5 py-1.5 text-center text-xs font-medium hover:border-vexo-accent"
+            className="block w-full rounded-lg border border-vexo-accent px-2.5 py-1.5 text-center text-xs font-medium text-vexo-accent hover:bg-vexo-accent/10"
           >
             Atualizar / verificar conexão
           </a>
@@ -114,7 +114,7 @@ export function WhatsappConnectionPanel({
               title="Apenas letras minúsculas, números e hífen"
               className="flex-1 rounded-lg border border-vexo-border bg-vexo-bg px-2 py-1 text-xs font-mono outline-none focus:border-vexo-accent"
             />
-            <button className="rounded-lg border border-vexo-border px-2.5 py-1 text-xs hover:border-vexo-accent">
+            <button className="rounded-lg border border-vexo-accent px-2.5 py-1 text-xs text-vexo-accent hover:bg-vexo-accent/10">
               Salvar
             </button>
           </div>

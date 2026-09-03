@@ -127,7 +127,7 @@ export default async function ConversationDetailPage({ params }: { params: { id:
 
         <div className="space-y-2">
           <form action={setConversationStatus.bind(null, conversation.id, "LOST")}>
-            <button className="w-full rounded-lg border border-vexo-border px-3 py-1.5 text-xs text-vexo-muted hover:border-vexo-accent hover:text-vexo-fg">
+            <button className="w-full rounded-lg border border-vexo-accent px-3 py-1.5 text-xs text-vexo-accent hover:bg-vexo-accent/10">
               Marcar como perdido
             </button>
           </form>

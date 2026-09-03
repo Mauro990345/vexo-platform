@@ -21,11 +21,11 @@ enum UserRole {
 }
 
 model Clinic {
-  id        String   @id @default(cuid())
-  name      String
-  slug      String   @unique
-  timezone  String   @default("America/Sao_Paulo")
-  active    Boolean  @default(true)
+  id       String  @id @default(cuid())
+  name     String
+  slug     String  @unique
+  timezone String  @default("America/Sao_Paulo")
+  active   Boolean @default(true)
 
   // Piloto 21D
   pilotStartedAt DateTime?
@@ -53,16 +53,16 @@ model Clinic {
   // reenviado automaticamente a cada agendamento confirmado)
   welcomeVideoUrl String?
 
-  reminderConfig  ReminderConfig?
-  instagramAccount InstagramAccount?
+  reminderConfig        ReminderConfig?
+  instagramAccount      InstagramAccount?
   googleCalendarAccount GoogleCalendarAccount?
 
-  users         User[]
-  leads         Lead[]
-  conversations Conversation[]
-  appointments  Appointment[]
+  users           User[]
+  leads           Lead[]
+  conversations   Conversation[]
+  appointments    Appointment[]
   weeklySummaries WeeklySummary[]
-  approachLogs  ApproachLog[]
+  approachLogs    ApproachLog[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -96,12 +96,12 @@ model InstagramAccount {
   clinicId String @unique
   clinic   Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
 
-  igUserId        String // ID do usuário/página profissional no Instagram
-  igUsername       String?
-  facebookPageId   String
+  igUserId       String // ID do usuário/página profissional no Instagram
+  igUsername     String?
+  facebookPageId String
 
-  accessTokenEnc   String   @db.Text // token de página, criptografado em repouso
-  tokenExpiresAt   DateTime?
+  accessTokenEnc String    @db.Text // token de página, criptografado em repouso
+  tokenExpiresAt DateTime?
 
   connectedAt DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -115,8 +115,8 @@ model GoogleCalendarAccount {
   googleAccountEmail String
   calendarId         String @default("primary")
 
-  accessTokenEnc  String   @db.Text
-  refreshTokenEnc String   @db.Text
+  accessTokenEnc  String    @db.Text
+  refreshTokenEnc String    @db.Text
   tokenExpiresAt  DateTime?
 
   connectedAt DateTime @default(now())
@@ -164,8 +164,8 @@ model Conversation {
   leadId String
   lead   Lead   @relation(fields: [leadId], references: [id], onDelete: Cascade)
 
-  status        ConversationStatus @default(NEW)
-  needsHumanReason String? @db.Text
+  status           ConversationStatus @default(NEW)
+  needsHumanReason String?            @db.Text
 
   lastLeadMessageAt DateTime?
   lastAiMessageAt   DateTime?
@@ -201,7 +201,7 @@ enum MessageStatus {
 }
 
 model Message {
-  id             String @id @default(cuid())
+  id             String       @id @default(cuid())
   conversationId String
   conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 
@@ -212,7 +212,7 @@ model Message {
 
   igMessageId String?
 
-  status      MessageStatus @default(SENT)
+  status       MessageStatus @default(SENT)
   scheduledFor DateTime? // usado por mensagens OUTBOUND com delay adaptativo
   sentAt       DateTime?
   failReason   String?
@@ -246,10 +246,10 @@ model Appointment {
   leadId String
   lead   Lead   @relation(fields: [leadId], references: [id], onDelete: Cascade)
 
-  scheduledAt DateTime
+  scheduledAt   DateTime
   googleEventId String?
 
-  status       AppointmentStatus @default(SCHEDULED)
+  status             AppointmentStatus @default(SCHEDULED)
   welcomeVideoSentAt DateTime?
 
   reminderLogs ReminderLog[]
@@ -273,7 +273,7 @@ model ReminderConfig {
 }
 
 model ReminderLog {
-  id            String @id @default(cuid())
+  id            String      @id @default(cuid())
   appointmentId String
   appointment   Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
 
@@ -298,12 +298,12 @@ enum FollowUpTrigger {
 }
 
 model FollowUpLog {
-  id             String @id @default(cuid())
+  id             String       @id @default(cuid())
   conversationId String
   conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 
   trigger     FollowUpTrigger
-  triggeredAt DateTime  @default(now())
+  triggeredAt DateTime        @default(now())
   respondedAt DateTime?
 
   // Progresso na sequência configurável (FollowUpStep, mesmo trigger).
@@ -341,8 +341,8 @@ model FollowUpStep {
 // Configuração global do gatilho automático "parou de responder". Linha
 // única (id fixo "singleton").
 model FollowUpSettings {
-  id           String   @id @default("singleton")
-  silenceHours Int      @default(24)
+  id           String @id @default("singleton")
+  silenceHours Int    @default(24)
 
   // Janela de envio (horário de Brasília, ver src/lib/follow-up-window.ts) —
   // mensagens de follow-up só saem dentro dela; fora, esperam a próxima
@@ -354,6 +354,17 @@ model FollowUpSettings {
   windowEndMinute   Int   @default(1080)
 
   updatedAt DateTime @updatedAt
+}
+
+// Configuração global do timing de resposta da IA. Linha única (id fixo
+// "singleton"), igual ao padrão de FollowUpSettings. adaptiveDelayEnabled
+// desligado é usado durante testes (ver computeAdaptiveDelaySeconds em
+// src/lib/scheduler.ts) — a IA responde sem o delay artificial de
+// agendamento, direto.
+model AiSettings {
+  id                   String   @id @default("singleton")
+  adaptiveDelayEnabled Boolean  @default(true)
+  updatedAt            DateTime @updatedAt
 }
 
 // A primeira mensagem é sempre enviada manualmente por Mauro, fora da
@@ -391,7 +402,7 @@ model WeeklySummary {
   noShowCount     Int
   completedCount  Int
 
-  sentAt   DateTime?
+  sentAt    DateTime?
   sendError String?
 
   createdAt DateTime @default(now())
