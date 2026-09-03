@@ -18,15 +18,13 @@ const config: Config = {
           fg: "#f1f4f8",
           accent: "#3b82f6",
           accentFg: "#ffffff",
-          // Azul petróleo — só pro fundo dos cards de agendamento na Agenda,
-          // pra diferenciar visualmente do resto da UI (que usa surface/
-          // surface2 neutros). Precisa ser visivelmente azul e mais claro
-          // que o resto da paleta (que é toda cinza-escuro) — não pode ficar
-          // perto demais de vexo-surface2/border em luminosidade, senão o
-          // card se mistura com o fundo em vez de se destacar (era o
-          // problema da tentativa anterior, #1c3a4a — muito escuro/dessaturado).
-          petrol: "#2c5a86",
-          petrolBorder: "#3d76ab",
+          // Azul petróleo — só pro fundo dos cards de agendamento na Agenda.
+          // #081B2A veio direto do usuário (cor exata pedida); petrolBorder
+          // é um tom mais claro derivado dela só pra dar contorno visível
+          // ao card, já que a cor pedida é bem próxima da luminosidade do
+          // resto da paleta escura.
+          petrol: "#081B2A",
+          petrolBorder: "#1c3e56",
         },
       },
       fontFamily: {
