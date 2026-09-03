@@ -1,22 +1,29 @@
-// Timing adaptativo de resposta da IA — pura lógica de agendamento de envio,
-// não consome tokens extras. Primeira resposta tem delay curto fixo; as
-// seguintes espelham o tempo que o lead levou para responder, com jitter e
-// teto/piso de segurança.
+// Timing de resposta da IA — pura lógica de agendamento de envio, não
+// consome tokens extras (a resposta já foi gerada; isso só decide QUANDO
+// ela sai). Faixas fixas por tempo de silêncio do lead desde a última
+// mensagem da IA, sorteadas aleatoriamente dentro de cada faixa.
+//
+// A faixa de >6h é mais RÁPIDA que a de 1-6h de propósito: quando o lead
+// volta depois de sumir muito tempo é um momento de reengajamento, e o
+// sistema deve aproveitar rápido a atenção dele voltando em vez de
+// enfileirar atrás de um delay ainda maior.
 
-export const FIRST_REPLY_DELAY_SECONDS = Number(process.env.AI_FIRST_REPLY_DELAY_SECONDS ?? 40);
-export const MIN_REPLY_DELAY_SECONDS = Number(process.env.AI_MIN_REPLY_DELAY_SECONDS ?? 15);
-export const MAX_REPLY_DELAY_SECONDS = Number(process.env.AI_MAX_REPLY_DELAY_SECONDS ?? 900);
+const ONE_HOUR_SECONDS = 60 * 60;
+const SIX_HOURS_SECONDS = 6 * 60 * 60;
+
+function randomInRangeSeconds(minSeconds: number, maxSeconds: number): number {
+  return Math.round(minSeconds + Math.random() * (maxSeconds - minSeconds));
+}
 
 export function computeAdaptiveDelaySeconds(leadResponseTimeSeconds: number | null): number {
-  if (leadResponseTimeSeconds === null) {
-    return FIRST_REPLY_DELAY_SECONDS;
+  // Primeira mensagem da IA numa conversa nova: mesma faixa da resposta rápida (≤1h).
+  if (leadResponseTimeSeconds === null || leadResponseTimeSeconds <= ONE_HOUR_SECONDS) {
+    return randomInRangeSeconds(30, 60);
   }
 
-  const jitterFactor = 0.8 + Math.random() * 0.4; // variação de ±20%
-  const mirrored = leadResponseTimeSeconds * jitterFactor;
+  if (leadResponseTimeSeconds <= SIX_HOURS_SECONDS) {
+    return randomInRangeSeconds(5 * 60, 10 * 60);
+  }
 
-  return Math.min(
-    MAX_REPLY_DELAY_SECONDS,
-    Math.max(MIN_REPLY_DELAY_SECONDS, Math.round(mirrored))
-  );
+  return randomInRangeSeconds(2 * 60, 5 * 60);
 }
