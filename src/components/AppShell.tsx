@@ -27,7 +27,7 @@ function NavLink({ item, active }: { item: NavItem; active: boolean }) {
       href={item.href}
       className={`flex items-center gap-2 rounded-lg px-2 py-1.5 text-[13px] font-medium transition ${
         active
-          ? "bg-vexo-accent/15 text-vexo-accent"
+          ? "bg-vexo-petrol text-vexo-accent"
           : "text-vexo-muted hover:bg-vexo-petrol hover:text-vexo-fg"
       }`}
     >
