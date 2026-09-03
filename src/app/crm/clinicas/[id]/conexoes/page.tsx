@@ -71,7 +71,13 @@ function ConnectionCard({
   );
 }
 
-export default async function ClinicConexoesPage({ params }: { params: { id: string } }) {
+export default async function ClinicConexoesPage({
+  params,
+  searchParams,
+}: {
+  params: { id: string };
+  searchParams: { status?: string };
+}) {
   await requireInternalSession();
 
   const clinic = await prisma.clinic.findUnique({
@@ -101,6 +107,12 @@ export default async function ClinicConexoesPage({ params }: { params: { id: str
         </p>
       </div>
 
+      {searchParams.status === "erro" && (
+        <p className="rounded-lg border border-red-500/30 bg-red-500/10 p-2 text-xs text-red-300">
+          Falha ao conectar o Instagram. Tente novamente.
+        </p>
+      )}
+
       <div className="grid grid-cols-3 gap-3">
         <ConnectionCard
           icon={<MessageCircle className="h-3.5 w-3.5" strokeWidth={2} />}
@@ -122,7 +134,7 @@ export default async function ClinicConexoesPage({ params }: { params: { id: str
             instagramConnected ? `Conectado · @${clinic.instagramAccount!.igUsername ?? "conectado"}` : "Não conectado"
           }
           statusDot={instagramConnected ? "bg-emerald-400" : "bg-vexo-muted"}
-          href={`${base}/instagram`}
+          href={`/api/oauth/instagram/start?clinicId=${clinic.id}`}
         />
         <ConnectionCard
           icon={<Calendar className="h-3.5 w-3.5" strokeWidth={2} />}

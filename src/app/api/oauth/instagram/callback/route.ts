@@ -33,12 +33,12 @@ export async function GET(req: NextRequest) {
     });
 
     return NextResponse.redirect(
-      `${process.env.APP_URL ?? ""}/crm/clinicas/${parsedState.clinicId}/instagram?status=conectado`
+      `${process.env.APP_URL ?? ""}/crm/clinicas/${parsedState.clinicId}/conexoes?status=conectado`
     );
   } catch (err) {
     console.error("[vexo] Falha no callback OAuth do Instagram:", err);
     return NextResponse.redirect(
-      `${process.env.APP_URL ?? ""}/crm/clinicas/${parsedState.clinicId}/instagram?status=erro`
+      `${process.env.APP_URL ?? ""}/crm/clinicas/${parsedState.clinicId}/conexoes?status=erro`
     );
   }
 }
