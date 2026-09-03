@@ -53,28 +53,28 @@ export default async function ClinicAgendaPage({
   const base = `/crm/clinicas/${clinic.id}/agenda`;
 
   return (
-    <div className="space-y-4">
+    <div className="-mt-3 space-y-3 sm:-mt-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight">Agenda</h1>
-          <p className="mt-1 text-sm text-vexo-muted">
+          <h1 className="text-base font-semibold tracking-tight">Agenda</h1>
+          <p className="mt-0.5 text-xs text-vexo-muted">
             {weekStart.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })} –{" "}
             {addDays(weekStart, 6).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-1.5">
           <Link
             href={`${base}?week=${toDateParam(addDays(weekStart, -7))}`}
-            className="rounded-lg border border-vexo-border px-3 py-1.5 text-sm hover:border-vexo-accent"
+            className="rounded-lg border border-vexo-border px-2.5 py-1 text-xs hover:border-vexo-accent"
           >
             ← Semana
           </Link>
-          <Link href={base} className="rounded-lg border border-vexo-border px-3 py-1.5 text-sm hover:border-vexo-accent">
+          <Link href={base} className="rounded-lg border border-vexo-border px-2.5 py-1 text-xs hover:border-vexo-accent">
             Hoje
           </Link>
           <Link
             href={`${base}?week=${toDateParam(addDays(weekStart, 7))}`}
-            className="rounded-lg border border-vexo-border px-3 py-1.5 text-sm hover:border-vexo-accent"
+            className="rounded-lg border border-vexo-border px-2.5 py-1 text-xs hover:border-vexo-accent"
           >
             Semana →
           </Link>
