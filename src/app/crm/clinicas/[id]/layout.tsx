@@ -33,7 +33,7 @@ export default async function ClinicLayout({
       navGroups={buildClinicNavGroups(clinic.id)}
       contextHeader={
         <div className="rounded-lg bg-vexo-surface2 px-2 py-1.5">
-          <Link href="/crm" className="flex items-center gap-1 text-[11px] text-vexo-muted hover:text-vexo-fg">
+          <Link href="/crm" className="flex items-center gap-1 text-card text-vexo-muted hover:text-vexo-fg">
             <ChevronLeft className="h-3 w-3 shrink-0" strokeWidth={2} />
             Contas
           </Link>

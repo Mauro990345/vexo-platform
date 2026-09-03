@@ -25,7 +25,7 @@ function NavLink({ item, active }: { item: NavItem; active: boolean }) {
   return (
     <Link
       href={item.href}
-      className={`flex items-center gap-2 rounded-lg px-2 py-1.5 text-[13px] font-medium transition ${
+      className={`flex items-center gap-2 rounded-lg px-2 py-1.5 text-sidebar-item font-medium transition ${
         active
           ? "bg-vexo-petrol text-vexo-accent"
           : "text-vexo-muted hover:bg-vexo-petrol hover:text-vexo-fg"
@@ -65,7 +65,7 @@ export function AppShell({
           <span className="h-6 w-6 shrink-0 rounded-lg bg-vexo-accent" />
           <div className="min-w-0">
             <p className="text-xs font-semibold leading-none tracking-tight">VEXO</p>
-            <p className="mt-1 truncate text-[10px] leading-none text-vexo-muted">M8 Growth</p>
+            <p className="mt-1 truncate text-caption leading-none text-vexo-muted">M8 Growth</p>
           </div>
         </Link>
 
@@ -74,7 +74,7 @@ export function AppShell({
         <nav className="flex-1 space-y-3 px-2.5 py-1.5">
           {navGroups.map((group) => (
             <div key={group.label} className="space-y-0.5">
-              <p className="px-2 pb-1 pt-0.5 text-[9px] font-semibold uppercase tracking-wider text-vexo-muted">
+              <p className="px-2 pb-1 pt-0.5 text-sidebar-group font-semibold uppercase tracking-wider text-vexo-muted">
                 {group.label}
               </p>
               {group.items.map((item) => (
@@ -86,7 +86,7 @@ export function AppShell({
 
         <div className="border-t border-vexo-border p-2.5">
           <div className="flex items-center justify-between gap-2 rounded-lg px-1.5 py-1">
-            <span className="truncate text-[11px] text-vexo-muted">{userLabel}</span>
+            <span className="truncate text-card text-vexo-muted">{userLabel}</span>
             <SignOutButton />
           </div>
         </div>

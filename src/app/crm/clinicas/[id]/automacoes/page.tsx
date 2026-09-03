@@ -40,7 +40,7 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
               rows={8}
               defaultValue={clinic.aiSystemPrompt ?? ""}
               placeholder="Cole aqui o prompt fornecido pelo Mauro para esta clínica..."
-              className="w-full rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5 font-mono text-[11px] outline-none focus:border-vexo-accent"
+              className="w-full rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5 font-mono text-card outline-none focus:border-vexo-accent"
             />
           </div>
 
@@ -102,7 +102,7 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
 
           <button
             type="submit"
-            className="w-full rounded-lg bg-vexo-accent px-2.5 py-1.5 text-xs font-medium text-white hover:opacity-90"
+            className="w-full rounded-lg bg-vexo-accent px-2.5 py-1.5 text-xs font-medium text-vexo-accentFg hover:opacity-90"
           >
             Salvar configuração
           </button>
@@ -127,14 +127,14 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
                 className="w-full rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5 text-xs outline-none focus:border-vexo-accent"
               />
             </div>
-            <button className="rounded-lg bg-vexo-accent px-2.5 py-1.5 text-xs font-medium text-white hover:opacity-90">
+            <button className="rounded-lg bg-vexo-accent px-2.5 py-1.5 text-xs font-medium text-vexo-accentFg hover:opacity-90">
               Registrar
             </button>
           </form>
 
           <div className="space-y-2.5 rounded-xl border border-vexo-border bg-vexo-surface p-3.5">
             <h2 className="text-sm font-medium text-vexo-muted">Contas</h2>
-            <p className="text-[11px] text-vexo-muted">
+            <p className="text-card text-vexo-muted">
               Login do painel do cliente — permanente, sem expiração. Revogado removendo o acesso
               abaixo.
             </p>
@@ -145,10 +145,10 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
                   <li key={u.id} className="flex items-center justify-between px-2.5 py-1.5 text-xs">
                     <div>
                       <p>{u.name}</p>
-                      <p className="text-[11px] text-vexo-muted">{u.email}</p>
+                      <p className="text-card text-vexo-muted">{u.email}</p>
                     </div>
                     <form action={removeClientLogin.bind(null, clinic.id, u.id)}>
-                      <button className="rounded-md border border-vexo-border px-1.5 py-1 text-[11px] text-red-400 hover:border-red-500/40">
+                      <button className="rounded-md border border-vexo-border px-1.5 py-1 text-card text-vexo-error hover:border-vexo-error/40">
                         Remover acesso
                       </button>
                     </form>

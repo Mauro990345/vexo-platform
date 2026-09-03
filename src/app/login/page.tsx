@@ -77,12 +77,12 @@ export default function LoginPage() {
             />
           </div>
 
-          {error && <p className="mb-4 text-sm text-red-400">{error}</p>}
+          {error && <p className="mb-4 text-sm text-vexo-error">{error}</p>}
 
           <button
             type="submit"
             disabled={loading}
-            className="w-full rounded-lg bg-vexo-accent px-3 py-2 text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-50"
+            className="w-full rounded-lg bg-vexo-accent px-3 py-2 text-sm font-medium text-vexo-accentFg transition hover:opacity-90 disabled:opacity-50"
           >
             {loading ? "Entrando..." : "Entrar"}
           </button>

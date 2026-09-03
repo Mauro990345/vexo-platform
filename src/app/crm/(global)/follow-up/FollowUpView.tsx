@@ -47,20 +47,20 @@ function StepList({
           <details key={step.id} className="group rounded-xl border border-vexo-border bg-vexo-surface">
             <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5">
               <div className="flex min-w-0 items-center gap-2.5">
-                <span className="shrink-0 rounded-full border border-vexo-border px-1.5 py-0.5 text-[11px] text-vexo-muted">
+                <span className="shrink-0 rounded-full border border-vexo-border px-1.5 py-0.5 text-card text-vexo-muted">
                   Passo {i + 1}
                 </span>
-                <span className="shrink-0 text-[11px] text-vexo-muted">
+                <span className="shrink-0 text-card text-vexo-muted">
                   {i === 0 ? `dia ${step.offsetDays}` : `+${step.offsetDays}d`}
                 </span>
                 <span className="truncate text-xs">{preview(step.content)}</span>
                 {step.attachmentUrl && (
-                  <span className="shrink-0 text-[11px] text-vexo-muted" title="Tem anexo">
+                  <span className="shrink-0 text-card text-vexo-muted" title="Tem anexo">
                     📎
                   </span>
                 )}
               </div>
-              <span className="shrink-0 text-[11px] text-vexo-muted transition group-open:rotate-180">▾</span>
+              <span className="shrink-0 text-card text-vexo-muted transition group-open:rotate-180">▾</span>
             </summary>
 
             <div className="border-t border-vexo-border p-3.5">
@@ -68,7 +68,7 @@ function StepList({
                 <form action={moveFollowUpStep.bind(null, step.id, "up")}>
                   <button
                     disabled={i === 0}
-                    className="rounded-md border border-vexo-accent px-1.5 py-1 text-[11px] text-vexo-accent hover:bg-vexo-accent/10 disabled:opacity-30"
+                    className="rounded-md border border-vexo-accent px-1.5 py-1 text-card text-vexo-accent hover:bg-vexo-accent/10 disabled:opacity-30"
                   >
                     ↑
                   </button>
@@ -76,13 +76,13 @@ function StepList({
                 <form action={moveFollowUpStep.bind(null, step.id, "down")}>
                   <button
                     disabled={i === steps.length - 1}
-                    className="rounded-md border border-vexo-accent px-1.5 py-1 text-[11px] text-vexo-accent hover:bg-vexo-accent/10 disabled:opacity-30"
+                    className="rounded-md border border-vexo-accent px-1.5 py-1 text-card text-vexo-accent hover:bg-vexo-accent/10 disabled:opacity-30"
                   >
                     ↓
                   </button>
                 </form>
                 <form action={deleteFollowUpStep.bind(null, step.id)}>
-                  <button className="rounded-md border border-vexo-border px-1.5 py-1 text-[11px] text-red-400 hover:border-red-500/40">
+                  <button className="rounded-md border border-vexo-border px-1.5 py-1 text-card text-vexo-error hover:border-vexo-error/40">
                     Remover
                   </button>
                 </form>
@@ -126,7 +126,7 @@ function StepList({
                       >
                         Ver anexo atual
                       </a>
-                      <label className="flex shrink-0 items-center gap-1 text-[11px] text-vexo-muted">
+                      <label className="flex shrink-0 items-center gap-1 text-card text-vexo-muted">
                         <input type="checkbox" name="removeAttachment" className="rounded border-vexo-border" />
                         Remover
                       </label>
@@ -139,14 +139,14 @@ function StepList({
                     accept="image/*,video/*"
                     className="block w-full text-xs text-vexo-muted file:mr-2 file:rounded-lg file:border file:border-vexo-border file:bg-vexo-bg file:px-2.5 file:py-1.5 file:text-xs file:text-vexo-fg hover:file:border-vexo-accent"
                   />
-                  <p className="mt-1 text-[11px] text-vexo-muted">
+                  <p className="mt-1 text-card text-vexo-muted">
                     {step.attachmentUrl ? "Escolher um novo arquivo substitui o atual." : "JPG, PNG, WEBP, GIF, MP4, MOV ou WEBM — até 25MB."}
                   </p>
                 </div>
 
                 <button
                   type="submit"
-                  className="rounded-lg border border-vexo-accent px-2.5 py-1 text-[11px] font-medium text-vexo-accent hover:bg-vexo-accent/10"
+                  className="rounded-lg border border-vexo-accent px-2.5 py-1 text-card font-medium text-vexo-accent hover:bg-vexo-accent/10"
                 >
                   Salvar passo {i + 1}
                 </button>
@@ -192,12 +192,12 @@ function StepList({
             accept="image/*,video/*"
             className="block w-full text-xs text-vexo-muted file:mr-2 file:rounded-lg file:border file:border-vexo-border file:bg-vexo-bg file:px-2.5 file:py-1.5 file:text-xs file:text-vexo-fg hover:file:border-vexo-accent"
           />
-          <p className="mt-1 text-[11px] text-vexo-muted">JPG, PNG, WEBP, GIF, MP4, MOV ou WEBM — até 25MB.</p>
+          <p className="mt-1 text-card text-vexo-muted">JPG, PNG, WEBP, GIF, MP4, MOV ou WEBM — até 25MB.</p>
         </div>
 
         <button
           type="submit"
-          className="rounded-lg bg-vexo-accent px-2.5 py-1.5 text-xs font-medium text-white hover:opacity-90"
+          className="rounded-lg bg-vexo-accent px-2.5 py-1.5 text-xs font-medium text-vexo-accentFg hover:opacity-90"
         >
           Adicionar passo
         </button>
@@ -260,7 +260,7 @@ export async function FollowUpView() {
           </label>
           <button
             type="submit"
-            className="shrink-0 rounded-lg border border-vexo-accent px-2.5 py-1.5 text-[11px] font-medium text-vexo-accent hover:bg-vexo-accent/10"
+            className="shrink-0 rounded-lg border border-vexo-accent px-2.5 py-1.5 text-card font-medium text-vexo-accent hover:bg-vexo-accent/10"
           >
             Salvar
           </button>
@@ -336,7 +336,7 @@ export async function FollowUpView() {
               Salvar janela
             </button>
           </div>
-          <p className="text-[11px] text-vexo-muted">Horário de Brasília.</p>
+          <p className="text-card text-vexo-muted">Horário de Brasília.</p>
         </form>
       </section>
 
@@ -382,7 +382,7 @@ export async function FollowUpView() {
         </form>
 
         {silenceSteps.length === 0 && (
-          <p className="rounded-lg border border-vexo-border bg-vexo-surface p-2.5 text-[11px] text-vexo-muted">
+          <p className="rounded-lg border border-vexo-border bg-vexo-surface p-2.5 text-card text-vexo-muted">
             Nenhum passo configurado ainda — enquanto isso, o sistema usa uma mensagem padrão
             única (imediata) pra não ficar mudo.
           </p>
@@ -407,7 +407,7 @@ export async function FollowUpView() {
         </div>
 
         {noShowSteps.length === 0 && (
-          <p className="rounded-lg border border-vexo-border bg-vexo-surface p-2.5 text-[11px] text-vexo-muted">
+          <p className="rounded-lg border border-vexo-border bg-vexo-surface p-2.5 text-card text-vexo-muted">
             Nenhum passo configurado ainda — enquanto isso, o sistema usa uma mensagem padrão
             única, enviada no dia seguinte à marcação.
           </p>

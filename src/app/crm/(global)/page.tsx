@@ -31,7 +31,7 @@ export default async function ClinicsOverviewPage() {
         <h1 className="text-xl font-semibold tracking-tight">Painel</h1>
         <Link
           href="/crm/clinicas/nova"
-          className="rounded-lg bg-vexo-accent px-3 py-1.5 text-sm font-medium text-white hover:opacity-90"
+          className="rounded-lg bg-vexo-accent px-3 py-1.5 text-sm font-medium text-vexo-accentFg hover:opacity-90"
         >
           + Nova clínica
         </Link>

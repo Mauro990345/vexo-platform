@@ -9,8 +9,8 @@ const STATUS_LABELS: Record<WhatsappConnectionState, string> = {
 };
 
 const STATUS_DOT: Record<WhatsappConnectionState, string> = {
-  open: "bg-emerald-400",
-  connecting: "bg-amber-400",
+  open: "bg-vexo-success",
+  connecting: "bg-vexo-warning",
   close: "bg-vexo-muted",
   unknown: "bg-vexo-muted",
 };
@@ -51,7 +51,7 @@ export function WhatsappConnectionPanel({
         <div className="min-w-0 flex-1">
           <p className="text-sm font-medium">WhatsApp</p>
           <p className="truncate text-xs text-vexo-muted">{description}</p>
-          <div className="mt-1 flex items-center gap-1.5 text-[11px] text-vexo-muted">
+          <div className="mt-1 flex items-center gap-1.5 text-card text-vexo-muted">
             <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${STATUS_DOT[status]}`} />
             {STATUS_LABELS[status]} · <span className="font-mono">{instanceName}</span>
           </div>
@@ -59,7 +59,7 @@ export function WhatsappConnectionPanel({
 
         {isOpen && disconnectAction && (
           <form action={disconnectAction} className="shrink-0">
-            <button className="rounded-lg border border-vexo-border px-2.5 py-1.5 text-xs text-vexo-muted hover:border-red-500/40 hover:text-red-300">
+            <button className="rounded-lg border border-vexo-border px-2.5 py-1.5 text-xs text-vexo-muted hover:border-vexo-error/40 hover:text-vexo-error">
               Desconectar
             </button>
           </form>
@@ -67,7 +67,7 @@ export function WhatsappConnectionPanel({
       </div>
 
       {statusError && (
-        <p className="rounded-lg border border-red-500/30 bg-red-500/10 p-2 text-xs text-red-300">{statusError}</p>
+        <p className="rounded-lg border border-vexo-error/30 bg-vexo-error/10 p-2 text-xs text-vexo-error">{statusError}</p>
       )}
 
       {isOpen ? (
@@ -85,7 +85,7 @@ export function WhatsappConnectionPanel({
             <p className="text-xs text-vexo-muted">Não foi possível gerar o QR code agora.</p>
           )}
 
-          <p className="text-[11px] leading-normal text-vexo-muted">
+          <p className="text-card leading-normal text-vexo-muted">
             No celular que vai receber as notificações: WhatsApp → Aparelhos conectados → Conectar um
             aparelho, e escaneie o código acima. Ele expira em segundos — se não der tempo, clique em
             "Atualizar" para gerar um novo.
@@ -102,7 +102,7 @@ export function WhatsappConnectionPanel({
 
       {renameAction && !isOpen && (
         <form action={renameAction} className="space-y-1.5 border-t border-vexo-border pt-2">
-          <label className="block text-[11px] text-vexo-muted" htmlFor="instanceName">
+          <label className="block text-card text-vexo-muted" htmlFor="instanceName">
             Nome da instância (avançado — ex: reaproveitar uma já conectada)
           </label>
           <div className="flex gap-1.5">

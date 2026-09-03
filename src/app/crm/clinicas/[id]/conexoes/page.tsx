@@ -17,8 +17,8 @@ const WHATSAPP_STATUS_LABELS: Record<WhatsappConnectionState, string> = {
 };
 
 const WHATSAPP_STATUS_DOT: Record<WhatsappConnectionState, string> = {
-  open: "bg-emerald-400",
-  connecting: "bg-amber-400",
+  open: "bg-vexo-success",
+  connecting: "bg-vexo-warning",
   close: "bg-vexo-muted",
   unknown: "bg-vexo-muted",
 };
@@ -66,7 +66,7 @@ function ConnectionCard({
       <p className="text-xs text-vexo-muted">{description}</p>
 
       <div className="mt-auto flex items-center justify-between gap-2 pt-1">
-        <div className="flex min-w-0 items-center gap-1.5 text-[11px] text-vexo-muted">
+        <div className="flex min-w-0 items-center gap-1.5 text-card text-vexo-muted">
           <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${statusDot}`} />
           <span className="truncate">{statusLabel}</span>
         </div>
@@ -75,7 +75,7 @@ function ConnectionCard({
         ) : (
           <Link
             href={href}
-            className="shrink-0 rounded-lg border border-vexo-accent px-2.5 py-1 text-[11px] font-medium text-vexo-accent hover:bg-vexo-accent/10"
+            className="shrink-0 rounded-lg border border-vexo-accent px-2.5 py-1 text-card font-medium text-vexo-accent hover:bg-vexo-accent/10"
           >
             {buttonLabel}
           </Link>
@@ -129,7 +129,7 @@ export default async function ClinicConexoesPage({
       </div>
 
       {searchParams.status === "erro" && (
-        <p className="rounded-lg border border-red-500/30 bg-red-500/10 p-2 text-xs text-red-300">
+        <p className="rounded-lg border border-vexo-error/30 bg-vexo-error/10 p-2 text-xs text-vexo-error">
           Falha ao conectar{searchParams.channel ? ` o ${CHANNEL_NAMES[searchParams.channel] ?? searchParams.channel}` : ""}. Tente novamente.
         </p>
       )}
@@ -154,7 +154,7 @@ export default async function ClinicConexoesPage({
           statusLabel={
             instagramConnected ? `Conectado · @${clinic.instagramAccount!.igUsername ?? "conectado"}` : "Não conectado"
           }
-          statusDot={instagramConnected ? "bg-emerald-400" : "bg-vexo-muted"}
+          statusDot={instagramConnected ? "bg-vexo-success" : "bg-vexo-muted"}
           href={`/api/oauth/instagram/start?clinicId=${clinic.id}`}
           openInNewTab
         />
@@ -165,7 +165,7 @@ export default async function ClinicConexoesPage({
           description="IA consulta horários livres e cria os agendamentos."
           connected={googleConnected}
           statusLabel={googleConnected ? "Conectado" : "Não conectado"}
-          statusDot={googleConnected ? "bg-emerald-400" : "bg-vexo-muted"}
+          statusDot={googleConnected ? "bg-vexo-success" : "bg-vexo-muted"}
           href={`/api/oauth/google-calendar/start?clinicId=${clinic.id}`}
           openInNewTab
         />

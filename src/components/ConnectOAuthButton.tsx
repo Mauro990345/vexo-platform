@@ -9,7 +9,7 @@ export function ConnectOAuthButton({ href, label }: { href: string; label: strin
     <button
       type="button"
       onClick={() => window.open(href, "_blank", "noopener,noreferrer")}
-      className="shrink-0 rounded-lg border border-vexo-accent px-2.5 py-1 text-[11px] font-medium text-vexo-accent hover:bg-vexo-accent/10"
+      className="shrink-0 rounded-lg border border-vexo-accent px-2.5 py-1 text-card font-medium text-vexo-accent hover:bg-vexo-accent/10"
     >
       {label}
     </button>

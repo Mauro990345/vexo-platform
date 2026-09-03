@@ -22,8 +22,8 @@ export function AttendanceToggle({
         <button
           className={`w-full rounded-md border px-2 py-1.5 text-xs font-medium leading-tight transition ${
             isCompleted
-              ? "border-emerald-500/50 bg-emerald-500/25 text-emerald-200"
-              : "border-emerald-500/30 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20"
+              ? "border-vexo-success/50 bg-vexo-success/25 text-vexo-success"
+              : "border-vexo-success/30 bg-vexo-success/10 text-vexo-success hover:bg-vexo-success/20"
           }`}
         >
           ✓ Compareceu
@@ -33,8 +33,8 @@ export function AttendanceToggle({
         <button
           className={`w-full rounded-md border px-2 py-1.5 text-xs font-medium leading-tight transition ${
             isNoShow
-              ? "border-red-500/50 bg-red-500/25 text-red-200"
-              : "border-red-500/30 bg-red-500/10 text-red-300 hover:bg-red-500/20"
+              ? "border-vexo-error/50 bg-vexo-error/25 text-vexo-error"
+              : "border-vexo-error/30 bg-vexo-error/10 text-vexo-error hover:bg-vexo-error/20"
           }`}
         >
           ✗ Não compareceu

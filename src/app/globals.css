@@ -2,8 +2,51 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ---------------------------------------------------------------------------
+ * VEXO — Design tokens
+ * Fonte única de cores do sistema. Cada variável guarda um "R G B" (sem
+ * vírgula, sem rgb()) — é o formato que o Tailwind precisa pra poder aplicar
+ * opacidade (ex: bg-vexo-accent/10) em cima de uma variável CSS, ver
+ * tailwind.config.ts (cada cor vexo.* referencia uma dessas variáveis via
+ * rgb(var(--vexo-x) / <alpha-value>)).
+ *
+ * Pra trocar uma cor do sistema, mexe só aqui — não precisa caçar componente
+ * por componente. Tabela de referência em português simples: ver PR/commit
+ * que introduziu este arquivo.
+ * ------------------------------------------------------------------------- */
 :root {
   color-scheme: dark;
+
+  /* Fundos e superfícies (do mais escuro/geral ao mais claro/aninhado) */
+  --vexo-bg: 11 15 23; /* #0b0f17 — fundo geral da aplicação */
+  --vexo-surface: 20 26 36; /* #141a24 — sidebar + cards principais */
+  --vexo-surface2: 27 34 46; /* #1b222e — blocos aninhados dentro de um card */
+
+  /* Bordas */
+  --vexo-border: 35 44 58; /* #232c3a — borda padrão */
+  --vexo-border-strong: 51 64 79; /* #33404f — borda de destaque (raro) */
+
+  /* Texto */
+  --vexo-muted: 139 150 168; /* #8b96a8 — texto secundário/apagado */
+  --vexo-fg: 241 244 248; /* #f1f4f8 — texto principal */
+
+  /* Cor de marca / ação primária */
+  --vexo-accent: 59 130 246; /* #3b82f6 — azul da marca (botão primário, item ativo, links) */
+  --vexo-accent-fg: 255 255 255; /* #ffffff — texto EM CIMA de um fundo accent (ex: texto do botão primário) */
+
+  /* Azul petróleo — só pro fundo dos cards de agendamento na Agenda. Veio
+     direto do usuário (cor exata pedida); petrol-border é um tom mais claro
+     derivado dela só pra dar contorno visível ao card. */
+  --vexo-petrol: 11 36 54; /* #0B2436 */
+  --vexo-petrol-border: 30 68 89; /* #1e4459 */
+
+  /* Semânticas de status/badge — usadas em qualquer tela (pipeline, agenda,
+     follow-up, conexões...). "Info" reaproveita a cor de marca (accent) de
+     propósito: já eram a mesma cor antes de virar variável, então não faz
+     sentido ter uma segunda cor de azul. */
+  --vexo-success: 52 211 153; /* #34d399 — sucesso/positivo (conectado, compareceu, agendado) */
+  --vexo-error: 248 113 113; /* #f87171 — erro/negativo (falha, faltou, precisa de humano) */
+  --vexo-warning: 251 191 36; /* #fbbf24 — alerta/atenção (conectando, pendente) */
 }
 
 body {

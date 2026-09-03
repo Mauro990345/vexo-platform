@@ -48,11 +48,11 @@ export default async function ConversationDetailPage({ params }: { params: { id:
         </div>
 
         {conversation.status === "NEEDS_HUMAN" && (
-          <div className="mb-4 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">
+          <div className="mb-4 rounded-xl border border-vexo-error/30 bg-vexo-error/10 p-3 text-sm text-vexo-error">
             <p className="font-medium">Precisa de atenção humana</p>
-            <p className="mt-1 text-red-300/80">{conversation.needsHumanReason}</p>
+            <p className="mt-1 text-vexo-error/80">{conversation.needsHumanReason}</p>
             <form action={setConversationStatus.bind(null, conversation.id, "IN_CONVERSATION")} className="mt-2">
-              <button className="rounded-lg border border-red-500/30 px-3 py-1 text-xs hover:bg-red-500/10">
+              <button className="rounded-lg border border-vexo-error/30 px-3 py-1 text-xs hover:bg-vexo-error/10">
                 Devolver para a IA
               </button>
             </form>
@@ -67,8 +67,8 @@ export default async function ConversationDetailPage({ params }: { params: { id:
                   m.direction === "INBOUND"
                     ? "bg-vexo-bg text-vexo-fg"
                     : m.sender === "HUMAN"
-                      ? "bg-amber-500/20 text-vexo-fg"
-                      : "bg-vexo-accent text-white"
+                      ? "bg-vexo-warning/20 text-vexo-fg"
+                      : "bg-vexo-accent text-vexo-accentFg"
                 }`}
               >
                 {m.mediaUrl ? (
@@ -76,7 +76,7 @@ export default async function ConversationDetailPage({ params }: { params: { id:
                 ) : (
                   <p>{m.content}</p>
                 )}
-                <p className="mt-1 text-[10px] opacity-60">
+                <p className="mt-1 text-caption opacity-60">
                   {m.sender === "AI" ? "IA" : m.sender === "HUMAN" ? "Humano" : m.sender === "SYSTEM" ? "Sistema" : "Lead"} ·{" "}
                   {(m.sentAt ?? m.createdAt).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
                   {m.status === "PENDING" ? " · agendada" : m.status === "FAILED" ? " · falhou" : ""}
@@ -95,7 +95,7 @@ export default async function ConversationDetailPage({ params }: { params: { id:
             placeholder="Responder manualmente (uso da secretária/Mauro)..."
             className="flex-1 rounded-lg border border-vexo-border bg-vexo-surface px-3 py-2 text-sm outline-none focus:border-vexo-accent"
           />
-          <button className="rounded-lg bg-vexo-accent px-4 py-2 text-sm font-medium text-white hover:opacity-90">
+          <button className="rounded-lg bg-vexo-accent px-4 py-2 text-sm font-medium text-vexo-accentFg hover:opacity-90">
             Enviar
           </button>
         </form>

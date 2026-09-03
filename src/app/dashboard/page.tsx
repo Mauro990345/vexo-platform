@@ -31,7 +31,7 @@ export default async function ClientDashboardPage() {
       {clinic.whatsappStatus !== "open" && (
         <Link
           href="/dashboard/whatsapp"
-          className="block rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-200 hover:bg-amber-500/15"
+          className="block rounded-xl border border-vexo-warning/30 bg-vexo-warning/10 p-3 text-sm text-vexo-warning hover:bg-vexo-warning/15"
         >
           ⚠️ WhatsApp não conectado — clique para conectar e receber os avisos da equipe.
         </Link>

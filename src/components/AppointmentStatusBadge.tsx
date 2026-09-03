@@ -9,10 +9,10 @@ const STATUS_LABELS: Record<string, string> = {
 // Cores próprias (não reaproveita StatusBadge — aquele componente é pro
 // enum de status da CONVERSA, um domínio diferente de AppointmentStatus).
 const STATUS_CLASSES: Record<string, string> = {
-  SCHEDULED: "border-emerald-500/30 text-emerald-300",
-  CONFIRMED: "border-emerald-500/30 text-emerald-300",
+  SCHEDULED: "border-vexo-success/30 text-vexo-success",
+  CONFIRMED: "border-vexo-success/30 text-vexo-success",
   COMPLETED: "border-vexo-accent/30 text-vexo-accent",
-  NO_SHOW: "border-red-500/30 text-red-300",
+  NO_SHOW: "border-vexo-error/30 text-vexo-error",
   CANCELLED: "border-vexo-border text-vexo-muted",
 };
 
@@ -20,10 +20,10 @@ const STATUS_CLASSES: Record<string, string> = {
 // Agenda) — cor cheia em vez de translúcida, pra ficar visível como uma
 // faixa de identificação, não como badge.
 const STATUS_BORDER_CLASSES: Record<string, string> = {
-  SCHEDULED: "border-l-emerald-400",
-  CONFIRMED: "border-l-emerald-400",
+  SCHEDULED: "border-l-vexo-success",
+  CONFIRMED: "border-l-vexo-success",
   COMPLETED: "border-l-vexo-accent",
-  NO_SHOW: "border-l-red-400",
+  NO_SHOW: "border-l-vexo-error",
   CANCELLED: "border-l-vexo-muted",
 };
 
@@ -36,7 +36,7 @@ export function AppointmentStatusBadge({ status, compact }: { status: string; co
   const label = STATUS_LABELS[status] ?? status;
 
   if (compact) {
-    return <span className={`text-[10px] font-medium leading-none ${classes.split(" ")[1]}`}>{label}</span>;
+    return <span className={`text-caption font-medium leading-none ${classes.split(" ")[1]}`}>{label}</span>;
   }
 
   return (

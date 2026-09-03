@@ -101,14 +101,14 @@ export default async function ClinicAgendaPage({
           <div className="border-b border-r border-vexo-border" />
           {days.map((d, i) => (
             <div key={i} className="min-w-0 border-b border-r border-vexo-border px-1.5 py-1.5 text-center last:border-r-0">
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-vexo-muted">{WEEKDAY_LABELS[i]}</p>
+              <p className="text-caption font-semibold uppercase tracking-wide text-vexo-muted">{WEEKDAY_LABELS[i]}</p>
               <p className="truncate text-xs font-semibold">{d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}</p>
             </div>
           ))}
 
           {HOURS.map((hour) => (
             <Fragment key={hour}>
-              <div className="border-b border-r border-vexo-border px-1 py-1 text-right text-[10px] text-vexo-muted">
+              <div className="border-b border-r border-vexo-border px-1 py-1 text-right text-caption text-vexo-muted">
                 {String(hour).padStart(2, "0")}h
               </div>
               {days.map((d, i) => {
@@ -128,7 +128,7 @@ export default async function ClinicAgendaPage({
                       <Link
                         key={a.id}
                         href={`/crm/conversas/${a.conversationId}`}
-                        className={`flex min-w-0 flex-1 flex-col justify-center gap-0.5 rounded-md border border-l-[3px] border-vexo-petrolBorder bg-vexo-petrol p-1 text-[10px] text-vexo-fg transition hover:border-vexo-accent ${appointmentStatusBorderClass(a.status)}`}
+                        className={`flex min-w-0 flex-1 flex-col justify-center gap-0.5 rounded-card border border-l-[3px] border-vexo-petrolBorder bg-vexo-petrol p-1 text-caption text-vexo-fg transition hover:border-vexo-accent ${appointmentStatusBorderClass(a.status)}`}
                       >
                         <p className="truncate font-medium leading-tight">{a.lead.name ?? a.lead.igUsername ?? "Lead"}</p>
                         <div className="flex min-w-0 items-center gap-1.5 leading-none">

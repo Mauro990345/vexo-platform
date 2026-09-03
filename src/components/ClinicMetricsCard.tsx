@@ -37,7 +37,7 @@ export function ClinicMetricsCard({
         <div className="flex items-center gap-2">
           {active !== undefined && (
             <span
-              className={`h-2 w-2 shrink-0 rounded-full ${active ? "bg-emerald-400" : "bg-vexo-muted"}`}
+              className={`h-2 w-2 shrink-0 rounded-full ${active ? "bg-vexo-success" : "bg-vexo-muted"}`}
               title={active ? "Ativa" : "Inativa"}
             />
           )}
@@ -59,12 +59,12 @@ export function ClinicMetricsCard({
 
       <div className="space-y-2.5">
         <div>
-          <h3 className="mb-1.5 text-[10px] font-medium uppercase tracking-wide text-vexo-muted">Hoje</h3>
+          <h3 className="mb-1.5 text-caption font-medium uppercase tracking-wide text-vexo-muted">Hoje</h3>
           <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
             <StatCard label="Abordados" value={String(today.approached)} />
             <StatCard label="Responderam" value={String(today.responded)} />
             <div className="rounded-lg border border-vexo-border bg-vexo-surface2 p-2.5">
-              <p className="truncate text-[11px] font-medium text-vexo-muted">Taxa de resposta</p>
+              <p className="truncate text-card font-medium text-vexo-muted">Taxa de resposta</p>
               <div className="mt-1">
                 <ResponseRateRing value={today.responseRate} />
               </div>
@@ -74,7 +74,7 @@ export function ClinicMetricsCard({
         </div>
 
         <div>
-          <h3 className="mb-1.5 text-[10px] font-medium uppercase tracking-wide text-vexo-muted">
+          <h3 className="mb-1.5 text-caption font-medium uppercase tracking-wide text-vexo-muted">
             Últimos 7 dias
           </h3>
           <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
@@ -101,10 +101,10 @@ function ConnectionBadge({ connected, label }: { connected: boolean; label: stri
   return (
     <span
       className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 ${
-        connected ? "border-emerald-500/30 text-emerald-300" : "border-vexo-border text-vexo-muted"
+        connected ? "border-vexo-success/30 text-vexo-success" : "border-vexo-border text-vexo-muted"
       }`}
     >
-      <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${connected ? "bg-emerald-400" : "bg-vexo-muted"}`} />
+      <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${connected ? "bg-vexo-success" : "bg-vexo-muted"}`} />
       {label}
     </span>
   );

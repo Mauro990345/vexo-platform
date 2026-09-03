@@ -7,13 +7,15 @@ const LABELS: Record<string, string> = {
   NEEDS_HUMAN: "Precisa de humano",
 };
 
+// "Info" (NEW) reaproveita a cor de marca (vexo-accent) — já era praticamente
+// a mesma cor antes de virar variável, então vira uma cor só.
 const COLORS: Record<string, string> = {
-  NEW: "bg-blue-500/15 text-blue-300 border-blue-500/30",
+  NEW: "bg-vexo-accent/15 text-vexo-accent border-vexo-accent/30",
   IN_CONVERSATION: "bg-vexo-accent/15 text-vexo-accent border-vexo-accent/30",
-  SCHEDULED: "bg-emerald-500/15 text-emerald-300 border-emerald-500/30",
-  FOLLOW_UP: "bg-amber-500/15 text-amber-300 border-amber-500/30",
+  SCHEDULED: "bg-vexo-success/15 text-vexo-success border-vexo-success/30",
+  FOLLOW_UP: "bg-vexo-warning/15 text-vexo-warning border-vexo-warning/30",
   LOST: "bg-vexo-muted/15 text-vexo-muted border-vexo-border",
-  NEEDS_HUMAN: "bg-red-500/15 text-red-300 border-red-500/30",
+  NEEDS_HUMAN: "bg-vexo-error/15 text-vexo-error border-vexo-error/30",
 };
 
 export function StatusBadge({ status }: { status: string }) {
