@@ -128,10 +128,10 @@ export default async function ClinicAgendaPage({
                       <Link
                         key={a.id}
                         href={`/crm/conversas/${a.conversationId}`}
-                        className={`block min-w-0 space-y-0.5 rounded-md border border-l-[3px] border-vexo-border bg-vexo-surface2 p-1 text-[10px] transition hover:border-vexo-accent ${appointmentStatusBorderClass(a.status)}`}
+                        className={`block min-w-0 space-y-0.5 rounded-md border border-l-[3px] border-vexo-petrolBorder bg-vexo-petrol p-1 text-[10px] text-vexo-fg transition hover:border-vexo-accent ${appointmentStatusBorderClass(a.status)}`}
                       >
                         <p className="truncate font-medium">{a.lead.name ?? a.lead.igUsername ?? "Lead"}</p>
-                        <p className="truncate text-vexo-muted">
+                        <p className="truncate text-vexo-fg/70">
                           {a.scheduledAt.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
                         </p>
                         <AppointmentStatusBadge status={a.status} compact />

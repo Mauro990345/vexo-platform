@@ -37,9 +37,6 @@ export default async function ClientWhatsappPage() {
     <div className="max-w-md space-y-4">
       <div>
         <h1 className="text-lg font-semibold tracking-tight">Conexão do WhatsApp</h1>
-        <p className="text-sm text-vexo-muted">
-          Número que recebe os avisos de "precisa de atendimento humano" da equipe.
-        </p>
       </div>
 
       <WhatsappConnectionPanel
@@ -48,6 +45,7 @@ export default async function ClientWhatsappPage() {
         qrBase64={qrBase64}
         statusError={statusError}
         refreshHref="/dashboard/whatsapp"
+        description='Número que recebe os avisos de "precisa de atendimento humano" da equipe.'
         disconnectAction={disconnectWhatsappClientAction}
       />
     </div>

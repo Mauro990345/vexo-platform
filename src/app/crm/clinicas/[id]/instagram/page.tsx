@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { AtSign } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { requireInternalSession } from "@/lib/session";
 
@@ -22,12 +23,8 @@ export default async function ClinicInstagramPage({
   const connected = Boolean(clinic.instagramAccount);
 
   return (
-    <div className="max-w-sm space-y-3">
+    <div className="max-w-md space-y-3">
       <h1 className="text-base font-semibold tracking-tight">Conectar Instagram</h1>
-      <p className="text-xs text-vexo-muted">
-        Canal onde a IA conversa com os leads da clínica — mensagens recebidas no Direct viram
-        atendimento automático.
-      </p>
 
       {searchParams.status === "erro" && (
         <p className="rounded-lg border border-red-500/30 bg-red-500/10 p-2 text-xs text-red-300">
@@ -35,32 +32,27 @@ export default async function ClinicInstagramPage({
         </p>
       )}
 
-      <div className="space-y-2.5 rounded-xl border border-vexo-border bg-vexo-surface p-3.5">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-medium text-vexo-muted">Instagram</h2>
-          <span
-            className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-medium ${
-              connected ? "border-emerald-500/30 text-emerald-300" : "border-vexo-border text-vexo-muted"
-            }`}
-          >
-            <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${connected ? "bg-emerald-400" : "bg-vexo-muted"}`} />
-            {connected ? "Conectado" : "Desconectado"}
-          </span>
-        </div>
+      <div className="flex items-center gap-3 rounded-xl border border-vexo-border bg-vexo-surface p-3.5">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-pink-500 text-white">
+          <AtSign className="h-4 w-4" strokeWidth={2} />
+        </span>
 
-        {connected ? (
-          <p className="text-xs">
-            Conta conectada: <span className="font-medium">@{clinic.instagramAccount!.igUsername ?? "conectado"}</span>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-medium">Instagram</p>
+          <p className="truncate text-xs text-vexo-muted">
+            Captura no Direct e leva a conversa pra IA.
           </p>
-        ) : (
-          <p className="text-xs text-vexo-muted">Nenhuma conta do Instagram conectada ainda.</p>
-        )}
+          <div className="mt-1 flex items-center gap-1.5 text-[11px] text-vexo-muted">
+            <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${connected ? "bg-emerald-400" : "bg-vexo-muted"}`} />
+            {connected ? `Conectado · @${clinic.instagramAccount!.igUsername ?? "conectado"}` : "Não conectado"}
+          </div>
+        </div>
 
         <a
           href={`/api/oauth/instagram/start?clinicId=${clinic.id}`}
-          className="block w-full rounded-lg border border-vexo-accent px-2.5 py-1.5 text-center text-xs font-medium text-vexo-accent hover:bg-vexo-accent/10"
+          className="shrink-0 rounded-lg border border-vexo-accent px-2.5 py-1.5 text-xs font-medium text-vexo-accent hover:bg-vexo-accent/10"
         >
-          {connected ? "Reconectar" : "Conectar Instagram"}
+          {connected ? "Reconectar" : "Conectar"}
         </a>
       </div>
     </div>

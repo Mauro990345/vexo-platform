@@ -1,3 +1,4 @@
+import { MessageCircle } from "lucide-react";
 import type { WhatsappConnectionState } from "@/lib/whatsapp-connection";
 
 const STATUS_LABELS: Record<WhatsappConnectionState, string> = {
@@ -7,11 +8,11 @@ const STATUS_LABELS: Record<WhatsappConnectionState, string> = {
   unknown: "Status desconhecido",
 };
 
-const STATUS_CLASSES: Record<WhatsappConnectionState, string> = {
-  open: "border-emerald-500/30 text-emerald-300",
-  connecting: "border-amber-500/30 text-amber-300",
-  close: "border-vexo-border text-vexo-muted",
-  unknown: "border-vexo-border text-vexo-muted",
+const STATUS_DOT: Record<WhatsappConnectionState, string> = {
+  open: "bg-emerald-400",
+  connecting: "bg-amber-400",
+  close: "bg-vexo-muted",
+  unknown: "bg-vexo-muted",
 };
 
 // Painel de conexão do WhatsApp (pareamento por QR code) — usado tanto no
@@ -25,6 +26,7 @@ export function WhatsappConnectionPanel({
   qrBase64,
   statusError,
   refreshHref,
+  description,
   disconnectAction,
   renameAction,
 }: {
@@ -33,6 +35,7 @@ export function WhatsappConnectionPanel({
   qrBase64: string | null;
   statusError: string | null;
   refreshHref: string;
+  description: string;
   disconnectAction?: (formData: FormData) => Promise<void>;
   renameAction?: (formData: FormData) => Promise<void>;
 }) {
@@ -40,37 +43,37 @@ export function WhatsappConnectionPanel({
 
   return (
     <div className="space-y-2.5 rounded-xl border border-vexo-border bg-vexo-surface p-3.5">
-      <div className="flex items-center justify-between">
-        <h2 className="text-sm font-medium text-vexo-muted">WhatsApp</h2>
-        <span
-          className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-medium ${STATUS_CLASSES[status]}`}
-        >
-          <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-current" />
-          {STATUS_LABELS[status]}
+      <div className="flex items-center gap-3">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-500 text-white">
+          <MessageCircle className="h-4 w-4" strokeWidth={2} />
         </span>
-      </div>
 
-      <p className="text-xs text-vexo-muted">
-        Instância: <span className="font-mono">{instanceName}</span>
-      </p>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-medium">WhatsApp</p>
+          <p className="truncate text-xs text-vexo-muted">{description}</p>
+          <div className="mt-1 flex items-center gap-1.5 text-[11px] text-vexo-muted">
+            <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${STATUS_DOT[status]}`} />
+            {STATUS_LABELS[status]} · <span className="font-mono">{instanceName}</span>
+          </div>
+        </div>
+
+        {isOpen && disconnectAction && (
+          <form action={disconnectAction} className="shrink-0">
+            <button className="rounded-lg border border-vexo-border px-2.5 py-1.5 text-xs text-vexo-muted hover:border-red-500/40 hover:text-red-300">
+              Desconectar
+            </button>
+          </form>
+        )}
+      </div>
 
       {statusError && (
         <p className="rounded-lg border border-red-500/30 bg-red-500/10 p-2 text-xs text-red-300">{statusError}</p>
       )}
 
       {isOpen ? (
-        <div className="space-y-2">
-          <p className="text-xs">WhatsApp conectado e pronto para enviar notificações.</p>
-          {disconnectAction && (
-            <form action={disconnectAction}>
-              <button className="rounded-lg border border-vexo-border px-2.5 py-1.5 text-xs text-vexo-muted hover:border-red-500/40 hover:text-red-300">
-                Desconectar
-              </button>
-            </form>
-          )}
-        </div>
+        <p className="text-xs">WhatsApp conectado e pronto para enviar notificações.</p>
       ) : (
-        <div className="space-y-2">
+        <div className="space-y-2 border-t border-vexo-border pt-2.5">
           {qrBase64 ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img

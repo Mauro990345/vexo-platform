@@ -37,11 +37,8 @@ export default async function ClinicWhatsappPage({ params }: { params: { id: str
   }
 
   return (
-    <div className="max-w-sm space-y-3">
+    <div className="max-w-md space-y-3">
       <h1 className="text-base font-semibold tracking-tight">Conectar WhatsApp</h1>
-      <p className="text-xs text-vexo-muted">
-        Usado para notificar a secretária quando um lead precisa de atendimento humano.
-      </p>
 
       <WhatsappConnectionPanel
         instanceName={instanceName}
@@ -49,6 +46,7 @@ export default async function ClinicWhatsappPage({ params }: { params: { id: str
         qrBase64={qrBase64}
         statusError={statusError}
         refreshHref={`/crm/clinicas/${clinic.id}/whatsapp`}
+        description="Notifica a secretária quando um lead precisa de atendimento humano."
         disconnectAction={disconnectWhatsappAction.bind(null, clinic.id)}
         renameAction={renameWhatsappInstanceAction.bind(null, clinic.id)}
       />

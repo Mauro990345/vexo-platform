@@ -18,6 +18,11 @@ const config: Config = {
           fg: "#f1f4f8",
           accent: "#3b82f6",
           accentFg: "#ffffff",
+          // Azul petróleo — só pro fundo dos cards de agendamento na Agenda,
+          // pra diferenciar visualmente do resto da UI (que usa surface/
+          // surface2 neutros).
+          petrol: "#1c3a4a",
+          petrolBorder: "#2b5266",
         },
       },
       fontFamily: {
