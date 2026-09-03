@@ -122,19 +122,23 @@ export default async function ClinicAgendaPage({
                 return (
                   <div
                     key={i}
-                    className="min-w-0 space-y-0.5 overflow-hidden border-b border-r border-vexo-border p-1 last:border-r-0"
+                    className="flex min-w-0 flex-col gap-0.5 overflow-hidden border-b border-r border-vexo-border p-1 last:border-r-0"
                   >
                     {cellAppointments.map((a) => (
                       <Link
                         key={a.id}
                         href={`/crm/conversas/${a.conversationId}`}
-                        className={`block min-w-0 space-y-0.5 rounded-md border border-l-[3px] border-vexo-petrolBorder bg-vexo-petrol p-1 text-[10px] text-vexo-fg transition hover:border-vexo-accent ${appointmentStatusBorderClass(a.status)}`}
+                        className={`flex min-w-0 flex-1 flex-col rounded-md border border-l-[3px] border-vexo-petrolBorder bg-vexo-petrol p-1 text-[10px] text-vexo-fg transition hover:border-vexo-accent ${appointmentStatusBorderClass(a.status)}`}
                       >
                         <p className="truncate font-medium">{a.lead.name ?? a.lead.igUsername ?? "Lead"}</p>
-                        <p className="truncate text-vexo-fg/70">
-                          {a.scheduledAt.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
-                        </p>
-                        <AppointmentStatusBadge status={a.status} compact />
+                        {/* flex-1 + items-center centraliza essa linha no espaço
+                            que sobra abaixo do nome, em vez de colar no topo. */}
+                        <div className="flex flex-1 min-w-0 items-center gap-1.5">
+                          <span className="shrink-0 text-vexo-fg/70">
+                            {a.scheduledAt.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                          </span>
+                          <AppointmentStatusBadge status={a.status} compact />
+                        </div>
                       </Link>
                     ))}
                   </div>

@@ -19,12 +19,12 @@ const config: Config = {
           accent: "#3b82f6",
           accentFg: "#ffffff",
           // Azul petróleo — só pro fundo dos cards de agendamento na Agenda.
-          // #081B2A veio direto do usuário (cor exata pedida); petrolBorder
+          // #0B2436 veio direto do usuário (cor exata pedida); petrolBorder
           // é um tom mais claro derivado dela só pra dar contorno visível
           // ao card, já que a cor pedida é bem próxima da luminosidade do
           // resto da paleta escura.
-          petrol: "#081B2A",
-          petrolBorder: "#1c3e56",
+          petrol: "#0B2436",
+          petrolBorder: "#1e4459",
         },
       },
       fontFamily: {
