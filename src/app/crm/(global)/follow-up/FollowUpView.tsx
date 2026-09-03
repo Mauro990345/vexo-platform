@@ -114,15 +114,33 @@ function StepList({
                 </div>
 
                 <div>
-                  <label className="mb-1 block text-xs text-vexo-muted">
-                    Anexo (opcional — URL de imagem ou vídeo)
-                  </label>
+                  <label className="mb-1 block text-xs text-vexo-muted">Anexo (opcional — imagem ou vídeo)</label>
+                  {step.attachmentUrl && (
+                    <div className="mb-1.5 flex items-center justify-between gap-2 rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5">
+                      <a
+                        href={step.attachmentUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="min-w-0 truncate text-xs text-vexo-accent hover:underline"
+                      >
+                        Ver anexo atual
+                      </a>
+                      <label className="flex shrink-0 items-center gap-1 text-[11px] text-vexo-muted">
+                        <input type="checkbox" name="removeAttachment" className="rounded border-vexo-border" />
+                        Remover
+                      </label>
+                    </div>
+                  )}
+                  <input type="hidden" name="currentAttachmentUrl" value={step.attachmentUrl ?? ""} />
                   <input
-                    name="attachmentUrl"
-                    defaultValue={step.attachmentUrl ?? ""}
-                    placeholder="https://..."
-                    className="w-full rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5 text-xs outline-none focus:border-vexo-accent"
+                    name="attachmentFile"
+                    type="file"
+                    accept="image/*,video/*"
+                    className="block w-full text-xs text-vexo-muted file:mr-2 file:rounded-lg file:border file:border-vexo-border file:bg-vexo-bg file:px-2.5 file:py-1.5 file:text-xs file:text-vexo-fg hover:file:border-vexo-accent"
                   />
+                  <p className="mt-1 text-[11px] text-vexo-muted">
+                    {step.attachmentUrl ? "Escolher um novo arquivo substitui o atual." : "JPG, PNG, WEBP, GIF, MP4, MOV ou WEBM — até 25MB."}
+                  </p>
                 </div>
 
                 <button
@@ -166,14 +184,14 @@ function StepList({
         </div>
 
         <div>
-          <label className="mb-1 block text-xs text-vexo-muted">
-            Anexo (opcional — URL de imagem ou vídeo)
-          </label>
+          <label className="mb-1 block text-xs text-vexo-muted">Anexo (opcional — imagem ou vídeo)</label>
           <input
-            name="attachmentUrl"
-            placeholder="https://..."
-            className="w-full rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5 text-xs outline-none focus:border-vexo-accent"
+            name="attachmentFile"
+            type="file"
+            accept="image/*,video/*"
+            className="block w-full text-xs text-vexo-muted file:mr-2 file:rounded-lg file:border file:border-vexo-border file:bg-vexo-bg file:px-2.5 file:py-1.5 file:text-xs file:text-vexo-fg hover:file:border-vexo-accent"
           />
+          <p className="mt-1 text-[11px] text-vexo-muted">JPG, PNG, WEBP, GIF, MP4, MOV ou WEBM — até 25MB.</p>
         </div>
 
         <button

@@ -16,3 +16,5 @@ npm-debug.log*
 /prisma/migrations/dev/
 *.tsbuildinfo
 next-env.d.ts
+
+/uploads/

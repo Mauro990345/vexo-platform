@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireInternalSession } from "@/lib/session";
+import { saveUploadedAttachment, deleteUploadedAttachment } from "@/lib/uploads";
 import type { FollowUpTrigger } from "@prisma/client";
 
 // Duas sequências independentes (SILENCE / NO_SHOW), cada uma com sua
@@ -24,13 +25,24 @@ function readOffsetDays(formData: FormData): number {
   return offsetDays;
 }
 
+// Anexo agora é upload de arquivo (imagem/vídeo), não mais uma URL colada
+// — o campo do form se chama "attachmentFile" (File) em vez de
+// "attachmentUrl" (texto), mas o que fica salvo no banco continua sendo
+// uma URL (a nossa própria, servida de public/uploads — ver src/lib/uploads.ts).
+async function readAttachmentFile(formData: FormData): Promise<File | null> {
+  const file = formData.get("attachmentFile");
+  return file instanceof File && file.size > 0 ? file : null;
+}
+
 export async function addFollowUpStep(trigger: FollowUpTrigger, formData: FormData) {
   await requireInternalSession();
 
   const content = String(formData.get("content") ?? "").trim();
   if (!content) throw new Error("O texto da mensagem é obrigatório.");
   const offsetDays = readOffsetDays(formData);
-  const attachmentUrl = String(formData.get("attachmentUrl") ?? "").trim() || null;
+
+  const file = await readAttachmentFile(formData);
+  const attachmentUrl = file ? await saveUploadedAttachment(file, "follow-up") : null;
 
   const last = await prisma.followUpStep.findFirst({ where: { trigger }, orderBy: { order: "desc" } });
   await prisma.followUpStep.create({
@@ -46,7 +58,19 @@ export async function updateFollowUpStep(stepId: string, formData: FormData) {
   const content = String(formData.get("content") ?? "").trim();
   if (!content) throw new Error("O texto da mensagem é obrigatório.");
   const offsetDays = readOffsetDays(formData);
-  const attachmentUrl = String(formData.get("attachmentUrl") ?? "").trim() || null;
+
+  const currentAttachmentUrl = String(formData.get("currentAttachmentUrl") ?? "").trim() || null;
+  const removeAttachment = formData.get("removeAttachment") === "on";
+  const file = await readAttachmentFile(formData);
+
+  let attachmentUrl = currentAttachmentUrl;
+  if (file) {
+    attachmentUrl = await saveUploadedAttachment(file, "follow-up");
+    await deleteUploadedAttachment(currentAttachmentUrl);
+  } else if (removeAttachment) {
+    await deleteUploadedAttachment(currentAttachmentUrl);
+    attachmentUrl = null;
+  }
 
   await prisma.followUpStep.update({ where: { id: stepId }, data: { content, attachmentUrl, offsetDays } });
   revalidatePath("/crm", "layout");
@@ -54,7 +78,8 @@ export async function updateFollowUpStep(stepId: string, formData: FormData) {
 
 export async function deleteFollowUpStep(stepId: string) {
   await requireInternalSession();
-  await prisma.followUpStep.delete({ where: { id: stepId } });
+  const step = await prisma.followUpStep.delete({ where: { id: stepId } });
+  await deleteUploadedAttachment(step.attachmentUrl);
   revalidatePath("/crm", "layout");
 }
 
