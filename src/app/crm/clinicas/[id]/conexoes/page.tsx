@@ -79,16 +79,16 @@ function ConnectionCard({
 
       <p className="text-xs text-vexo-muted">{description}</p>
 
-      {/* Status numa linha própria (não divide espaço com os botões) —
-          com "Gerenciar" + "Desconectar" juntos, os dois numa mesma linha
-          do status sobrava largura de menos e "Conectado" truncava pra
-          "C...". */}
-      <div className="mt-auto space-y-1.5 pt-1">
-        <div className="flex items-center gap-1.5 text-card text-vexo-muted">
+      {/* Status e botão(ões) na mesma linha, botão à direita — a página
+          real (grid-cols-3 sem max-w extra) dá bastante largura por card,
+          então mesmo "Conectado" + "Gerenciar" + "Desconectar" cabe numa
+          linha só sem truncar. */}
+      <div className="mt-auto flex items-center justify-between gap-2 pt-1">
+        <div className="flex min-w-0 items-center gap-1.5 text-card text-vexo-muted">
           <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${statusDot}`} />
           <span className="truncate">{statusLabel}</span>
         </div>
-        <div className="flex flex-wrap items-center gap-1.5">
+        <div className="flex shrink-0 items-center gap-1.5">
           {!connected && notConnectedAction ? (
             notConnectedAction
           ) : openInNewTab ? (

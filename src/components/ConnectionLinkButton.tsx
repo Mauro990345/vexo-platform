@@ -29,22 +29,47 @@ export function ConnectionLinkButton({
 
   function showToast(message: string) {
     setToast(message);
-    setTimeout(() => setToast(null), 2500);
+    setTimeout(() => setToast(null), 2800);
   }
 
   async function handleConnect() {
     setPending(true);
+
+    let created: { token: string; url: string } | null = null;
+
+    // navigator.clipboard.write PRECISA ser chamado sincronamente dentro do
+    // gesto de clique — Safari (e navegadores mais rígidos) invalidam a
+    // permissão se ela só rodar depois de um `await` (ex: esperar o
+    // servidor gerar o link primeiro). O truque é passar o texto como uma
+    // Promise pro ClipboardItem em vez de esperar ela resolver antes de
+    // chamar write() — assim o clique nunca perde o "user activation".
+    const textPromise = createConnectionLink(clinicId, channel).then((result) => {
+      created = result;
+      return result.url;
+    });
+
     try {
-      const result = await createConnectionLink(clinicId, channel);
-      setToken(result.token);
-      try {
-        await navigator.clipboard.writeText(result.url);
-        showToast("Link copiado!");
-      } catch {
-        showToast("Link gerado, mas não deu pra copiar automaticamente.");
+      if (typeof ClipboardItem !== "undefined" && navigator.clipboard?.write) {
+        await navigator.clipboard.write([
+          new ClipboardItem({ "text/plain": textPromise.then((url) => new Blob([url], { type: "text/plain" })) }),
+        ]);
+      } else {
+        // Fallback pra navegadores sem ClipboardItem — aqui sim perde a
+        // garantia do user-activation, mas é o melhor possível sem ele.
+        const url = await textPromise;
+        await navigator.clipboard.writeText(url);
       }
+      setToken(created!.token);
+      showToast("Link copiado! Envie para o cliente.");
     } catch {
-      showToast("Falha ao gerar o link. Tente de novo.");
+      // Cobre tanto falha em gerar o link (created continua null) quanto
+      // falha só no clipboard (created já preenchido) — sempre com aviso.
+      if (created) {
+        setToken((created as { token: string }).token);
+        showToast("Link gerado, mas não deu pra copiar automaticamente.");
+      } else {
+        showToast("Falha ao gerar o link. Tente de novo.");
+      }
     } finally {
       setPending(false);
     }
