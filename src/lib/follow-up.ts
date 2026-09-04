@@ -36,25 +36,6 @@ const DEFAULT_WINDOW_DAYS = [1, 2, 3, 4, 5];
 const DEFAULT_WINDOW_START_MINUTE = 8 * 60;
 const DEFAULT_WINDOW_END_MINUTE = 18 * 60;
 
-// Usados somente enquanto a clínica ainda não configurou nenhum passo em
-// /crm/follow-up para aquele trigger — garante que o follow-up nunca fique
-// mudo por falta de configuração.
-const DEFAULT_SILENCE_STEPS: { offsetDays: number; content: string; attachmentUrl: null }[] = [
-  {
-    offsetDays: 0,
-    content: "Oi! Ainda tem interesse em agendar sua avaliação? Consigo te ajudar a encontrar um horário 🙂",
-    attachmentUrl: null,
-  },
-];
-const DEFAULT_NO_SHOW_STEPS: typeof DEFAULT_SILENCE_STEPS = [
-  {
-    // Só sai no dia seguinte — dá folga pra secretária marcar sem pressa.
-    offsetDays: 1,
-    content: "Oi! Vimos que não foi possível comparecer hoje. Quer que eu já veja um novo horário pra você?",
-    attachmentUrl: null,
-  },
-];
-
 async function getSettings() {
   const settings = await prisma.followUpSettings.findUnique({ where: { id: "singleton" } });
   return {
@@ -157,12 +138,10 @@ async function dispatchFollowUpSteps(): Promise<number> {
   const now = new Date();
 
   for (const log of openLogs) {
-    const configuredSteps = log.trigger === "NO_SHOW" ? noShowSteps : silenceSteps;
-    const steps = configuredSteps.length > 0
-      ? configuredSteps
-      : log.trigger === "NO_SHOW"
-        ? DEFAULT_NO_SHOW_STEPS
-        : DEFAULT_SILENCE_STEPS;
+    // Sem passo configurado pra esse trigger: não envia nada — sem mensagem
+    // padrão/fallback. Só sai o que a clínica configurou explicitamente em
+    // /crm/follow-up.
+    const steps = log.trigger === "NO_SHOW" ? noShowSteps : silenceSteps;
 
     const nextIndex = (log.lastStepIndex ?? -1) + 1;
     const nextStep = steps[nextIndex];

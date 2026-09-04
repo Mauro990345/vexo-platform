@@ -396,18 +396,13 @@ export async function FollowUpView() {
                   </button>
                 </form>
 
-                {silenceSteps.length === 0 && (
-                  <p className="rounded-lg border border-vexo-border bg-vexo-surface p-2.5 text-card text-vexo-muted">
-                    Nenhum passo configurado ainda — enquanto isso, o sistema usa uma mensagem
-                    padrão única (imediata) pra não ficar mudo.
-                  </p>
-                )}
-
-                <StepList
-                  steps={silenceSteps}
-                  trigger="SILENCE"
-                  firstStepLabel="Enviado quantas horas/dias após o lead parar de responder"
-                />
+                <div className="pt-2">
+                  <StepList
+                    steps={silenceSteps}
+                    trigger="SILENCE"
+                    firstStepLabel="Enviado quantas horas/dias após o lead parar de responder"
+                  />
+                </div>
               </section>
             ),
           },
@@ -424,18 +419,13 @@ export async function FollowUpView() {
                   quando puder, sem pressa.
                 </p>
 
-                {noShowSteps.length === 0 && (
-                  <p className="rounded-lg border border-vexo-border bg-vexo-surface p-2.5 text-card text-vexo-muted">
-                    Nenhum passo configurado ainda — enquanto isso, o sistema usa uma mensagem
-                    padrão única, enviada no dia seguinte à marcação.
-                  </p>
-                )}
-
-                <StepList
-                  steps={noShowSteps}
-                  trigger="NO_SHOW"
-                  firstStepLabel="Enviado quantos dias após marcar como não compareceu"
-                />
+                <div className="pt-2">
+                  <StepList
+                    steps={noShowSteps}
+                    trigger="NO_SHOW"
+                    firstStepLabel="Enviado quantos dias após marcar como não compareceu"
+                  />
+                </div>
               </section>
             ),
           },
