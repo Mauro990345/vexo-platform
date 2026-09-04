@@ -2,7 +2,8 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { getClinicMetrics, startOfDay, addDays } from "@/lib/metrics";
 import { ClinicMetricsCard } from "@/components/ClinicMetricsCard";
-import { createClientLogin, removeClientLogin } from "@/app/crm/clinicas/actions";
+import { removeClientLogin } from "@/app/crm/clinicas/actions";
+import { CreateClientLoginForm } from "@/components/CreateClientLoginForm";
 
 export const dynamic = "force-dynamic";
 
@@ -92,35 +93,7 @@ export default async function PainelPage() {
                   </ul>
                 )}
 
-                <form action={createClientLogin.bind(null, clinic.id)} className="space-y-1.5 pt-1">
-                  <input
-                    name="name"
-                    placeholder="Nome do responsável"
-                    required
-                    className="w-full rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5 text-xs outline-none focus:border-vexo-accent"
-                  />
-                  <input
-                    name="email"
-                    type="email"
-                    placeholder="E-mail"
-                    required
-                    className="w-full rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5 text-xs outline-none focus:border-vexo-accent"
-                  />
-                  <input
-                    name="password"
-                    type="password"
-                    placeholder="Senha (mín. 8 caracteres)"
-                    required
-                    minLength={8}
-                    className="w-full rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5 text-xs outline-none focus:border-vexo-accent"
-                  />
-                  <button
-                    type="submit"
-                    className="w-full rounded-lg border border-vexo-accent px-2.5 py-1.5 text-xs font-medium text-vexo-accent hover:bg-vexo-accent/10"
-                  >
-                    Criar acesso
-                  </button>
-                </form>
+                <CreateClientLoginForm clinicId={clinic.id} />
               </div>
             </details>
           </div>

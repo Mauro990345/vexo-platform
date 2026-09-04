@@ -4,6 +4,7 @@ import crypto from "crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import bcrypt from "bcryptjs";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireInternalSession } from "@/lib/session";
 import { setAppointmentAttendance } from "@/lib/appointments";
@@ -146,7 +147,19 @@ export async function cancelConnectionLink(clinicId: string, token: string): Pro
   revalidatePath(`/crm/clinicas/${clinicId}/conexoes`);
 }
 
-export async function createClientLogin(clinicId: string, formData: FormData) {
+export type CreateClientLoginState = { error: string | null };
+
+// Usa useActionState no form (ver CreateClientLoginForm) em vez de deixar
+// o form disparar isso como action "crua" — email duplicado (User.email é
+// @unique) é um erro esperado, não excepcional (autofill do navegador
+// reenviando um e-mail já cadastrado antes é o caso mais comum), então
+// precisa aparecer como mensagem no formulário, não derrubar a página
+// inteira com a tela genérica de erro do Next.
+export async function createClientLogin(
+  clinicId: string,
+  _prevState: CreateClientLoginState,
+  formData: FormData
+): Promise<CreateClientLoginState> {
   await requireInternalSession();
 
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
@@ -154,16 +167,25 @@ export async function createClientLogin(clinicId: string, formData: FormData) {
   const password = String(formData.get("password") ?? "");
 
   if (!email || !name || password.length < 8) {
-    throw new Error("Preencha nome, e-mail e senha (mín. 8 caracteres).");
+    return { error: "Preencha nome, e-mail e senha (mín. 8 caracteres)." };
   }
 
   const passwordHash = await bcrypt.hash(password, 12);
 
-  await prisma.user.create({
-    data: { email, name, passwordHash, role: "CLIENT", clinicId },
-  });
+  try {
+    await prisma.user.create({
+      data: { email, name, passwordHash, role: "CLIENT", clinicId },
+    });
+  } catch (err) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+      return { error: "Já existe um acesso cadastrado com esse e-mail." };
+    }
+    throw err;
+  }
 
+  revalidatePath("/crm/painel");
   revalidatePath(`/crm/clinicas/${clinicId}`);
+  return { error: null };
 }
 
 export async function removeClientLogin(clinicId: string, userId: string) {
