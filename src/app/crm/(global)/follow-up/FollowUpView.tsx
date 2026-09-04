@@ -249,10 +249,8 @@ export async function FollowUpView() {
                   <div>
                     <h2 className="text-sm font-semibold">Timing de resposta da IA</h2>
                     <p className="mt-1 text-xs text-vexo-muted">
-                      Vale pra todas as conversas, não só follow-up. Ligado, a IA espera um tempo
-                      calculado (30s a 10min, dependendo de quanto o lead demorou pra responder)
-                      antes de enviar a resposta. Desligado — útil enquanto você está testando o
-                      sistema — a IA responde quase na hora, sem esperar.
+                      Controla o delay de resposta da IA em todas as conversas — desligue pra
+                      testar o sistema sem esperar.
                     </p>
                   </div>
 
@@ -282,9 +280,8 @@ export async function FollowUpView() {
                   <div>
                     <h2 className="text-sm font-semibold">Janela de envio</h2>
                     <p className="mt-1 text-xs text-vexo-muted">
-                      Vale para as duas sequências de follow-up. Mensagens só saem dentro desses
-                      dias e horário — se o gatilho acontecer fora da janela, a mensagem espera
-                      até a próxima janela válida em vez de disparar na hora.
+                      Mensagens de follow-up só saem dentro desses dias e horário; fora, esperam a
+                      próxima janela.
                     </p>
                   </div>
 
@@ -360,11 +357,8 @@ export async function FollowUpView() {
             content: (
               <section className="space-y-3">
                 <p className="text-xs text-vexo-muted">
-                  Gatilho automático: se o lead não responder dentro do prazo abaixo, o sistema
-                  detecta sozinho pela última mensagem da conversa e dispara essa sequência — sem
-                  precisar de nenhuma ação manual. Só vale antes do agendamento acontecer; depois
-                  que o lead agenda, esse gatilho para de valer e quem cuida dele é a sequência de
-                  lembretes/não compareceu.
+                  Dispara automaticamente se o lead sumir antes de agendar — depois do
+                  agendamento, quem assume é a sequência de não-compareceu.
                 </p>
 
                 <form
@@ -413,10 +407,8 @@ export async function FollowUpView() {
             content: (
               <section className="space-y-3">
                 <p className="text-xs text-vexo-muted">
-                  Gatilho manual: só quem está na clínica sabe se o paciente veio ou não, então
-                  essa sequência só é disparada pelo botão <strong>"Não compareceu"</strong> na
-                  tela do agendamento — nunca automaticamente. Não tem folga escondida: você marca
-                  quando puder, sem pressa.
+                  Dispara só quando você clica em <strong>"Não compareceu"</strong> na Agenda —
+                  nunca automaticamente.
                 </p>
 
                 <div className="pt-2">
