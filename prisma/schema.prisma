@@ -144,6 +144,11 @@ model GoogleCalendarAccount {
   refreshTokenEnc String    @db.Text
   tokenExpiresAt  DateTime?
 
+  // Token de sincronização incremental (ver src/lib/google-calendar-sync.ts)
+  // — null significa "nunca sincronizou ainda" ou "token expirou, refazer
+  // do zero"; preenchido a cada rodada com o nextSyncToken do Google.
+  syncToken String?
+
   connectedAt DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }
@@ -283,6 +288,12 @@ model Appointment {
 
   scheduledAt   DateTime
   googleEventId String?
+
+  // Só preenchidos pra agendamentos importados do Google Calendar sem Lead
+  // (sync de leitura) — manualTitle vem do "summary" do evento, usado como
+  // nome de exibição já que não há Lead pra tirar o nome.
+  manualTitle      String?
+  syncedFromGoogle Boolean @default(false)
 
   status             AppointmentStatus @default(SCHEDULED)
   welcomeVideoSentAt DateTime?

@@ -69,7 +69,10 @@ export async function disconnectGoogleCalendar(clinicId: string): Promise<void> 
   await prisma.googleCalendarAccount.delete({ where: { clinicId } });
 }
 
-async function clientForClinic(clinicId: string) {
+// Exportado pra src/lib/google-calendar-sync.ts reaproveitar o mesmo
+// client autenticado (com renovação automática de access token) em vez de
+// duplicar essa lógica.
+export async function clientForClinic(clinicId: string) {
   const account = await prisma.googleCalendarAccount.findUnique({ where: { clinicId } });
   if (!account) throw new Error("Clínica sem Google Calendar conectado.");
 

@@ -3,11 +3,13 @@ import { dispatchDueMessages } from "@/lib/dispatch";
 import { processReminders } from "@/lib/reminders";
 import { processFollowUps } from "@/lib/follow-up";
 import { sendWeeklySummaries } from "@/lib/weekly-summary";
+import { syncAllGoogleCalendars } from "@/lib/google-calendar-sync";
 
 // Worker de background do VEXO — processo separado (serviço próprio no
 // Railway) que compartilha o mesmo banco Postgres da aplicação web.
 // Responsável por: despachar mensagens agendadas (timing adaptativo),
-// lembretes de agendamento, detecção de follow-up e o resumo semanal.
+// lembretes de agendamento, detecção de follow-up, resumo semanal e
+// sincronização de leitura do Google Calendar.
 
 const TIMEZONE = "America/Sao_Paulo";
 
@@ -41,6 +43,13 @@ cron.schedule("*/30 * * * *", () => runSafely("processFollowUps", processFollowU
 cron.schedule("0 9 * * 5", () => runSafely("sendWeeklySummaries", sendWeeklySummaries), {
   timezone: TIMEZONE,
 });
+
+// Sincronização de leitura do Google Calendar (eventos criados/editados/
+// cancelados direto no calendário da clínica, fora do VEXO) — polling com
+// syncToken incremental a cada 5 minutos, suficiente pro caso de uso (não
+// é tempo real crítico) e bem mais simples que webhook (ver
+// src/lib/google-calendar-sync.ts).
+cron.schedule("*/5 * * * *", () => runSafely("syncGoogleCalendars", syncAllGoogleCalendars));
 
 // Roda uma primeira vez imediatamente ao subir, para não esperar o primeiro tick.
 runSafely("dispatchDueMessages", dispatchDueMessages);
