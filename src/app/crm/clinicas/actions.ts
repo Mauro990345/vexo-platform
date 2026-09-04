@@ -1,5 +1,6 @@
 "use server";
 
+import crypto from "crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import bcrypt from "bcryptjs";
@@ -7,6 +8,8 @@ import { prisma } from "@/lib/prisma";
 import { requireInternalSession } from "@/lib/session";
 import { setAppointmentAttendance } from "@/lib/appointments";
 import { disconnectWhatsapp, renameWhatsappInstance } from "@/lib/whatsapp-connection";
+
+const CONNECTION_LINK_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 dias
 
 function slugify(name: string): string {
   return name
@@ -89,6 +92,23 @@ export async function updateClinicSettings(clinicId: string, formData: FormData)
 
   revalidatePath(`/crm/clinicas/${clinicId}/automacoes`);
   revalidatePath(`/crm/clinicas/${clinicId}`);
+}
+
+// Link público de auto-conexão (ver src/app/conectar/[token]/page.tsx) —
+// token de 24 bytes aleatórios (base64url), nunca o id real da clínica.
+// Por clínica, não por canal: serve pra Google Calendar hoje e Instagram/
+// WhatsApp no futuro sem precisar de um link novo por canal. Expira em 7
+// dias ou no primeiro uso bem-sucedido (usedAt), o que vier primeiro.
+export async function createConnectionLink(clinicId: string) {
+  await requireInternalSession();
+
+  const token = crypto.randomBytes(24).toString("base64url");
+
+  await prisma.connectionLink.create({
+    data: { clinicId, token, expiresAt: new Date(Date.now() + CONNECTION_LINK_TTL_MS) },
+  });
+
+  redirect(`/crm/clinicas/${clinicId}/conexoes?linkGerado=${token}`);
 }
 
 export async function createClientLogin(clinicId: string, formData: FormData) {

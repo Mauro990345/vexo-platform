@@ -6,6 +6,8 @@ import { requireInternalSession } from "@/lib/session";
 import { refreshWhatsappStatus, type WhatsappConnectionState } from "@/lib/whatsapp-connection";
 import { ConnectOAuthButton } from "@/components/ConnectOAuthButton";
 import { RefreshOnFocus } from "@/components/RefreshOnFocus";
+import { CopyLinkBox } from "@/components/CopyLinkBox";
+import { createConnectionLink } from "../../actions";
 
 export const dynamic = "force-dynamic";
 
@@ -95,7 +97,7 @@ export default async function ClinicConexoesPage({
   searchParams,
 }: {
   params: { id: string };
-  searchParams: { status?: string; channel?: string };
+  searchParams: { status?: string; channel?: string; linkGerado?: string };
 }) {
   await requireInternalSession();
 
@@ -133,6 +135,30 @@ export default async function ClinicConexoesPage({
           Falha ao conectar{searchParams.channel ? ` o ${CHANNEL_NAMES[searchParams.channel] ?? searchParams.channel}` : ""}. Tente novamente.
         </p>
       )}
+
+      <div className="space-y-2 rounded-xl border border-vexo-border bg-vexo-surface p-3.5">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 className="text-sm font-medium">Link de auto-conexão</h2>
+            <p className="mt-0.5 text-xs text-vexo-muted">
+              Manda pro cliente conectar o Google Calendar sozinho, sem login no VEXO. Válido por
+              7 dias ou até o primeiro uso.
+            </p>
+          </div>
+          <form action={createConnectionLink.bind(null, clinic.id)}>
+            <button
+              type="submit"
+              className="shrink-0 rounded-lg border border-vexo-accent px-2.5 py-1.5 text-card font-medium text-vexo-accent hover:bg-vexo-accent/10"
+            >
+              Gerar link de conexão
+            </button>
+          </form>
+        </div>
+
+        {searchParams.linkGerado && (
+          <CopyLinkBox url={`${process.env.APP_URL ?? ""}/conectar/${searchParams.linkGerado}`} />
+        )}
+      </div>
 
       <div className="grid grid-cols-3 gap-3">
         <ConnectionCard

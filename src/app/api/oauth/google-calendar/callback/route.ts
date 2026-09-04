@@ -12,11 +12,13 @@ export async function GET(req: NextRequest) {
   const parsedState = verifyOAuthState(state);
   if (!parsedState) return new NextResponse("State inválido ou expirado.", { status: 400 });
 
+  const { clinicId, connectToken } = parsedState;
+
   try {
     const result = await exchangeGoogleCode(code);
 
     await prisma.googleCalendarAccount.upsert({
-      where: { clinicId: parsedState.clinicId },
+      where: { clinicId },
       update: {
         googleAccountEmail: result.email,
         accessTokenEnc: encryptToken(result.accessToken),
@@ -24,7 +26,7 @@ export async function GET(req: NextRequest) {
         tokenExpiresAt: result.expiryDate,
       },
       create: {
-        clinicId: parsedState.clinicId,
+        clinicId,
         googleAccountEmail: result.email,
         accessTokenEnc: encryptToken(result.accessToken),
         refreshTokenEnc: encryptToken(result.refreshToken),
@@ -32,13 +34,28 @@ export async function GET(req: NextRequest) {
       },
     });
 
+    // Veio do link público de auto-conexão (não da tela admin) — invalida o
+    // token (não reutilizável) e manda pra tela pública de sucesso em vez
+    // da tela de Conexões do CRM.
+    if (connectToken) {
+      await prisma.connectionLink.updateMany({
+        where: { token: connectToken, clinicId },
+        data: { usedAt: new Date() },
+      });
+      return NextResponse.redirect(`${process.env.APP_URL ?? ""}/conectar/${connectToken}/sucesso`);
+    }
+
     return NextResponse.redirect(
-      `${process.env.APP_URL ?? ""}/crm/clinicas/${parsedState.clinicId}/conexoes?status=conectado&channel=google-calendar`
+      `${process.env.APP_URL ?? ""}/crm/clinicas/${clinicId}/conexoes?status=conectado&channel=google-calendar`
     );
   } catch (err) {
     console.error("[vexo] Falha no callback OAuth do Google Calendar:", err);
+
+    if (connectToken) {
+      return NextResponse.redirect(`${process.env.APP_URL ?? ""}/conectar/${connectToken}?status=erro`);
+    }
     return NextResponse.redirect(
-      `${process.env.APP_URL ?? ""}/crm/clinicas/${parsedState.clinicId}/conexoes?status=erro&channel=google-calendar`
+      `${process.env.APP_URL ?? ""}/crm/clinicas/${clinicId}/conexoes?status=erro&channel=google-calendar`
     );
   }
 }
