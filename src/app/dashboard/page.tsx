@@ -93,7 +93,11 @@ export default async function ClientDashboardPage({
         <div className="grid gap-6 lg:grid-cols-2">
           {/* Coluna esquerda: status de canais, semana e números */}
           <div className="space-y-6">
-            <div className="space-y-3 rounded-2xl border border-vexo-border bg-vexo-surface p-3.5">
+            <div className="space-y-3">
+              {/* Linha do nome da clínica + pills — solta, sem card ao redor,
+                  pra começar exatamente na mesma altura que o título
+                  "Agendamentos" da coluna direita (mesmo critério: nenhum
+                  padding/borda acima de nenhum dos dois). */}
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
                   <span className="h-2 w-2 shrink-0 rounded-full bg-vexo-success" />
@@ -106,49 +110,51 @@ export default async function ClientDashboardPage({
                 </div>
               </div>
 
-              <div className="flex items-center justify-between gap-1.5 border-t border-vexo-border pt-3">
-                <Link
-                  href={`${base}?week=${toDateParam(addDays(weekStart, -7))}`}
-                  className="rounded-lg border border-vexo-border px-2.5 py-1 text-xs hover:border-vexo-accent"
-                >
-                  ← Semana
-                </Link>
-                <Link href={base} className="rounded-lg border border-vexo-border px-2.5 py-1 text-xs hover:border-vexo-accent">
-                  Hoje
-                </Link>
-                <Link
-                  href={`${base}?week=${toDateParam(addDays(weekStart, 7))}`}
-                  className="rounded-lg border border-vexo-border px-2.5 py-1 text-xs hover:border-vexo-accent"
-                >
-                  Semana →
-                </Link>
-              </div>
+              <div className="space-y-3 rounded-2xl border border-vexo-border bg-vexo-surface p-3.5">
+                <div className="flex items-center justify-between gap-1.5">
+                  <Link
+                    href={`${base}?week=${toDateParam(addDays(weekStart, -7))}`}
+                    className="rounded-lg border border-vexo-border px-2.5 py-1 text-xs hover:border-vexo-accent"
+                  >
+                    ← Semana
+                  </Link>
+                  <Link href={base} className="rounded-lg border border-vexo-border px-2.5 py-1 text-xs hover:border-vexo-accent">
+                    Hoje
+                  </Link>
+                  <Link
+                    href={`${base}?week=${toDateParam(addDays(weekStart, 7))}`}
+                    className="rounded-lg border border-vexo-border px-2.5 py-1 text-xs hover:border-vexo-accent"
+                  >
+                    Semana →
+                  </Link>
+                </div>
 
-              <div className="space-y-1.5 pt-1">
-                <p className="text-caption font-medium uppercase tracking-wide text-vexo-muted">
-                  Abordagens por dia · {weekStart.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })} –{" "}
-                  {addDays(weekStart, 6).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}
-                </p>
-                <div className="space-y-1">
-                  {weekDays.map((day, i) => {
-                    const count = dailyApproached[i] ?? 0;
-                    return (
-                      <div key={day.getTime()} className="flex items-center gap-2">
-                        <span className="w-7 shrink-0 text-caption leading-none text-vexo-muted">
-                          {WEEKDAY_LABELS[i]}
-                        </span>
-                        <div className="flex h-2.5 flex-1 items-center rounded-full bg-vexo-accent/15">
-                          <div
-                            className="h-1 rounded-full bg-vexo-accent"
-                            style={{ width: `${(count / maxApproached) * 100}%` }}
-                          />
+                <div className="space-y-1.5 border-t border-vexo-border pt-3">
+                  <p className="text-caption font-medium uppercase tracking-wide text-vexo-muted">
+                    Abordagens por dia · {weekStart.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })} –{" "}
+                    {addDays(weekStart, 6).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}
+                  </p>
+                  <div className="space-y-1">
+                    {weekDays.map((day, i) => {
+                      const count = dailyApproached[i] ?? 0;
+                      return (
+                        <div key={day.getTime()} className="flex items-center gap-2">
+                          <span className="w-7 shrink-0 text-caption leading-none text-vexo-muted">
+                            {WEEKDAY_LABELS[i]}
+                          </span>
+                          <div className="flex h-2.5 flex-1 items-center rounded-full bg-vexo-accent/15">
+                            <div
+                              className="h-1 rounded-full bg-vexo-accent"
+                              style={{ width: `${(count / maxApproached) * 100}%` }}
+                            />
+                          </div>
+                          <span className="w-4 shrink-0 text-right text-caption font-medium leading-none">
+                            {count}
+                          </span>
                         </div>
-                        <span className="w-4 shrink-0 text-right text-caption font-medium leading-none">
-                          {count}
-                        </span>
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
             </div>
@@ -172,10 +178,8 @@ export default async function ClientDashboardPage({
             </div>
           </div>
 
-          {/* Coluna direita: agendamentos — pt-[15px] no desktop pra alinhar
-              o topo do texto com o topo do texto dentro do card da coluna
-              esquerda (que tem p-3.5 + 1px de borda antes do conteúdo). */}
-          <div className="space-y-3 lg:pt-[15px]">
+          {/* Coluna direita: agendamentos */}
+          <div className="space-y-3">
             <h2 className="text-caption font-medium uppercase tracking-wide text-vexo-muted">Agendamentos</h2>
             <div className="space-y-2">
               {appointments.map((a) => (
