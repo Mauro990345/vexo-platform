@@ -128,8 +128,10 @@ export default async function ClinicAgendaPage({
                       // Sem conversationId = importado do Google Calendar sem
                       // Lead vinculado (paciente conhecido, agendado
                       // manualmente) — não tem conversa pra abrir, então o
-                      // card não é clicável, só informativo.
-                      const label = a.lead?.name ?? a.lead?.igUsername ?? "Paciente";
+                      // card não é clicável, só informativo. Nesse caso o
+                      // nome vem do manualTitle (título do evento no Google),
+                      // não de um texto genérico fixo.
+                      const label = a.lead ? a.lead.name ?? a.lead.igUsername ?? "Lead" : a.manualTitle ?? "Agendamento";
                       const inner = (
                         <>
                           <p className="truncate font-medium leading-tight">{label}</p>
