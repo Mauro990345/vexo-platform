@@ -95,27 +95,46 @@ export async function updateClinicSettings(clinicId: string, formData: FormData)
   revalidatePath(`/crm/clinicas/${clinicId}`);
 }
 
+export type ConnectionLinkChannel = "google-calendar" | "instagram";
+
 // Link público de auto-conexão (ver src/app/conectar/[token]/page.tsx) —
 // token de 24 bytes aleatórios (base64url), nunca o id real da clínica.
-// Por clínica, não por canal: serve pra Google Calendar hoje e Instagram/
-// WhatsApp no futuro sem precisar de um link novo por canal. Expira em 7
+// Um por canal (WhatsApp fica de fora, já tem QR code próprio) — se já
+// existir um link pendente pro mesmo canal/clínica, reaproveita em vez de
+// gerar outro (evita links duplicados de cliques repetidos). Expira em 7
 // dias ou no primeiro uso bem-sucedido (usedAt), o que vier primeiro.
-export async function createConnectionLink(clinicId: string) {
+//
+// Sem redirect: chamada direto de um client component (ver
+// ConnectionLinkButton) que copia a URL retornada pra área de
+// transferência na hora, sem navegar/recarregar a página.
+export async function createConnectionLink(
+  clinicId: string,
+  channel: ConnectionLinkChannel
+): Promise<{ token: string; url: string }> {
   await requireInternalSession();
+
+  const existing = await prisma.connectionLink.findFirst({
+    where: { clinicId, channel, usedAt: null, expiresAt: { gt: new Date() } },
+    orderBy: { createdAt: "desc" },
+  });
+  if (existing) {
+    return { token: existing.token, url: `${process.env.APP_URL ?? ""}/conectar/${existing.token}` };
+  }
 
   const token = crypto.randomBytes(24).toString("base64url");
 
   await prisma.connectionLink.create({
-    data: { clinicId, token, expiresAt: new Date(Date.now() + CONNECTION_LINK_TTL_MS) },
+    data: { clinicId, channel, token, expiresAt: new Date(Date.now() + CONNECTION_LINK_TTL_MS) },
   });
 
-  redirect(`/crm/clinicas/${clinicId}/conexoes?linkGerado=${token}`);
+  revalidatePath(`/crm/clinicas/${clinicId}/conexoes`);
+  return { token, url: `${process.env.APP_URL ?? ""}/conectar/${token}` };
 }
 
 // Cancela um link recém-gerado antes de mandar pro cliente (ex: gerou por
 // engano) — mesma marca de "usado" que o callback OAuth usa depois de uma
 // conexão real, então o link para de funcionar imediatamente.
-export async function cancelConnectionLink(clinicId: string, token: string) {
+export async function cancelConnectionLink(clinicId: string, token: string): Promise<void> {
   await requireInternalSession();
 
   await prisma.connectionLink.updateMany({
@@ -123,7 +142,7 @@ export async function cancelConnectionLink(clinicId: string, token: string) {
     data: { usedAt: new Date() },
   });
 
-  redirect(`/crm/clinicas/${clinicId}/conexoes`);
+  revalidatePath(`/crm/clinicas/${clinicId}/conexoes`);
 }
 
 export async function createClientLogin(clinicId: string, formData: FormData) {

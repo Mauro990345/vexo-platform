@@ -6,8 +6,8 @@ import { requireInternalSession } from "@/lib/session";
 import { refreshWhatsappStatus, type WhatsappConnectionState } from "@/lib/whatsapp-connection";
 import { ConnectOAuthButton } from "@/components/ConnectOAuthButton";
 import { RefreshOnFocus } from "@/components/RefreshOnFocus";
-import { CopyLinkBox } from "@/components/CopyLinkBox";
-import { createConnectionLink, cancelConnectionLink, disconnectGoogleCalendarAction } from "../../actions";
+import { ConnectionLinkButton } from "@/components/ConnectionLinkButton";
+import { disconnectGoogleCalendarAction } from "../../actions";
 
 export const dynamic = "force-dynamic";
 
@@ -27,12 +27,14 @@ const WHATSAPP_STATUS_DOT: Record<WhatsappConnectionState, string> = {
 
 // Card compacto no formato de referência (grid 3 colunas): ícone+nome em
 // cima, descrição no meio, status + botão na mesma linha embaixo. O card
-// em si não é clicável — só o botão. Instagram e Google Calendar apontam
-// direto pro endpoint que inicia o OAuth, aberto numa aba nova
-// (openInNewTab) pra não tirar o usuário da tela de Conexões — o status
-// atualiza sozinho ao voltar pra essa aba (ver RefreshOnFocus). WhatsApp
-// continua navegando pra tela própria (mesma aba) porque precisa mostrar
-// o QR code, não é um redirect OAuth de terceiro.
+// em si não é clicável — só o botão. Quando JÁ conectado, Instagram e
+// Google Calendar reabrem o OAuth direto (aba nova, openInNewTab) via
+// "Gerenciar" — o status atualiza sozinho ao voltar pra essa aba (ver
+// RefreshOnFocus). Quando AINDA não conectado, os dois usam
+// notConnectedAction (ver ConnectionLinkButton) — gera e copia o link de
+// auto-conexão em vez de abrir o OAuth pra mim. WhatsApp fica de fora dos
+// dois: continua navegando pra tela própria (mesma aba) porque mostra QR
+// code, não é um redirect OAuth de terceiro.
 function ConnectionCard({
   icon,
   iconBg,
@@ -44,6 +46,7 @@ function ConnectionCard({
   href,
   openInNewTab,
   disconnectAction,
+  notConnectedAction,
 }: {
   icon: React.ReactNode;
   iconBg: string;
@@ -58,6 +61,10 @@ function ConnectionCard({
   // VEXO (hoje só Google Calendar) — quando ausente, nenhum botão de
   // desconectar aparece, mesmo conectado.
   disconnectAction?: () => Promise<void>;
+  // Substitui o botão padrão de "Conectar" só quando não conectado — usado
+  // pelo Google Calendar (ver GoogleCalendarConnectButton). Ausente pros
+  // outros canais, que continuam com o link/botão de sempre.
+  notConnectedAction?: React.ReactNode;
 }) {
   const buttonLabel = connected ? "Gerenciar" : "Conectar";
 
@@ -82,7 +89,9 @@ function ConnectionCard({
           <span className="truncate">{statusLabel}</span>
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
-          {openInNewTab ? (
+          {!connected && notConnectedAction ? (
+            notConnectedAction
+          ) : openInNewTab ? (
             <ConnectOAuthButton href={href} label={buttonLabel} />
           ) : (
             <Link
@@ -118,7 +127,7 @@ export default async function ClinicConexoesPage({
   searchParams,
 }: {
   params: { id: string };
-  searchParams: { status?: string; channel?: string; linkGerado?: string };
+  searchParams: { status?: string; channel?: string };
 }) {
   await requireInternalSession();
 
@@ -139,6 +148,26 @@ export default async function ClinicConexoesPage({
   const instagramConnected = Boolean(clinic.instagramAccount);
   const googleConnected = Boolean(clinic.googleCalendarAccount);
 
+  // Link pendente (não usado, não expirado) por canal — se existir, o card
+  // correspondente mostra "Cancelar" no lugar de "Conectar" (ver
+  // ConnectionLinkButton). Um por canal, não compartilhado.
+  const [pendingInstagramLink, pendingGoogleLink] = await Promise.all([
+    instagramConnected
+      ? null
+      : prisma.connectionLink.findFirst({
+          where: { clinicId: clinic.id, channel: "instagram", usedAt: null, expiresAt: { gt: new Date() } },
+          orderBy: { createdAt: "desc" },
+          select: { token: true },
+        }),
+    googleConnected
+      ? null
+      : prisma.connectionLink.findFirst({
+          where: { clinicId: clinic.id, channel: "google-calendar", usedAt: null, expiresAt: { gt: new Date() } },
+          orderBy: { createdAt: "desc" },
+          select: { token: true },
+        }),
+  ]);
+
   return (
     <div className="space-y-3">
       <RefreshOnFocus />
@@ -156,42 +185,6 @@ export default async function ClinicConexoesPage({
           Falha ao conectar{searchParams.channel ? ` o ${CHANNEL_NAMES[searchParams.channel] ?? searchParams.channel}` : ""}. Tente novamente.
         </p>
       )}
-
-      <div className="space-y-2 rounded-xl border border-vexo-border bg-vexo-surface p-3.5">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <h2 className="text-sm font-medium">Link de auto-conexão</h2>
-            <p className="mt-0.5 text-xs text-vexo-muted">
-              Manda pro cliente conectar o Google Calendar sozinho, sem login no VEXO. Válido por
-              7 dias ou até o primeiro uso.
-            </p>
-          </div>
-          <form action={createConnectionLink.bind(null, clinic.id)}>
-            <button
-              type="submit"
-              className="shrink-0 rounded-lg border border-vexo-accent px-2.5 py-1.5 text-card font-medium text-vexo-accent hover:bg-vexo-accent/10"
-            >
-              Gerar link de conexão
-            </button>
-          </form>
-        </div>
-
-        {searchParams.linkGerado && (
-          <div className="flex items-center gap-2">
-            <div className="min-w-0 flex-1">
-              <CopyLinkBox url={`${process.env.APP_URL ?? ""}/conectar/${searchParams.linkGerado}`} />
-            </div>
-            <form action={cancelConnectionLink.bind(null, clinic.id, searchParams.linkGerado)}>
-              <button
-                type="submit"
-                className="shrink-0 rounded-lg border border-vexo-error/40 px-2.5 py-1.5 text-card font-medium text-vexo-error hover:bg-vexo-error/10"
-              >
-                Cancelar
-              </button>
-            </form>
-          </div>
-        )}
-      </div>
 
       <div className="grid grid-cols-3 gap-3">
         <ConnectionCard
@@ -216,6 +209,9 @@ export default async function ClinicConexoesPage({
           statusDot={instagramConnected ? "bg-vexo-success" : "bg-vexo-muted"}
           href={`/api/oauth/instagram/start?clinicId=${clinic.id}`}
           openInNewTab
+          notConnectedAction={
+            <ConnectionLinkButton clinicId={clinic.id} channel="instagram" pendingToken={pendingInstagramLink?.token ?? null} />
+          }
         />
         <ConnectionCard
           icon={<Calendar className="h-3.5 w-3.5" strokeWidth={2} />}
@@ -228,6 +224,9 @@ export default async function ClinicConexoesPage({
           href={`/api/oauth/google-calendar/start?clinicId=${clinic.id}`}
           openInNewTab
           disconnectAction={disconnectGoogleCalendarAction.bind(null, clinic.id)}
+          notConnectedAction={
+            <ConnectionLinkButton clinicId={clinic.id} channel="google-calendar" pendingToken={pendingGoogleLink?.token ?? null} />
+          }
         />
       </div>
     </div>

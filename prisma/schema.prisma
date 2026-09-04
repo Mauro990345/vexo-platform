@@ -111,16 +111,18 @@ model InstagramAccount {
 // Link público de auto-conexão (ex: /conectar/{token}) — permite o CLIENTE
 // (a clínica) conectar seus próprios canais sem login no CRM e sem precisar
 // do Mauro por perto. Token não-adivinhável, gerado à parte do id da
-// clínica (nunca expõe o id real numa URL pública). Por clínica, não por
-// canal: mesma estrutura serve pra Google Calendar hoje e Instagram/
-// WhatsApp no futuro, sem precisar gerar um link novo por canal.
-// Invalidado OU por expiração (7 dias, ver createConnectionLink) OU no
-// primeiro uso bem-sucedido (usedAt) — o que vier primeiro.
+// clínica (nunca expõe o id real numa URL pública). Um link por canal
+// (google-calendar | instagram — WhatsApp continua com o QR code próprio,
+// nunca passa por aqui): cada card em Conexões gera/cancela o seu próprio,
+// independente dos outros, mesma estrutura reaproveitada de canal pra
+// canal. Invalidado OU por expiração (7 dias, ver createConnectionLink) OU
+// no primeiro uso bem-sucedido (usedAt) — o que vier primeiro.
 model ConnectionLink {
   id       String @id @default(cuid())
   clinicId String
   clinic   Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
 
+  channel   String
   token     String    @unique
   expiresAt DateTime
   usedAt    DateTime?

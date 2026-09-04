@@ -39,7 +39,7 @@ export async function GET(req: NextRequest) {
     // da tela de Conexões do CRM.
     if (connectToken) {
       await prisma.connectionLink.updateMany({
-        where: { token: connectToken, clinicId },
+        where: { token: connectToken, clinicId, channel: "google-calendar" },
         data: { usedAt: new Date() },
       });
       return NextResponse.redirect(`${process.env.APP_URL ?? ""}/conectar/${connectToken}/sucesso`);
