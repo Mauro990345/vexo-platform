@@ -44,17 +44,13 @@ function attendanceRingColor(rate: number | null): "success" | "warning" | "erro
   return "error";
 }
 
-// Mesma paleta semântica já usada em StatusBadge/AppointmentStatusBadge —
-// só reaproveitada aqui pro ponto colorido do cabeçalho de cada coluna
-// (Novo contato e Em conversa dividem a cor "info" de propósito, é a mesma
-// distinção que já existe no resto do sistema, não uma cor nova).
 const PIPELINE_COLUMNS = [
-  { status: "NEW", label: "Novo contato", dot: "bg-vexo-accent" },
-  { status: "IN_CONVERSATION", label: "Em conversa", dot: "bg-vexo-accent" },
-  { status: "SCHEDULED", label: "Agendado", dot: "bg-vexo-success" },
-  { status: "FOLLOW_UP", label: "Follow-up", dot: "bg-vexo-warning" },
-  { status: "NEEDS_HUMAN", label: "Precisa de humano", dot: "bg-vexo-error" },
-  { status: "LOST", label: "Perdido", dot: "bg-vexo-muted" },
+  { status: "NEW", label: "Novo contato" },
+  { status: "IN_CONVERSATION", label: "Em conversa" },
+  { status: "SCHEDULED", label: "Agendado" },
+  { status: "FOLLOW_UP", label: "Follow-up" },
+  { status: "NEEDS_HUMAN", label: "Precisa de humano" },
+  { status: "LOST", label: "Perdido" },
 ] as const;
 
 function formatDateTime(date: Date): string {
@@ -140,93 +136,101 @@ export default async function ClinicPipelinePage({ params }: { params: { id: str
         </div>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-        {PIPELINE_COLUMNS.map((col) => {
-          const items = byStatus[col.status] ?? [];
-          return (
-            <div key={col.status} className="rounded-xl border border-vexo-border bg-vexo-surface p-3">
-              <div className="mb-2.5 flex items-center justify-between gap-2">
-                <div className="flex min-w-0 items-center gap-1.5">
-                  <span className={`h-2 w-2 shrink-0 rounded-full ${col.dot}`} />
+      {/* Board com rolagem horizontal própria (arrasta os cards pros
+          lados se as 6 colunas não couberem) — cada coluna só cresce em
+          altura conforme o conteúdo, sem scroll vertical próprio; quem
+          rola verticalmente é a página toda. */}
+      <div className="overflow-x-auto pb-2">
+        <div className="flex items-start gap-3">
+          {PIPELINE_COLUMNS.map((col) => {
+            const items = byStatus[col.status] ?? [];
+            return (
+              <div
+                key={col.status}
+                className={`shrink-0 rounded-xl border border-vexo-border bg-vexo-surface p-3 ${
+                  col.status === "SCHEDULED" ? "w-80" : "w-64"
+                }`}
+              >
+                <div className="mb-2.5 flex items-center justify-between gap-2">
                   <h2 className="truncate text-xs font-semibold">{col.label}</h2>
+                  <span className="shrink-0 rounded-full bg-vexo-surface2 px-1.5 py-0.5 text-caption font-medium text-vexo-muted">
+                    {items.length}
+                  </span>
                 </div>
-                <span className="shrink-0 rounded-full bg-vexo-surface2 px-1.5 py-0.5 text-caption font-medium text-vexo-muted">
-                  {items.length}
-                </span>
-              </div>
 
-              <div className="max-h-[28rem] space-y-3 overflow-y-auto pr-0.5">
-                {items.map((conv) => {
-                  const appt = conv.appointments[0];
-                  const name = conv.lead.name ?? conv.lead.igUsername ?? "Lead";
-                  const initials = getInitials(name);
-                  const avatarColor = avatarColorClass(conv.lead.id);
+                <div className="space-y-3">
+                  {items.map((conv) => {
+                    const appt = conv.appointments[0];
+                    const name = conv.lead.name ?? conv.lead.igUsername ?? "Lead";
+                    const initials = getInitials(name);
+                    const avatarColor = avatarColorClass(conv.lead.id);
 
-                  // A coluna Agendado fica com uma versão compacta própria
-                  // (avatar+nome na mesma linha, sem a linha de canal) pra
-                  // não ficar alta demais somando com o bloco de
-                  // agendamento/botões abaixo — as outras 5 colunas usam a
-                  // estrutura completa de 3 linhas.
-                  if (col.status === "SCHEDULED") {
-                    return (
-                      <div key={conv.id} className="rounded-xl border border-vexo-border bg-vexo-surface2 p-2">
-                        <Link
-                          href={`/crm/conversas/${conv.id}`}
-                          className="flex items-center gap-2 transition hover:text-vexo-accent"
-                        >
-                          <div
-                            className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold text-vexo-accentFg ${avatarColor}`}
+                    // A coluna Agendado fica com uma versão compacta própria
+                    // (avatar+nome na mesma linha, sem a linha de canal) pra
+                    // não ficar alta demais somando com o bloco de
+                    // agendamento/botões abaixo — as outras 5 colunas usam a
+                    // estrutura completa de 3 linhas.
+                    if (col.status === "SCHEDULED") {
+                      return (
+                        <div key={conv.id} className="rounded-xl border border-vexo-border bg-vexo-surface2 p-2">
+                          <Link
+                            href={`/crm/conversas/${conv.id}`}
+                            className="flex items-center gap-2 transition hover:text-vexo-accent"
                           >
-                            {initials}
-                          </div>
-                          <p className="truncate text-xs font-semibold">{name}</p>
-                        </Link>
+                            <div
+                              className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold text-vexo-accentFg ${avatarColor}`}
+                            >
+                              {initials}
+                            </div>
+                            <p className="truncate text-xs font-semibold">{name}</p>
+                          </Link>
 
-                        {appt && (
-                          <div className="mt-1.5">
-                            <p className="mb-1 text-caption font-medium text-vexo-fg">
-                              {formatDateTime(appt.scheduledAt)}
-                            </p>
-                            <AttendanceToggle appointmentId={appt.id} status={appt.status} />
+                          {appt && (
+                            <div className="mt-1.5">
+                              <p className="mb-1 text-caption font-medium text-vexo-fg">
+                                {formatDateTime(appt.scheduledAt)}
+                              </p>
+                              <AttendanceToggle appointmentId={appt.id} status={appt.status} />
+                            </div>
+                          )}
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div key={conv.id} className="rounded-xl border border-vexo-border bg-vexo-surface2 p-3.5">
+                        <Link href={`/crm/conversas/${conv.id}`} className="block transition hover:text-vexo-accent">
+                          <div className="flex items-start justify-between gap-2">
+                            <p className="truncate text-sm font-semibold">{name}</p>
+                            <MoreHorizontal className="h-3.5 w-3.5 shrink-0 text-vexo-muted" strokeWidth={2} />
                           </div>
-                        )}
+
+                          <div className="mt-2.5 flex items-center gap-2">
+                            <div
+                              className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold text-vexo-accentFg ${avatarColor}`}
+                            >
+                              {initials}
+                            </div>
+                            <p className="truncate text-card text-vexo-muted">Instagram</p>
+                          </div>
+
+                          <div className="mt-2 flex items-center gap-1.5 text-caption text-vexo-muted">
+                            <AtSign className="h-3 w-3 shrink-0" strokeWidth={2} />
+                            <span>{conv.lastMessageAt ? formatDateTime(conv.lastMessageAt) : "—"}</span>
+                          </div>
+                        </Link>
                       </div>
                     );
-                  }
+                  })}
 
-                  return (
-                    <div key={conv.id} className="rounded-xl border border-vexo-border bg-vexo-surface2 p-3.5">
-                      <Link href={`/crm/conversas/${conv.id}`} className="block transition hover:text-vexo-accent">
-                        <div className="flex items-start justify-between gap-2">
-                          <p className="truncate text-sm font-semibold">{name}</p>
-                          <MoreHorizontal className="h-3.5 w-3.5 shrink-0 text-vexo-muted" strokeWidth={2} />
-                        </div>
-
-                        <div className="mt-2.5 flex items-center gap-2">
-                          <div
-                            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold text-vexo-accentFg ${avatarColor}`}
-                          >
-                            {initials}
-                          </div>
-                          <p className="truncate text-card text-vexo-muted">Instagram</p>
-                        </div>
-
-                        <div className="mt-2 flex items-center gap-1.5 text-caption text-vexo-muted">
-                          <AtSign className="h-3 w-3 shrink-0" strokeWidth={2} />
-                          <span>{conv.lastMessageAt ? formatDateTime(conv.lastMessageAt) : "—"}</span>
-                        </div>
-                      </Link>
-                    </div>
-                  );
-                })}
-
-                {items.length === 0 && (
-                  <p className="py-2 text-center text-caption text-vexo-muted">Nenhum lead aqui.</p>
-                )}
+                  {items.length === 0 && (
+                    <p className="py-2 text-center text-caption text-vexo-muted">Nenhum lead aqui.</p>
+                  )}
+                </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
     </div>
   );
