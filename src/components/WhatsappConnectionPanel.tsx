@@ -15,11 +15,10 @@ const STATUS_DOT: Record<WhatsappConnectionState, string> = {
   unknown: "bg-vexo-muted",
 };
 
-// Painel de conexão do WhatsApp (pareamento por QR code) — usado tanto no
-// admin (/crm/clinicas/[id]/whatsapp) quanto no painel do cliente
-// (/dashboard/whatsapp). Cada tela busca os dados e passa aqui já
-// resolvidos; renameAction só é passada pelo admin (o cliente não pode
-// trocar o nome técnico da instância).
+// Painel de conexão do WhatsApp (pareamento por QR code) — usado pelo CRM
+// interno (/crm/clinicas/[id]/whatsapp). Conectar canais é responsabilidade
+// da M8 Growth, não da clínica, então não existe mais versão disso no
+// painel do cliente.
 export function WhatsappConnectionPanel({
   instanceName,
   status,

@@ -214,6 +214,7 @@ model Conversation {
   updatedAt DateTime @updatedAt
 
   @@index([clinicId, status])
+  @@index([clinicId, createdAt])
   @@index([leadId])
 }
 
@@ -304,6 +305,7 @@ model Appointment {
   updatedAt DateTime @updatedAt
 
   @@index([clinicId, scheduledAt])
+  @@index([clinicId, createdAt])
   @@index([status])
 }
 
