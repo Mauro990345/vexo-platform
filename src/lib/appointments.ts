@@ -20,31 +20,35 @@ export async function setAppointmentAttendance(
   const targetStatus = appt.status === requestedStatus ? "SCHEDULED" : requestedStatus;
 
   // Agendamento sem Lead vinculado (importado do Google Calendar sem
-  // conversa no Instagram) — não existe Pipeline nem follow-up pra mexer,
-  // só alterna o status do Appointment mesmo. Guarda mínima aqui pro schema
-  // opcional compilar; a ramificação completa (com previousStatus) é o
-  // próximo passo.
-  if (appt.conversationId) {
-    if (appt.status === "NO_SHOW" && targetStatus !== "NO_SHOW") {
-      await cancelPendingFollowUp(appt.conversationId);
-      // Só devolve a conversa pra SCHEDULED se ela ainda estiver em FOLLOW_UP —
-      // se o lead já respondeu e reabriu a conversa por conta própria, isso já
-      // foi tratado em conversation-pipeline.ts e não deve ser sobrescrito aqui.
-      await prisma.conversation.updateMany({
-        where: { id: appt.conversationId, status: "FOLLOW_UP" },
-        data: { status: "SCHEDULED" },
-      });
+  // conversa no Instagram, paciente conhecido agendado manualmente) — não
+  // existe Pipeline nem follow-up pra mexer, só alterna o status do
+  // Appointment mesmo (inclusive o desfazer: clicar de novo já volta pra
+  // SCHEDULED pelo cálculo de targetStatus acima).
+  if (!appt.conversationId) {
+    return prisma.appointment.update({ where: { id: appointmentId }, data: { status: targetStatus } });
+  }
+
+  if (targetStatus === "NO_SHOW" && appt.status !== "NO_SHOW") {
+    // Entrando em não-comparecimento: guarda em que coluna do Pipeline a
+    // conversa estava (não assume nenhuma fixa) antes de mover pra
+    // Follow-up, pra dar pra desfazer depois voltando exatamente pra lá.
+    const conversation = await prisma.conversation.findUniqueOrThrow({ where: { id: appt.conversationId } });
+    await triggerFollowUp(appt.conversationId, "NO_SHOW", conversation.status);
+  } else if (appt.status === "NO_SHOW" && targetStatus !== "NO_SHOW") {
+    // Desfazendo: cancela a sequência de não-comparecimento em andamento e
+    // devolve a conversa pra coluna de onde ela tinha saído (previousStatus),
+    // não uma coluna fixa. Só mexe se ainda estiver em FOLLOW_UP — se o
+    // lead já respondeu e reabriu a conversa por conta própria, isso já foi
+    // tratado em conversation-pipeline.ts e não deve ser sobrescrito aqui.
+    const conversation = await prisma.conversation.findUniqueOrThrow({ where: { id: appt.conversationId } });
+    if (conversation.status === "FOLLOW_UP") {
+      await cancelPendingFollowUp(appt.conversationId, new Date(), conversation.previousStatus ?? "SCHEDULED");
+      await prisma.conversation.update({ where: { id: appt.conversationId }, data: { previousStatus: null } });
     }
   }
 
-  const updated = await prisma.appointment.update({
+  return prisma.appointment.update({
     where: { id: appointmentId },
     data: { status: targetStatus },
   });
-
-  if (appt.conversationId && targetStatus === "NO_SHOW" && appt.status !== "NO_SHOW") {
-    await triggerFollowUp(appt.conversationId, "NO_SHOW");
-  }
-
-  return updated;
 }

@@ -48,10 +48,20 @@ async function getSettings() {
 
 // Move a conversa pra FOLLOW_UP e abre um log — chamada tanto pela detecção
 // automática de silêncio quanto pela marcação manual de "não compareceu"
-// (src/lib/appointments.ts).
-export async function triggerFollowUp(conversationId: string, trigger: "SILENCE" | "NO_SHOW") {
+// (src/lib/appointments.ts). `previousStatus` é opcional e só usado pelo
+// caminho de não-comparecimento: guarda em que coluna do Pipeline a
+// conversa estava antes de mover, pra dar pra desfazer depois voltando pra
+// lá em vez de assumir uma coluna fixa — ver setAppointmentAttendance.
+export async function triggerFollowUp(
+  conversationId: string,
+  trigger: "SILENCE" | "NO_SHOW",
+  previousStatus?: ConversationStatus
+) {
   await prisma.$transaction([
-    prisma.conversation.update({ where: { id: conversationId }, data: { status: "FOLLOW_UP" } }),
+    prisma.conversation.update({
+      where: { id: conversationId },
+      data: { status: "FOLLOW_UP", ...(previousStatus ? { previousStatus } : {}) },
+    }),
     prisma.followUpLog.create({ data: { conversationId, trigger } }),
   ]);
 }
