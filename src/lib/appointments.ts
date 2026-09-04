@@ -19,15 +19,22 @@ export async function setAppointmentAttendance(
 
   const targetStatus = appt.status === requestedStatus ? "SCHEDULED" : requestedStatus;
 
-  if (appt.status === "NO_SHOW" && targetStatus !== "NO_SHOW") {
-    await cancelPendingFollowUp(appt.conversationId);
-    // Só devolve a conversa pra SCHEDULED se ela ainda estiver em FOLLOW_UP —
-    // se o lead já respondeu e reabriu a conversa por conta própria, isso já
-    // foi tratado em conversation-pipeline.ts e não deve ser sobrescrito aqui.
-    await prisma.conversation.updateMany({
-      where: { id: appt.conversationId, status: "FOLLOW_UP" },
-      data: { status: "SCHEDULED" },
-    });
+  // Agendamento sem Lead vinculado (importado do Google Calendar sem
+  // conversa no Instagram) — não existe Pipeline nem follow-up pra mexer,
+  // só alterna o status do Appointment mesmo. Guarda mínima aqui pro schema
+  // opcional compilar; a ramificação completa (com previousStatus) é o
+  // próximo passo.
+  if (appt.conversationId) {
+    if (appt.status === "NO_SHOW" && targetStatus !== "NO_SHOW") {
+      await cancelPendingFollowUp(appt.conversationId);
+      // Só devolve a conversa pra SCHEDULED se ela ainda estiver em FOLLOW_UP —
+      // se o lead já respondeu e reabriu a conversa por conta própria, isso já
+      // foi tratado em conversation-pipeline.ts e não deve ser sobrescrito aqui.
+      await prisma.conversation.updateMany({
+        where: { id: appt.conversationId, status: "FOLLOW_UP" },
+        data: { status: "SCHEDULED" },
+      });
+    }
   }
 
   const updated = await prisma.appointment.update({
@@ -35,7 +42,7 @@ export async function setAppointmentAttendance(
     data: { status: targetStatus },
   });
 
-  if (targetStatus === "NO_SHOW" && appt.status !== "NO_SHOW") {
+  if (appt.conversationId && targetStatus === "NO_SHOW" && appt.status !== "NO_SHOW") {
     await triggerFollowUp(appt.conversationId, "NO_SHOW");
   }
 

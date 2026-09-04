@@ -15,6 +15,11 @@ export async function processReminders(): Promise<{ sent: number }> {
     where: {
       status: { in: ["SCHEDULED", "CONFIRMED"] },
       scheduledAt: { gt: now, lt: horizon },
+      // Sem Lead vinculado = importado do Google Calendar sem conversa no
+      // Instagram (paciente conhecido, agendado manualmente) — não existe
+      // canal (WhatsApp/Instagram) pra mandar lembrete, a clínica lembra
+      // esse paciente por fora do VEXO.
+      leadId: { not: null },
     },
     include: {
       lead: true,
@@ -26,6 +31,7 @@ export async function processReminders(): Promise<{ sent: number }> {
   let sent = 0;
 
   for (const appt of appointments) {
+    if (!appt.lead) continue; // defesa a mais — já filtrado no where acima
     const hoursBeforeList = appt.clinic.reminderConfig?.hoursBefore ?? [24, 3];
 
     for (const hoursBefore of hoursBeforeList) {

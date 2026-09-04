@@ -189,8 +189,13 @@ model Conversation {
   leadId String
   lead   Lead   @relation(fields: [leadId], references: [id], onDelete: Cascade)
 
-  status           ConversationStatus @default(NEW)
-  needsHumanReason String?            @db.Text
+  status           ConversationStatus  @default(NEW)
+  // Status de antes de entrar em FOLLOW_UP por não-comparecimento — guardado
+  // só pra poder desfazer (voltar pra onde estava) quando alguém desmarca o
+  // "Não compareceu"; ver setAppointmentAttendance em src/lib/appointments.ts.
+  // Sempre null fora dessa janela.
+  previousStatus   ConversationStatus?
+  needsHumanReason String?             @db.Text
 
   lastLeadMessageAt DateTime?
   lastAiMessageAt   DateTime?
@@ -260,16 +265,21 @@ enum AppointmentStatus {
   CANCELLED
 }
 
+// conversationId/leadId são opcionais: um agendamento pode vir da IA
+// (Lead + Conversation sempre presentes, criado por conversation-pipeline.ts)
+// ou ser importado direto do Google Calendar da clínica sem nenhum Lead
+// vinculado (paciente conhecido, agendado manualmente, sem conversa no
+// Instagram) — ver plano de sincronização de leitura do Google Calendar.
 model Appointment {
   id       String @id @default(cuid())
   clinicId String
   clinic   Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
 
-  conversationId String
-  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  conversationId String?
+  conversation   Conversation? @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 
-  leadId String
-  lead   Lead   @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  leadId String?
+  lead   Lead?   @relation(fields: [leadId], references: [id], onDelete: Cascade)
 
   scheduledAt   DateTime
   googleEventId String?

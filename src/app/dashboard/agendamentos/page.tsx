@@ -30,7 +30,7 @@ export default async function ClientAppointmentsPage() {
           <tbody className="divide-y divide-vexo-border">
             {appointments.map((a) => (
               <tr key={a.id} className="transition hover:bg-vexo-surface2">
-                <td className="px-4 py-3 font-medium">{a.lead.name ?? a.lead.igUsername ?? "Lead"}</td>
+                <td className="px-4 py-3 font-medium">{a.lead?.name ?? a.lead?.igUsername ?? "Paciente"}</td>
                 <td className="px-4 py-3 text-vexo-muted">
                   {a.scheduledAt.toLocaleString("pt-BR", {
                     day: "2-digit",

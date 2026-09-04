@@ -207,7 +207,7 @@ export async function setAppointmentAttendanceAction(
   const appt = await setAppointmentAttendance(appointmentId, status);
   if (appt) {
     revalidatePath(`/crm/clinicas/${appt.clinicId}`);
-    revalidatePath(`/crm/conversas/${appt.conversationId}`);
+    if (appt.conversationId) revalidatePath(`/crm/conversas/${appt.conversationId}`);
   }
 }
 

@@ -124,21 +124,35 @@ export default async function ClinicAgendaPage({
                     key={i}
                     className="flex min-w-0 flex-col gap-0.5 overflow-hidden border-b border-r border-vexo-border p-1 last:border-r-0"
                   >
-                    {cellAppointments.map((a) => (
-                      <Link
-                        key={a.id}
-                        href={`/crm/conversas/${a.conversationId}`}
-                        className={`flex min-w-0 flex-1 flex-col justify-center gap-0.5 rounded-card border border-l-[3px] border-vexo-petrolBorder bg-vexo-petrol p-1 text-caption text-vexo-fg transition hover:border-vexo-accent ${appointmentStatusBorderClass(a.status)}`}
-                      >
-                        <p className="truncate font-medium leading-tight">{a.lead.name ?? a.lead.igUsername ?? "Lead"}</p>
-                        <div className="flex min-w-0 items-center gap-1.5 leading-none">
-                          <span className="shrink-0 text-vexo-fg/70">
-                            {a.scheduledAt.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
-                          </span>
-                          <AppointmentStatusBadge status={a.status} compact />
+                    {cellAppointments.map((a) => {
+                      // Sem conversationId = importado do Google Calendar sem
+                      // Lead vinculado (paciente conhecido, agendado
+                      // manualmente) — não tem conversa pra abrir, então o
+                      // card não é clicável, só informativo.
+                      const label = a.lead?.name ?? a.lead?.igUsername ?? "Paciente";
+                      const inner = (
+                        <>
+                          <p className="truncate font-medium leading-tight">{label}</p>
+                          <div className="flex min-w-0 items-center gap-1.5 leading-none">
+                            <span className="shrink-0 text-vexo-fg/70">
+                              {a.scheduledAt.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                            </span>
+                            <AppointmentStatusBadge status={a.status} compact />
+                          </div>
+                        </>
+                      );
+                      const className = `flex min-w-0 flex-1 flex-col justify-center gap-0.5 rounded-card border border-l-[3px] border-vexo-petrolBorder bg-vexo-petrol p-1 text-caption text-vexo-fg transition ${appointmentStatusBorderClass(a.status)}`;
+
+                      return a.conversationId ? (
+                        <Link key={a.id} href={`/crm/conversas/${a.conversationId}`} className={`${className} hover:border-vexo-accent`}>
+                          {inner}
+                        </Link>
+                      ) : (
+                        <div key={a.id} className={className}>
+                          {inner}
                         </div>
-                      </Link>
-                    ))}
+                      );
+                    })}
                   </div>
                 );
               })}
