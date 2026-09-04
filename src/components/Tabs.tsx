@@ -5,6 +5,11 @@ import { useLayoutEffect, useRef, useState } from "react";
 export type TabItem = {
   id: string;
   label: string;
+  // Ícone já renderizado (ex: <Settings className="h-3.5 w-3.5" />), mesmo
+  // motivo do NavItem.icon em AppShell — elemento pronto, não referência de
+  // componente, pra poder vir de um Server Component sem quebrar a
+  // serialização da fronteira server→client.
+  icon?: React.ReactNode;
   content: React.ReactNode;
 };
 
@@ -27,7 +32,7 @@ export function Tabs({ tabs, defaultTabId }: { tabs: TabItem[]; defaultTabId?: s
 
   return (
     <div>
-      <div className="relative flex gap-5 border-b border-vexo-border">
+      <div className="relative flex gap-8 border-b border-vexo-border">
         {tabs.map((tab) => (
           <button
             key={tab.id}
@@ -36,16 +41,17 @@ export function Tabs({ tabs, defaultTabId }: { tabs: TabItem[]; defaultTabId?: s
             }}
             type="button"
             onClick={() => setActiveId(tab.id)}
-            className={`shrink-0 whitespace-nowrap px-0.5 pb-2.5 text-sm font-medium transition-colors ${
-              activeId === tab.id ? "text-vexo-accent" : "text-vexo-muted hover:text-vexo-fg"
+            className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap px-0.5 pb-2.5 text-xs font-medium transition-colors ${
+              activeId === tab.id ? "text-vexo-accent" : "text-vexo-fg/60 hover:text-vexo-fg"
             }`}
           >
+            {tab.icon}
             {tab.label}
           </button>
         ))}
         {underline && (
           <span
-            className="absolute bottom-0 h-0.5 rounded-full bg-vexo-accent transition-all duration-300 ease-out"
+            className="absolute bottom-0 h-px rounded-full bg-vexo-accent transition-all duration-300 ease-out"
             style={{ left: underline.left, width: underline.width }}
           />
         )}

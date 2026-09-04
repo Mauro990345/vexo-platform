@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import type { FollowUpStep, FollowUpTrigger } from "@prisma/client";
+import { Settings, Clock, CalendarX } from "lucide-react";
 import { Tabs } from "@/components/Tabs";
 import {
   addFollowUpStep,
@@ -226,7 +227,7 @@ export async function FollowUpView() {
   const adaptiveDelayEnabled = aiSettings?.adaptiveDelayEnabled ?? true;
 
   return (
-    <div className="max-w-lg space-y-4">
+    <div className="max-w-lg space-y-6">
       <div>
         <h1 className="text-base font-semibold tracking-tight">Follow-up</h1>
         <p className="mt-1 text-xs text-vexo-muted">
@@ -241,6 +242,7 @@ export async function FollowUpView() {
           {
             id: "geral",
             label: "Configurações gerais",
+            icon: <Settings className="h-3.5 w-3.5 shrink-0" strokeWidth={2} />,
             content: (
               <div className="space-y-6">
                 <section className="space-y-2.5">
@@ -354,6 +356,7 @@ export async function FollowUpView() {
           {
             id: "silence",
             label: "Parou de responder",
+            icon: <Clock className="h-3.5 w-3.5 shrink-0" strokeWidth={2} />,
             content: (
               <section className="space-y-3">
                 <p className="text-xs text-vexo-muted">
@@ -411,6 +414,7 @@ export async function FollowUpView() {
           {
             id: "no-show",
             label: "Não compareceu",
+            icon: <CalendarX className="h-3.5 w-3.5 shrink-0" strokeWidth={2} />,
             content: (
               <section className="space-y-3">
                 <p className="text-xs text-vexo-muted">
