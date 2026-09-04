@@ -2,10 +2,14 @@ import Link from "next/link";
 import { requireClientSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { getClinicMetrics, startOfDay, addDays } from "@/lib/metrics";
-import { ClinicMetricsCard } from "@/components/ClinicMetricsCard";
+import { StatCard } from "@/components/StatCard";
 
 export const dynamic = "force-dynamic";
 
+// Painel do cliente: só números informativos, sem Pipeline/Kanban (isso
+// fica só no CRM interno) e sem os detalhes de conexão/taxa de resposta em
+// anel do card usado no lado admin — aqui é só "abordados / em conversa /
+// agendaram", hoje e nos últimos 7 dias.
 export default async function ClientDashboardPage() {
   const session = await requireClientSession();
   const clinicId = session.user.clinicId as string;
@@ -37,7 +41,23 @@ export default async function ClientDashboardPage() {
         </Link>
       )}
 
-      <ClinicMetricsCard name={clinic.name} today={today} last7Days={last7Days} />
+      <div className="space-y-3">
+        <h2 className="text-caption font-medium uppercase tracking-wide text-vexo-muted">Hoje</h2>
+        <div className="grid grid-cols-3 gap-2.5">
+          <StatCard label="Abordados" value={String(today.approached)} />
+          <StatCard label="Em conversa" value={String(today.responded)} />
+          <StatCard label="Agendaram" value={String(today.scheduled)} />
+        </div>
+      </div>
+
+      <div className="space-y-3">
+        <h2 className="text-caption font-medium uppercase tracking-wide text-vexo-muted">Últimos 7 dias</h2>
+        <div className="grid grid-cols-3 gap-2.5">
+          <StatCard label="Abordados" value={String(last7Days.approached)} />
+          <StatCard label="Em conversa" value={String(last7Days.responded)} />
+          <StatCard label="Agendaram" value={String(last7Days.scheduled)} />
+        </div>
+      </div>
     </div>
   );
 }
