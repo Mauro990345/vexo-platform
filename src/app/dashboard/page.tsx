@@ -83,9 +83,9 @@ export default async function ClientDashboardPage({
   const base = "/dashboard";
 
   return (
-    <div className="min-h-screen bg-vexo-bg px-4 py-6 sm:px-8 sm:py-8">
+    <div className="min-h-screen bg-vexo-bg px-4 pt-4 pb-10 sm:px-8 sm:pt-6 sm:pb-14">
       <div className="mx-auto max-w-6xl">
-        <div className="mb-6">
+        <div className="mb-4">
           <h1 className="text-lg font-semibold tracking-tight">Painel</h1>
           <p className="text-sm text-vexo-muted">Acompanhamento em tempo real das abordagens no Instagram.</p>
         </div>
@@ -134,14 +134,18 @@ export default async function ClientDashboardPage({
                     const count = dailyApproached[i] ?? 0;
                     return (
                       <div key={day.getTime()} className="flex items-center gap-2">
-                        <span className="w-7 shrink-0 text-caption text-vexo-muted">{WEEKDAY_LABELS[i]}</span>
-                        <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-vexo-accent/15">
+                        <span className="w-7 shrink-0 text-caption leading-none text-vexo-muted">
+                          {WEEKDAY_LABELS[i]}
+                        </span>
+                        <div className="flex h-2.5 flex-1 items-center rounded-full bg-vexo-accent/15">
                           <div
-                            className="h-full rounded-full bg-vexo-accent"
+                            className="h-1 rounded-full bg-vexo-accent"
                             style={{ width: `${(count / maxApproached) * 100}%` }}
                           />
                         </div>
-                        <span className="w-4 shrink-0 text-right text-caption font-medium">{count}</span>
+                        <span className="w-4 shrink-0 text-right text-caption font-medium leading-none">
+                          {count}
+                        </span>
                       </div>
                     );
                   })}
@@ -168,8 +172,10 @@ export default async function ClientDashboardPage({
             </div>
           </div>
 
-          {/* Coluna direita: agendamentos */}
-          <div className="space-y-3">
+          {/* Coluna direita: agendamentos — pt-[15px] no desktop pra alinhar
+              o topo do texto com o topo do texto dentro do card da coluna
+              esquerda (que tem p-3.5 + 1px de borda antes do conteúdo). */}
+          <div className="space-y-3 lg:pt-[15px]">
             <h2 className="text-caption font-medium uppercase tracking-wide text-vexo-muted">Agendamentos</h2>
             <div className="space-y-2">
               {appointments.map((a) => (
