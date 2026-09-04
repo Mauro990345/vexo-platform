@@ -8,33 +8,6 @@ import { startOfDay, addDays } from "@/lib/metrics";
 
 export const dynamic = "force-dynamic";
 
-// Paleta pequena e fixa (tokens que já existem, nenhuma cor nova) pro
-// avatar do lead — escolhida por hash do id, então a mesma pessoa sempre
-// cai na mesma cor entre renders, sem precisar guardar isso em lugar
-// nenhum.
-const AVATAR_COLORS = ["bg-vexo-accent", "bg-vexo-success", "bg-vexo-warning", "bg-vexo-error"] as const;
-
-function hashString(value: string): number {
-  let hash = 0;
-  for (let i = 0; i < value.length; i++) {
-    hash = (hash * 31 + value.charCodeAt(i)) | 0;
-  }
-  return Math.abs(hash);
-}
-
-function avatarColorClass(leadId: string): string {
-  return AVATAR_COLORS[hashString(leadId) % AVATAR_COLORS.length] ?? AVATAR_COLORS[0];
-}
-
-function getInitials(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  const first = parts[0];
-  if (!first) return "?";
-  if (parts.length === 1) return first.slice(0, 2).toUpperCase();
-  const last = parts[parts.length - 1] ?? first;
-  return ((first[0] ?? "") + (last[0] ?? "")).toUpperCase();
-}
-
 // Faixas da cor do anel de comparecimento — decisão de exibição, não de
 // dado (o número em si vem sempre certo do banco). Ajustável se a clínica
 // achar essas faixas erradas pra realidade dela.
@@ -145,12 +118,7 @@ export default async function ClinicPipelinePage({ params }: { params: { id: str
           {PIPELINE_COLUMNS.map((col) => {
             const items = byStatus[col.status] ?? [];
             return (
-              <div
-                key={col.status}
-                className={`shrink-0 rounded-xl border border-vexo-border bg-vexo-surface p-3 ${
-                  col.status === "SCHEDULED" ? "w-80" : "w-64"
-                }`}
-              >
+              <div key={col.status} className="w-64 shrink-0 rounded-xl border border-vexo-border bg-vexo-surface p-3">
                 <div className="mb-2.5 flex items-center justify-between gap-2">
                   <h2 className="truncate text-xs font-semibold">{col.label}</h2>
                   <span className="shrink-0 rounded-full bg-vexo-surface2 px-1.5 py-0.5 text-caption font-medium text-vexo-muted">
@@ -162,26 +130,16 @@ export default async function ClinicPipelinePage({ params }: { params: { id: str
                   {items.map((conv) => {
                     const appt = conv.appointments[0];
                     const name = conv.lead.name ?? conv.lead.igUsername ?? "Lead";
-                    const initials = getInitials(name);
-                    const avatarColor = avatarColorClass(conv.lead.id);
 
                     // A coluna Agendado fica com uma versão compacta própria
-                    // (avatar+nome na mesma linha, sem a linha de canal) pra
-                    // não ficar alta demais somando com o bloco de
+                    // (só o nome, sem "..." nem linha de canal) pra não
+                    // ficar alta demais somando com o bloco de
                     // agendamento/botões abaixo — as outras 5 colunas usam a
-                    // estrutura completa de 3 linhas.
+                    // estrutura padrão (nome + "..." em cima).
                     if (col.status === "SCHEDULED") {
                       return (
                         <div key={conv.id} className="rounded-xl border border-vexo-border bg-vexo-surface2 p-2">
-                          <Link
-                            href={`/crm/conversas/${conv.id}`}
-                            className="flex items-center gap-2 transition hover:text-vexo-accent"
-                          >
-                            <div
-                              className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold text-vexo-accentFg ${avatarColor}`}
-                            >
-                              {initials}
-                            </div>
+                          <Link href={`/crm/conversas/${conv.id}`} className="block transition hover:text-vexo-accent">
                             <p className="truncate text-xs font-semibold">{name}</p>
                           </Link>
 
@@ -205,16 +163,7 @@ export default async function ClinicPipelinePage({ params }: { params: { id: str
                             <MoreHorizontal className="h-3.5 w-3.5 shrink-0 text-vexo-muted" strokeWidth={2} />
                           </div>
 
-                          <div className="mt-2.5 flex items-center gap-2">
-                            <div
-                              className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold text-vexo-accentFg ${avatarColor}`}
-                            >
-                              {initials}
-                            </div>
-                            <p className="truncate text-card text-vexo-muted">Instagram</p>
-                          </div>
-
-                          <div className="mt-2 flex items-center gap-1.5 text-caption text-vexo-muted">
+                          <div className="mt-1.5 flex items-center gap-1.5 text-caption text-vexo-muted">
                             <AtSign className="h-3 w-3 shrink-0" strokeWidth={2} />
                             <span>{conv.lastMessageAt ? formatDateTime(conv.lastMessageAt) : "—"}</span>
                           </div>

@@ -26,7 +26,7 @@ export function AttendanceToggle({
           colunas estreitas (pipeline) em vez de quebrar linha. */}
       <form action={setAppointmentAttendanceAction.bind(null, appointmentId, "COMPLETED")} className="min-w-0 flex-1">
         <button
-          className={`w-full truncate rounded border px-1.5 py-1 text-card font-medium leading-none transition ${
+          className={`w-full truncate rounded border px-1 py-0.5 text-caption font-medium leading-none transition ${
             isCompleted
               ? "border-vexo-success bg-vexo-success/15 text-vexo-success"
               : "border-vexo-border text-vexo-muted hover:border-vexo-success/50 hover:text-vexo-success"
@@ -37,7 +37,7 @@ export function AttendanceToggle({
       </form>
       <form action={setAppointmentAttendanceAction.bind(null, appointmentId, "NO_SHOW")} className="min-w-0 flex-1">
         <button
-          className={`w-full truncate rounded border px-1.5 py-1 text-card font-medium leading-none transition ${
+          className={`w-full truncate rounded border px-1 py-0.5 text-caption font-medium leading-none transition ${
             isNoShow
               ? "border-vexo-error bg-vexo-error/15 text-vexo-error"
               : "border-vexo-border text-vexo-muted hover:border-vexo-error/50 hover:text-vexo-error"
