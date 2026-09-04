@@ -7,7 +7,7 @@ import { refreshWhatsappStatus, type WhatsappConnectionState } from "@/lib/whats
 import { ConnectOAuthButton } from "@/components/ConnectOAuthButton";
 import { RefreshOnFocus } from "@/components/RefreshOnFocus";
 import { CopyLinkBox } from "@/components/CopyLinkBox";
-import { createConnectionLink } from "../../actions";
+import { createConnectionLink, cancelConnectionLink } from "../../actions";
 
 export const dynamic = "force-dynamic";
 
@@ -156,7 +156,19 @@ export default async function ClinicConexoesPage({
         </div>
 
         {searchParams.linkGerado && (
-          <CopyLinkBox url={`${process.env.APP_URL ?? ""}/conectar/${searchParams.linkGerado}`} />
+          <div className="flex items-center gap-2">
+            <div className="min-w-0 flex-1">
+              <CopyLinkBox url={`${process.env.APP_URL ?? ""}/conectar/${searchParams.linkGerado}`} />
+            </div>
+            <form action={cancelConnectionLink.bind(null, clinic.id, searchParams.linkGerado)}>
+              <button
+                type="submit"
+                className="shrink-0 rounded-lg border border-vexo-error/40 px-2.5 py-1.5 text-card font-medium text-vexo-error hover:bg-vexo-error/10"
+              >
+                Cancelar
+              </button>
+            </form>
+          </div>
         )}
       </div>
 

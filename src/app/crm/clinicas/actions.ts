@@ -111,6 +111,20 @@ export async function createConnectionLink(clinicId: string) {
   redirect(`/crm/clinicas/${clinicId}/conexoes?linkGerado=${token}`);
 }
 
+// Cancela um link recém-gerado antes de mandar pro cliente (ex: gerou por
+// engano) — mesma marca de "usado" que o callback OAuth usa depois de uma
+// conexão real, então o link para de funcionar imediatamente.
+export async function cancelConnectionLink(clinicId: string, token: string) {
+  await requireInternalSession();
+
+  await prisma.connectionLink.updateMany({
+    where: { token, clinicId },
+    data: { usedAt: new Date() },
+  });
+
+  redirect(`/crm/clinicas/${clinicId}/conexoes`);
+}
+
 export async function createClientLogin(clinicId: string, formData: FormData) {
   await requireInternalSession();
 
