@@ -1,8 +1,28 @@
+// Chaves fixas (não construídas por template string) pra o Tailwind JIT
+// conseguir achar essas classes por análise estática do arquivo — se fosse
+// `stroke-vexo-${color}` em runtime, a classe nunca seria gerada no CSS
+// final.
+const RING_STROKE: Record<"accent" | "success" | "warning" | "error", string> = {
+  accent: "stroke-vexo-accent",
+  success: "stroke-vexo-success",
+  warning: "stroke-vexo-warning",
+  error: "stroke-vexo-error",
+};
+
 // Anel de progresso simples pra uma métrica de "parte de um todo" (taxa de
-// resposta) — um valor único, então não é um caso de paleta categórica
-// (só a cor de destaque + a trilha em vexo-border). rotate-90 deixa o
-// início do arco no topo em vez de à direita (padrão de gráfico de "%").
-export function ResponseRateRing({ value }: { value: number | null }) {
+// resposta, taxa de comparecimento) — um valor único, então não é um caso
+// de paleta categórica (só a cor escolhida + a trilha em vexo-border).
+// rotate-90 deixa o início do arco no topo em vez de à direita (padrão de
+// gráfico de "%"). "color" é decidido por quem usa o componente (ex: fixo
+// pra uma métrica, ou condicional a faixas de valor pra outra) — o anel em
+// si não sabe nada sobre o que cada faixa significa.
+export function ResponseRateRing({
+  value,
+  color = "accent",
+}: {
+  value: number | null;
+  color?: "accent" | "success" | "warning" | "error";
+}) {
   const pct = value !== null ? Math.round(value * 100) : null;
   const radius = 12;
   const circumference = 2 * Math.PI * radius;
@@ -22,7 +42,7 @@ export function ResponseRateRing({ value }: { value: number | null }) {
             strokeDasharray={circumference}
             strokeDashoffset={offset}
             strokeLinecap="round"
-            className="stroke-vexo-accent"
+            className={RING_STROKE[color]}
           />
         )}
       </svg>

@@ -3,8 +3,19 @@ import { notFound } from "next/navigation";
 import { AtSign } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { AttendanceToggle } from "@/components/AttendanceToggle";
+import { ResponseRateRing } from "@/components/ResponseRateRing";
+import { startOfDay, addDays } from "@/lib/metrics";
 
 export const dynamic = "force-dynamic";
+
+// Faixas da cor do anel de comparecimento — decisão de exibição, não de
+// dado (o número em si vem sempre certo do banco). Ajustável se a clínica
+// achar essas faixas erradas pra realidade dela.
+function attendanceRingColor(rate: number | null): "success" | "warning" | "error" {
+  if (rate === null || rate >= 0.75) return "success";
+  if (rate >= 0.5) return "warning";
+  return "error";
+}
 
 // Mesma paleta semântica já usada em StatusBadge/AppointmentStatusBadge —
 // só reaproveitada aqui pro ponto colorido do cabeçalho de cada coluna
@@ -24,20 +35,45 @@ function formatDateTime(date: Date): string {
 }
 
 export default async function ClinicPipelinePage({ params }: { params: { id: string } }) {
-  const clinic = await prisma.clinic.findUnique({
-    where: { id: params.id },
-    include: {
-      conversations: {
-        include: {
-          lead: true,
-          appointments: { orderBy: { scheduledAt: "desc" }, take: 1 },
+  const clinicId = params.id;
+  const todayStart = startOfDay(new Date());
+  const periodStart = addDays(todayStart, -6);
+  const periodEnd = addDays(todayStart, 1);
+
+  const [clinic, newContacts, responded, scheduled, completed, noShow] = await Promise.all([
+    prisma.clinic.findUnique({
+      where: { id: clinicId },
+      include: {
+        conversations: {
+          include: {
+            lead: true,
+            appointments: { orderBy: { scheduledAt: "desc" }, take: 1 },
+          },
+          orderBy: { lastMessageAt: "desc" },
         },
-        orderBy: { lastMessageAt: "desc" },
       },
-    },
-  });
+    }),
+    prisma.conversation.count({
+      where: { clinicId, createdAt: { gte: periodStart, lt: periodEnd } },
+    }),
+    prisma.conversation.count({
+      where: { clinicId, createdAt: { gte: periodStart, lt: periodEnd }, status: { not: "NEW" } },
+    }),
+    prisma.appointment.count({
+      where: { clinicId, createdAt: { gte: periodStart, lt: periodEnd } },
+    }),
+    prisma.appointment.count({
+      where: { clinicId, scheduledAt: { gte: periodStart, lt: periodEnd }, status: "COMPLETED" },
+    }),
+    prisma.appointment.count({
+      where: { clinicId, scheduledAt: { gte: periodStart, lt: periodEnd }, status: "NO_SHOW" },
+    }),
+  ]);
 
   if (!clinic) notFound();
+
+  const responseRate = newContacts > 0 ? responded / newContacts : null;
+  const attendanceRate = completed + noShow > 0 ? completed / (completed + noShow) : null;
 
   const byStatus = Object.fromEntries(
     PIPELINE_COLUMNS.map((col) => [col.status, clinic.conversations.filter((c) => c.status === col.status)])
@@ -48,6 +84,33 @@ export default async function ClinicPipelinePage({ params }: { params: { id: str
       <div>
         <h1 className="text-xl font-semibold tracking-tight">Pipeline</h1>
         <p className="mt-1 text-sm text-vexo-muted">{clinic.name}</p>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="rounded-lg border border-vexo-border bg-vexo-surface2 p-2.5">
+          <p className="truncate text-card font-medium text-vexo-muted">Novos contatos</p>
+          <p className="mt-1 text-xl font-semibold leading-none tracking-tight">{newContacts}</p>
+          <p className="mt-1 text-card text-vexo-muted">Últimos 7 dias</p>
+        </div>
+        <div className="rounded-lg border border-vexo-border bg-vexo-surface2 p-2.5">
+          <p className="truncate text-card font-medium text-vexo-muted">Taxa de resposta</p>
+          <div className="mt-1">
+            <ResponseRateRing value={responseRate} />
+          </div>
+          <p className="mt-1 text-card text-vexo-muted">Novo contato → Em conversa</p>
+        </div>
+        <div className="rounded-lg border border-vexo-border bg-vexo-surface2 p-2.5">
+          <p className="truncate text-card font-medium text-vexo-muted">Agendados</p>
+          <p className="mt-1 text-xl font-semibold leading-none tracking-tight">{scheduled}</p>
+          <p className="mt-1 text-card text-vexo-muted">Últimos 7 dias</p>
+        </div>
+        <div className="rounded-lg border border-vexo-border bg-vexo-surface2 p-2.5">
+          <p className="truncate text-card font-medium text-vexo-muted">Taxa de comparecimento</p>
+          <div className="mt-1">
+            <ResponseRateRing value={attendanceRate} color={attendanceRingColor(attendanceRate)} />
+          </div>
+          <p className="mt-1 text-card text-vexo-muted">Compareceu x Não compareceu</p>
+        </div>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
