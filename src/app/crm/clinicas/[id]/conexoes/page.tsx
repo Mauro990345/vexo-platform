@@ -7,7 +7,7 @@ import { refreshWhatsappStatus, type WhatsappConnectionState } from "@/lib/whats
 import { ConnectOAuthButton } from "@/components/ConnectOAuthButton";
 import { RefreshOnFocus } from "@/components/RefreshOnFocus";
 import { CopyLinkBox } from "@/components/CopyLinkBox";
-import { createConnectionLink, cancelConnectionLink } from "../../actions";
+import { createConnectionLink, cancelConnectionLink, disconnectGoogleCalendarAction } from "../../actions";
 
 export const dynamic = "force-dynamic";
 
@@ -43,6 +43,7 @@ function ConnectionCard({
   statusDot,
   href,
   openInNewTab,
+  disconnectAction,
 }: {
   icon: React.ReactNode;
   iconBg: string;
@@ -53,6 +54,10 @@ function ConnectionCard({
   statusDot: string;
   href: string;
   openInNewTab?: boolean;
+  // Só passado pelos canais que já têm uma forma de revogar o acesso pelo
+  // VEXO (hoje só Google Calendar) — quando ausente, nenhum botão de
+  // desconectar aparece, mesmo conectado.
+  disconnectAction?: () => Promise<void>;
 }) {
   const buttonLabel = connected ? "Gerenciar" : "Conectar";
 
@@ -67,21 +72,37 @@ function ConnectionCard({
 
       <p className="text-xs text-vexo-muted">{description}</p>
 
-      <div className="mt-auto flex items-center justify-between gap-2 pt-1">
-        <div className="flex min-w-0 items-center gap-1.5 text-card text-vexo-muted">
+      {/* Status numa linha própria (não divide espaço com os botões) —
+          com "Gerenciar" + "Desconectar" juntos, os dois numa mesma linha
+          do status sobrava largura de menos e "Conectado" truncava pra
+          "C...". */}
+      <div className="mt-auto space-y-1.5 pt-1">
+        <div className="flex items-center gap-1.5 text-card text-vexo-muted">
           <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${statusDot}`} />
           <span className="truncate">{statusLabel}</span>
         </div>
-        {openInNewTab ? (
-          <ConnectOAuthButton href={href} label={buttonLabel} />
-        ) : (
-          <Link
-            href={href}
-            className="shrink-0 rounded-lg border border-vexo-accent px-2.5 py-1 text-card font-medium text-vexo-accent hover:bg-vexo-accent/10"
-          >
-            {buttonLabel}
-          </Link>
-        )}
+        <div className="flex flex-wrap items-center gap-1.5">
+          {openInNewTab ? (
+            <ConnectOAuthButton href={href} label={buttonLabel} />
+          ) : (
+            <Link
+              href={href}
+              className="rounded-lg border border-vexo-accent px-2.5 py-1 text-card font-medium text-vexo-accent hover:bg-vexo-accent/10"
+            >
+              {buttonLabel}
+            </Link>
+          )}
+          {connected && disconnectAction && (
+            <form action={disconnectAction}>
+              <button
+                type="submit"
+                className="rounded-lg border border-vexo-error/40 px-2.5 py-1 text-card font-medium text-vexo-error hover:bg-vexo-error/10"
+              >
+                Desconectar
+              </button>
+            </form>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -206,6 +227,7 @@ export default async function ClinicConexoesPage({
           statusDot={googleConnected ? "bg-vexo-success" : "bg-vexo-muted"}
           href={`/api/oauth/google-calendar/start?clinicId=${clinic.id}`}
           openInNewTab
+          disconnectAction={disconnectGoogleCalendarAction.bind(null, clinic.id)}
         />
       </div>
     </div>

@@ -50,6 +50,25 @@ export async function exchangeGoogleCode(code: string) {
   };
 }
 
+// Revoga o acesso OAuth ativo e remove a conexão local — usado tanto pra
+// resetar contas de teste (Plano Piloto 21D) quanto pra quando a clínica
+// desiste no meio do teste. Revogar do lado do Google é best-effort: se
+// falhar (token já revogado, rede fora), ainda assim removemos localmente
+// pra não deixar o card preso em "Conectado" sem o acesso real funcionar.
+export async function disconnectGoogleCalendar(clinicId: string): Promise<void> {
+  const account = await prisma.googleCalendarAccount.findUnique({ where: { clinicId } });
+  if (!account) return;
+
+  try {
+    const client = oauthClient();
+    await client.revokeToken(decryptToken(account.refreshTokenEnc));
+  } catch (err) {
+    console.error("[vexo] Falha ao revogar token do Google Calendar:", err);
+  }
+
+  await prisma.googleCalendarAccount.delete({ where: { clinicId } });
+}
+
 async function clientForClinic(clinicId: string) {
   const account = await prisma.googleCalendarAccount.findUnique({ where: { clinicId } });
   if (!account) throw new Error("Clínica sem Google Calendar conectado.");

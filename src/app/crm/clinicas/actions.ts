@@ -8,6 +8,7 @@ import { prisma } from "@/lib/prisma";
 import { requireInternalSession } from "@/lib/session";
 import { setAppointmentAttendance } from "@/lib/appointments";
 import { disconnectWhatsapp, renameWhatsappInstance } from "@/lib/whatsapp-connection";
+import { disconnectGoogleCalendar } from "@/lib/google-calendar";
 
 const CONNECTION_LINK_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 dias
 
@@ -204,6 +205,18 @@ export async function logApproach(clinicId: string, formData: FormData) {
   });
 
   revalidatePath(`/crm/clinicas/${clinicId}`);
+}
+
+// Desconecta o Google Calendar da clínica — revoga o acesso OAuth e volta
+// o card de Conexões pra "Não conectado". Caso de uso real: clínica em
+// teste (Plano Piloto 21D) desiste antes de terminar; não dá pra depender
+// de esperar o token expirar sozinho.
+export async function disconnectGoogleCalendarAction(clinicId: string) {
+  await requireInternalSession();
+  await disconnectGoogleCalendar(clinicId);
+  revalidatePath(`/crm/clinicas/${clinicId}/conexoes`);
+  revalidatePath(`/crm/clinicas/${clinicId}`);
+  revalidatePath("/crm/painel");
 }
 
 export async function renameWhatsappInstanceAction(clinicId: string, formData: FormData) {
