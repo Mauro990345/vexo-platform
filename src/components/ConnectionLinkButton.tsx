@@ -6,10 +6,10 @@ import { createConnectionLink, cancelConnectionLink, type ConnectionLinkChannel 
 // Substitui o botão "Conectar" padrão nos cards de Google Calendar e
 // Instagram (WhatsApp fica de fora — já tem fluxo de QR code próprio, ver
 // conexoes/page.tsx) — em vez de abrir o OAuth direto pra mim, gera o link
-// público de auto-conexão daquele canal e copia pra área de transferência
-// na hora, sem expandir o card nem navegar a página. Enquanto o link
-// estiver pendente (não usado, não expirado), o botão vira "Cancelar" na
-// mesma posição.
+// público de auto-conexão daquele canal, copia pra área de transferência e
+// abre numa aba nova, tudo de uma vez, sem expandir o card. Enquanto o
+// link estiver pendente (não usado, não expirado), o botão vira "Cancelar"
+// na mesma posição.
 export function ConnectionLinkButton({
   clinicId,
   channel,
@@ -35,14 +35,22 @@ export function ConnectionLinkButton({
   async function handleConnect() {
     setPending(true);
 
+    // window.open PRECISA ser chamado sincronamente dentro do gesto de
+    // clique, senão o navegador bloqueia como pop-up (mesma regra do
+    // clipboard abaixo) — por isso abre em branco JÁ aqui, antes de
+    // qualquer await, e só preenche o endereço quando o link terminar de
+    // ser gerado no servidor.
+    const newTab = window.open("", "_blank");
+
     let created: { token: string; url: string } | null = null;
 
-    // navigator.clipboard.write PRECISA ser chamado sincronamente dentro do
-    // gesto de clique — Safari (e navegadores mais rígidos) invalidam a
-    // permissão se ela só rodar depois de um `await` (ex: esperar o
-    // servidor gerar o link primeiro). O truque é passar o texto como uma
-    // Promise pro ClipboardItem em vez de esperar ela resolver antes de
-    // chamar write() — assim o clique nunca perde o "user activation".
+    // navigator.clipboard.write também PRECISA ser chamado sincronamente
+    // dentro do gesto de clique — Safari (e navegadores mais rígidos)
+    // invalidam a permissão se ela só rodar depois de um `await` (ex:
+    // esperar o servidor gerar o link primeiro). O truque é passar o texto
+    // como uma Promise pro ClipboardItem em vez de esperar ela resolver
+    // antes de chamar write() — assim o clique nunca perde o "user
+    // activation", nem pro clipboard nem pra aba.
     const textPromise = createConnectionLink(clinicId, channel).then((result) => {
       created = result;
       return result.url;
@@ -60,14 +68,17 @@ export function ConnectionLinkButton({
         await navigator.clipboard.writeText(url);
       }
       setToken(created!.token);
+      if (newTab) newTab.location.href = created!.url;
       showToast("Link copiado! Envie para o cliente.");
     } catch {
       // Cobre tanto falha em gerar o link (created continua null) quanto
       // falha só no clipboard (created já preenchido) — sempre com aviso.
       if (created) {
         setToken((created as { token: string }).token);
+        if (newTab) newTab.location.href = (created as { url: string }).url;
         showToast("Link gerado, mas não deu pra copiar automaticamente.");
       } else {
+        newTab?.close();
         showToast("Falha ao gerar o link. Tente de novo.");
       }
     } finally {
