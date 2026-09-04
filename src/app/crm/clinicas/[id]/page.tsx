@@ -2,7 +2,6 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AtSign, MoreHorizontal } from "lucide-react";
 import { prisma } from "@/lib/prisma";
-import { AttendanceToggle } from "@/components/AttendanceToggle";
 import { ResponseRateRing } from "@/components/ResponseRateRing";
 import { startOfDay, addDays } from "@/lib/metrics";
 
@@ -144,12 +143,9 @@ export default async function ClinicPipelinePage({ params }: { params: { id: str
                           </Link>
 
                           {appt && (
-                            <div className="mt-1.5">
-                              <p className="mb-1 text-caption font-medium text-vexo-fg">
-                                {formatDateTime(appt.scheduledAt)}
-                              </p>
-                              <AttendanceToggle appointmentId={appt.id} status={appt.status} />
-                            </div>
+                            <p className="mt-1.5 text-caption font-medium text-vexo-fg">
+                              {formatDateTime(appt.scheduledAt)}
+                            </p>
                           )}
                         </div>
                       );

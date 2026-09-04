@@ -43,12 +43,28 @@ export async function createClinic(formData: FormData) {
   redirect(`/crm/clinicas/${clinic.id}`);
 }
 
-export async function updateClinicSettings(clinicId: string, formData: FormData) {
+// Config da IA/agente — separada de updateClinicSettings (abaixo) pra viver
+// na própria página "Agente de IA" sem arriscar sobrescrever os campos que
+// ficaram em "Automações" quando os dois formulários salvam em momentos
+// diferentes.
+export async function updateAiAgentSettings(clinicId: string, formData: FormData) {
   await requireInternalSession();
 
   const aiSystemPrompt = String(formData.get("aiSystemPrompt") ?? "").trim() || null;
   const welcomeVideoUrl = String(formData.get("welcomeVideoUrl") ?? "").trim() || null;
   const notifyWhatsappNumber = String(formData.get("notifyWhatsappNumber") ?? "").trim() || null;
+
+  await prisma.clinic.update({
+    where: { id: clinicId },
+    data: { aiSystemPrompt, welcomeVideoUrl, notifyWhatsappNumber },
+  });
+
+  revalidatePath(`/crm/clinicas/${clinicId}/agente-ia`);
+}
+
+export async function updateClinicSettings(clinicId: string, formData: FormData) {
+  await requireInternalSession();
+
   const clientWhatsappNumber = String(formData.get("clientWhatsappNumber") ?? "").trim() || null;
   const active = formData.get("active") === "on";
   const hoursBeforeRaw = String(formData.get("hoursBefore") ?? "24,3");
@@ -60,9 +76,6 @@ export async function updateClinicSettings(clinicId: string, formData: FormData)
   await prisma.clinic.update({
     where: { id: clinicId },
     data: {
-      aiSystemPrompt,
-      welcomeVideoUrl,
-      notifyWhatsappNumber,
       clientWhatsappNumber,
       active,
       reminderConfig: {
@@ -74,6 +87,7 @@ export async function updateClinicSettings(clinicId: string, formData: FormData)
     },
   });
 
+  revalidatePath(`/crm/clinicas/${clinicId}/automacoes`);
   revalidatePath(`/crm/clinicas/${clinicId}`);
 }
 

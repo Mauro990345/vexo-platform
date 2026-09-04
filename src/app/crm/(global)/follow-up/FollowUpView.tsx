@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import type { FollowUpStep, FollowUpTrigger } from "@prisma/client";
-import { Settings, Clock, CalendarX } from "lucide-react";
+import { Clock, CalendarX } from "lucide-react";
 import { Tabs } from "@/components/Tabs";
 import {
   addFollowUpStep,
@@ -8,30 +8,12 @@ import {
   deleteFollowUpStep,
   moveFollowUpStep,
   updateFollowUpSettings,
-  updateFollowUpWindow,
-  updateAiSettings,
 } from "./actions";
 
 function preview(text: string, max = 70): string {
   const oneLine = text.replace(/\s+/g, " ").trim();
   return oneLine.length > max ? `${oneLine.slice(0, max)}…` : oneLine;
 }
-
-function minutesToTime(minutes: number): string {
-  const h = Math.floor(minutes / 60).toString().padStart(2, "0");
-  const m = (minutes % 60).toString().padStart(2, "0");
-  return `${h}:${m}`;
-}
-
-const WEEKDAY_LABELS = [
-  { value: 0, label: "Dom" },
-  { value: 1, label: "Seg" },
-  { value: 2, label: "Ter" },
-  { value: 3, label: "Qua" },
-  { value: 4, label: "Qui" },
-  { value: 5, label: "Sex" },
-  { value: 6, label: "Sáb" },
-];
 
 function StepList({
   steps,
@@ -214,17 +196,12 @@ function StepList({
 // (FollowUpStep/FollowUpSettings não têm clinicId, é compartilhada por
 // todas as clínicas) — só muda a sidebar em volta, não o conteúdo.
 export async function FollowUpView() {
-  const [silenceSteps, noShowSteps, settings, aiSettings] = await Promise.all([
+  const [silenceSteps, noShowSteps, settings] = await Promise.all([
     prisma.followUpStep.findMany({ where: { trigger: "SILENCE" }, orderBy: { order: "asc" } }),
     prisma.followUpStep.findMany({ where: { trigger: "NO_SHOW" }, orderBy: { order: "asc" } }),
     prisma.followUpSettings.findUnique({ where: { id: "singleton" } }),
-    prisma.aiSettings.findUnique({ where: { id: "singleton" } }),
   ]);
   const silenceHours = settings?.silenceHours ?? 24;
-  const windowDays = settings?.windowDays?.length ? settings.windowDays : [1, 2, 3, 4, 5];
-  const windowStart = minutesToTime(settings?.windowStartMinute ?? 8 * 60);
-  const windowEnd = minutesToTime(settings?.windowEndMinute ?? 18 * 60);
-  const adaptiveDelayEnabled = aiSettings?.adaptiveDelayEnabled ?? true;
 
   return (
     <div className="max-w-lg space-y-8">
@@ -237,119 +214,8 @@ export async function FollowUpView() {
       </div>
 
       <Tabs
-        defaultTabId="geral"
+        defaultTabId="silence"
         tabs={[
-          {
-            id: "geral",
-            label: "Configurações gerais",
-            icon: <Settings className="h-3.5 w-3.5 shrink-0" strokeWidth={2} />,
-            content: (
-              <div className="space-y-6">
-                <section className="space-y-2.5">
-                  <div>
-                    <h2 className="text-sm font-semibold">Timing de resposta da IA</h2>
-                    <p className="mt-1 text-xs text-vexo-muted">
-                      Controla o delay de resposta da IA em todas as conversas — desligue pra
-                      testar o sistema sem esperar.
-                    </p>
-                  </div>
-
-                  <form
-                    action={updateAiSettings}
-                    className="flex items-center justify-between gap-3 rounded-xl border border-vexo-border bg-vexo-surface p-3.5"
-                  >
-                    <label className="flex items-center gap-2 text-xs">
-                      <input
-                        type="checkbox"
-                        name="adaptiveDelayEnabled"
-                        defaultChecked={adaptiveDelayEnabled}
-                        className="h-3.5 w-3.5 shrink-0 rounded border-vexo-border"
-                      />
-                      Delay adaptativo ativado
-                    </label>
-                    <button
-                      type="submit"
-                      className="shrink-0 rounded-lg border border-vexo-accent px-2.5 py-1.5 text-card font-medium text-vexo-accent hover:bg-vexo-accent/10"
-                    >
-                      Salvar
-                    </button>
-                  </form>
-                </section>
-
-                <section className="space-y-2.5">
-                  <div>
-                    <h2 className="text-sm font-semibold">Janela de envio</h2>
-                    <p className="mt-1 text-xs text-vexo-muted">
-                      Mensagens de follow-up só saem dentro desses dias e horário; fora, esperam a
-                      próxima janela.
-                    </p>
-                  </div>
-
-                  <form
-                    action={updateFollowUpWindow}
-                    className="space-y-2.5 rounded-xl border border-vexo-border bg-vexo-surface p-3.5"
-                  >
-                    <div>
-                      <label className="mb-1 block text-xs text-vexo-muted">Dias da semana</label>
-                      <div className="flex flex-wrap gap-1.5">
-                        {WEEKDAY_LABELS.map((day) => (
-                          <label
-                            key={day.value}
-                            className="flex items-center gap-1.5 rounded-lg border border-vexo-border bg-vexo-bg px-2 py-1 text-xs has-[:checked]:border-vexo-accent has-[:checked]:text-vexo-accent"
-                          >
-                            <input
-                              type="checkbox"
-                              name="windowDays"
-                              value={day.value}
-                              defaultChecked={windowDays.includes(day.value)}
-                              className="rounded border-vexo-border"
-                            />
-                            {day.label}
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="flex flex-wrap items-end gap-2.5">
-                      <div>
-                        <label className="mb-1 block text-xs text-vexo-muted" htmlFor="windowStart">
-                          Das
-                        </label>
-                        <input
-                          id="windowStart"
-                          name="windowStart"
-                          type="time"
-                          required
-                          defaultValue={windowStart}
-                          className="rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5 text-xs outline-none focus:border-vexo-accent"
-                        />
-                      </div>
-                      <div>
-                        <label className="mb-1 block text-xs text-vexo-muted" htmlFor="windowEnd">
-                          às
-                        </label>
-                        <input
-                          id="windowEnd"
-                          name="windowEnd"
-                          type="time"
-                          required
-                          defaultValue={windowEnd}
-                          className="rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5 text-xs outline-none focus:border-vexo-accent"
-                        />
-                      </div>
-                      <button
-                        type="submit"
-                        className="rounded-lg border border-vexo-accent px-2.5 py-1.5 text-xs font-medium text-vexo-accent hover:bg-vexo-accent/10"
-                      >
-                        Salvar janela
-                      </button>
-                    </div>
-                    <p className="text-card text-vexo-muted">Horário de Brasília.</p>
-                  </form>
-                </section>
-              </div>
-            ),
-          },
           {
             id: "silence",
             label: "Parou de responder",
