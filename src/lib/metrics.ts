@@ -51,3 +51,25 @@ export function startOfMonth(d: Date): Date {
 export function addDays(d: Date, days: number): Date {
   return new Date(d.getTime() + days * 24 * 60 * 60 * 1000);
 }
+
+// Soma de ApproachLog por dia, pra semana (7 dias a partir de weekStart).
+// loggedDate sempre é gravado à meia-noite (ver logApproach), então dá pra
+// indexar cada log num dia da semana em vez de rodar 7 queries separadas.
+export async function getDailyApproachCounts(clinicId: string, weekStart: Date): Promise<number[]> {
+  const start = startOfDay(weekStart);
+  const end = addDays(start, 7);
+
+  const logs = await prisma.approachLog.findMany({
+    where: { clinicId, loggedDate: { gte: start, lt: end } },
+    select: { loggedDate: true, count: true },
+  });
+
+  const counts = new Array(7).fill(0) as number[];
+  for (const log of logs) {
+    const dayIndex = Math.round(
+      (startOfDay(log.loggedDate).getTime() - start.getTime()) / (24 * 60 * 60 * 1000)
+    );
+    if (dayIndex >= 0 && dayIndex < 7) counts[dayIndex] = (counts[dayIndex] ?? 0) + log.count;
+  }
+  return counts;
+}

@@ -1,16 +1,30 @@
+import Link from "next/link";
 import { AtSign } from "lucide-react";
 import { requireClientSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
-import { getClinicMetrics, startOfDay, addDays } from "@/lib/metrics";
+import { getClinicMetrics, getDailyApproachCounts, startOfDay, addDays } from "@/lib/metrics";
 import { StatCard } from "@/components/StatCard";
 import { AppointmentStatusBadge } from "@/components/AppointmentStatusBadge";
 import { NoShowButton } from "@/components/NoShowButton";
+import { ChannelStatusPill } from "@/components/ChannelStatusPill";
 
 export const dynamic = "force-dynamic";
 
 // Marcar "Não compareceu" só faz sentido pra agendamento ainda em aberto —
 // já compareceu ou já foi cancelado não tem o que alternar aqui.
 const ACTIONABLE_STATUSES = ["SCHEDULED", "CONFIRMED", "NO_SHOW"];
+
+const WEEKDAY_LABELS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
+
+// Segunda como início da semana (getDay(): 0=dom..6=sáb) — mesmo critério
+// da Agenda interna (src/app/crm/clinicas/[id]/agenda/page.tsx).
+function startOfWeek(d: Date): Date {
+  const diff = (d.getDay() + 6) % 7;
+  return startOfDay(addDays(d, -diff));
+}
+function toDateParam(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
 
 // Painel do cliente — página única, sem sidebar/menu: a clínica só vê
 // números informativos + a lista de agendamentos com o botão de
@@ -23,8 +37,16 @@ const ACTIONABLE_STATUSES = ["SCHEDULED", "CONFIRMED", "NO_SHOW"];
 // disparam juntas num único Promise.all — antes eram 2 requests
 // sequenciais (uma página pros números, outra pra lista) mais uma consulta
 // de clinic só pra checar o status do WhatsApp (usada num aviso que não
-// existe mais, já que a tela de conexão do cliente saiu daqui).
-export default async function ClientDashboardPage() {
+// existe mais, já que a tela de conexão do cliente saiu daqui). O status de
+// conexões usa o campo cacheado clinic.whatsappStatus (mesmo já mostrado
+// no CRM interno em ClinicMetricsCard) em vez de refreshWhatsappStatus() —
+// aquilo bate na API da Evolution ao vivo, e reintroduzir essa espera aqui
+// desfaria a otimização de carregamento feita antes.
+export default async function ClientDashboardPage({
+  searchParams,
+}: {
+  searchParams: { week?: string };
+}) {
   const session = await requireClientSession();
   const clinicId = session.user.clinicId as string;
 
@@ -32,7 +54,20 @@ export default async function ClientDashboardPage() {
   const todayStart = startOfDay(now);
   const last7Start = addDays(todayStart, -6);
 
-  const [today, last7Days, appointments] = await Promise.all([
+  const parsedRef = searchParams.week ? new Date(searchParams.week) : now;
+  const weekStart = startOfWeek(Number.isNaN(parsedRef.getTime()) ? now : parsedRef);
+  const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
+
+  const [clinic, today, last7Days, appointments, dailyApproached] = await Promise.all([
+    prisma.clinic.findUniqueOrThrow({
+      where: { id: clinicId },
+      select: {
+        name: true,
+        whatsappStatus: true,
+        instagramAccount: { select: { id: true } },
+        googleCalendarAccount: { select: { id: true } },
+      },
+    }),
     getClinicMetrics(clinicId, todayStart, addDays(todayStart, 1)),
     getClinicMetrics(clinicId, last7Start, addDays(todayStart, 1)),
     prisma.appointment.findMany({
@@ -41,7 +76,11 @@ export default async function ClientDashboardPage() {
       orderBy: { scheduledAt: "desc" },
       take: 100,
     }),
+    getDailyApproachCounts(clinicId, weekStart),
   ]);
+
+  const maxApproached = Math.max(1, ...dailyApproached);
+  const base = "/dashboard";
 
   return (
     <div className="min-h-screen bg-vexo-bg px-4 py-6 sm:px-8 sm:py-8">
@@ -52,8 +91,64 @@ export default async function ClientDashboardPage() {
         </div>
 
         <div className="grid gap-6 lg:grid-cols-2">
-          {/* Coluna esquerda: números */}
+          {/* Coluna esquerda: status de canais, semana e números */}
           <div className="space-y-6">
+            <div className="space-y-3 rounded-2xl border border-vexo-border bg-vexo-surface p-3.5">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <span className="h-2 w-2 shrink-0 rounded-full bg-vexo-success" />
+                  <h2 className="font-medium">{clinic.name}</h2>
+                </div>
+                <div className="flex flex-wrap gap-1.5 text-xs">
+                  <ChannelStatusPill connected={Boolean(clinic.instagramAccount)} label="Instagram" />
+                  <ChannelStatusPill connected={Boolean(clinic.googleCalendarAccount)} label="Calendar" />
+                  <ChannelStatusPill connected={clinic.whatsappStatus === "open"} label="WhatsApp" />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between gap-1.5 border-t border-vexo-border pt-3">
+                <Link
+                  href={`${base}?week=${toDateParam(addDays(weekStart, -7))}`}
+                  className="rounded-lg border border-vexo-border px-2.5 py-1 text-xs hover:border-vexo-accent"
+                >
+                  ← Semana
+                </Link>
+                <Link href={base} className="rounded-lg border border-vexo-border px-2.5 py-1 text-xs hover:border-vexo-accent">
+                  Hoje
+                </Link>
+                <Link
+                  href={`${base}?week=${toDateParam(addDays(weekStart, 7))}`}
+                  className="rounded-lg border border-vexo-border px-2.5 py-1 text-xs hover:border-vexo-accent"
+                >
+                  Semana →
+                </Link>
+              </div>
+
+              <div className="space-y-1.5 pt-1">
+                <p className="text-caption font-medium uppercase tracking-wide text-vexo-muted">
+                  Abordagens por dia · {weekStart.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })} –{" "}
+                  {addDays(weekStart, 6).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}
+                </p>
+                <div className="space-y-1">
+                  {weekDays.map((day, i) => {
+                    const count = dailyApproached[i] ?? 0;
+                    return (
+                      <div key={day.getTime()} className="flex items-center gap-2">
+                        <span className="w-7 shrink-0 text-caption text-vexo-muted">{WEEKDAY_LABELS[i]}</span>
+                        <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-vexo-accent/15">
+                          <div
+                            className="h-full rounded-full bg-vexo-accent"
+                            style={{ width: `${(count / maxApproached) * 100}%` }}
+                          />
+                        </div>
+                        <span className="w-4 shrink-0 text-right text-caption font-medium">{count}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
             <div className="space-y-3">
               <h2 className="text-caption font-medium uppercase tracking-wide text-vexo-muted">Hoje</h2>
               <div className="grid grid-cols-3 gap-2.5">
