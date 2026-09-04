@@ -83,9 +83,9 @@ export default async function ClientDashboardPage({
   const base = "/dashboard";
 
   return (
-    <div className="min-h-screen bg-vexo-bg px-4 pt-4 pb-10 sm:px-8 sm:pt-6 sm:pb-14">
+    <div className="min-h-screen bg-vexo-bg px-4 pt-4 pb-6 sm:px-8 sm:pt-6 sm:pb-8">
       <div className="mx-auto max-w-6xl">
-        <div className="mb-4">
+        <div className="mb-8">
           <h1 className="text-lg font-semibold tracking-tight">Painel</h1>
           <p className="text-sm text-vexo-muted">Acompanhamento em tempo real das abordagens no Instagram.</p>
         </div>
