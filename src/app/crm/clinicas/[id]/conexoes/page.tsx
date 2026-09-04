@@ -7,7 +7,7 @@ import { refreshWhatsappStatus, type WhatsappConnectionState } from "@/lib/whats
 import { ConnectOAuthButton } from "@/components/ConnectOAuthButton";
 import { RefreshOnFocus } from "@/components/RefreshOnFocus";
 import { ConnectionLinkButton } from "@/components/ConnectionLinkButton";
-import { disconnectGoogleCalendarAction } from "../../actions";
+import { disconnectGoogleCalendarAction, disconnectInstagramAction } from "../../actions";
 
 export const dynamic = "force-dynamic";
 
@@ -27,14 +27,17 @@ const WHATSAPP_STATUS_DOT: Record<WhatsappConnectionState, string> = {
 
 // Card compacto no formato de referência (grid 3 colunas): ícone+nome em
 // cima, descrição no meio, status + botão na mesma linha embaixo. O card
-// em si não é clicável — só o botão. Quando JÁ conectado, Instagram e
-// Google Calendar reabrem o OAuth direto (aba nova, openInNewTab) via
-// "Gerenciar" — o status atualiza sozinho ao voltar pra essa aba (ver
-// RefreshOnFocus). Quando AINDA não conectado, os dois usam
-// notConnectedAction (ver ConnectionLinkButton) — gera e copia o link de
-// auto-conexão em vez de abrir o OAuth pra mim. WhatsApp fica de fora dos
-// dois: continua navegando pra tela própria (mesma aba) porque mostra QR
-// code, não é um redirect OAuth de terceiro.
+// em si não é clicável — só o botão.
+//
+// 3 estados por canal (Instagram e Google Calendar, os dois com
+// disconnectAction): não conectado sem link → "Conectar" (gera e copia o
+// link, ver ConnectionLinkButton); não conectado com link pendente →
+// "Cancelar" (mesmo componente); conectado → SÓ "Desconectar", nunca os
+// dois juntos — "Gerenciar" foi removido de propósito, tinha dois botões
+// fazendo parecer que existia mais de uma ação possível quando só tem uma.
+// WhatsApp fica fora desse padrão: sem disconnectAction, continua com
+// "Gerenciar" navegando pra tela própria (QR code), que é uma ação
+// diferente (gerenciar =/= desconectar por lá).
 function ConnectionCard({
   icon,
   iconBg,
@@ -57,17 +60,15 @@ function ConnectionCard({
   statusDot: string;
   href: string;
   openInNewTab?: boolean;
-  // Só passado pelos canais que já têm uma forma de revogar o acesso pelo
-  // VEXO (hoje só Google Calendar) — quando ausente, nenhum botão de
-  // desconectar aparece, mesmo conectado.
+  // Quando presente, define os canais com desconexão pelo VEXO (Instagram,
+  // Google Calendar) — conectado mostra SÓ "Desconectar", nunca "Gerenciar"
+  // junto. Ausente (WhatsApp) mantém o "Gerenciar" de sempre.
   disconnectAction?: () => Promise<void>;
   // Substitui o botão padrão de "Conectar" só quando não conectado — usado
-  // pelo Google Calendar (ver GoogleCalendarConnectButton). Ausente pros
-  // outros canais, que continuam com o link/botão de sempre.
+  // por Instagram e Google Calendar (ver ConnectionLinkButton). Ausente
+  // pro WhatsApp, que continua com o link/botão de sempre.
   notConnectedAction?: React.ReactNode;
 }) {
-  const buttonLabel = connected ? "Gerenciar" : "Conectar";
-
   return (
     <div className="flex flex-col gap-2 rounded-xl border border-vexo-border bg-vexo-surface p-3.5">
       <div className="flex items-center gap-2.5">
@@ -79,37 +80,46 @@ function ConnectionCard({
 
       <p className="text-xs text-vexo-muted">{description}</p>
 
-      {/* Status e botão(ões) na mesma linha, botão à direita — a página
-          real (grid-cols-3 sem max-w extra) dá bastante largura por card,
-          então mesmo "Conectado" + "Gerenciar" + "Desconectar" cabe numa
-          linha só sem truncar. */}
+      {/* Status e botão na mesma linha, botão à direita — a página real
+          (grid-cols-3 sem max-w extra) dá bastante largura por card, cabe
+          numa linha só sem truncar. */}
       <div className="mt-auto flex items-center justify-between gap-2 pt-1">
         <div className="flex min-w-0 items-center gap-1.5 text-card text-vexo-muted">
           <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${statusDot}`} />
           <span className="truncate">{statusLabel}</span>
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
-          {!connected && notConnectedAction ? (
+          {connected ? (
+            disconnectAction ? (
+              <form action={disconnectAction}>
+                <button
+                  type="submit"
+                  className="rounded-lg border border-vexo-error/40 px-2.5 py-1 text-card font-medium text-vexo-error hover:bg-vexo-error/10"
+                >
+                  Desconectar
+                </button>
+              </form>
+            ) : openInNewTab ? (
+              <ConnectOAuthButton href={href} label="Gerenciar" />
+            ) : (
+              <Link
+                href={href}
+                className="rounded-lg border border-vexo-accent px-2.5 py-1 text-card font-medium text-vexo-accent hover:bg-vexo-accent/10"
+              >
+                Gerenciar
+              </Link>
+            )
+          ) : notConnectedAction ? (
             notConnectedAction
           ) : openInNewTab ? (
-            <ConnectOAuthButton href={href} label={buttonLabel} />
+            <ConnectOAuthButton href={href} label="Conectar" />
           ) : (
             <Link
               href={href}
               className="rounded-lg border border-vexo-accent px-2.5 py-1 text-card font-medium text-vexo-accent hover:bg-vexo-accent/10"
             >
-              {buttonLabel}
+              Conectar
             </Link>
-          )}
-          {connected && disconnectAction && (
-            <form action={disconnectAction}>
-              <button
-                type="submit"
-                className="rounded-lg border border-vexo-error/40 px-2.5 py-1 text-card font-medium text-vexo-error hover:bg-vexo-error/10"
-              >
-                Desconectar
-              </button>
-            </form>
           )}
         </div>
       </div>
@@ -209,6 +219,7 @@ export default async function ClinicConexoesPage({
           statusDot={instagramConnected ? "bg-vexo-success" : "bg-vexo-muted"}
           href={`/api/oauth/instagram/start?clinicId=${clinic.id}`}
           openInNewTab
+          disconnectAction={disconnectInstagramAction.bind(null, clinic.id)}
           notConnectedAction={
             <ConnectionLinkButton clinicId={clinic.id} channel="instagram" pendingToken={pendingInstagramLink?.token ?? null} />
           }
@@ -219,7 +230,11 @@ export default async function ClinicConexoesPage({
           name="Google Calendar"
           description="IA consulta horários livres e cria os agendamentos."
           connected={googleConnected}
-          statusLabel={googleConnected ? "Conectado" : "Não conectado"}
+          statusLabel={
+            googleConnected
+              ? `Conectado · ${clinic.googleCalendarAccount!.googleAccountEmail}`
+              : "Não conectado"
+          }
           statusDot={googleConnected ? "bg-vexo-success" : "bg-vexo-muted"}
           href={`/api/oauth/google-calendar/start?clinicId=${clinic.id}`}
           openInNewTab

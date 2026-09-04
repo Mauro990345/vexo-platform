@@ -9,6 +9,7 @@ import { requireInternalSession } from "@/lib/session";
 import { setAppointmentAttendance } from "@/lib/appointments";
 import { disconnectWhatsapp, renameWhatsappInstance } from "@/lib/whatsapp-connection";
 import { disconnectGoogleCalendar } from "@/lib/google-calendar";
+import { disconnectInstagram } from "@/lib/instagram";
 
 const CONNECTION_LINK_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 dias
 
@@ -233,6 +234,17 @@ export async function logApproach(clinicId: string, formData: FormData) {
 export async function disconnectGoogleCalendarAction(clinicId: string) {
   await requireInternalSession();
   await disconnectGoogleCalendar(clinicId);
+  revalidatePath(`/crm/clinicas/${clinicId}/conexoes`);
+  revalidatePath(`/crm/clinicas/${clinicId}`);
+  revalidatePath("/crm/painel");
+}
+
+// Mesmo espírito do disconnect do Google Calendar acima — clínica em teste
+// desiste, preciso poder soltar o Instagram na hora sem esperar prazo
+// nenhum.
+export async function disconnectInstagramAction(clinicId: string) {
+  await requireInternalSession();
+  await disconnectInstagram(clinicId);
   revalidatePath(`/crm/clinicas/${clinicId}/conexoes`);
   revalidatePath(`/crm/clinicas/${clinicId}`);
   revalidatePath("/crm/painel");

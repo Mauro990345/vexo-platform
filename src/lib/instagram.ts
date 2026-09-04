@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import { decryptToken } from "@/lib/crypto";
+import { prisma } from "@/lib/prisma";
 
 // Integração com Instagram Messaging via Graph API (Meta).
 // Autenticação sempre por OAuth oficial — nunca senha. Ver /api/oauth/instagram/*.
@@ -149,4 +150,13 @@ export async function exchangeInstagramCode(code: string): Promise<{
     igUserId,
     igUsername: igUsernameData.username,
   };
+}
+
+// Remove a conexão local — o token da Página não expira sozinho e a Graph
+// API não tem um endpoint de revogação equivalente ao refreshToken do
+// Google pra esse tipo de token, então "desconectar" aqui é parar o VEXO
+// de usar/guardar o acesso; revogar de vez, se necessário, é feito pelo
+// próprio Meta Business Suite do lado do cliente.
+export async function disconnectInstagram(clinicId: string): Promise<void> {
+  await prisma.instagramAccount.deleteMany({ where: { clinicId } });
 }
