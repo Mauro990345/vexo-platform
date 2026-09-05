@@ -9,11 +9,7 @@ import { SignOutButton } from "@/components/SignOutButton";
 // Server Component (os layouts) pra este Client Component não serializa
 // (React só sabe passar elementos/JSX pela fronteira server→client, não
 // referências de função soltas).
-// target é opcional — usado só pelo item "Painel" (abre
-// /crm/painel-cliente/[id] em nova aba, já que aquela rota não tem
-// sidebar própria; se navegasse na mesma aba a sidebar inteira sumiria
-// sem um caminho de volta além do botão "voltar" do navegador).
-export type NavItem = { href: string; label: string; icon: React.ReactNode; target?: string };
+export type NavItem = { href: string; label: string; icon: React.ReactNode };
 export type NavGroup = { label: string; items: NavItem[] };
 
 // Resolve o item ativo pelo prefixo mais específico — evita que "/crm" fique
@@ -29,8 +25,6 @@ function NavLink({ item, active }: { item: NavItem; active: boolean }) {
   return (
     <Link
       href={item.href}
-      target={item.target}
-      rel={item.target === "_blank" ? "noopener noreferrer" : undefined}
       className={`flex items-center gap-2 rounded-lg px-2 py-1.5 text-sidebar-item font-medium transition ${
         active
           ? "bg-vexo-petrol text-vexo-accent"
@@ -114,8 +108,6 @@ export function AppShell({
               <Link
                 key={item.href}
                 href={item.href}
-                target={item.target}
-                rel={item.target === "_blank" ? "noopener noreferrer" : undefined}
                 className={`whitespace-nowrap rounded-lg px-2.5 py-1.5 text-sm font-medium transition ${
                   active ? "bg-vexo-accent/15 text-vexo-accent" : "text-vexo-muted hover:text-vexo-fg"
                 }`}

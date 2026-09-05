@@ -24,11 +24,16 @@ import type { NavGroup } from "@/components/AppShell";
 // que sobrou: lembretes, ativa/inativa, registrar abordagens), Follow-up.
 // "Configurações" (tema/aparência) segue como último grupo, sozinho.
 //
-// "Painel" aponta pra /crm/painel-cliente/[id] (fora da árvore
-// /crm/clinicas/[id]/*, ver o comentário daquele arquivo) — abre em nova
-// aba (target: "_blank") porque aquela rota não tem sidebar nenhuma; se
-// navegasse na aba atual, a sidebar inteira (e todo o resto do menu)
-// sumiria sem um caminho de volta além do botão "voltar" do navegador.
+// "Painel" aqui é o MESMO destino do item "Painel" da sidebar global
+// (crm/(global)/layout.tsx): /crm/painel, a lista com o card de métricas +
+// "Ver painel de [clínica] ↗" de TODAS as clínicas — não um atalho direto
+// pro painel desta clínica específica. Antes, pra chegar em /crm/painel de
+// dentro de uma clínica, precisava voltar pra "Contas" primeiro; agora dá
+// pra ir direto. Sem target="_blank": /crm/painel tem sidebar própria (o
+// mesmo layout global), então navegar na mesma aba não perde menu nenhum
+// — diferente de /crm/painel-cliente/[id], que é a página sem chrome
+// nenhum (essa continua só alcançável pelo botão "Ver painel de [clínica]
+// ↗" de dentro de /crm/painel, que aí sim abre em nova aba).
 export function buildClinicNavGroups(clinicId: string): NavGroup[] {
   const base = `/crm/clinicas/${clinicId}`;
 
@@ -37,12 +42,7 @@ export function buildClinicNavGroups(clinicId: string): NavGroup[] {
       label: "Operação",
       items: [
         { href: `${base}/conexoes`, label: "Conexões", icon: <Link2 className="h-3.5 w-3.5 shrink-0" strokeWidth={2} /> },
-        {
-          href: `/crm/painel-cliente/${clinicId}`,
-          label: "Painel ↗",
-          icon: <LayoutDashboard className="h-3.5 w-3.5 shrink-0" strokeWidth={2} />,
-          target: "_blank",
-        },
+        { href: "/crm/painel", label: "Painel", icon: <LayoutDashboard className="h-3.5 w-3.5 shrink-0" strokeWidth={2} /> },
         { href: base, label: "Pipeline", icon: <Columns3 className="h-3.5 w-3.5 shrink-0" strokeWidth={2} /> },
         { href: `${base}/agenda`, label: "Agenda", icon: <CalendarDays className="h-3.5 w-3.5 shrink-0" strokeWidth={2} /> },
         { href: `${base}/agente-ia`, label: "Agente de IA", icon: <Bot className="h-3.5 w-3.5 shrink-0" strokeWidth={2} /> },
