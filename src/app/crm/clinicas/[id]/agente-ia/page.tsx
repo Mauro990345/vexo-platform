@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireInternalSession } from "@/lib/session";
 import { updateAiAgentSettings, updateAiAgentTiming } from "../../actions";
 import { updateAiSettings, updateFollowUpWindow } from "@/app/crm/(global)/follow-up/actions";
+import { PromptTextarea } from "@/components/PromptTextarea";
 
 export const dynamic = "force-dynamic";
 
@@ -55,53 +56,58 @@ export default async function ClinicAiAgentPage({ params }: { params: { id: stri
 
       <form
         action={updateAiAgentSettings.bind(null, clinic.id)}
-        className="space-y-3 rounded-xl border border-vexo-border bg-vexo-surface p-3.5"
+        className="space-y-4 rounded-xl border border-vexo-border bg-vexo-surface p-3.5"
       >
-        <h2 className="text-sm font-medium text-vexo-muted">Conversação</h2>
-
         <div>
-          <label className="mb-1 block text-xs" htmlFor="aiSystemPrompt">
+          <label className="mb-1 block text-sm font-semibold" htmlFor="aiSystemPrompt">
             Prompt de conversação da IA
           </label>
-          <textarea
+          <p className="mb-1.5 text-caption text-vexo-muted">
+            O "cérebro" da IA — define como ela conversa com o lead nesta clínica.
+          </p>
+          <PromptTextarea
             id="aiSystemPrompt"
             name="aiSystemPrompt"
-            rows={8}
             defaultValue={clinic.aiSystemPrompt ?? ""}
             placeholder="Cole aqui o prompt fornecido pelo Mauro para esta clínica..."
-            className="w-full rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5 font-mono text-card outline-none focus:border-vexo-accent"
           />
         </div>
 
-        <div>
-          <label className="mb-1 block text-xs" htmlFor="welcomeVideoUrl">
-            URL do vídeo de boas-vindas (primeiro atendimento)
-          </label>
-          <input
-            id="welcomeVideoUrl"
-            name="welcomeVideoUrl"
-            defaultValue={clinic.welcomeVideoUrl ?? ""}
-            placeholder="https://..."
-            className="w-full rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5 text-xs outline-none focus:border-vexo-accent"
-          />
-        </div>
+        <div className="space-y-3 border-t border-vexo-border pt-3.5">
+          <h2 className="text-caption font-medium uppercase tracking-wide text-vexo-muted">
+            Configurações auxiliares
+          </h2>
 
-        <div>
-          <label className="mb-1 block text-xs" htmlFor="notifyWhatsappNumber">
-            WhatsApp para alertas de escalonamento (Mauro/secretária)
-          </label>
-          <input
-            id="notifyWhatsappNumber"
-            name="notifyWhatsappNumber"
-            defaultValue={clinic.notifyWhatsappNumber ?? ""}
-            placeholder="+55 11 99999-9999"
-            className="w-full rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5 text-xs outline-none focus:border-vexo-accent"
-          />
+          <div>
+            <label className="mb-1 block text-xs text-vexo-muted" htmlFor="welcomeVideoUrl">
+              URL do vídeo de boas-vindas (primeiro atendimento)
+            </label>
+            <input
+              id="welcomeVideoUrl"
+              name="welcomeVideoUrl"
+              defaultValue={clinic.welcomeVideoUrl ?? ""}
+              placeholder="https://..."
+              className="w-full rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5 text-xs outline-none focus:border-vexo-accent"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs text-vexo-muted" htmlFor="notifyWhatsappNumber">
+              WhatsApp para alertas de escalonamento (Mauro/secretária)
+            </label>
+            <input
+              id="notifyWhatsappNumber"
+              name="notifyWhatsappNumber"
+              defaultValue={clinic.notifyWhatsappNumber ?? ""}
+              placeholder="+55 11 99999-9999"
+              className="w-full rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5 text-xs outline-none focus:border-vexo-accent"
+            />
+          </div>
         </div>
 
         <button
           type="submit"
-          className="w-full rounded-lg bg-vexo-accent px-2.5 py-1.5 text-xs font-medium text-vexo-accentFg hover:opacity-90"
+          className="rounded-lg border border-vexo-accent px-2.5 py-1.5 text-xs font-medium text-vexo-accent hover:bg-vexo-accent/10"
         >
           Salvar configuração
         </button>
