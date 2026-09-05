@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireInternalSession } from "@/lib/session";
 import { AppointmentStatusBadge, appointmentStatusBorderClass } from "@/components/AppointmentStatusBadge";
+import { getPageStyleOverrides } from "@/lib/page-style-overrides";
 
 export const dynamic = "force-dynamic";
 
@@ -53,6 +54,13 @@ export default async function ClinicAgendaPage({
   });
 
   const base = `/crm/clinicas/${clinic.id}/agenda`;
+
+  // Personalizar a borda esquerda nesta página (Configurações) troca a
+  // variação por status (verde/vermelho/etc., ver appointmentStatusBorderClass)
+  // por UMA cor fixa — as duas coisas não fazem sentido juntas, então uma
+  // suspende a outra enquanto o toggle estiver ligado.
+  const pageStyleOverrides = await getPageStyleOverrides();
+  const borderLeftOverridden = Boolean(pageStyleOverrides["agenda.cardBorderLeft"]);
 
   return (
     <div className="-mt-3 space-y-3 sm:-mt-5">
@@ -143,7 +151,10 @@ export default async function ClinicAgendaPage({
                           </div>
                         </>
                       );
-                      const className = `flex min-w-0 flex-1 flex-col justify-center gap-0.5 rounded-card border border-l-[3px] border-vexo-petrolBorder bg-vexo-petrol p-1 text-caption text-vexo-fg transition ${appointmentStatusBorderClass(a.status)}`;
+                      const leftBorderClass = borderLeftOverridden
+                        ? "border-l-vexo-agendaCardBorder"
+                        : appointmentStatusBorderClass(a.status);
+                      const className = `flex min-w-0 flex-1 flex-col justify-center gap-0.5 rounded-card border border-vexo-petrolBorder border-l-[3px] bg-vexo-agendaCardBg p-1 text-caption text-vexo-agendaCardFont transition ${leftBorderClass}`;
 
                       return a.conversationId ? (
                         <Link key={a.id} href={`/crm/conversas/${a.conversationId}`} className={`${className} hover:border-vexo-accent`}>

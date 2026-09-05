@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import { Providers } from "./providers";
 import { getThemeColors, buildThemeCssVars } from "@/lib/theme";
+import { getPageStyleOverrides, buildPageStyleCssVars } from "@/lib/page-style-overrides";
 import "./globals.css";
 
 const inter = Inter({
@@ -27,7 +28,12 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   // aplicadas como style inline no <html>, que sempre vence sobre as
   // variáveis padrão de globals.css (:root), então qualquer ajuste feito na
   // tela some pro sistema inteiro sem precisar mexer em CSS.
-  const themeVars = buildThemeCssVars(await getThemeColors());
+  const themeColors = await getThemeColors();
+  const pageStyleOverrides = await getPageStyleOverrides();
+  const themeVars = {
+    ...buildThemeCssVars(themeColors),
+    ...buildPageStyleCssVars(pageStyleOverrides),
+  };
 
   return (
     <html lang="pt-BR" className={`dark ${inter.variable}`} style={themeVars as React.CSSProperties}>

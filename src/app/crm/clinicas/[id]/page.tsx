@@ -7,14 +7,13 @@ import { startOfDay, addDays } from "@/lib/metrics";
 
 export const dynamic = "force-dynamic";
 
-// Teste visual temporário nos cards de lead do Pipeline — mesmo fundo
-// petróleo + borda esquerda colorida que os blocos de agendamento da
-// Agenda já usam (ver appointmentStatusBorderClass), só que aqui com uma
-// cor fixa (ciano) em vez de variar por status. É só uma experiência
-// visual pra ver como fica; se não for pra frente, é reverter pra
-// "rounded-xl border border-vexo-border bg-vexo-surface2" nos dois cards
-// abaixo.
-const LEAD_CARD_TEST_CLASS = "rounded-xl border border-l-[3px] border-vexo-petrolBorder border-l-cyan-400 bg-vexo-petrol";
+// Fundo/borda dos cards de lead — usa os tokens de página
+// (vexo-pipelineCardBg/vexo-pipelineCardBorder, ver
+// src/lib/page-style-overrides.ts), que por padrão seguem vexoPetrol/
+// vexoPetrolBorder (mesma aparência de sempre) mas podem ser
+// personalizados só pro Pipeline, sem afetar o card de agendamento da
+// Agenda, na tela de Configurações.
+const LEAD_CARD_CLASS = "rounded-xl border border-l-[3px] border-vexo-pipelineCardBorder bg-vexo-pipelineCardBg";
 
 // Faixas da cor do anel de comparecimento — decisão de exibição, não de
 // dado (o número em si vem sempre certo do banco). Ajustável se a clínica
@@ -90,7 +89,11 @@ export default async function ClinicPipelinePage({ params }: { params: { id: str
         <p className="mt-1 text-sm text-vexo-muted">{clinic.name}</p>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      {/* text-vexo-pipelineHeaderFont aqui em cima, não em cada número —
+          color é herdado, então os valores (sem cor própria) pegam esse
+          token; os labels/legendas continuam explicitamente vexo-muted,
+          por isso não mudam junto. */}
+      <div className="grid grid-cols-2 gap-3 text-vexo-pipelineHeaderFont sm:grid-cols-4">
         <div className="rounded-lg border border-vexo-border bg-vexo-surface2 px-2.5 py-1">
           <p className="truncate text-card font-medium text-vexo-muted">Novos contatos</p>
           <p className="mt-0.5 text-xl font-semibold leading-none tracking-tight">{newContacts}</p>
@@ -148,7 +151,7 @@ export default async function ClinicPipelinePage({ params }: { params: { id: str
                     // de @ + última mensagem).
                     if (col.status === "SCHEDULED") {
                       return (
-                        <div key={conv.id} className={`${LEAD_CARD_TEST_CLASS} p-3.5`}>
+                        <div key={conv.id} className={`${LEAD_CARD_CLASS} p-3.5`}>
                           <Link href={`/crm/conversas/${conv.id}`} className="block transition hover:text-vexo-accent">
                             <p className="truncate text-sm font-semibold">{name}</p>
                           </Link>
@@ -163,7 +166,7 @@ export default async function ClinicPipelinePage({ params }: { params: { id: str
                     }
 
                     return (
-                      <div key={conv.id} className={`${LEAD_CARD_TEST_CLASS} p-3.5`}>
+                      <div key={conv.id} className={`${LEAD_CARD_CLASS} p-3.5`}>
                         <Link href={`/crm/conversas/${conv.id}`} className="block transition hover:text-vexo-accent">
                           <div className="flex items-start justify-between gap-2">
                             <p className="truncate text-sm font-semibold">{name}</p>

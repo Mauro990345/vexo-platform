@@ -29,6 +29,16 @@ const config: Config = {
           success: "rgb(var(--vexo-success) / <alpha-value>)",
           error: "rgb(var(--vexo-error) / <alpha-value>)",
           warning: "rgb(var(--vexo-warning) / <alpha-value>)",
+          // Tokens por página (ver src/lib/page-style-overrides.ts) — cada
+          // variável, por padrão, referencia (via var() aninhado) a cor
+          // global equivalente; só passa a ter valor próprio quando
+          // personalizada na tela de Configurações.
+          pipelineHeaderFont: "rgb(var(--vexo-pipeline-header-font) / <alpha-value>)",
+          pipelineCardBg: "rgb(var(--vexo-pipeline-card-bg) / <alpha-value>)",
+          pipelineCardBorder: "rgb(var(--vexo-pipeline-card-border) / <alpha-value>)",
+          agendaCardFont: "rgb(var(--vexo-agenda-card-font) / <alpha-value>)",
+          agendaCardBg: "rgb(var(--vexo-agenda-card-bg) / <alpha-value>)",
+          agendaCardBorder: "rgb(var(--vexo-agenda-card-border) / <alpha-value>)",
         },
       },
       fontFamily: {

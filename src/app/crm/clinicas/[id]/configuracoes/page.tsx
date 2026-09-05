@@ -1,10 +1,12 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireInternalSession } from "@/lib/session";
-import { getThemeColors, THEME_FIELDS } from "@/lib/theme";
+import { getThemeColors, THEME_FIELDS, type ThemeColorKey } from "@/lib/theme";
+import { PAGE_STYLE_SECTIONS, getPageStyleOverrides, resolveEffectiveColor } from "@/lib/page-style-overrides";
 import { ColorField } from "@/components/ColorField";
+import { PageStyleColorField } from "@/components/PageStyleColorField";
 import { ConfirmSubmitButton } from "@/components/ConfirmSubmitButton";
-import { updateThemeSettings, resetThemeSettings } from "./actions";
+import { updateThemeSettings, resetThemeSettings, updatePageStyleOverrides } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +23,10 @@ export default async function ClinicConfiguracoesPage({ params }: { params: { id
   if (!clinic) notFound();
 
   const colors = await getThemeColors();
+  const pageStyleOverrides = await getPageStyleOverrides();
+  const globalFieldLabelByKey = Object.fromEntries(
+    THEME_FIELDS.flatMap((s) => s.fields).map((f) => [f.key, f.label])
+  ) as Record<ThemeColorKey, string>;
 
   return (
     <div className="max-w-3xl space-y-4">
@@ -73,6 +79,46 @@ export default async function ClinicConfiguracoesPage({ params }: { params: { id
         >
           Restaurar cores padrão
         </ConfirmSubmitButton>
+      </form>
+
+      <div className="border-t border-vexo-border pt-4">
+        <h2 className="text-sm font-semibold">Cores por página</h2>
+        <p className="mt-0.5 text-xs text-vexo-muted">
+          Cada elemento abaixo segue a cor geral do sistema (acima) por padrão. Ative "Personalizar
+          só nesta página" num campo específico pra dar a ele uma cor própria, independente do
+          resto — sem mexer em mais nada. Se você nunca ligar nenhum toggle, tudo continua
+          conectado como sempre foi.
+        </p>
+      </div>
+
+      <form action={updatePageStyleOverrides} className="space-y-5">
+        {PAGE_STYLE_SECTIONS.map((section) => (
+          <section key={section.page} className="space-y-2">
+            <h2 className="text-sm font-semibold">{section.page}</h2>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {section.fields.map((field) => (
+                <PageStyleColorField
+                  key={field.key}
+                  name={field.key}
+                  label={field.label}
+                  description={field.description}
+                  followsLabel={globalFieldLabelByKey[field.followsGlobalKey]}
+                  currentColor={resolveEffectiveColor(field, pageStyleOverrides, colors)}
+                  initiallyOverridden={Boolean(pageStyleOverrides[field.key])}
+                />
+              ))}
+            </div>
+          </section>
+        ))}
+
+        <div className="flex items-center gap-2 border-t border-vexo-border pt-3">
+          <button
+            type="submit"
+            className="rounded-lg bg-vexo-accent px-3 py-1.5 text-sm font-medium text-vexo-accentFg hover:opacity-90"
+          >
+            Salvar cores por página
+          </button>
+        </div>
       </form>
     </div>
   );

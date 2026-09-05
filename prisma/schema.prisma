@@ -443,6 +443,22 @@ model ThemeSettings {
   updatedAt DateTime @updatedAt
 }
 
+// Override de cor por elemento de UMA página específica (ex: só a borda
+// esquerda do card do Pipeline, sem afetar a borda do card da Agenda),
+// mesmo que hoje as duas sigam o mesmo token global. Cada campo elegível
+// vive registrado em src/lib/page-style-overrides.ts com uma chave fixa
+// (ex: "pipeline.cardBorderLeft") — a PRESENÇA de uma linha aqui é o que
+// significa "personalizado nesta página"; ausência = continua seguindo a
+// cor global normalmente (ver THEME_FIELDS). Ligar/desligar o toggle
+// "Personalizar só nesta página" na tela de Configurações cria ou apaga a
+// linha correspondente, nunca deixa "enabled=false" com valor esquecido.
+model PageStyleOverride {
+  id    String @id // chave do campo, ex: "pipeline.cardBorderLeft"
+  value String // cor hex ("#rrggbb")
+
+  updatedAt DateTime @updatedAt
+}
+
 // A primeira mensagem é sempre enviada manualmente por Mauro, fora da
 // plataforma (ver especificação — nenhuma automação de disparo em massa).
 // Este registro é apenas um contador manual para alimentar o painel do
