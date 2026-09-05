@@ -7,6 +7,15 @@ import { startOfDay, addDays } from "@/lib/metrics";
 
 export const dynamic = "force-dynamic";
 
+// Teste visual temporário nos cards de lead do Pipeline — mesmo fundo
+// petróleo + borda esquerda colorida que os blocos de agendamento da
+// Agenda já usam (ver appointmentStatusBorderClass), só que aqui com uma
+// cor fixa (ciano) em vez de variar por status. É só uma experiência
+// visual pra ver como fica; se não for pra frente, é reverter pra
+// "rounded-xl border border-vexo-border bg-vexo-surface2" nos dois cards
+// abaixo.
+const LEAD_CARD_TEST_CLASS = "rounded-xl border border-l-[3px] border-vexo-petrolBorder border-l-cyan-400 bg-vexo-petrol";
+
 // Faixas da cor do anel de comparecimento — decisão de exibição, não de
 // dado (o número em si vem sempre certo do banco). Ajustável se a clínica
 // achar essas faixas erradas pra realidade dela.
@@ -139,7 +148,7 @@ export default async function ClinicPipelinePage({ params }: { params: { id: str
                     // de @ + última mensagem).
                     if (col.status === "SCHEDULED") {
                       return (
-                        <div key={conv.id} className="rounded-xl border border-vexo-border bg-vexo-surface2 p-3.5">
+                        <div key={conv.id} className={`${LEAD_CARD_TEST_CLASS} p-3.5`}>
                           <Link href={`/crm/conversas/${conv.id}`} className="block transition hover:text-vexo-accent">
                             <p className="truncate text-sm font-semibold">{name}</p>
                           </Link>
@@ -154,7 +163,7 @@ export default async function ClinicPipelinePage({ params }: { params: { id: str
                     }
 
                     return (
-                      <div key={conv.id} className="rounded-xl border border-vexo-border bg-vexo-surface2 p-3.5">
+                      <div key={conv.id} className={`${LEAD_CARD_TEST_CLASS} p-3.5`}>
                         <Link href={`/crm/conversas/${conv.id}`} className="block transition hover:text-vexo-accent">
                           <div className="flex items-start justify-between gap-2">
                             <p className="truncate text-sm font-semibold">{name}</p>
