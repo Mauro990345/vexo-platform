@@ -145,7 +145,7 @@ export default async function ClinicPipelinePage({ params }: { params: { id: str
                           </Link>
 
                           {appt && (
-                            <p className="mt-1.5 text-caption font-medium text-vexo-fg">
+                            <p className="mt-1.5 text-caption font-medium text-vexo-muted">
                               {formatDateTime(appt.scheduledAt)}
                             </p>
                           )}
