@@ -82,24 +82,24 @@ export default async function ClinicPipelinePage({ params }: { params: { id: str
       </div>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <div className="rounded-lg border border-vexo-border bg-vexo-surface2 p-2.5">
+        <div className="rounded-lg border border-vexo-border bg-vexo-surface2 px-2.5 py-1.5">
           <p className="truncate text-card font-medium text-vexo-muted">Novos contatos</p>
           <p className="mt-1 text-xl font-semibold leading-none tracking-tight">{newContacts}</p>
           <p className="mt-1 text-card text-vexo-muted">Últimos 7 dias</p>
         </div>
-        <div className="rounded-lg border border-vexo-border bg-vexo-surface2 p-2.5">
+        <div className="rounded-lg border border-vexo-border bg-vexo-surface2 px-2.5 py-1.5">
           <p className="truncate text-card font-medium text-vexo-muted">Taxa de resposta</p>
           <div className="mt-1">
             <ResponseRateRing value={responseRate} />
           </div>
           <p className="mt-1 text-card text-vexo-muted">Novo contato → Em conversa</p>
         </div>
-        <div className="rounded-lg border border-vexo-border bg-vexo-surface2 p-2.5">
+        <div className="rounded-lg border border-vexo-border bg-vexo-surface2 px-2.5 py-1.5">
           <p className="truncate text-card font-medium text-vexo-muted">Agendados</p>
           <p className="mt-1 text-xl font-semibold leading-none tracking-tight">{scheduled}</p>
           <p className="mt-1 text-card text-vexo-muted">Últimos 7 dias</p>
         </div>
-        <div className="rounded-lg border border-vexo-border bg-vexo-surface2 p-2.5">
+        <div className="rounded-lg border border-vexo-border bg-vexo-surface2 px-2.5 py-1.5">
           <p className="truncate text-card font-medium text-vexo-muted">Taxa de comparecimento</p>
           <div className="mt-1">
             <ResponseRateRing value={attendanceRate} color={attendanceRingColor(attendanceRate)} />
@@ -130,16 +130,18 @@ export default async function ClinicPipelinePage({ params }: { params: { id: str
                     const appt = conv.appointments[0];
                     const name = conv.lead.name ?? conv.lead.igUsername ?? "Lead";
 
-                    // A coluna Agendado fica com uma versão compacta própria
-                    // (só o nome, sem "..." nem linha de canal) pra não
-                    // ficar alta demais somando com o bloco de
-                    // agendamento/botões abaixo — as outras 5 colunas usam a
-                    // estrutura padrão (nome + "..." em cima).
+                    // A coluna Agendado usava padding/fonte menores (versão
+                    // compacta de quando ainda tinha os botões
+                    // "Compareceu"/"Faltou" dentro do card, removidos há
+                    // algumas rodadas) — agora usa o mesmo p-3.5 e mesmo
+                    // tamanho de texto do nome que as outras 5 colunas, só
+                    // trocando a segunda linha (data do agendamento em vez
+                    // de @ + última mensagem).
                     if (col.status === "SCHEDULED") {
                       return (
-                        <div key={conv.id} className="rounded-xl border border-vexo-border bg-vexo-surface2 p-2">
+                        <div key={conv.id} className="rounded-xl border border-vexo-border bg-vexo-surface2 p-3.5">
                           <Link href={`/crm/conversas/${conv.id}`} className="block transition hover:text-vexo-accent">
-                            <p className="truncate text-xs font-semibold">{name}</p>
+                            <p className="truncate text-sm font-semibold">{name}</p>
                           </Link>
 
                           {appt && (
