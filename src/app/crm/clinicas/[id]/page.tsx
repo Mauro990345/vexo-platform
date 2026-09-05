@@ -13,7 +13,14 @@ export const dynamic = "force-dynamic";
 // vexoPetrolBorder (mesma aparência de sempre) mas podem ser
 // personalizados só pro Pipeline, sem afetar o card de agendamento da
 // Agenda, na tela de Configurações.
-const LEAD_CARD_CLASS = "rounded-xl border border-l-[3px] border-vexo-pipelineCardBorder bg-vexo-pipelineCardBg";
+//
+// Mesma receita do card de agendamento da Agenda: a borda "ambiente" (as 4
+// faces) fica em vexo-petrolBorder, sem token de página — só a lateral
+// esquerda troca de cor (border-l-vexo-pipelineCardBorder), senão
+// personalizar essa cor pintava o contorno inteiro do card, não só a
+// faixa da esquerda.
+const LEAD_CARD_CLASS =
+  "rounded-xl border border-vexo-petrolBorder border-l-[3px] border-l-vexo-pipelineCardBorder bg-vexo-pipelineCardBg";
 
 // Faixas da cor do anel de comparecimento — decisão de exibição, não de
 // dado (o número em si vem sempre certo do banco). Ajustável se a clínica
