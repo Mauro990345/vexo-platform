@@ -24,24 +24,31 @@ function toDateParam(d: Date): string {
 }
 
 // Corpo do Painel do cliente — extraído de /dashboard pra ser reaproveitado
-// também pela visão "Ver painel de [clínica]" que a M8 Growth usa de dentro
-// do CRM interno (/crm/painel-cliente/[id]), sem duplicar layout: as duas
+// por DUAS visões internas do CRM: "Ver painel de [clínica]"
+// (/crm/painel-cliente/[id], sem sidebar nenhuma, aberta em nova aba a
+// partir de /crm/painel) e o item "Painel" de dentro do contexto de uma
+// clínica (/crm/clinicas/[id]/painel — mantém a sidebar da clínica visível,
+// Pipeline/Agenda/Follow-up etc. continuam ali, só o conteúdo muda). As três
 // telas renderizam este mesmo componente, só trocando de onde o clinicId
-// vem (sessão do cliente vs. parâmetro de rota do admin) e pra onde os
-// links de navegação de semana apontam (base). noShowAction é injetável
-// porque a ação por trás do botão "Não compareceu" precisa rodar sob uma
-// sessão diferente em cada contexto (CLIENT vs INTERNAL_ADMIN/STAFF) —
-// ver NoShowButton.
+// vem, pra onde os links de navegação de semana apontam (base), e se o
+// componente desenha sua própria página inteira ou só o conteúdo
+// (standalone — false quando já existe um layout por fora fornecendo
+// min-h-screen/padding/max-w-6xl, como o AppShell da clínica). noShowAction
+// é injetável porque a ação por trás do botão "Não compareceu" precisa
+// rodar sob uma sessão diferente em cada contexto (CLIENT vs
+// INTERNAL_ADMIN/STAFF) — ver NoShowButton.
 export async function ClientPanelView({
   clinicId,
   week,
   base,
   noShowAction,
+  standalone = true,
 }: {
   clinicId: string;
   week?: string;
   base: string;
   noShowAction?: (appointmentId: string, status: "COMPLETED" | "NO_SHOW") => Promise<unknown>;
+  standalone?: boolean;
 }) {
   const now = new Date();
   const todayStart = startOfDay(now);
@@ -75,8 +82,8 @@ export async function ClientPanelView({
   const maxApproached = Math.max(1, ...dailyApproached);
 
   return (
-    <div className="min-h-screen bg-vexo-bg px-4 pt-4 pb-6 sm:px-8 sm:pt-6 sm:pb-8">
-      <div className="mx-auto max-w-6xl">
+    <div className={standalone ? "min-h-screen bg-vexo-bg px-4 pt-4 pb-6 sm:px-8 sm:pt-6 sm:pb-8" : undefined}>
+      <div className={standalone ? "mx-auto max-w-6xl" : undefined}>
         <div className="mb-8">
           <h1 className="text-lg font-semibold tracking-tight">Painel</h1>
           <p className="text-sm text-vexo-muted">Acompanhamento em tempo real das abordagens no Instagram.</p>
