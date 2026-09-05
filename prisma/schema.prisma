@@ -410,9 +410,14 @@ model FollowUpSettings {
 // src/lib/scheduler.ts) — a IA responde sem o delay artificial de
 // agendamento, direto.
 model AiSettings {
-  id                   String   @id @default("singleton")
-  adaptiveDelayEnabled Boolean  @default(true)
-  updatedAt            DateTime @updatedAt
+  id                    String   @id @default("singleton")
+  adaptiveDelayEnabled  Boolean  @default(true)
+  // Faixa "até 1h de silêncio" de computeAdaptiveDelaySeconds — as outras
+  // duas faixas (1-6h e >6h) continuam fixas, sem campo no banco. Válido
+  // de 30 a 60 (segundos); validado na action, revalidado no próprio
+  // scheduler.ts por segurança.
+  firstBandDelaySeconds Int      @default(45)
+  updatedAt             DateTime @updatedAt
 }
 
 // Cores do sistema (design tokens), editáveis visualmente pela tela

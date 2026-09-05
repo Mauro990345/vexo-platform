@@ -38,15 +38,24 @@ async function readAttachmentFile(formData: FormData): Promise<File | null> {
 // computeAdaptiveDelaySeconds em src/lib/scheduler.ts). Desligado é usado
 // pra testar o sistema sem esperar as faixas de 30s-10min — a IA passa a
 // responder quase na hora (FAST_REPLY_DELAY_SECONDS).
+//
+// firstBandDelaySeconds é o único valor ajustável das 3 faixas — validado
+// aqui (30 a 60) antes de gravar; o scheduler.ts também faz um clamp
+// defensivo na leitura, por segurança.
 export async function updateAiSettings(formData: FormData) {
   await requireInternalSession();
 
   const adaptiveDelayEnabled = formData.get("adaptiveDelayEnabled") === "on";
 
+  const firstBandDelaySeconds = parseInt(String(formData.get("firstBandDelaySeconds") ?? ""), 10);
+  if (!Number.isFinite(firstBandDelaySeconds) || firstBandDelaySeconds < 30 || firstBandDelaySeconds > 60) {
+    throw new Error("O delay da faixa de até 1h precisa ser entre 30 e 60 segundos.");
+  }
+
   await prisma.aiSettings.upsert({
     where: { id: "singleton" },
-    update: { adaptiveDelayEnabled },
-    create: { id: "singleton", adaptiveDelayEnabled },
+    update: { adaptiveDelayEnabled, firstBandDelaySeconds },
+    create: { id: "singleton", adaptiveDelayEnabled, firstBandDelaySeconds },
   });
 
   revalidatePath("/crm", "layout");

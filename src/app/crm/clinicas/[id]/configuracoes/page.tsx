@@ -7,20 +7,29 @@ import { ColorField } from "@/components/ColorField";
 import { PageStyleColorField } from "@/components/PageStyleColorField";
 import { ConfirmSubmitButton } from "@/components/ConfirmSubmitButton";
 import { updateThemeSettings, resetThemeSettings, updatePageStyleOverrides } from "./actions";
+import { updateAiSettings } from "@/app/crm/(global)/follow-up/actions";
 
 export const dynamic = "force-dynamic";
 
-// Editor visual das cores do sistema (design tokens) — estilo GHL: cada
-// campo é um <input type="color"> com descrição em português simples de
-// onde aquilo aparece. Vale pra TODAS as clínicas (ThemeSettings é global,
-// não tem clinicId — a lista de campos e valores padrão vive em
-// src/lib/theme.ts), mesmo essa tela ficando dentro da rota de uma clínica
-// específica na sidebar.
+// Configurações GLOBAIS do sistema — timing de resposta da IA, cores do
+// sistema, cores por página. Tudo aqui vale pro VEXO inteiro (todas as
+// clínicas), não só a que está selecionada no momento — mesmo essa tela
+// ficando dentro da rota de uma clínica específica na sidebar (nenhuma
+// das configs abaixo tem clinicId no schema). É por isso que configs
+// realmente por-clínica (prompt da IA, vídeo de boas-vindas, WhatsApp de
+// alerta) NÃO estão aqui — ficam em "Agente de IA", pra não misturar
+// "desta clínica" com "do sistema inteiro" na mesma tela.
 export default async function ClinicConfiguracoesPage({ params }: { params: { id: string } }) {
   await requireInternalSession();
 
-  const clinic = await prisma.clinic.findUnique({ where: { id: params.id }, select: { id: true } });
+  const [clinic, aiSettings] = await Promise.all([
+    prisma.clinic.findUnique({ where: { id: params.id }, select: { id: true } }),
+    prisma.aiSettings.findUnique({ where: { id: "singleton" } }),
+  ]);
   if (!clinic) notFound();
+
+  const adaptiveDelayEnabled = aiSettings?.adaptiveDelayEnabled ?? true;
+  const firstBandDelaySeconds = aiSettings?.firstBandDelaySeconds ?? 45;
 
   const colors = await getThemeColors();
   const pageStyleOverrides = await getPageStyleOverrides();
@@ -33,9 +42,73 @@ export default async function ClinicConfiguracoesPage({ params }: { params: { id
       <div>
         <h1 className="text-base font-semibold tracking-tight">Configurações</h1>
         <p className="mt-0.5 text-xs text-vexo-muted">
-          Cores do sistema. Essas cores valem para o VEXO inteiro — todas as clínicas, não só esta
-          — mesmo esse item de menu estando dentro do contexto de uma clínica. Mude o que quiser e
-          clique em "Salvar cores"; a mudança aparece em todas as telas na hora.
+          Configurações globais do VEXO — valem para todas as clínicas, não só esta, mesmo esse
+          item de menu estando dentro do contexto de uma clínica específica.
+        </p>
+      </div>
+
+      <section className="space-y-2.5">
+        <div>
+          <h2 className="text-sm font-semibold">Timing de resposta da IA</h2>
+          <p className="mt-1 text-xs text-vexo-muted">
+            Controla quanto tempo a IA espera pra responder, de acordo com o tempo de silêncio do
+            lead desde a última mensagem dela. Vale pra todas as clínicas.
+          </p>
+          <ul className="mt-1.5 space-y-0.5 text-xs text-vexo-muted">
+            <li>• até 1 hora sem resposta: 30-60 segundos</li>
+            <li>• de 1 a 6 horas: 5-10 minutos</li>
+            <li>• mais de 6 horas: 2-5 minutos</li>
+          </ul>
+        </div>
+
+        <form
+          action={updateAiSettings}
+          className="space-y-3 rounded-xl border border-vexo-border bg-vexo-surface p-3.5"
+        >
+          <label className="flex items-center gap-2 text-xs">
+            <input
+              type="checkbox"
+              name="adaptiveDelayEnabled"
+              defaultChecked={adaptiveDelayEnabled}
+              className="h-3.5 w-3.5 shrink-0 rounded border-vexo-border"
+            />
+            Delay adaptativo ativado
+          </label>
+
+          <div>
+            <label className="mb-1 block text-xs" htmlFor="firstBandDelaySeconds">
+              Delay da faixa "até 1 hora" (segundos, entre 30 e 60)
+            </label>
+            <input
+              id="firstBandDelaySeconds"
+              name="firstBandDelaySeconds"
+              type="number"
+              min={30}
+              max={60}
+              step={1}
+              required
+              defaultValue={firstBandDelaySeconds}
+              className="w-24 rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5 text-xs outline-none focus:border-vexo-accent"
+            />
+            <p className="mt-1 text-card text-vexo-muted">
+              As outras duas faixas (1-6h e mais de 6h) continuam fixas, sem ajuste.
+            </p>
+          </div>
+
+          <button
+            type="submit"
+            className="rounded-lg border border-vexo-accent px-2.5 py-1.5 text-card font-medium text-vexo-accent hover:bg-vexo-accent/10"
+          >
+            Salvar
+          </button>
+        </form>
+      </section>
+
+      <div className="border-t border-vexo-border pt-4">
+        <h2 className="text-sm font-semibold">Cores do sistema</h2>
+        <p className="mt-0.5 text-xs text-vexo-muted">
+          Mude o que quiser e clique em "Salvar cores"; a mudança aparece em todas as telas na
+          hora.
         </p>
       </div>
 

@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireInternalSession } from "@/lib/session";
 import { updateAiAgentSettings } from "../../actions";
-import { updateAiSettings, updateFollowUpWindow } from "@/app/crm/(global)/follow-up/actions";
+import { updateFollowUpWindow } from "@/app/crm/(global)/follow-up/actions";
 
 export const dynamic = "force-dynamic";
 
@@ -22,22 +22,26 @@ const WEEKDAY_LABELS = [
   { value: 6, label: "Sáb" },
 ];
 
-// "Delay adaptativo" e "Janela de envio" vieram da antiga aba
-// "Configurações gerais" do Follow-up. Continuam sendo config global
-// (AiSettings/FollowUpSettings não têm clinicId — vale pra todas as
-// clínicas), só a TELA mudou de lugar pra ficar junto do resto do que
-// configura o comportamento da IA.
+// "Janela de envio" veio da antiga aba "Configurações gerais" do
+// Follow-up. Continua sendo config global (FollowUpSettings não tem
+// clinicId — vale pra todas as clínicas), só a TELA mudou de lugar pra
+// ficar junto do resto do que configura o comportamento da IA.
+//
+// "Timing de resposta da IA" (delay adaptativo) SAIU daqui — também é
+// global, mas por estar misturada com o prompt/vídeo/WhatsApp DESTA
+// clínica (que são específicos, não globais), criava risco real de
+// alguém achar que estava mexendo só nesta clínica. Mora agora em
+// Configurações (/crm/clinicas/[id]/configuracoes), junto do resto do que
+// já é declaradamente "vale pro sistema inteiro".
 export default async function ClinicAiAgentPage({ params }: { params: { id: string } }) {
   await requireInternalSession();
 
-  const [clinic, aiSettings, followUpSettings] = await Promise.all([
+  const [clinic, followUpSettings] = await Promise.all([
     prisma.clinic.findUnique({ where: { id: params.id } }),
-    prisma.aiSettings.findUnique({ where: { id: "singleton" } }),
     prisma.followUpSettings.findUnique({ where: { id: "singleton" } }),
   ]);
   if (!clinic) notFound();
 
-  const adaptiveDelayEnabled = aiSettings?.adaptiveDelayEnabled ?? true;
   const windowDays = followUpSettings?.windowDays?.length ? followUpSettings.windowDays : [1, 2, 3, 4, 5];
   const windowStart = minutesToTime(followUpSettings?.windowStartMinute ?? 8 * 60);
   const windowEnd = minutesToTime(followUpSettings?.windowEndMinute ?? 18 * 60);
@@ -99,37 +103,6 @@ export default async function ClinicAiAgentPage({ params }: { params: { id: stri
           Salvar configuração
         </button>
       </form>
-
-      <section className="space-y-2.5">
-        <div>
-          <h2 className="text-sm font-semibold">Timing de resposta da IA</h2>
-          <p className="mt-1 text-xs text-vexo-muted">
-            Controla o delay de resposta da IA em todas as conversas (vale pra todas as clínicas)
-            — desligue pra testar o sistema sem esperar.
-          </p>
-        </div>
-
-        <form
-          action={updateAiSettings}
-          className="flex items-center justify-between gap-3 rounded-xl border border-vexo-border bg-vexo-surface p-3.5"
-        >
-          <label className="flex items-center gap-2 text-xs">
-            <input
-              type="checkbox"
-              name="adaptiveDelayEnabled"
-              defaultChecked={adaptiveDelayEnabled}
-              className="h-3.5 w-3.5 shrink-0 rounded border-vexo-border"
-            />
-            Delay adaptativo ativado
-          </label>
-          <button
-            type="submit"
-            className="shrink-0 rounded-lg border border-vexo-accent px-2.5 py-1.5 text-card font-medium text-vexo-accent hover:bg-vexo-accent/10"
-          >
-            Salvar
-          </button>
-        </form>
-      </section>
 
       <section className="space-y-2.5">
         <div>
