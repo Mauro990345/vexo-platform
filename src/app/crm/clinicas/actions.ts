@@ -88,16 +88,27 @@ export async function updateAiAgentTiming(clinicId: string, formData: FormData) 
   revalidatePath(`/crm/clinicas/${clinicId}/agente-ia`);
 }
 
+// firstReminderHours/secondReminderHours em vez de um único campo de texto
+// livre ("horas antes, separadas por vírgula") — digitação solta era
+// sujeita a erro de formatação (espaço a mais, vírgula esquecida). Dois
+// campos numéricos porque hoje o produto sempre usa exatamente 2
+// lembretes; reminders.ts em si itera a lista genericamente, então
+// suportaria mais no futuro se precisar.
 export async function updateClinicSettings(clinicId: string, formData: FormData) {
   await requireInternalSession();
 
   const clientWhatsappNumber = String(formData.get("clientWhatsappNumber") ?? "").trim() || null;
   const active = formData.get("active") === "on";
-  const hoursBeforeRaw = String(formData.get("hoursBefore") ?? "24,3");
-  const hoursBefore = hoursBeforeRaw
-    .split(",")
-    .map((v) => parseInt(v.trim(), 10))
-    .filter((v) => !Number.isNaN(v) && v > 0);
+
+  const firstReminderHours = parseInt(String(formData.get("firstReminderHours") ?? ""), 10);
+  const secondReminderHours = parseInt(String(formData.get("secondReminderHours") ?? ""), 10);
+  if (!Number.isFinite(firstReminderHours) || firstReminderHours <= 0) {
+    throw new Error("Informe um número de horas válido (maior que zero) para o 1º lembrete.");
+  }
+  if (!Number.isFinite(secondReminderHours) || secondReminderHours <= 0) {
+    throw new Error("Informe um número de horas válido (maior que zero) para o 2º lembrete.");
+  }
+  const hoursBefore = [firstReminderHours, secondReminderHours];
 
   await prisma.clinic.update({
     where: { id: clinicId },
@@ -106,8 +117,8 @@ export async function updateClinicSettings(clinicId: string, formData: FormData)
       active,
       reminderConfig: {
         upsert: {
-          create: { hoursBefore: hoursBefore.length ? hoursBefore : [24, 3] },
-          update: { hoursBefore: hoursBefore.length ? hoursBefore : [24, 3] },
+          create: { hoursBefore },
+          update: { hoursBefore },
         },
       },
     },
