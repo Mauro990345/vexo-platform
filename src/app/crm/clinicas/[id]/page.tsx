@@ -82,29 +82,29 @@ export default async function ClinicPipelinePage({ params }: { params: { id: str
       </div>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <div className="rounded-lg border border-vexo-border bg-vexo-surface2 px-2.5 py-1.5">
+        <div className="rounded-lg border border-vexo-border bg-vexo-surface2 px-2.5 py-1">
           <p className="truncate text-card font-medium text-vexo-muted">Novos contatos</p>
-          <p className="mt-1 text-xl font-semibold leading-none tracking-tight">{newContacts}</p>
-          <p className="mt-1 text-card text-vexo-muted">Últimos 7 dias</p>
+          <p className="mt-0.5 text-xl font-semibold leading-none tracking-tight">{newContacts}</p>
+          <p className="mt-0.5 text-card text-vexo-muted">Últimos 7 dias</p>
         </div>
-        <div className="rounded-lg border border-vexo-border bg-vexo-surface2 px-2.5 py-1.5">
+        <div className="rounded-lg border border-vexo-border bg-vexo-surface2 px-2.5 py-1">
           <p className="truncate text-card font-medium text-vexo-muted">Taxa de resposta</p>
-          <div className="mt-1">
+          <div className="mt-0.5">
             <ResponseRateRing value={responseRate} />
           </div>
-          <p className="mt-1 text-card text-vexo-muted">Novo contato → Em conversa</p>
+          <p className="mt-0.5 text-card text-vexo-muted">Novo contato → Em conversa</p>
         </div>
-        <div className="rounded-lg border border-vexo-border bg-vexo-surface2 px-2.5 py-1.5">
+        <div className="rounded-lg border border-vexo-border bg-vexo-surface2 px-2.5 py-1">
           <p className="truncate text-card font-medium text-vexo-muted">Agendados</p>
-          <p className="mt-1 text-xl font-semibold leading-none tracking-tight">{scheduled}</p>
-          <p className="mt-1 text-card text-vexo-muted">Últimos 7 dias</p>
+          <p className="mt-0.5 text-xl font-semibold leading-none tracking-tight">{scheduled}</p>
+          <p className="mt-0.5 text-card text-vexo-muted">Últimos 7 dias</p>
         </div>
-        <div className="rounded-lg border border-vexo-border bg-vexo-surface2 px-2.5 py-1.5">
+        <div className="rounded-lg border border-vexo-border bg-vexo-surface2 px-2.5 py-1">
           <p className="truncate text-card font-medium text-vexo-muted">Taxa de comparecimento</p>
-          <div className="mt-1">
+          <div className="mt-0.5">
             <ResponseRateRing value={attendanceRate} color={attendanceRingColor(attendanceRate)} />
           </div>
-          <p className="mt-1 text-card text-vexo-muted">Compareceu x Não compareceu</p>
+          <p className="mt-0.5 text-card text-vexo-muted">Compareceu x Não compareceu</p>
         </div>
       </div>
 
