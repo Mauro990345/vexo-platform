@@ -7,13 +7,28 @@ import { setAppointmentAttendanceClientAction } from "@/app/dashboard/actions";
 // desfaz (mesma semântica do AttendanceToggle usado internamente, só que
 // aqui é um botão só em vez de dois lado a lado, já que "Compareceu" não é
 // uma ação que a clínica precisa disparar por aqui).
-export function NoShowButton({ appointmentId, status }: { appointmentId: string; status: string }) {
+//
+// "action" é injetável porque este componente também é usado pela visão
+// "Ver painel de [clínica]" do CRM interno (ClientPanelView, renderizado
+// em /crm/painel-cliente/[id]) — lá quem clica é um admin/staff, sem
+// sessão CLIENT, então o padrão (setAppointmentAttendanceClientAction, que
+// exige requireClientSession) sempre falharia; essa tela passa a ação
+// interna equivalente (setAppointmentAttendanceAction) no lugar.
+export function NoShowButton({
+  appointmentId,
+  status,
+  action = setAppointmentAttendanceClientAction,
+}: {
+  appointmentId: string;
+  status: string;
+  action?: (appointmentId: string, status: "COMPLETED" | "NO_SHOW") => Promise<unknown>;
+}) {
   const [isPending, startTransition] = useTransition();
   const isNoShow = status === "NO_SHOW";
 
   function handleClick() {
     startTransition(async () => {
-      await setAppointmentAttendanceClientAction(appointmentId, "NO_SHOW");
+      await action(appointmentId, "NO_SHOW");
     });
   }
 

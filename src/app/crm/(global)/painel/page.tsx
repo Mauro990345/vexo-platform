@@ -64,6 +64,15 @@ export default async function PainelPage() {
               last7Days={last7Days}
             />
 
+            <Link
+              href={`/crm/painel-cliente/${clinic.id}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="block rounded-lg border border-vexo-border px-2.5 py-1.5 text-center text-xs font-medium text-vexo-accent hover:bg-vexo-accent/10"
+            >
+              Ver painel de {clinic.name} ↗
+            </Link>
+
             <details className="rounded-xl border border-vexo-border bg-vexo-surface p-3.5">
               <summary className="cursor-pointer list-none text-xs font-medium text-vexo-muted">
                 Acesso do cliente ao painel dele ({clinic.users.length})
