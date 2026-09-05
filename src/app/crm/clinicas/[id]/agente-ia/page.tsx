@@ -27,13 +27,13 @@ const WEEKDAY_LABELS = [
 // clinicId — vale pra todas as clínicas), só a TELA mudou de lugar pra
 // ficar junto do resto do que configura o comportamento da IA.
 //
-// "Timing de resposta da IA": o toggle geral (adaptiveDelayEnabled) é
-// global e também aparece em Configurações — repetido de propósito, sem
-// problema (baixo risco, poucas pessoas mexem nisso). Já o delay da
-// faixa "até 1h" é POR CLÍNICA (Clinic.firstBandDelaySeconds) — cada
-// clínica pode querer um tom de primeira resposta diferente — por isso
-// SÓ existe aqui, não em Configurações (que só explica as outras 2 faixas,
-// fixas e globais).
+// "Timing de resposta da IA" mora só aqui agora (não em Configurações —
+// tirado de lá pra não duplicar a mesma explicação em dois lugares). O
+// toggle geral (adaptiveDelayEnabled) é global (AiSettings, sem
+// clinicId), mas fica exposto aqui mesmo assim porque é o único lugar
+// onde essa config aparece. Já o delay da faixa "até 1h"
+// (Clinic.firstBandDelaySeconds) é POR CLÍNICA de verdade — cada clínica
+// pode querer um tom de primeira resposta diferente.
 export default async function ClinicAiAgentPage({ params }: { params: { id: string } }) {
   await requireInternalSession();
 
@@ -111,10 +111,23 @@ export default async function ClinicAiAgentPage({ params }: { params: { id: stri
         <div>
           <h2 className="text-sm font-semibold">Timing de resposta da IA</h2>
           <p className="mt-1 text-xs text-vexo-muted">
-            Quanto tempo a IA espera pra responder quando o lead está em silêncio há até 1 hora —
-            só desta clínica. As outras faixas (1-6h: 5-10 minutos; mais de 6h: 2-5 minutos) são
-            fixas e valem pra todas as clínicas, sem ajuste (ver Configurações).
+            Controla quanto tempo a IA espera pra responder, com base em quanto tempo o lead ficou
+            em silêncio.
           </p>
+          <ul className="mt-1.5 space-y-1 text-xs text-vexo-muted">
+            <li>
+              <span className="font-medium text-vexo-fg">Até 1 hora sem resposta:</span> 30-60
+              segundos (ajustável abaixo, só desta clínica)
+            </li>
+            <li>
+              <span className="font-medium text-vexo-fg">De 1 a 6 horas:</span> 5-10 minutos
+              (fixo, vale pra todas as clínicas)
+            </li>
+            <li>
+              <span className="font-medium text-vexo-fg">Mais de 6 horas:</span> 2-5 minutos
+              (fixo, vale pra todas as clínicas)
+            </li>
+          </ul>
         </div>
 
         <form
