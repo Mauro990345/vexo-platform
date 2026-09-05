@@ -11,14 +11,14 @@ import { updateAiSettings } from "@/app/crm/(global)/follow-up/actions";
 
 export const dynamic = "force-dynamic";
 
-// Configurações GLOBAIS do sistema — timing de resposta da IA, cores do
-// sistema, cores por página. Tudo aqui vale pro VEXO inteiro (todas as
-// clínicas), não só a que está selecionada no momento — mesmo essa tela
-// ficando dentro da rota de uma clínica específica na sidebar (nenhuma
-// das configs abaixo tem clinicId no schema). É por isso que configs
-// realmente por-clínica (prompt da IA, vídeo de boas-vindas, WhatsApp de
-// alerta) NÃO estão aqui — ficam em "Agente de IA", pra não misturar
-// "desta clínica" com "do sistema inteiro" na mesma tela.
+// Configurações GLOBAIS do sistema — timing de resposta da IA (as 2
+// faixas fixas + o toggle geral), cores do sistema, cores por página.
+// Tudo aqui vale pro VEXO inteiro (todas as clínicas), não só a que está
+// selecionada no momento — mesmo essa tela ficando dentro da rota de uma
+// clínica específica na sidebar. Configs realmente por-clínica (prompt da
+// IA, vídeo de boas-vindas, WhatsApp de alerta, e também o delay da
+// faixa "até 1h" — cada clínica pode querer um tom de primeira resposta
+// diferente) NÃO estão aqui — ficam em "Agente de IA".
 export default async function ClinicConfiguracoesPage({ params }: { params: { id: string } }) {
   await requireInternalSession();
 
@@ -29,7 +29,6 @@ export default async function ClinicConfiguracoesPage({ params }: { params: { id
   if (!clinic) notFound();
 
   const adaptiveDelayEnabled = aiSettings?.adaptiveDelayEnabled ?? true;
-  const firstBandDelaySeconds = aiSettings?.firstBandDelaySeconds ?? 45;
 
   const colors = await getThemeColors();
   const pageStyleOverrides = await getPageStyleOverrides();
@@ -52,18 +51,18 @@ export default async function ClinicConfiguracoesPage({ params }: { params: { id
           <h2 className="text-sm font-semibold">Timing de resposta da IA</h2>
           <p className="mt-1 text-xs text-vexo-muted">
             Controla quanto tempo a IA espera pra responder, de acordo com o tempo de silêncio do
-            lead desde a última mensagem dela. Vale pra todas as clínicas.
+            lead desde a última mensagem dela.
           </p>
           <ul className="mt-1.5 space-y-0.5 text-xs text-vexo-muted">
-            <li>• até 1 hora sem resposta: 30-60 segundos</li>
-            <li>• de 1 a 6 horas: 5-10 minutos</li>
-            <li>• mais de 6 horas: 2-5 minutos</li>
+            <li>• até 1 hora sem resposta: 30-60 segundos (ajustável por clínica, ver "Agente de IA" de cada uma)</li>
+            <li>• de 1 a 6 horas: 5-10 minutos — fixo, vale pra todas as clínicas</li>
+            <li>• mais de 6 horas: 2-5 minutos — fixo, vale pra todas as clínicas</li>
           </ul>
         </div>
 
         <form
           action={updateAiSettings}
-          className="space-y-3 rounded-xl border border-vexo-border bg-vexo-surface p-3.5"
+          className="flex items-center justify-between gap-3 rounded-xl border border-vexo-border bg-vexo-surface p-3.5"
         >
           <label className="flex items-center gap-2 text-xs">
             <input
@@ -72,32 +71,11 @@ export default async function ClinicConfiguracoesPage({ params }: { params: { id
               defaultChecked={adaptiveDelayEnabled}
               className="h-3.5 w-3.5 shrink-0 rounded border-vexo-border"
             />
-            Delay adaptativo ativado
+            Delay adaptativo ativado (vale pra todas as clínicas)
           </label>
-
-          <div>
-            <label className="mb-1 block text-xs" htmlFor="firstBandDelaySeconds">
-              Delay da faixa "até 1 hora" (segundos, entre 30 e 60)
-            </label>
-            <input
-              id="firstBandDelaySeconds"
-              name="firstBandDelaySeconds"
-              type="number"
-              min={30}
-              max={60}
-              step={1}
-              required
-              defaultValue={firstBandDelaySeconds}
-              className="w-24 rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5 text-xs outline-none focus:border-vexo-accent"
-            />
-            <p className="mt-1 text-card text-vexo-muted">
-              As outras duas faixas (1-6h e mais de 6h) continuam fixas, sem ajuste.
-            </p>
-          </div>
-
           <button
             type="submit"
-            className="rounded-lg border border-vexo-accent px-2.5 py-1.5 text-card font-medium text-vexo-accent hover:bg-vexo-accent/10"
+            className="shrink-0 rounded-lg border border-vexo-accent px-2.5 py-1.5 text-card font-medium text-vexo-accent hover:bg-vexo-accent/10"
           >
             Salvar
           </button>

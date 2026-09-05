@@ -177,7 +177,7 @@ export async function handleInboundInstagramMessage(event: InboundInstagramEvent
   const aiSettings = await prisma.aiSettings.findUnique({ where: { id: "singleton" } });
   const delaySeconds = aiSettings?.adaptiveDelayEnabled === false
     ? FAST_REPLY_DELAY_SECONDS
-    : computeAdaptiveDelaySeconds(leadResponseTimeSeconds, aiSettings?.firstBandDelaySeconds ?? 45);
+    : computeAdaptiveDelaySeconds(leadResponseTimeSeconds, clinic.firstBandDelaySeconds);
   const scheduledFor = new Date(Date.now() + delaySeconds * 1000);
 
   await prisma.message.create({

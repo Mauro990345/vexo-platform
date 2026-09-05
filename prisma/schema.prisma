@@ -53,6 +53,14 @@ model Clinic {
   // reenviado automaticamente a cada agendamento confirmado)
   welcomeVideoUrl String?
 
+  // Delay de resposta da IA quando o lead está em silêncio há até 1h (ver
+  // computeAdaptiveDelaySeconds em src/lib/scheduler.ts) — por clínica,
+  // não global: cada uma pode querer um tom de "primeira resposta"
+  // diferente. Válido de 30 a 60 (segundos); validado em
+  // updateAiAgentSettings. As outras duas faixas (1-6h, 6h+) continuam
+  // fixas e globais, sem campo — nem aqui nem em AiSettings.
+  firstBandDelaySeconds Int @default(45)
+
   reminderConfig        ReminderConfig?
   instagramAccount      InstagramAccount?
   googleCalendarAccount GoogleCalendarAccount?
@@ -408,16 +416,12 @@ model FollowUpSettings {
 // "singleton"), igual ao padrão de FollowUpSettings. adaptiveDelayEnabled
 // desligado é usado durante testes (ver computeAdaptiveDelaySeconds em
 // src/lib/scheduler.ts) — a IA responde sem o delay artificial de
-// agendamento, direto.
+// agendamento, direto. A faixa "até 1h" (firstBandDelaySeconds) NÃO mora
+// aqui — é por clínica, ver Clinic.firstBandDelaySeconds.
 model AiSettings {
-  id                    String   @id @default("singleton")
-  adaptiveDelayEnabled  Boolean  @default(true)
-  // Faixa "até 1h de silêncio" de computeAdaptiveDelaySeconds — as outras
-  // duas faixas (1-6h e >6h) continuam fixas, sem campo no banco. Válido
-  // de 30 a 60 (segundos); validado na action, revalidado no próprio
-  // scheduler.ts por segurança.
-  firstBandDelaySeconds Int      @default(45)
-  updatedAt             DateTime @updatedAt
+  id                   String   @id @default("singleton")
+  adaptiveDelayEnabled Boolean  @default(true)
+  updatedAt            DateTime @updatedAt
 }
 
 // Cores do sistema (design tokens), editáveis visualmente pela tela

@@ -1,8 +1,8 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireInternalSession } from "@/lib/session";
-import { updateAiAgentSettings } from "../../actions";
-import { updateFollowUpWindow } from "@/app/crm/(global)/follow-up/actions";
+import { updateAiAgentSettings, updateAiAgentTiming } from "../../actions";
+import { updateAiSettings, updateFollowUpWindow } from "@/app/crm/(global)/follow-up/actions";
 
 export const dynamic = "force-dynamic";
 
@@ -27,21 +27,24 @@ const WEEKDAY_LABELS = [
 // clinicId — vale pra todas as clínicas), só a TELA mudou de lugar pra
 // ficar junto do resto do que configura o comportamento da IA.
 //
-// "Timing de resposta da IA" (delay adaptativo) SAIU daqui — também é
-// global, mas por estar misturada com o prompt/vídeo/WhatsApp DESTA
-// clínica (que são específicos, não globais), criava risco real de
-// alguém achar que estava mexendo só nesta clínica. Mora agora em
-// Configurações (/crm/clinicas/[id]/configuracoes), junto do resto do que
-// já é declaradamente "vale pro sistema inteiro".
+// "Timing de resposta da IA": o toggle geral (adaptiveDelayEnabled) é
+// global e também aparece em Configurações — repetido de propósito, sem
+// problema (baixo risco, poucas pessoas mexem nisso). Já o delay da
+// faixa "até 1h" é POR CLÍNICA (Clinic.firstBandDelaySeconds) — cada
+// clínica pode querer um tom de primeira resposta diferente — por isso
+// SÓ existe aqui, não em Configurações (que só explica as outras 2 faixas,
+// fixas e globais).
 export default async function ClinicAiAgentPage({ params }: { params: { id: string } }) {
   await requireInternalSession();
 
-  const [clinic, followUpSettings] = await Promise.all([
+  const [clinic, followUpSettings, aiSettings] = await Promise.all([
     prisma.clinic.findUnique({ where: { id: params.id } }),
     prisma.followUpSettings.findUnique({ where: { id: "singleton" } }),
+    prisma.aiSettings.findUnique({ where: { id: "singleton" } }),
   ]);
   if (!clinic) notFound();
 
+  const adaptiveDelayEnabled = aiSettings?.adaptiveDelayEnabled ?? true;
   const windowDays = followUpSettings?.windowDays?.length ? followUpSettings.windowDays : [1, 2, 3, 4, 5];
   const windowStart = minutesToTime(followUpSettings?.windowStartMinute ?? 8 * 60);
   const windowEnd = minutesToTime(followUpSettings?.windowEndMinute ?? 18 * 60);
@@ -103,6 +106,66 @@ export default async function ClinicAiAgentPage({ params }: { params: { id: stri
           Salvar configuração
         </button>
       </form>
+
+      <section className="space-y-2.5">
+        <div>
+          <h2 className="text-sm font-semibold">Timing de resposta da IA</h2>
+          <p className="mt-1 text-xs text-vexo-muted">
+            Quanto tempo a IA espera pra responder quando o lead está em silêncio há até 1 hora —
+            só desta clínica. As outras faixas (1-6h: 5-10 minutos; mais de 6h: 2-5 minutos) são
+            fixas e valem pra todas as clínicas, sem ajuste (ver Configurações).
+          </p>
+        </div>
+
+        <form
+          action={updateAiAgentTiming.bind(null, clinic.id)}
+          className="flex flex-wrap items-end gap-2.5 rounded-xl border border-vexo-border bg-vexo-surface p-3.5"
+        >
+          <div>
+            <label className="mb-1 block text-xs" htmlFor="firstBandDelaySeconds">
+              Delay "até 1 hora" (segundos, entre 30 e 60)
+            </label>
+            <input
+              id="firstBandDelaySeconds"
+              name="firstBandDelaySeconds"
+              type="number"
+              min={30}
+              max={60}
+              step={1}
+              required
+              defaultValue={clinic.firstBandDelaySeconds}
+              className="w-24 rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5 text-xs outline-none focus:border-vexo-accent"
+            />
+          </div>
+          <button
+            type="submit"
+            className="rounded-lg border border-vexo-accent px-2.5 py-1.5 text-xs font-medium text-vexo-accent hover:bg-vexo-accent/10"
+          >
+            Salvar
+          </button>
+        </form>
+
+        <form
+          action={updateAiSettings}
+          className="flex items-center justify-between gap-3 rounded-xl border border-vexo-border bg-vexo-surface p-3.5"
+        >
+          <label className="flex items-center gap-2 text-xs">
+            <input
+              type="checkbox"
+              name="adaptiveDelayEnabled"
+              defaultChecked={adaptiveDelayEnabled}
+              className="h-3.5 w-3.5 shrink-0 rounded border-vexo-border"
+            />
+            Delay adaptativo ativado (vale pra todas as clínicas)
+          </label>
+          <button
+            type="submit"
+            className="shrink-0 rounded-lg border border-vexo-accent px-2.5 py-1.5 text-card font-medium text-vexo-accent hover:bg-vexo-accent/10"
+          >
+            Salvar
+          </button>
+        </form>
+      </section>
 
       <section className="space-y-2.5">
         <div>

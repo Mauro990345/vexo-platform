@@ -37,25 +37,23 @@ async function readAttachmentFile(formData: FormData): Promise<File | null> {
 // Liga/desliga o delay artificial de resposta da IA (ver
 // computeAdaptiveDelaySeconds em src/lib/scheduler.ts). Desligado é usado
 // pra testar o sistema sem esperar as faixas de 30s-10min — a IA passa a
-// responder quase na hora (FAST_REPLY_DELAY_SECONDS).
+// responder quase na hora (FAST_REPLY_DELAY_SECONDS). Global mesmo
+// (AiSettings não tem clinicId) — a faixa "até 1h" É por clínica, mora em
+// Clinic.firstBandDelaySeconds (ver updateAiAgentTiming em
+// crm/clinicas/actions.ts), não aqui.
 //
-// firstBandDelaySeconds é o único valor ajustável das 3 faixas — validado
-// aqui (30 a 60) antes de gravar; o scheduler.ts também faz um clamp
-// defensivo na leitura, por segurança.
+// Essa mesma action alimenta o form tanto em Configurações quanto na
+// tela "Agente de IA" de cada clínica — o toggle aparece repetido nos
+// dois lugares de propósito (é global de qualquer forma).
 export async function updateAiSettings(formData: FormData) {
   await requireInternalSession();
 
   const adaptiveDelayEnabled = formData.get("adaptiveDelayEnabled") === "on";
 
-  const firstBandDelaySeconds = parseInt(String(formData.get("firstBandDelaySeconds") ?? ""), 10);
-  if (!Number.isFinite(firstBandDelaySeconds) || firstBandDelaySeconds < 30 || firstBandDelaySeconds > 60) {
-    throw new Error("O delay da faixa de até 1h precisa ser entre 30 e 60 segundos.");
-  }
-
   await prisma.aiSettings.upsert({
     where: { id: "singleton" },
-    update: { adaptiveDelayEnabled, firstBandDelaySeconds },
-    create: { id: "singleton", adaptiveDelayEnabled, firstBandDelaySeconds },
+    update: { adaptiveDelayEnabled },
+    create: { id: "singleton", adaptiveDelayEnabled },
   });
 
   revalidatePath("/crm", "layout");

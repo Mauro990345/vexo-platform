@@ -68,6 +68,26 @@ export async function updateAiAgentSettings(clinicId: string, formData: FormData
   revalidatePath(`/crm/clinicas/${clinicId}/agente-ia`);
 }
 
+// Formulário próprio (não junto de updateAiAgentSettings) pelo mesmo
+// motivo do comentário acima — timing é conceitualmente separado de
+// prompt/vídeo/WhatsApp, e por clínica (diferente das outras duas faixas
+// de computeAdaptiveDelaySeconds, que são globais e ficam em Configurações).
+export async function updateAiAgentTiming(clinicId: string, formData: FormData) {
+  await requireInternalSession();
+
+  const firstBandDelaySeconds = parseInt(String(formData.get("firstBandDelaySeconds") ?? ""), 10);
+  if (!Number.isFinite(firstBandDelaySeconds) || firstBandDelaySeconds < 30 || firstBandDelaySeconds > 60) {
+    throw new Error("O delay da faixa de até 1h precisa ser entre 30 e 60 segundos.");
+  }
+
+  await prisma.clinic.update({
+    where: { id: clinicId },
+    data: { firstBandDelaySeconds },
+  });
+
+  revalidatePath(`/crm/clinicas/${clinicId}/agente-ia`);
+}
+
 export async function updateClinicSettings(clinicId: string, formData: FormData) {
   await requireInternalSession();
 
