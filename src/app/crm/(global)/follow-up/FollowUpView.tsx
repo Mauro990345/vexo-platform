@@ -8,6 +8,7 @@ import {
   deleteFollowUpStep,
   moveFollowUpStep,
   updateFollowUpSettings,
+  updateNoShowFirstStepDelay,
 } from "./actions";
 
 function preview(text: string, max = 70): string {
@@ -73,19 +74,29 @@ function StepList({
               </div>
 
               <form action={updateFollowUpStep.bind(null, step.id)} className="space-y-2.5">
-                <div>
-                  <label className="mb-1 block text-xs text-vexo-muted">
-                    {i === 0 ? firstStepLabel : "Enviado quantas horas após o passo anterior"}
-                  </label>
-                  <input
-                    name="offsetHours"
-                    type="number"
-                    min={0}
-                    required
-                    defaultValue={step.offsetHours}
-                    className="w-24 rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5 text-xs outline-none focus:border-vexo-accent"
-                  />
-                </div>
+                {i === 0 && trigger === "NO_SHOW" ? (
+                  <div>
+                    <input type="hidden" name="offsetHours" value={step.offsetHours} />
+                    <p className="text-xs text-vexo-muted">
+                      Prazo da primeira mensagem configurado acima, na caixinha "Enviar a primeira
+                      mensagem depois de".
+                    </p>
+                  </div>
+                ) : (
+                  <div>
+                    <label className="mb-1 block text-xs text-vexo-muted">
+                      {i === 0 ? firstStepLabel : "Enviado quantas horas após o passo anterior"}
+                    </label>
+                    <input
+                      name="offsetHours"
+                      type="number"
+                      min={0}
+                      required
+                      defaultValue={step.offsetHours}
+                      className="w-24 rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5 text-xs outline-none focus:border-vexo-accent"
+                    />
+                  </div>
+                )}
 
                 <div>
                   <label className="mb-1 block text-xs text-vexo-muted">Texto da mensagem</label>
@@ -150,9 +161,9 @@ function StepList({
           <input
             name="offsetHours"
             type="number"
-            min={0}
+            min={trigger === "NO_SHOW" && steps.length === 0 ? 1 : 0}
             required
-            defaultValue={0}
+            defaultValue={trigger === "NO_SHOW" && steps.length === 0 ? 1 : 0}
             className="w-24 rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5 text-xs outline-none focus:border-vexo-accent"
           />
         </div>
@@ -277,7 +288,46 @@ export async function FollowUpView() {
                   nunca automaticamente.
                 </p>
 
-                <div className="mt-2">
+                {noShowSteps.length > 0 && (
+                  <>
+                    <form
+                      action={updateNoShowFirstStepDelay}
+                      className="mt-5 flex flex-wrap items-end gap-2.5 rounded-xl border border-vexo-border bg-vexo-surface p-3.5"
+                    >
+                      <div>
+                        <label className="mb-1 block text-xs text-vexo-muted" htmlFor="noShowFirstDelay">
+                          Enviar a primeira mensagem depois de
+                        </label>
+                        <div className="flex items-center gap-2">
+                          <input
+                            id="noShowFirstDelay"
+                            name="offsetHours"
+                            type="number"
+                            min={1}
+                            required
+                            defaultValue={noShowSteps[0]!.offsetHours}
+                            className="w-20 rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5 text-xs outline-none focus:border-vexo-accent"
+                          />
+                          <span className="text-xs text-vexo-muted">
+                            horas após o clique em "Não compareceu"
+                          </span>
+                        </div>
+                      </div>
+                      <button
+                        type="submit"
+                        className="rounded-lg border border-vexo-accent px-2.5 py-1.5 text-xs font-medium text-vexo-accent hover:bg-vexo-accent/10"
+                      >
+                        Salvar prazo
+                      </button>
+                    </form>
+                    <p className="mt-1 text-caption text-vexo-muted">
+                      Mínimo de 1 hora — é a janela que a secretária tem pra desfazer a marcação,
+                      caso tenha clicado errado ou o lead avise depois que vai atrasar.
+                    </p>
+                  </>
+                )}
+
+                <div className="mt-5">
                   <StepList
                     steps={noShowSteps}
                     trigger="NO_SHOW"

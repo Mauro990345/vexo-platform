@@ -17,10 +17,17 @@ import type { FollowUpTrigger } from "@prisma/client";
 // /crm/clinicas/[id]/follow-up (dentro do contexto de uma clínica) — e as
 // duas precisam refletir a mudança, não só a que originou a ação.
 
-function readOffsetHours(formData: FormData): number {
+// `min` sobe pra 1 no primeiro passo da sequência NO_SHOW — ver
+// updateNoShowFirstStepDelay logo abaixo pra entender por quê (a secretária
+// precisa dessa janela pra poder desfazer a marcação).
+function readOffsetHours(formData: FormData, min = 0): number {
   const offsetHours = parseInt(String(formData.get("offsetHours") ?? ""), 10);
-  if (!Number.isFinite(offsetHours) || offsetHours < 0) {
-    throw new Error("Informe um número de horas válido (0 ou mais).");
+  if (!Number.isFinite(offsetHours) || offsetHours < min) {
+    throw new Error(
+      min > 0
+        ? `Informe um número de horas válido (mínimo ${min}) — a secretária precisa dessa janela pra poder desfazer a marcação de "não compareceu" se for engano, ou se o lead avisar depois que vai atrasar.`
+        : "Informe um número de horas válido (0 ou mais)."
+    );
   }
   return offsetHours;
 }
@@ -64,12 +71,14 @@ export async function addFollowUpStep(trigger: FollowUpTrigger, formData: FormDa
 
   const content = String(formData.get("content") ?? "").trim();
   if (!content) throw new Error("O texto da mensagem é obrigatório.");
-  const offsetHours = readOffsetHours(formData);
+
+  const last = await prisma.followUpStep.findFirst({ where: { trigger }, orderBy: { order: "desc" } });
+  const isFirstNoShowStep = trigger === "NO_SHOW" && !last;
+  const offsetHours = readOffsetHours(formData, isFirstNoShowStep ? 1 : 0);
 
   const file = await readAttachmentFile(formData);
   const attachmentUrl = file ? await saveUploadedAttachment(file, "follow-up") : null;
 
-  const last = await prisma.followUpStep.findFirst({ where: { trigger }, orderBy: { order: "desc" } });
   await prisma.followUpStep.create({
     data: { trigger, order: (last?.order ?? -1) + 1, content, attachmentUrl, offsetHours },
   });
@@ -82,7 +91,10 @@ export async function updateFollowUpStep(stepId: string, formData: FormData) {
 
   const content = String(formData.get("content") ?? "").trim();
   if (!content) throw new Error("O texto da mensagem é obrigatório.");
-  const offsetHours = readOffsetHours(formData);
+
+  const existing = await prisma.followUpStep.findUniqueOrThrow({ where: { id: stepId } });
+  const isFirstNoShowStep = existing.trigger === "NO_SHOW" && existing.order === 0;
+  const offsetHours = readOffsetHours(formData, isFirstNoShowStep ? 1 : 0);
 
   const currentAttachmentUrl = String(formData.get("currentAttachmentUrl") ?? "").trim() || null;
   const removeAttachment = formData.get("removeAttachment") === "on";
@@ -153,6 +165,33 @@ export async function updateFollowUpSettings(formData: FormData) {
     create: { id: "singleton", silenceHours },
   });
 
+  revalidatePath("/crm", "layout");
+}
+
+// Caixinha destacada da aba "Não compareceu", visualmente equivalente à
+// "Considerar que o lead parou de responder depois de X horas" da aba
+// "Parou de responder" — mas em vez de alimentar um FollowUpSettings
+// global, edita direto o offsetHours do PRIMEIRO passo (order 0) da
+// sequência NO_SHOW, que já existia dentro da lista de passos (só ficava
+// escondido lá). Mínimo de 1 hora: é a janela que a secretária tem pra
+// desfazer a marcação de "não compareceu" caso tenha clicado errado, ou o
+// lead avise depois que só vai atrasar — sem isso, um valor 0 disparia a
+// primeira mensagem de reengajamento assim que ela clicasse, mesmo que
+// desfizesse a marcação em seguida.
+export async function updateNoShowFirstStepDelay(formData: FormData) {
+  await requireInternalSession();
+
+  const offsetHours = readOffsetHours(formData, 1);
+
+  const firstStep = await prisma.followUpStep.findFirst({
+    where: { trigger: "NO_SHOW" },
+    orderBy: { order: "asc" },
+  });
+  if (!firstStep) {
+    throw new Error('Cadastre o Passo 1 da sequência de "não compareceu" antes de configurar esse prazo.');
+  }
+
+  await prisma.followUpStep.update({ where: { id: firstStep.id }, data: { offsetHours } });
   revalidatePath("/crm", "layout");
 }
 
