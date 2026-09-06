@@ -238,8 +238,19 @@ async function confirmAppointment(params: {
   // Envio imediato (scheduledFor: agora) — dispatchDueMessages roda a
   // cada 15s, então sai pro Instagram quase na hora, reforçando o
   // comparecimento logo que o agendamento é confirmado na conversa.
+  //
+  // Trava contra reenvio: se o lead remarcar dentro da MESMA conversa,
+  // confirmAppointment roda de novo e criaria um Appointment novo — sem
+  // essa checagem, o vídeo seria disparado outra vez a cada remarcação.
+  // Busca em TODOS os agendamentos já feitos nesta conversationId (o que
+  // acabou de ser criado ainda não tem confirmationVideoSentAt, então
+  // nunca bate consigo mesmo) se algum já recebeu o vídeo.
   const clinic = await prisma.clinic.findUnique({ where: { id: params.clinicId } });
-  if (clinic?.confirmationVideoUrl) {
+  const alreadySentVideo = await prisma.appointment.findFirst({
+    where: { conversationId: params.conversationId, confirmationVideoSentAt: { not: null } },
+    select: { id: true },
+  });
+  if (clinic?.confirmationVideoUrl && !alreadySentVideo) {
     await prisma.$transaction([
       prisma.message.create({
         data: {
