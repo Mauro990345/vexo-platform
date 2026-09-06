@@ -17,12 +17,12 @@ import type { FollowUpTrigger } from "@prisma/client";
 // /crm/clinicas/[id]/follow-up (dentro do contexto de uma clínica) — e as
 // duas precisam refletir a mudança, não só a que originou a ação.
 
-function readOffsetDays(formData: FormData): number {
-  const offsetDays = parseInt(String(formData.get("offsetDays") ?? ""), 10);
-  if (!Number.isFinite(offsetDays) || offsetDays < 0) {
-    throw new Error("Informe um número de dias válido (0 ou mais).");
+function readOffsetHours(formData: FormData): number {
+  const offsetHours = parseInt(String(formData.get("offsetHours") ?? ""), 10);
+  if (!Number.isFinite(offsetHours) || offsetHours < 0) {
+    throw new Error("Informe um número de horas válido (0 ou mais).");
   }
-  return offsetDays;
+  return offsetHours;
 }
 
 // Anexo agora é upload de arquivo (imagem/vídeo), não mais uma URL colada
@@ -64,14 +64,14 @@ export async function addFollowUpStep(trigger: FollowUpTrigger, formData: FormDa
 
   const content = String(formData.get("content") ?? "").trim();
   if (!content) throw new Error("O texto da mensagem é obrigatório.");
-  const offsetDays = readOffsetDays(formData);
+  const offsetHours = readOffsetHours(formData);
 
   const file = await readAttachmentFile(formData);
   const attachmentUrl = file ? await saveUploadedAttachment(file, "follow-up") : null;
 
   const last = await prisma.followUpStep.findFirst({ where: { trigger }, orderBy: { order: "desc" } });
   await prisma.followUpStep.create({
-    data: { trigger, order: (last?.order ?? -1) + 1, content, attachmentUrl, offsetDays },
+    data: { trigger, order: (last?.order ?? -1) + 1, content, attachmentUrl, offsetHours },
   });
 
   revalidatePath("/crm", "layout");
@@ -82,7 +82,7 @@ export async function updateFollowUpStep(stepId: string, formData: FormData) {
 
   const content = String(formData.get("content") ?? "").trim();
   if (!content) throw new Error("O texto da mensagem é obrigatório.");
-  const offsetDays = readOffsetDays(formData);
+  const offsetHours = readOffsetHours(formData);
 
   const currentAttachmentUrl = String(formData.get("currentAttachmentUrl") ?? "").trim() || null;
   const removeAttachment = formData.get("removeAttachment") === "on";
@@ -97,7 +97,7 @@ export async function updateFollowUpStep(stepId: string, formData: FormData) {
     attachmentUrl = null;
   }
 
-  await prisma.followUpStep.update({ where: { id: stepId }, data: { content, attachmentUrl, offsetDays } });
+  await prisma.followUpStep.update({ where: { id: stepId }, data: { content, attachmentUrl, offsetHours } });
   revalidatePath("/crm", "layout");
 }
 

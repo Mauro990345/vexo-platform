@@ -117,8 +117,8 @@ async function processSilentConversations(): Promise<number> {
   return triggered;
 }
 
-function addDays(date: Date, days: number): Date {
-  return new Date(date.getTime() + days * 24 * 60 * 60 * 1000);
+function addHours(date: Date, hours: number): Date {
+  return new Date(date.getTime() + hours * 60 * 60 * 1000);
 }
 
 async function dispatchFollowUpSteps(): Promise<number> {
@@ -158,8 +158,8 @@ async function dispatchFollowUpSteps(): Promise<number> {
     if (!nextStep) continue; // sequência já concluída para este log
 
     const dueAt = log.lastStepSentAt
-      ? addDays(log.lastStepSentAt, nextStep.offsetDays)
-      : addDays(log.triggeredAt, nextStep.offsetDays);
+      ? addHours(log.lastStepSentAt, nextStep.offsetHours)
+      : addHours(log.triggeredAt, nextStep.offsetHours);
     if (now < dueAt) continue;
 
     // Confere de novo, bem no momento de enviar, se o lead já respondeu ou

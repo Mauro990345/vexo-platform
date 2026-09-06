@@ -385,9 +385,11 @@ model FollowUpStep {
   trigger FollowUpTrigger
   order   Int
 
-  // Dias desde o gatilho (lead sumiu ou faltou) para o primeiro passo;
-  // dias desde o envio do passo anterior para os demais.
-  offsetDays Int
+  // Horas desde o gatilho (lead sumiu ou faltou) para o primeiro passo;
+  // horas desde o envio do passo anterior para os demais. Unificado em
+  // horas (era dias) pra dar mais precisão — 24 = "1 dia", 48 = "2 dias",
+  // ou qualquer valor intermediário como 12.
+  offsetHours Int
 
   content       String  @db.Text
   attachmentUrl String?

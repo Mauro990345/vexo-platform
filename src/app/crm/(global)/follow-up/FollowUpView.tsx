@@ -35,7 +35,7 @@ function StepList({
                   Passo {i + 1}
                 </span>
                 <span className="shrink-0 text-card text-vexo-muted">
-                  {i === 0 ? `dia ${step.offsetDays}` : `+${step.offsetDays}d`}
+                  {i === 0 ? `${step.offsetHours}h` : `+${step.offsetHours}h`}
                 </span>
                 <span className="truncate text-xs">{preview(step.content)}</span>
                 {step.attachmentUrl && (
@@ -75,14 +75,14 @@ function StepList({
               <form action={updateFollowUpStep.bind(null, step.id)} className="space-y-2.5">
                 <div>
                   <label className="mb-1 block text-xs text-vexo-muted">
-                    {i === 0 ? firstStepLabel : "Enviado quantos dias após o passo anterior"}
+                    {i === 0 ? firstStepLabel : "Enviado quantas horas após o passo anterior"}
                   </label>
                   <input
-                    name="offsetDays"
+                    name="offsetHours"
                     type="number"
                     min={0}
                     required
-                    defaultValue={step.offsetDays}
+                    defaultValue={step.offsetHours}
                     className="w-24 rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5 text-xs outline-none focus:border-vexo-accent"
                   />
                 </div>
@@ -145,10 +145,10 @@ function StepList({
 
         <div>
           <label className="mb-1 block text-xs text-vexo-muted">
-            {steps.length === 0 ? firstStepLabel : "Enviado quantos dias após o passo anterior"}
+            {steps.length === 0 ? firstStepLabel : "Enviado quantas horas após o passo anterior"}
           </label>
           <input
-            name="offsetDays"
+            name="offsetHours"
             type="number"
             min={0}
             required
@@ -260,7 +260,7 @@ export async function FollowUpView() {
                   <StepList
                     steps={silenceSteps}
                     trigger="SILENCE"
-                    firstStepLabel="Enviado quantas horas/dias após o lead parar de responder"
+                    firstStepLabel="Enviado quantas horas após o lead parar de responder"
                   />
                 </div>
               </section>
@@ -281,7 +281,7 @@ export async function FollowUpView() {
                   <StepList
                     steps={noShowSteps}
                     trigger="NO_SHOW"
-                    firstStepLabel="Enviado quantos dias após marcar como não compareceu"
+                    firstStepLabel="Enviado quantas horas após marcar como não compareceu"
                   />
                 </div>
               </section>
