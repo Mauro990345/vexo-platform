@@ -79,21 +79,25 @@ export default async function ClinicAiAgentPage({ params }: { params: { id: stri
           </h2>
 
           <div>
-            <label className="mb-1 block text-xs text-vexo-muted" htmlFor="welcomeVideoUrl">
-              URL do vídeo de boas-vindas (primeiro atendimento)
+            <label className="mb-1 block text-xs text-vexo-muted" htmlFor="confirmationVideoUrl">
+              URL do vídeo de confirmação de agendamento (reforça comparecimento)
             </label>
             <input
-              id="welcomeVideoUrl"
-              name="welcomeVideoUrl"
-              defaultValue={clinic.welcomeVideoUrl ?? ""}
+              id="confirmationVideoUrl"
+              name="confirmationVideoUrl"
+              defaultValue={clinic.confirmationVideoUrl ?? ""}
               placeholder="https://..."
               className="w-full rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5 text-xs outline-none focus:border-vexo-accent"
             />
+            <p className="mt-1 text-caption text-vexo-muted">
+              Enviado automaticamente pelo Instagram assim que um agendamento é confirmado na
+              conversa — não é preciso disparar manualmente.
+            </p>
           </div>
 
           <div>
             <label className="mb-1 block text-xs text-vexo-muted" htmlFor="notifyWhatsappNumber">
-              WhatsApp para alertas de escalonamento (Mauro/secretária)
+              WhatsApp da secretária (avisa quando o lead pede atendimento humano)
             </label>
             <input
               id="notifyWhatsappNumber"
@@ -102,6 +106,10 @@ export default async function ClinicAiAgentPage({ params }: { params: { id: stri
               placeholder="+55 11 99999-9999"
               className="w-full rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5 text-xs outline-none focus:border-vexo-accent"
             />
+            <p className="mt-1 text-caption text-vexo-muted">
+              Recebe um alerta por WhatsApp sempre que a IA identifica que o lead precisa falar com
+              uma pessoa.
+            </p>
           </div>
         </div>
 

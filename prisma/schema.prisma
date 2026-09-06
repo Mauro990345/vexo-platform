@@ -49,9 +49,13 @@ model Clinic {
   // Prompt de conversação (fornecido pelo Mauro, por clínica)
   aiSystemPrompt String? @db.Text
 
-  // Vídeo fixo do médico explicando o primeiro atendimento (gravado uma vez,
-  // reenviado automaticamente a cada agendamento confirmado)
-  welcomeVideoUrl String?
+  // Vídeo fixo do médico (gravado uma vez) enviado automaticamente pelo
+  // Instagram assim que um agendamento é confirmado na conversa (ver
+  // confirmAppointment em src/lib/conversation-pipeline.ts) — reforça o
+  // comparecimento, não é um "vídeo de boas-vindas" genérico (nome antigo
+  // do campo, renomeado por ser impreciso: o vídeo só é enviado DEPOIS do
+  // agendamento confirmado, não no início do atendimento).
+  confirmationVideoUrl String?
 
   // Delay de resposta da IA quando o lead está em silêncio há até 1h (ver
   // computeAdaptiveDelaySeconds em src/lib/scheduler.ts) — por clínica,
@@ -304,8 +308,8 @@ model Appointment {
   manualTitle      String?
   syncedFromGoogle Boolean @default(false)
 
-  status             AppointmentStatus @default(SCHEDULED)
-  welcomeVideoSentAt DateTime?
+  status                  AppointmentStatus @default(SCHEDULED)
+  confirmationVideoSentAt DateTime?
 
   reminderLogs ReminderLog[]
 

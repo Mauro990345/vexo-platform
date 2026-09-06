@@ -235,23 +235,26 @@ async function confirmAppointment(params: {
     data: { status: "SCHEDULED" },
   });
 
+  // Envio imediato (scheduledFor: agora) — dispatchDueMessages roda a
+  // cada 15s, então sai pro Instagram quase na hora, reforçando o
+  // comparecimento logo que o agendamento é confirmado na conversa.
   const clinic = await prisma.clinic.findUnique({ where: { id: params.clinicId } });
-  if (clinic?.welcomeVideoUrl) {
+  if (clinic?.confirmationVideoUrl) {
     await prisma.$transaction([
       prisma.message.create({
         data: {
           conversationId: params.conversationId,
           direction: "OUTBOUND",
           sender: "SYSTEM",
-          content: "[vídeo de boas-vindas — primeiro atendimento]",
-          mediaUrl: clinic.welcomeVideoUrl,
+          content: "[vídeo de confirmação de agendamento]",
+          mediaUrl: clinic.confirmationVideoUrl,
           status: "PENDING",
           scheduledFor: new Date(),
         },
       }),
       prisma.appointment.update({
         where: { id: appointment.id },
-        data: { welcomeVideoSentAt: new Date() },
+        data: { confirmationVideoSentAt: new Date() },
       }),
     ]);
   }

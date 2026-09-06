@@ -57,12 +57,12 @@ export async function updateAiAgentSettings(clinicId: string, formData: FormData
   await requireInternalSession();
 
   const aiSystemPrompt = String(formData.get("aiSystemPrompt") ?? "").trim() || null;
-  const welcomeVideoUrl = String(formData.get("welcomeVideoUrl") ?? "").trim() || null;
+  const confirmationVideoUrl = String(formData.get("confirmationVideoUrl") ?? "").trim() || null;
   const notifyWhatsappNumber = String(formData.get("notifyWhatsappNumber") ?? "").trim() || null;
 
   await prisma.clinic.update({
     where: { id: clinicId },
-    data: { aiSystemPrompt, welcomeVideoUrl, notifyWhatsappNumber },
+    data: { aiSystemPrompt, confirmationVideoUrl, notifyWhatsappNumber },
   });
 
   revalidatePath(`/crm/clinicas/${clinicId}/agente-ia`);

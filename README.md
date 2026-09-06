@@ -110,8 +110,10 @@ ambiente, e que ainda dependem de você:
    de WhatsApp via QR code em `/crm/clinicas/[id]/whatsapp` (ou pelo próprio
    painel da clínica, em `/dashboard/whatsapp`) — não existe mais uma
    instância única compartilhada.
-5. **Vídeo de boas-vindas** de cada clínica, hospedado em uma URL pública
-   (`Clinic.welcomeVideoUrl`), gravado uma única vez pelo médico.
+5. **Vídeo de confirmação de agendamento** de cada clínica, hospedado em uma
+   URL pública (`Clinic.confirmationVideoUrl`), gravado uma única vez pelo
+   médico — enviado automaticamente pelo Instagram assim que um
+   agendamento é confirmado na conversa, pra reforçar o comparecimento.
 6. Conectar Instagram e Google Calendar de cada clínica pelo botão em
    `/crm/clinicas/[id]` (fluxo OAuth oficial — nenhuma senha é armazenada).
 
