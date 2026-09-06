@@ -33,7 +33,9 @@ export async function setAppointmentAttendance(
     // conversa estava (não assume nenhuma fixa) antes de mover pra
     // Follow-up, pra dar pra desfazer depois voltando exatamente pra lá.
     const conversation = await prisma.conversation.findUniqueOrThrow({ where: { id: appt.conversationId } });
-    await triggerFollowUp(appt.conversationId, "NO_SHOW", conversation.status);
+    // triggeredAt = scheduledAt (não o momento do clique) — a sequência
+    // conta a partir do horário agendado, ver comentário em triggerFollowUp.
+    await triggerFollowUp(appt.conversationId, "NO_SHOW", conversation.status, appt.scheduledAt);
   } else if (appt.status === "NO_SHOW" && targetStatus !== "NO_SHOW") {
     // Desfazendo: cancela a sequência de não-comparecimento em andamento e
     // devolve a conversa pra coluna de onde ela tinha saído (previousStatus),

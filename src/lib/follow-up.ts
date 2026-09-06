@@ -52,17 +52,25 @@ async function getSettings() {
 // caminho de não-comparecimento: guarda em que coluna do Pipeline a
 // conversa estava antes de mover, pra dar pra desfazer depois voltando pra
 // lá em vez de assumir uma coluna fixa — ver setAppointmentAttendance.
+// `triggeredAt` é opcional e serve pro caso do NO_SHOW: o prazo da
+// sequência conta a partir do HORÁRIO AGENDADO da consulta (scheduledAt),
+// não do momento em que a secretária clica em "Não compareceu" — ela pode
+// demorar um pouco pra marcar (a orientação é fazer isso o mais perto
+// possível da ausência) sem que isso atrase a sequência, já que o primeiro
+// passo já é enviado só algumas horas depois. Sem esse parâmetro (caso do
+// SILENCE), usa o default do schema (now()).
 export async function triggerFollowUp(
   conversationId: string,
   trigger: "SILENCE" | "NO_SHOW",
-  previousStatus?: ConversationStatus
+  previousStatus?: ConversationStatus,
+  triggeredAt?: Date
 ) {
   await prisma.$transaction([
     prisma.conversation.update({
       where: { id: conversationId },
       data: { status: "FOLLOW_UP", ...(previousStatus ? { previousStatus } : {}) },
     }),
-    prisma.followUpLog.create({ data: { conversationId, trigger } }),
+    prisma.followUpLog.create({ data: { conversationId, trigger, ...(triggeredAt ? { triggeredAt } : {}) } }),
   ]);
 }
 

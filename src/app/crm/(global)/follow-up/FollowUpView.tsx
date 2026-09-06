@@ -277,11 +277,23 @@ export async function FollowUpView() {
                   nunca automaticamente.
                 </p>
 
-                <div className="mt-2">
+                <div className="mt-5 rounded-xl border border-vexo-border bg-vexo-surface p-3.5">
+                  <p className="text-xs text-vexo-fg">
+                    O prazo conta a partir do <strong>horário agendado da consulta</strong>, não do
+                    momento em que a secretária clica em "Não compareceu".
+                  </p>
+                  <p className="mt-1 text-caption text-vexo-muted">
+                    Por isso não tem problema clicar com um pouco de atraso (30 min, 1h, 2h) — a
+                    primeira mensagem já sai algumas horas depois da consulta, então o prazo
+                    continua correto mesmo assim.
+                  </p>
+                </div>
+
+                <div className="mt-5">
                   <StepList
                     steps={noShowSteps}
                     trigger="NO_SHOW"
-                    firstStepLabel="Enviado quantas horas após marcar como não compareceu"
+                    firstStepLabel="Enviado quantas horas após o horário agendado da consulta"
                   />
                 </div>
               </section>
