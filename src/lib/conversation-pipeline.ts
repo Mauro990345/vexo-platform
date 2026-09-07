@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { classifyConversation, generateLeadReply, type CalendarTool } from "@/lib/anthropic";
+import { classifyConversation, generateLeadReply, type AgentTools } from "@/lib/anthropic";
 import { checkAvailability, createCalendarEvent } from "@/lib/google-calendar";
 import { computeAdaptiveDelaySeconds, FAST_REPLY_DELAY_SECONDS } from "@/lib/scheduler";
 import { DEFAULT_CONVERSATION_SYSTEM_PROMPT } from "@/lib/default-prompt";
@@ -18,7 +18,7 @@ export type InboundInstagramEvent = {
   igMessageId?: string;
 };
 
-function buildAvailabilityCheck(clinicId: string): CalendarTool["checkAvailability"] {
+function buildAvailabilityCheck(clinicId: string): AgentTools["checkAvailability"] {
   return async ({ dateFrom, dateTo }) => {
     try {
       const slots = await checkAvailability(clinicId, dateFrom, dateTo);
@@ -157,15 +157,22 @@ export async function handleInboundInstagramMessage(event: InboundInstagramEvent
   }
 
   let scheduledStartTime: string | undefined;
+  let capturedLeadPhone: string | undefined;
 
   const reply = await generateLeadReply({
     systemPrompt: clinic.aiSystemPrompt || DEFAULT_CONVERSATION_SYSTEM_PROMPT,
     history: chatHistory,
-    calendar: {
+    tools: {
       checkAvailability: buildAvailabilityCheck(clinic.id),
       async scheduleAppointment(args) {
         scheduledStartTime = args.startTime;
         return { confirmed: true, startTime: args.startTime };
+      },
+      async saveLeadPhone(args) {
+        const phone = args.phone.trim();
+        if (!phone) return { error: "Número vazio." };
+        capturedLeadPhone = phone;
+        return { saved: true };
       },
     },
   });
@@ -190,6 +197,10 @@ export async function handleInboundInstagramMessage(event: InboundInstagramEvent
       scheduledFor,
     },
   });
+
+  if (capturedLeadPhone) {
+    await prisma.lead.update({ where: { id: lead.id }, data: { phone: capturedLeadPhone } });
+  }
 
   if (scheduledStartTime) {
     await confirmAppointment({

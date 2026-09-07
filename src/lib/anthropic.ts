@@ -87,13 +87,19 @@ export async function classifyConversation(history: ChatTurn[]): Promise<Convers
 // Conversa com o lead (Sonnet) — com ferramentas de agenda
 // -----------------------------------------------------------------------
 
-export type CalendarTool = {
+export type AgentTools = {
   checkAvailability: (args: { dateFrom: string; dateTo: string }) => Promise<
     { slots: string[] } | { error: string }
   >;
   scheduleAppointment: (args: { startTime: string; leadName?: string }) => Promise<
     { confirmed: true; startTime: string } | { error: string }
   >;
+  // Chamada quando o lead informa o WhatsApp na conversa — normalmente logo
+  // depois de confirmar o agendamento, se o prompt da clínica pedir esse
+  // dado nesse momento (ver Clinic.aiSystemPrompt). Sem isso o número fica
+  // só no texto da mensagem, sem ficar disponível pra secretária no CRM
+  // nem pros lembretes automáticos por WhatsApp (que dependem de Lead.phone).
+  saveLeadPhone: (args: { phone: string }) => Promise<{ saved: true } | { error: string }>;
 };
 
 const TOOLS: Anthropic.Tool[] = [
@@ -123,12 +129,24 @@ const TOOLS: Anthropic.Tool[] = [
       required: ["startTime"],
     },
   },
+  {
+    name: "save_lead_phone",
+    description:
+      "Salva o número de WhatsApp do lead assim que ele informar na conversa. Chame sempre que o lead enviar um número de telefone/WhatsApp, mesmo que fora do momento em que foi pedido.",
+    input_schema: {
+      type: "object",
+      properties: {
+        phone: { type: "string", description: "Número de WhatsApp informado pelo lead, no formato que ele mandou." },
+      },
+      required: ["phone"],
+    },
+  },
 ];
 
 export async function generateLeadReply(params: {
   systemPrompt: string;
   history: ChatTurn[];
-  calendar: CalendarTool;
+  tools: AgentTools;
 }): Promise<{ text: string; scheduled?: { startTime: string } }> {
   const client = anthropicClient();
   const messages: Anthropic.MessageParam[] = params.history.map((t) => ({
@@ -163,16 +181,18 @@ export async function generateLeadReply(params: {
 
       let result: unknown;
       if (block.name === "check_availability") {
-        result = await params.calendar.checkAvailability(
+        result = await params.tools.checkAvailability(
           block.input as { dateFrom: string; dateTo: string }
         );
       } else if (block.name === "schedule_appointment") {
         const input = block.input as { startTime: string; leadName?: string };
-        const outcome = await params.calendar.scheduleAppointment(input);
+        const outcome = await params.tools.scheduleAppointment(input);
         result = outcome;
         if ("confirmed" in outcome && outcome.confirmed) {
           scheduled = { startTime: outcome.startTime };
         }
+      } else if (block.name === "save_lead_phone") {
+        result = await params.tools.saveLeadPhone(block.input as { phone: string });
       } else {
         result = { error: `Ferramenta desconhecida: ${block.name}` };
       }

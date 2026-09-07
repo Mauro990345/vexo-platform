@@ -106,6 +106,9 @@ export default async function ConversationDetailPage({ params }: { params: { id:
           <h2 className="mb-2 text-xs font-medium uppercase tracking-wide text-vexo-muted">Lead</h2>
           <p>{conversation.lead.name ?? "Sem nome"}</p>
           <p className="text-vexo-muted">@{conversation.lead.igUsername ?? "—"}</p>
+          <p className="text-vexo-muted">
+            {conversation.lead.phone ?? "WhatsApp não informado"}
+          </p>
         </div>
 
         {appointment && (
