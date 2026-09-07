@@ -26,6 +26,23 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
           <h2 className="text-sm font-medium text-vexo-muted">Configuração</h2>
 
           <div>
+            <label className="mb-1 block text-xs" htmlFor="address">
+              Endereço da clínica
+            </label>
+            <input
+              id="address"
+              name="address"
+              defaultValue={clinic.address ?? ""}
+              placeholder="Rua, número, bairro, cidade"
+              className="w-full rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5 text-xs outline-none focus:border-vexo-accent"
+            />
+            <p className="mt-1 text-caption text-vexo-muted">
+              Preenche automaticamente a localização do evento no Google Calendar quando um
+              agendamento é confirmado — não precisa digitar em dois lugares.
+            </p>
+          </div>
+
+          <div>
             <label className="mb-1 block text-xs" htmlFor="clientWhatsappNumber">
               WhatsApp da clínica (resumo semanal)
             </label>

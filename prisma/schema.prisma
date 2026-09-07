@@ -27,6 +27,13 @@ model Clinic {
   timezone String  @default("America/Sao_Paulo")
   active   Boolean @default(true)
 
+  // Endereço físico da clínica — alimenta automaticamente o campo de
+  // localização do evento criado no Google Calendar (ver createCalendarEvent
+  // em src/lib/google-calendar.ts), pra não precisar digitar o endereço em
+  // dois lugares diferentes. Nome da(s) doutora(s) fica só no texto do
+  // prompt por clínica, sem campo próprio.
+  address String?
+
   // Piloto 21D
   pilotStartedAt DateTime?
   pilotEndsAt    DateTime?

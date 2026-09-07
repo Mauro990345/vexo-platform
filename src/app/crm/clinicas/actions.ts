@@ -28,6 +28,7 @@ export async function createClinic(formData: FormData) {
 
   const name = String(formData.get("name") ?? "").trim();
   if (!name) throw new Error("Nome da clínica é obrigatório.");
+  const address = String(formData.get("address") ?? "").trim() || null;
 
   const slug = slugify(name) + "-" + Math.random().toString(36).slice(2, 6);
 
@@ -35,6 +36,7 @@ export async function createClinic(formData: FormData) {
     data: {
       name,
       slug,
+      address,
       // Nome padrão da instância na Evolution API — pode ser trocado antes
       // do primeiro pareamento em /crm/clinicas/[id]/whatsapp (ex. pra
       // reaproveitar uma instância já validada).
@@ -128,6 +130,7 @@ export async function updateAiAgentTiming(clinicId: string, formData: FormData) 
 export async function updateClinicSettings(clinicId: string, formData: FormData) {
   await requireInternalSession();
 
+  const address = String(formData.get("address") ?? "").trim() || null;
   const clientWhatsappNumber = String(formData.get("clientWhatsappNumber") ?? "").trim() || null;
   const active = formData.get("active") === "on";
 
@@ -144,6 +147,7 @@ export async function updateClinicSettings(clinicId: string, formData: FormData)
   await prisma.clinic.update({
     where: { id: clinicId },
     data: {
+      address,
       clientWhatsappNumber,
       active,
       reminderConfig: {

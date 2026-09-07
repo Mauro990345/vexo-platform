@@ -220,12 +220,19 @@ async function confirmAppointment(params: {
   leadName?: string;
   startTimeIso: string;
 }) {
+  // Buscado logo no início (não só mais abaixo, pra confirmationVideoUrl)
+  // porque address também alimenta o evento do Google Calendar criado a
+  // seguir — endereço da clínica preenchido uma vez em Automações, sem
+  // precisar digitar de novo aqui.
+  const clinic = await prisma.clinic.findUnique({ where: { id: params.clinicId } });
+
   let googleEventId: string | undefined;
   try {
     googleEventId = await createCalendarEvent(
       params.clinicId,
       params.startTimeIso,
-      `VEXO — Avaliação: ${params.leadName ?? "lead"}`
+      `VEXO — Avaliação: ${params.leadName ?? "lead"}`,
+      clinic?.address ?? undefined
     );
   } catch (err) {
     console.error("[vexo] Falha ao criar evento no Google Calendar:", err);
@@ -256,7 +263,6 @@ async function confirmAppointment(params: {
   // Busca em TODOS os agendamentos já feitos nesta conversationId (o que
   // acabou de ser criado ainda não tem confirmationVideoSentAt, então
   // nunca bate consigo mesmo) se algum já recebeu o vídeo.
-  const clinic = await prisma.clinic.findUnique({ where: { id: params.clinicId } });
   const alreadySentVideo = await prisma.appointment.findFirst({
     where: { conversationId: params.conversationId, confirmationVideoSentAt: { not: null } },
     select: { id: true },

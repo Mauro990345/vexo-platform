@@ -146,7 +146,8 @@ export async function checkAvailability(
 export async function createCalendarEvent(
   clinicId: string,
   startTimeIso: string,
-  summary: string
+  summary: string,
+  location?: string
 ): Promise<string> {
   const { client, calendarId } = await clientForClinic(clinicId);
   const calendar = google.calendar({ version: "v3", auth: client });
@@ -158,6 +159,7 @@ export async function createCalendarEvent(
     calendarId,
     requestBody: {
       summary,
+      location,
       start: { dateTime: start.toISOString() },
       end: { dateTime: end.toISOString() },
     },
