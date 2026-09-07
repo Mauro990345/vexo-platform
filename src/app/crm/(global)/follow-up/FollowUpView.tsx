@@ -107,6 +107,11 @@ function StepList({
                     defaultValue={step.content}
                     className="w-full rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5 text-xs outline-none focus:border-vexo-accent"
                   />
+                  <p className="mt-1 text-caption text-vexo-muted">
+                    Use <code className="rounded bg-vexo-bg px-1 py-0.5">{"{{primeiro_nome}}"}</code>{" "}
+                    em qualquer parte do texto pra ser substituído pelo primeiro nome de cada lead
+                    no envio.
+                  </p>
                 </div>
 
                 <div>
@@ -174,9 +179,13 @@ function StepList({
             name="content"
             rows={3}
             required
-            placeholder="Ex: Oi! Ainda tem interesse em agendar sua avaliação?"
+            placeholder="Ex: Oi, {{primeiro_nome}}! Ainda tem interesse em agendar sua avaliação?"
             className="w-full rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5 text-xs outline-none focus:border-vexo-accent"
           />
+          <p className="mt-1 text-caption text-vexo-muted">
+            Use <code className="rounded bg-vexo-bg px-1 py-0.5">{"{{primeiro_nome}}"}</code> em
+            qualquer parte do texto pra ser substituído pelo primeiro nome de cada lead no envio.
+          </p>
         </div>
 
         <div>

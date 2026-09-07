@@ -131,6 +131,21 @@ function addHours(date: Date, hours: number): Date {
   return new Date(date.getTime() + hours * 60 * 60 * 1000);
 }
 
+// Suporte à variável {{primeiro_nome}} no texto dos passos de follow-up
+// (editável em /crm/follow-up) — a clínica escreve o texto uma vez e cada
+// lead recebe com o próprio nome no lugar. Prioriza Lead.name (preenchido
+// na abordagem manual); cai pro igUsername quando não tem; string vazia se
+// nenhum dos dois existir (a mensagem sai sem o nome nesse caso, em vez de
+// deixar a variável sem substituir).
+function leadFirstName(lead: { name: string | null; igUsername: string | null }): string {
+  const raw = (lead.name ?? lead.igUsername ?? "").trim();
+  return raw.split(/\s+/)[0] ?? "";
+}
+
+function applyTemplateVariables(text: string, lead: { name: string | null; igUsername: string | null }): string {
+  return text.replaceAll("{{primeiro_nome}}", leadFirstName(lead));
+}
+
 async function dispatchFollowUpSteps(): Promise<number> {
   const [silenceSteps, noShowSteps, settings] = await Promise.all([
     prisma.followUpStep.findMany({ where: { trigger: "SILENCE" }, orderBy: { order: "asc" } }),
@@ -144,6 +159,7 @@ async function dispatchFollowUpSteps(): Promise<number> {
       conversation: {
         select: {
           lastLeadMessageAt: true,
+          lead: { select: { name: true, igUsername: true } },
           appointments: {
             where: { status: { in: ["SCHEDULED", "CONFIRMED"] } },
             select: { id: true },
@@ -193,13 +209,15 @@ async function dispatchFollowUpSteps(): Promise<number> {
     // válida em vez de disparar na hora.
     const sendAt = nextValidSendTime(now, settings.windowDays, settings.windowStartMinute, settings.windowEndMinute);
 
+    const stepContent = nextStep.content ? applyTemplateVariables(nextStep.content, log.conversation.lead) : "";
+
     const messagesToCreate = [];
-    if (nextStep.content) {
+    if (stepContent) {
       messagesToCreate.push({
         conversationId: log.conversationId,
         direction: "OUTBOUND" as const,
         sender: "AI" as const,
-        content: nextStep.content,
+        content: stepContent,
         status: "PENDING" as const,
         scheduledFor: sendAt,
       });
@@ -209,13 +227,13 @@ async function dispatchFollowUpSteps(): Promise<number> {
         conversationId: log.conversationId,
         direction: "OUTBOUND" as const,
         sender: "AI" as const,
-        content: nextStep.content ? "[anexo]" : "",
+        content: stepContent ? "[anexo]" : "",
         mediaUrl: nextStep.attachmentUrl,
         status: "PENDING" as const,
         // Se já existe uma mensagem de texto no mesmo passo, o anexo chega
         // logo em seguida, como duas mensagens separadas (limite da API do
         // Instagram: não dá pra combinar texto + anexo numa única mensagem).
-        scheduledFor: nextStep.content ? new Date(sendAt.getTime() + 5_000) : sendAt,
+        scheduledFor: stepContent ? new Date(sendAt.getTime() + 5_000) : sendAt,
       });
     }
 

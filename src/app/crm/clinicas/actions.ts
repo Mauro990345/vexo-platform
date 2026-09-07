@@ -49,6 +49,37 @@ export async function createClinic(formData: FormData) {
   redirect(`/crm/clinicas/${clinic.id}`);
 }
 
+// Exclusão definitiva — usada na lista de "Contas" (ClinicSearchList).
+// Desconecta as integrações externas antes (best-effort: uma falha ao
+// revogar um token não deve impedir a exclusão, já que o objetivo é a
+// clínica sumir da plataforma de qualquer forma). O resto — leads,
+// conversas, mensagens, agendamentos, usuários, logs de follow-up etc. —
+// some sozinho via onDelete: Cascade em todas as relações de Clinic no
+// schema, não precisa apagar manualmente tabela por tabela.
+export async function deleteClinic(clinicId: string) {
+  await requireInternalSession();
+
+  try {
+    await disconnectInstagram(clinicId);
+  } catch (err) {
+    console.error("[vexo] Falha ao desconectar Instagram antes de excluir clínica:", err);
+  }
+  try {
+    await disconnectGoogleCalendar(clinicId);
+  } catch (err) {
+    console.error("[vexo] Falha ao desconectar Google Calendar antes de excluir clínica:", err);
+  }
+  try {
+    await disconnectWhatsapp(clinicId);
+  } catch (err) {
+    console.error("[vexo] Falha ao desconectar WhatsApp antes de excluir clínica:", err);
+  }
+
+  await prisma.clinic.delete({ where: { id: clinicId } });
+
+  revalidatePath("/crm");
+}
+
 // Config da IA/agente — separada de updateClinicSettings (abaixo) pra viver
 // na própria página "Agente de IA" sem arriscar sobrescrever os campos que
 // ficaram em "Automações" quando os dois formulários salvam em momentos
