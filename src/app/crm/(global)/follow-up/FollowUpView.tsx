@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import type { FollowUpStep, FollowUpTrigger } from "@prisma/client";
 import { Clock, CalendarX } from "lucide-react";
 import { Tabs } from "@/components/Tabs";
+import { FollowUpMessageField } from "@/components/FollowUpMessageField";
 import {
   addFollowUpStep,
   updateFollowUpStep,
@@ -98,21 +99,7 @@ function StepList({
                   </div>
                 )}
 
-                <div>
-                  <label className="mb-1 block text-xs text-vexo-muted">Texto da mensagem</label>
-                  <textarea
-                    name="content"
-                    rows={3}
-                    required
-                    defaultValue={step.content}
-                    className="w-full rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5 text-xs outline-none focus:border-vexo-accent"
-                  />
-                  <p className="mt-1 text-caption text-vexo-muted">
-                    Use <code className="rounded bg-vexo-bg px-1 py-0.5">{"{{primeiro_nome}}"}</code>{" "}
-                    em qualquer parte do texto pra ser substituído pelo primeiro nome de cada lead
-                    no envio.
-                  </p>
-                </div>
+                <FollowUpMessageField defaultValue={step.content} />
 
                 <div>
                   <label className="mb-1 block text-xs text-vexo-muted">Anexo (opcional — imagem ou vídeo)</label>
@@ -173,20 +160,7 @@ function StepList({
           />
         </div>
 
-        <div>
-          <label className="mb-1 block text-xs text-vexo-muted">Texto da mensagem</label>
-          <textarea
-            name="content"
-            rows={3}
-            required
-            placeholder="Ex: Oi, {{primeiro_nome}}! Ainda tem interesse em agendar sua avaliação?"
-            className="w-full rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5 text-xs outline-none focus:border-vexo-accent"
-          />
-          <p className="mt-1 text-caption text-vexo-muted">
-            Use <code className="rounded bg-vexo-bg px-1 py-0.5">{"{{primeiro_nome}}"}</code> em
-            qualquer parte do texto pra ser substituído pelo primeiro nome de cada lead no envio.
-          </p>
-        </div>
+        <FollowUpMessageField placeholder="Ex: Oi! Ainda tem interesse em agendar sua avaliação?" />
 
         <div>
           <label className="mb-1 block text-xs text-vexo-muted">Anexo (opcional — imagem ou vídeo)</label>
@@ -298,43 +272,36 @@ export async function FollowUpView() {
                 </p>
 
                 {noShowSteps.length > 0 && (
-                  <>
-                    <form
-                      action={updateNoShowFirstStepDelay}
-                      className="mt-5 flex flex-wrap items-end gap-2.5 rounded-xl border border-vexo-border bg-vexo-surface p-3.5"
-                    >
-                      <div>
-                        <label className="mb-1 block text-xs text-vexo-muted" htmlFor="noShowFirstDelay">
-                          Enviar a primeira mensagem depois de
-                        </label>
-                        <div className="flex items-center gap-2">
-                          <input
-                            id="noShowFirstDelay"
-                            name="offsetHours"
-                            type="number"
-                            min={1}
-                            required
-                            defaultValue={noShowSteps[0]!.offsetHours}
-                            className="w-20 rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5 text-xs outline-none focus:border-vexo-accent"
-                          />
-                          <span className="text-xs text-vexo-muted">
-                            horas após o clique em "Não compareceu"
-                          </span>
-                        </div>
+                  <form
+                    action={updateNoShowFirstStepDelay}
+                    className="mt-5 flex flex-wrap items-end gap-2.5 rounded-xl border border-vexo-border bg-vexo-surface p-3.5"
+                  >
+                    <div>
+                      <label className="mb-1 block text-xs text-vexo-muted" htmlFor="noShowFirstDelay">
+                        Enviar a primeira mensagem depois de
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          id="noShowFirstDelay"
+                          name="offsetHours"
+                          type="number"
+                          min={1}
+                          required
+                          defaultValue={noShowSteps[0]!.offsetHours}
+                          className="w-20 rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5 text-xs outline-none focus:border-vexo-accent"
+                        />
+                        <span className="text-xs text-vexo-muted">
+                          horas após o clique em "Não compareceu"
+                        </span>
                       </div>
-                      <button
-                        type="submit"
-                        className="rounded-lg border border-vexo-accent px-2.5 py-1.5 text-xs font-medium text-vexo-accent hover:bg-vexo-accent/10"
-                      >
-                        Salvar prazo
-                      </button>
-                    </form>
-                    <p className="mt-1 text-caption text-vexo-muted">
-                      O período mínimo de envio da primeira mensagem é de 1 hora após a secretária
-                      marcar como "não compareceu" — essa margem garante tempo pra ela desfazer a
-                      marcação, caso tenha clicado errado ou o lead avise depois que vai atrasar.
-                    </p>
-                  </>
+                    </div>
+                    <button
+                      type="submit"
+                      className="rounded-lg border border-vexo-accent px-2.5 py-1.5 text-xs font-medium text-vexo-accent hover:bg-vexo-accent/10"
+                    >
+                      Salvar prazo
+                    </button>
+                  </form>
                 )}
 
                 <div className="mt-5">
