@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { sendWhatsappMessage, formatReminderMessage } from "@/lib/whatsapp";
+import { sendWhatsappMessage, formatReminderMessage, applyReminderTemplate } from "@/lib/whatsapp";
 import { sendInstagramMessage } from "@/lib/instagram";
 
 // Lembretes de agendamento — horas configuráveis por clínica (padrão 24h e 3h
@@ -34,7 +34,7 @@ export async function processReminders(): Promise<{ sent: number }> {
     if (!appt.lead) continue; // defesa a mais — já filtrado no where acima
     const hoursBeforeList = appt.clinic.reminderConfig?.hoursBefore ?? [24, 3];
 
-    for (const hoursBefore of hoursBeforeList) {
+    for (const [index, hoursBefore] of hoursBeforeList.entries()) {
       const triggerAt = new Date(appt.scheduledAt.getTime() - hoursBefore * 60 * 60 * 1000);
       if (now < triggerAt) continue; // ainda não chegou a hora deste lembrete
       if (now >= appt.scheduledAt) continue; // já passou do horário do agendamento
@@ -42,11 +42,16 @@ export async function processReminders(): Promise<{ sent: number }> {
       const alreadySent = appt.reminderLogs.some((r) => r.hoursBefore === hoursBefore);
       if (alreadySent) continue;
 
-      const text = formatReminderMessage({
-        leadFirstName: (appt.lead.name ?? "").split(" ")[0] || "tudo bem",
-        hoursBefore,
-        scheduledAt: appt.scheduledAt,
-      });
+      // index 0 = 1º lembrete, 1 = 2º — cada um pode ter um texto próprio
+      // (ReminderConfig.firstMessageTemplate/secondMessageTemplate,
+      // editável em Automações). Sem personalização, cai no texto fixo
+      // padrão (formatReminderMessage).
+      const customTemplate =
+        index === 0 ? appt.clinic.reminderConfig?.firstMessageTemplate : appt.clinic.reminderConfig?.secondMessageTemplate;
+      const leadFirstName = (appt.lead.name ?? "").split(" ")[0] || "";
+      const text = customTemplate
+        ? applyReminderTemplate(customTemplate, { leadFirstName, scheduledAt: appt.scheduledAt })
+        : formatReminderMessage({ leadFirstName: leadFirstName || "tudo bem", hoursBefore, scheduledAt: appt.scheduledAt });
 
       const canUseWhatsapp = Boolean(appt.lead.phone && appt.clinic.whatsappInstanceName);
 

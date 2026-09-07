@@ -108,3 +108,19 @@ export function formatReminderMessage(params: {
 
   return `Oi, ${params.leadFirstName}! Passando para lembrar que seu horário é ${when}, às ${time}. Te esperamos! 💙`;
 }
+
+// Texto customizado de lembrete (ReminderConfig.firstMessageTemplate /
+// secondMessageTemplate, editável por clínica em Automações) — aceita
+// {{primeiro_nome}} e {{horario}}. Usado no lugar de formatReminderMessage
+// quando a clínica personalizou o texto daquele lembrete específico.
+export function applyReminderTemplate(template: string, params: { leadFirstName: string; scheduledAt: Date }): string {
+  const time = params.scheduledAt.toLocaleString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "America/Sao_Paulo",
+  });
+
+  return template.replaceAll("{{primeiro_nome}}", params.leadFirstName).replaceAll("{{horario}}", time);
+}

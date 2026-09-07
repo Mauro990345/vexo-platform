@@ -1,7 +1,13 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireInternalSession } from "@/lib/session";
+import { TemplateMessageField } from "@/components/TemplateMessageField";
 import { updateClinicSettings, logApproach } from "../../actions";
+
+const REMINDER_VARIABLES = [
+  { token: "{{primeiro_nome}}", label: "+ Nome do lead" },
+  { token: "{{horario}}", label: "+ Horário" },
+];
 
 export const dynamic = "force-dynamic";
 
@@ -59,39 +65,61 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
           </div>
 
           <div className="grid grid-cols-2 gap-2.5">
-            <div>
-              <label className="mb-1 block text-xs" htmlFor="firstReminderHours">
-                1º lembrete: horas antes
-              </label>
-              <input
-                id="firstReminderHours"
-                name="firstReminderHours"
-                type="number"
-                min={1}
-                required
-                defaultValue={clinic.reminderConfig?.hoursBefore?.[0] ?? 24}
-                className="w-full rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5 text-xs outline-none focus:border-vexo-accent"
+            <div className="space-y-2">
+              <div>
+                <label className="mb-1 block text-xs" htmlFor="firstReminderHours">
+                  1º lembrete: horas antes
+                </label>
+                <input
+                  id="firstReminderHours"
+                  name="firstReminderHours"
+                  type="number"
+                  min={1}
+                  required
+                  defaultValue={clinic.reminderConfig?.hoursBefore?.[0] ?? 24}
+                  className="w-full rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5 text-xs outline-none focus:border-vexo-accent"
+                />
+                <p className="mt-1 text-caption text-vexo-muted">
+                  Quantas horas antes do horário agendado o 1º lembrete é enviado ao lead.
+                </p>
+              </div>
+              <TemplateMessageField
+                name="firstMessageTemplate"
+                label="Texto do 1º lembrete"
+                required={false}
+                rows={3}
+                variables={REMINDER_VARIABLES}
+                defaultValue={clinic.reminderConfig?.firstMessageTemplate ?? ""}
+                placeholder={'Vazio usa o texto padrão: "Oi, {{primeiro_nome}}! Passando para lembrar que seu horário é amanhã, às {{horario}}. Te esperamos! 💙"'}
               />
-              <p className="mt-1 text-caption text-vexo-muted">
-                Quantas horas antes do horário agendado o 1º lembrete é enviado ao lead.
-              </p>
             </div>
-            <div>
-              <label className="mb-1 block text-xs" htmlFor="secondReminderHours">
-                2º lembrete: horas antes
-              </label>
-              <input
-                id="secondReminderHours"
-                name="secondReminderHours"
-                type="number"
-                min={1}
-                required
-                defaultValue={clinic.reminderConfig?.hoursBefore?.[1] ?? 3}
-                className="w-full rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5 text-xs outline-none focus:border-vexo-accent"
+            <div className="space-y-2">
+              <div>
+                <label className="mb-1 block text-xs" htmlFor="secondReminderHours">
+                  2º lembrete: horas antes
+                </label>
+                <input
+                  id="secondReminderHours"
+                  name="secondReminderHours"
+                  type="number"
+                  min={1}
+                  required
+                  defaultValue={clinic.reminderConfig?.hoursBefore?.[1] ?? 3}
+                  className="w-full rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5 text-xs outline-none focus:border-vexo-accent"
+                />
+                <p className="mt-1 text-caption text-vexo-muted">
+                  Quantas horas antes do horário agendado o 2º lembrete é enviado ao lead.
+                </p>
+              </div>
+              <TemplateMessageField
+                name="secondMessageTemplate"
+                label="Texto do 2º lembrete"
+                required={false}
+                rows={3}
+                variables={REMINDER_VARIABLES}
+                defaultValue={clinic.reminderConfig?.secondMessageTemplate ?? ""}
+                placeholder={'Vazio usa o texto padrão: "Oi, {{primeiro_nome}}! Passando para lembrar que seu horário é em Xh, às {{horario}}. Te esperamos! 💙"'}
               />
-              <p className="mt-1 text-caption text-vexo-muted">
-                Quantas horas antes do horário agendado o 2º lembrete é enviado ao lead.
-              </p>
             </div>
           </div>
 

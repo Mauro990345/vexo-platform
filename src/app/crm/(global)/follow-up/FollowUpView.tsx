@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import type { FollowUpStep, FollowUpTrigger } from "@prisma/client";
 import { Clock, CalendarX } from "lucide-react";
 import { Tabs } from "@/components/Tabs";
-import { FollowUpMessageField } from "@/components/FollowUpMessageField";
+import { TemplateMessageField } from "@/components/TemplateMessageField";
 import {
   addFollowUpStep,
   updateFollowUpStep,
@@ -99,7 +99,7 @@ function StepList({
                   </div>
                 )}
 
-                <FollowUpMessageField defaultValue={step.content} />
+                <TemplateMessageField defaultValue={step.content} />
 
                 <div>
                   <label className="mb-1 block text-xs text-vexo-muted">Anexo (opcional — imagem ou vídeo)</label>
@@ -160,7 +160,7 @@ function StepList({
           />
         </div>
 
-        <FollowUpMessageField placeholder="Ex: Oi! Ainda tem interesse em agendar sua avaliação?" />
+        <TemplateMessageField placeholder="Ex: Oi! Ainda tem interesse em agendar sua avaliação?" />
 
         <div>
           <label className="mb-1 block text-xs text-vexo-muted">Anexo (opcional — imagem ou vídeo)</label>

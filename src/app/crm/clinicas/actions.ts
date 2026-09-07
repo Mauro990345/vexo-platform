@@ -143,6 +143,8 @@ export async function updateClinicSettings(clinicId: string, formData: FormData)
     throw new Error("Informe um número de horas válido (maior que zero) para o 2º lembrete.");
   }
   const hoursBefore = [firstReminderHours, secondReminderHours];
+  const firstMessageTemplate = String(formData.get("firstMessageTemplate") ?? "").trim() || null;
+  const secondMessageTemplate = String(formData.get("secondMessageTemplate") ?? "").trim() || null;
 
   await prisma.clinic.update({
     where: { id: clinicId },
@@ -152,8 +154,8 @@ export async function updateClinicSettings(clinicId: string, formData: FormData)
       active,
       reminderConfig: {
         upsert: {
-          create: { hoursBefore },
-          update: { hoursBefore },
+          create: { hoursBefore, firstMessageTemplate, secondMessageTemplate },
+          update: { hoursBefore, firstMessageTemplate, secondMessageTemplate },
         },
       },
     },
