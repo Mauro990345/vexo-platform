@@ -321,8 +321,9 @@ export async function FollowUpView() {
                       </button>
                     </form>
                     <p className="mt-1 text-caption text-vexo-muted">
-                      Mínimo de 1 hora — é a janela que a secretária tem pra desfazer a marcação,
-                      caso tenha clicado errado ou o lead avise depois que vai atrasar.
+                      O período mínimo de envio da primeira mensagem é de 1 hora após a secretária
+                      marcar como "não compareceu" — essa margem garante tempo pra ela desfazer a
+                      marcação, caso tenha clicado errado ou o lead avise depois que vai atrasar.
                     </p>
                   </>
                 )}
