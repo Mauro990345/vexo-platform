@@ -138,7 +138,14 @@ export default async function ClinicPipelinePage({ params }: { params: { id: str
             return (
               <div key={col.status} className="w-64 shrink-0 rounded-xl border border-vexo-border bg-vexo-surface p-3">
                 <div className="mb-2.5 flex items-center justify-between gap-2">
-                  <h2 className="truncate text-xs font-semibold">{col.label}</h2>
+                  {/* text-vexo-fg explícito — antes o título só herdava a
+                      cor do body sem nenhuma classe própria, o que deveria
+                      já dar o mesmo resultado nas 6 colunas, mas na prática
+                      duas apareciam mais apagadas que as outras. Fixando a
+                      cor aqui em vez de depender de herança, o título das 6
+                      colunas (estados irmãos do mesmo funil) fica garantido
+                      igual, independente da causa exata da inconsistência. */}
+                  <h2 className="truncate text-xs font-semibold text-vexo-fg">{col.label}</h2>
                   <span className="shrink-0 rounded-full bg-vexo-surface2 px-1.5 py-0.5 text-caption font-medium text-vexo-muted">
                     {items.length}
                   </span>
