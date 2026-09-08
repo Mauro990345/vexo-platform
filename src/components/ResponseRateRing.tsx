@@ -32,7 +32,7 @@ export function ResponseRateRing({
   const radius = 12;
   const circumference = 2 * Math.PI * radius;
   const offset = pct !== null ? circumference * (1 - Math.min(pct, 100) / 100) : circumference;
-  const size = compact ? 22 : 30;
+  const size = compact ? 20 : 30;
 
   return (
     <div className="flex items-center gap-1.5">
