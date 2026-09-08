@@ -100,34 +100,46 @@ export default async function ClinicPipelinePage({ params }: { params: { id: str
           color é herdado, então os valores (sem cor própria) pegam esse
           token; os labels/legendas continuam explicitamente vexo-muted,
           por isso não mudam junto. */}
-      {/* py-0.5 (não py-1) + valores em text-lg (não text-xl) — de propósito
-          mais compactos que os cards de lead dentro das colunas do funil:
-          são um resumo de apoio, não o foco principal da tela, então não
-          deveriam competir em peso visual com o conteúdo do funil. */}
-      <div className="grid grid-cols-2 gap-3 text-vexo-pipelineHeaderFont sm:grid-cols-4">
+      {/* py-0.5 + valores em text-lg + só 2 linhas (label; valor + legenda
+          lado a lado) — de propósito mais compactos que os cards de lead
+          dentro das colunas do funil: são um resumo de apoio, não o foco
+          principal da tela, então não deveriam competir em peso visual com
+          o conteúdo do funil.
+          items-stretch explícito (já seria o padrão do grid, mas fica
+          garantido) + truncate na legenda de cada card: sem truncate, a
+          legenda mais longa ("Compareceu x Não compareceu") podia quebrar
+          pra uma segunda linha num card e não nos outros, deixando só
+          aquele card mais alto no mobile (grid-cols-2, menos largura por
+          card) — com truncate, as 4 legendas ficam sempre em 1 linha,
+          então as 4 alturas batem certo em qualquer largura de tela. */}
+      <div className="grid grid-cols-2 items-stretch gap-3 text-vexo-pipelineHeaderFont sm:grid-cols-4">
         <div className="rounded-lg border border-vexo-border bg-vexo-surface2 px-2.5 py-0.5">
           <p className="truncate text-card font-medium text-vexo-muted">Novos contatos</p>
-          <p className="mt-0.5 text-lg font-semibold leading-none tracking-tight">{newContacts}</p>
-          <p className="mt-0.5 text-card text-vexo-muted">Últimos 7 dias</p>
+          <div className="mt-0.5 flex min-w-0 items-baseline gap-1.5">
+            <span className="shrink-0 text-lg font-semibold leading-none tracking-tight">{newContacts}</span>
+            <span className="min-w-0 flex-1 truncate text-card text-vexo-muted">Últimos 7 dias</span>
+          </div>
         </div>
         <div className="rounded-lg border border-vexo-border bg-vexo-surface2 px-2.5 py-0.5">
           <p className="truncate text-card font-medium text-vexo-muted">Taxa de resposta</p>
-          <div className="mt-0.5">
+          <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
             <ResponseRateRing value={responseRate} compact />
+            <span className="min-w-0 flex-1 truncate text-card text-vexo-muted">Novo contato → Em conversa</span>
           </div>
-          <p className="mt-0.5 text-card text-vexo-muted">Novo contato → Em conversa</p>
         </div>
         <div className="rounded-lg border border-vexo-border bg-vexo-surface2 px-2.5 py-0.5">
           <p className="truncate text-card font-medium text-vexo-muted">Agendados</p>
-          <p className="mt-0.5 text-lg font-semibold leading-none tracking-tight">{scheduled}</p>
-          <p className="mt-0.5 text-card text-vexo-muted">Últimos 7 dias</p>
+          <div className="mt-0.5 flex min-w-0 items-baseline gap-1.5">
+            <span className="shrink-0 text-lg font-semibold leading-none tracking-tight">{scheduled}</span>
+            <span className="min-w-0 flex-1 truncate text-card text-vexo-muted">Últimos 7 dias</span>
+          </div>
         </div>
         <div className="rounded-lg border border-vexo-border bg-vexo-surface2 px-2.5 py-0.5">
           <p className="truncate text-card font-medium text-vexo-muted">Taxa de comparecimento</p>
-          <div className="mt-0.5">
+          <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
             <ResponseRateRing value={attendanceRate} color={attendanceRingColor(attendanceRate)} compact />
+            <span className="min-w-0 flex-1 truncate text-card text-vexo-muted">Compareceu x Não compareceu</span>
           </div>
-          <p className="mt-0.5 text-card text-vexo-muted">Compareceu x Não compareceu</p>
         </div>
       </div>
 
@@ -169,13 +181,13 @@ export default async function ClinicPipelinePage({ params }: { params: { id: str
                     // de @ + última mensagem).
                     if (col.status === "SCHEDULED") {
                       return (
-                        <div key={conv.id} className={`${LEAD_CARD_CLASS} p-3.5`}>
+                        <div key={conv.id} className={`${LEAD_CARD_CLASS} px-3.5 py-2.5`}>
                           <Link href={`/crm/conversas/${conv.id}`} className="block transition hover:text-vexo-accent">
                             <p className="truncate text-sm font-semibold">{name}</p>
                           </Link>
 
                           {appt && (
-                            <p className="mt-1.5 text-caption font-medium text-vexo-muted">
+                            <p className="mt-1 text-caption font-medium text-vexo-muted">
                               {formatDateTime(appt.scheduledAt)}
                             </p>
                           )}
@@ -184,14 +196,14 @@ export default async function ClinicPipelinePage({ params }: { params: { id: str
                     }
 
                     return (
-                      <div key={conv.id} className={`${LEAD_CARD_CLASS} p-3.5`}>
+                      <div key={conv.id} className={`${LEAD_CARD_CLASS} px-3.5 py-2.5`}>
                         <Link href={`/crm/conversas/${conv.id}`} className="block transition hover:text-vexo-accent">
                           <div className="flex items-start justify-between gap-2">
                             <p className="truncate text-sm font-semibold">{name}</p>
                             <MoreHorizontal className="h-3.5 w-3.5 shrink-0 text-vexo-muted" strokeWidth={2} />
                           </div>
 
-                          <div className="mt-1.5 flex items-center gap-1.5 text-caption text-vexo-muted">
+                          <div className="mt-1 flex items-center gap-1.5 text-caption text-vexo-muted">
                             <AtSign className="h-3 w-3 shrink-0" strokeWidth={2} />
                             <span>{conv.lastMessageAt ? formatDateTime(conv.lastMessageAt) : "—"}</span>
                           </div>
