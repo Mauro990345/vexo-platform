@@ -109,18 +109,41 @@ export function formatReminderMessage(params: {
   return `Oi, ${params.leadFirstName}! Passando para lembrar que seu horário é ${when}, às ${time}. Te esperamos! 💙`;
 }
 
+// "Hoje"/"amanhã" com base na data civil em America/Sao_Paulo (não em
+// diferença de milissegundos, que erraria perto da virada do dia) — usa a
+// convenção en-CA (YYYY-MM-DD) só como formato estável pra comparar datas,
+// nunca exibido ao lead. Além desses dois casos (únicos alcançáveis hoje,
+// já que processReminders só considera agendamentos até 48h à frente), cai
+// pro nome do dia da semana como reforço, sem quebrar se isso mudar no futuro.
+function relativeDayLabel(date: Date, now: Date): string {
+  const civilDate = (d: Date) => d.toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
+  const target = civilDate(date);
+  if (target === civilDate(now)) return "hoje";
+  if (target === civilDate(new Date(now.getTime() + 24 * 60 * 60 * 1000))) return "amanhã";
+  return date.toLocaleDateString("pt-BR", { weekday: "long", timeZone: "America/Sao_Paulo" });
+}
+
+// Data + horário legível, tipo "amanhã (05/09) às 15h" — combina o dia
+// relativo, a data numérica (pra não deixar dúvida de qual dia é "amanhã")
+// e a hora (sem minutos quando exatos, ex: "15h" em vez de "15h00").
+function formatDateTimeLabel(date: Date, now: Date): string {
+  const dayLabel = relativeDayLabel(date, now);
+  const dayMonth = date.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", timeZone: "America/Sao_Paulo" });
+  const [hour, minute] = date
+    .toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "America/Sao_Paulo" })
+    .split(":");
+  const hourLabel = minute === "00" ? `${hour}h` : `${hour}h${minute}`;
+
+  return `${dayLabel} (${dayMonth}) às ${hourLabel}`;
+}
+
 // Texto customizado de lembrete (ReminderConfig.firstMessageTemplate /
 // secondMessageTemplate, editável por clínica em Automações) — aceita
-// {{primeiro_nome}} e {{horario}}. Usado no lugar de formatReminderMessage
-// quando a clínica personalizou o texto daquele lembrete específico.
+// {{primeiro_nome}} e {{data_horario}}. Usado no lugar de
+// formatReminderMessage quando a clínica personalizou o texto daquele
+// lembrete específico.
 export function applyReminderTemplate(template: string, params: { leadFirstName: string; scheduledAt: Date }): string {
-  const time = params.scheduledAt.toLocaleString("pt-BR", {
-    day: "2-digit",
-    month: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZone: "America/Sao_Paulo",
-  });
+  const dataHorario = formatDateTimeLabel(params.scheduledAt, new Date());
 
-  return template.replaceAll("{{primeiro_nome}}", params.leadFirstName).replaceAll("{{horario}}", time);
+  return template.replaceAll("{{primeiro_nome}}", params.leadFirstName).replaceAll("{{data_horario}}", dataHorario);
 }

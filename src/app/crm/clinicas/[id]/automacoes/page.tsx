@@ -6,7 +6,7 @@ import { updateClinicSettings, logApproach } from "../../actions";
 
 const REMINDER_VARIABLES = [
   { token: "{{primeiro_nome}}", label: "+ Nome do lead" },
-  { token: "{{horario}}", label: "+ Horário" },
+  { token: "{{data_horario}}", label: "+ Data e horário" },
 ];
 
 export const dynamic = "force-dynamic";
@@ -21,10 +21,10 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
   if (!clinic) notFound();
 
   return (
-    <div className="max-w-3xl space-y-2.5">
+    <div className="max-w-4xl space-y-2.5">
       <h1 className="text-base font-semibold tracking-tight">Automações</h1>
 
-      <div className="grid gap-3 lg:grid-cols-2">
+      <div className="grid gap-3 lg:grid-cols-[3fr_2fr]">
         <form
           action={updateClinicSettings.bind(null, clinic.id)}
           className="space-y-3 rounded-xl border border-vexo-border bg-vexo-surface p-3.5"
@@ -64,7 +64,7 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
             </p>
           </div>
 
-          <div className="grid grid-cols-2 gap-2.5">
+          <div className="space-y-3">
             <div className="space-y-2">
               <div>
                 <label className="mb-1 block text-xs" htmlFor="firstReminderHours">
@@ -77,7 +77,7 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
                   min={1}
                   required
                   defaultValue={clinic.reminderConfig?.hoursBefore?.[0] ?? 24}
-                  className="w-full rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5 text-xs outline-none focus:border-vexo-accent"
+                  className="w-32 rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5 text-xs outline-none focus:border-vexo-accent"
                 />
                 <p className="mt-1 text-caption text-vexo-muted">
                   Quantas horas antes do horário agendado o 1º lembrete é enviado ao lead.
@@ -90,10 +90,10 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
                 rows={3}
                 variables={REMINDER_VARIABLES}
                 defaultValue={clinic.reminderConfig?.firstMessageTemplate ?? ""}
-                placeholder={'Vazio usa o texto padrão: "Oi, {{primeiro_nome}}! Passando para lembrar que seu horário é amanhã, às {{horario}}. Te esperamos! 💙"'}
+                placeholder={'Vazio usa o texto padrão: "Oi, {{primeiro_nome}}! Passando para lembrar que seu horário é amanhã (05/09), às 15h. Te esperamos! 💙"'}
               />
             </div>
-            <div className="space-y-2">
+            <div className="space-y-2 border-t border-vexo-border pt-3">
               <div>
                 <label className="mb-1 block text-xs" htmlFor="secondReminderHours">
                   2º lembrete: horas antes
@@ -105,7 +105,7 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
                   min={1}
                   required
                   defaultValue={clinic.reminderConfig?.hoursBefore?.[1] ?? 3}
-                  className="w-full rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5 text-xs outline-none focus:border-vexo-accent"
+                  className="w-32 rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5 text-xs outline-none focus:border-vexo-accent"
                 />
                 <p className="mt-1 text-caption text-vexo-muted">
                   Quantas horas antes do horário agendado o 2º lembrete é enviado ao lead.
@@ -118,7 +118,7 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
                 rows={3}
                 variables={REMINDER_VARIABLES}
                 defaultValue={clinic.reminderConfig?.secondMessageTemplate ?? ""}
-                placeholder={'Vazio usa o texto padrão: "Oi, {{primeiro_nome}}! Passando para lembrar que seu horário é em Xh, às {{horario}}. Te esperamos! 💙"'}
+                placeholder={'Vazio usa o texto padrão: "Oi, {{primeiro_nome}}! Passando para lembrar que seu horário é hoje, às 15h. Te esperamos! 💙"'}
               />
             </div>
           </div>

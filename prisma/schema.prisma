@@ -337,8 +337,8 @@ model ReminderConfig {
   hoursBefore Int[] @default([24, 3])
 
   // Texto de cada lembrete, editável por clínica — aceita {{primeiro_nome}}
-  // e {{horario}} (ver applyReminderTemplate em src/lib/whatsapp.ts). Null
-  // = usa o texto fixo padrão (formatReminderMessage), pra não quebrar
+  // e {{data_horario}} (ver applyReminderTemplate em src/lib/whatsapp.ts).
+  // Null = usa o texto fixo padrão (formatReminderMessage), pra não quebrar
   // clínicas que nunca personalizaram.
   firstMessageTemplate  String? @db.Text
   secondMessageTemplate String? @db.Text
