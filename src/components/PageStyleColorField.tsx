@@ -32,13 +32,17 @@ export function PageStyleColorField({
   return (
     <div className="space-y-2 rounded-lg border border-vexo-border bg-vexo-surface2 p-2.5">
       <div className="flex items-start gap-3">
+        {/* Sem bg-* aqui: em input[type=color] o preenchimento do quadrado
+            É a cor selecionada — dar um background próprio (ex: bg-transparent)
+            sobrepõe/esconde esse preenchimento nativo, deixando o quadrado
+            vazio mesmo com um valor válido. */}
         <input
           type="color"
           name={`${name}.value`}
           value={color}
           disabled={!enabled}
           onChange={(e) => setColor(e.target.value)}
-          className="h-9 w-9 shrink-0 cursor-pointer rounded border border-vexo-border bg-transparent p-0.5 disabled:cursor-not-allowed disabled:opacity-40"
+          className="h-9 w-9 shrink-0 cursor-pointer rounded border border-vexo-border p-0.5 disabled:cursor-not-allowed disabled:opacity-40"
         />
         <div className="min-w-0 flex-1">
           <p className="text-xs font-medium">{label}</p>

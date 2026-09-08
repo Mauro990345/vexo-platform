@@ -31,7 +31,14 @@ export function ResponseRateRing({
   return (
     <div className="flex items-center gap-2">
       <svg width="30" height="30" viewBox="0 0 30 30" className="-rotate-90 shrink-0" aria-hidden="true">
-        <circle cx="15" cy="15" r={radius} fill="none" strokeWidth="3.5" className="stroke-vexo-border" />
+        {/* Trilha de fundo — vexo-border tem contraste baixo demais contra
+            vexo-surface2 (fundo do card), ficando quase invisível quando não
+            há um arco colorido por cima pra compensar (caso "sem dado",
+            value null): o anel inteiro parecia ter sumido, enquanto um card
+            com dado real (arco colorido cobrindo a trilha) parecia normal.
+            vexo-muted garante o anel sempre visível, com o mesmo peso visual
+            nos 4 cards de métrica, com ou sem dado. */}
+        <circle cx="15" cy="15" r={radius} fill="none" strokeWidth="3.5" className="stroke-vexo-muted opacity-30" />
         {pct !== null && (
           <circle
             cx="15"
@@ -46,7 +53,10 @@ export function ResponseRateRing({
           />
         )}
       </svg>
-      <p className="text-xl font-semibold leading-none tracking-tight">{pct !== null ? `${pct}%` : "—"}</p>
+      {/* "0%" em vez de "—" quando não há dado suficiente — mesmo formato
+          usado pelos cards de contagem (ex: "Novos contatos" mostra "0" no
+          mesmo cenário de zero atividade, não um traço). */}
+      <p className="text-xl font-semibold leading-none tracking-tight">{pct !== null ? `${pct}%` : "0%"}</p>
     </div>
   );
 }
