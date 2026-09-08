@@ -100,28 +100,32 @@ export default async function ClinicPipelinePage({ params }: { params: { id: str
           color é herdado, então os valores (sem cor própria) pegam esse
           token; os labels/legendas continuam explicitamente vexo-muted,
           por isso não mudam junto. */}
+      {/* py-0.5 (não py-1) + valores em text-lg (não text-xl) — de propósito
+          mais compactos que os cards de lead dentro das colunas do funil:
+          são um resumo de apoio, não o foco principal da tela, então não
+          deveriam competir em peso visual com o conteúdo do funil. */}
       <div className="grid grid-cols-2 gap-3 text-vexo-pipelineHeaderFont sm:grid-cols-4">
-        <div className="rounded-lg border border-vexo-border bg-vexo-surface2 px-2.5 py-1">
+        <div className="rounded-lg border border-vexo-border bg-vexo-surface2 px-2.5 py-0.5">
           <p className="truncate text-card font-medium text-vexo-muted">Novos contatos</p>
-          <p className="mt-0.5 text-xl font-semibold leading-none tracking-tight">{newContacts}</p>
+          <p className="mt-0.5 text-lg font-semibold leading-none tracking-tight">{newContacts}</p>
           <p className="mt-0.5 text-card text-vexo-muted">Últimos 7 dias</p>
         </div>
-        <div className="rounded-lg border border-vexo-border bg-vexo-surface2 px-2.5 py-1">
+        <div className="rounded-lg border border-vexo-border bg-vexo-surface2 px-2.5 py-0.5">
           <p className="truncate text-card font-medium text-vexo-muted">Taxa de resposta</p>
           <div className="mt-0.5">
-            <ResponseRateRing value={responseRate} />
+            <ResponseRateRing value={responseRate} compact />
           </div>
           <p className="mt-0.5 text-card text-vexo-muted">Novo contato → Em conversa</p>
         </div>
-        <div className="rounded-lg border border-vexo-border bg-vexo-surface2 px-2.5 py-1">
+        <div className="rounded-lg border border-vexo-border bg-vexo-surface2 px-2.5 py-0.5">
           <p className="truncate text-card font-medium text-vexo-muted">Agendados</p>
-          <p className="mt-0.5 text-xl font-semibold leading-none tracking-tight">{scheduled}</p>
+          <p className="mt-0.5 text-lg font-semibold leading-none tracking-tight">{scheduled}</p>
           <p className="mt-0.5 text-card text-vexo-muted">Últimos 7 dias</p>
         </div>
-        <div className="rounded-lg border border-vexo-border bg-vexo-surface2 px-2.5 py-1">
+        <div className="rounded-lg border border-vexo-border bg-vexo-surface2 px-2.5 py-0.5">
           <p className="truncate text-card font-medium text-vexo-muted">Taxa de comparecimento</p>
           <div className="mt-0.5">
-            <ResponseRateRing value={attendanceRate} color={attendanceRingColor(attendanceRate)} />
+            <ResponseRateRing value={attendanceRate} color={attendanceRingColor(attendanceRate)} compact />
           </div>
           <p className="mt-0.5 text-card text-vexo-muted">Compareceu x Não compareceu</p>
         </div>

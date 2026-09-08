@@ -19,18 +19,27 @@ const RING_STROKE: Record<"accent" | "success" | "warning" | "error", string> = 
 export function ResponseRateRing({
   value,
   color = "accent",
+  compact = false,
 }: {
   value: number | null;
   color?: "accent" | "success" | "warning" | "error";
+  // Versão menor (anel + texto) pros cards de métrica do topo do Pipeline,
+  // que devem parecer mais leves/compactos que os cards de lead — não muda
+  // o uso padrão (ex: painel de clínicas), só quem passar compact.
+  compact?: boolean;
 }) {
   const pct = value !== null ? Math.round(value * 100) : null;
   const radius = 12;
   const circumference = 2 * Math.PI * radius;
   const offset = pct !== null ? circumference * (1 - Math.min(pct, 100) / 100) : circumference;
+  const size = compact ? 22 : 30;
 
   return (
-    <div className="flex items-center gap-2">
-      <svg width="30" height="30" viewBox="0 0 30 30" className="-rotate-90 shrink-0" aria-hidden="true">
+    <div className="flex items-center gap-1.5">
+      {/* viewBox fica sempre "0 0 30 30" — só width/height (size) mudam,
+          o SVG escala o desenho todo (raio, strokeWidth) proporcionalmente
+          sozinho, sem precisar recalcular nada. */}
+      <svg width={size} height={size} viewBox="0 0 30 30" className="-rotate-90 shrink-0" aria-hidden="true">
         {/* Trilha de fundo — vexo-border tem contraste baixo demais contra
             vexo-surface2 (fundo do card), ficando quase invisível quando não
             há um arco colorido por cima pra compensar (caso "sem dado",
@@ -56,7 +65,9 @@ export function ResponseRateRing({
       {/* "0%" em vez de "—" quando não há dado suficiente — mesmo formato
           usado pelos cards de contagem (ex: "Novos contatos" mostra "0" no
           mesmo cenário de zero atividade, não um traço). */}
-      <p className="text-xl font-semibold leading-none tracking-tight">{pct !== null ? `${pct}%` : "0%"}</p>
+      <p className={`font-semibold leading-none tracking-tight ${compact ? "text-lg" : "text-xl"}`}>
+        {pct !== null ? `${pct}%` : "0%"}
+      </p>
     </div>
   );
 }
