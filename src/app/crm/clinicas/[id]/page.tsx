@@ -1,9 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { MoreHorizontal, UserPlus, MessageCircle, CalendarDays, CheckCircle2 } from "lucide-react";
+import { MoreHorizontal } from "lucide-react";
 import { prisma } from "@/lib/prisma";
-import { ResponseRateRing } from "@/components/ResponseRateRing";
-import { ColorBadge, type BadgeColor } from "@/components/ColorBadge";
 import { startOfDay, addDays } from "@/lib/metrics";
 
 export const dynamic = "force-dynamic";
@@ -15,13 +13,10 @@ export const dynamic = "force-dynamic";
 // risco de desalinhar numa mudança futura).
 const PIPELINE_HEADER_BG = "bg-vexo-surface";
 
-// Faixas da cor do anel de comparecimento — decisão de exibição, não de
-// dado (o número em si vem sempre certo do banco). Ajustável se a clínica
-// achar essas faixas erradas pra realidade dela.
-function attendanceRingColor(rate: number | null): BadgeColor {
-  if (rate === null || rate >= 0.75) return "success";
-  if (rate >= 0.5) return "warning";
-  return "error";
+// "0%" (não "—") quando não há dado suficiente — mesmo formato usado pelos
+// cards de contagem (0 puro) nesse mesmo cenário de zero atividade.
+function formatPercent(value: number | null): string {
+  return value !== null ? `${Math.round(value * 100)}%` : "0%";
 }
 
 const PIPELINE_COLUMNS = [
@@ -140,74 +135,38 @@ export default async function ClinicPipelinePage({ params }: { params: { id: str
           no cabeçalho de cada coluna do board mais abaixo, ver
           PIPELINE_HEADER_BG) dividida em 4 seções por um divisor fino
           (divide-x), não mais 4 cards separados com borda própria cada —
-          visual de "barra de status", não "blocos empilhados". Padding
-          vertical reduzido (py-1) pra faixa ficar mais fina.
-          overflow-x-auto é rede de segurança pra telas bem estreitas (a
-          faixa não quebra linha; abaixo de min-w cada seção vira scroll
-          horizontal em vez de espremer o conteúdo). text-vexo-pipelineHeaderFont
-          aqui em cima, não em cada número — color é herdado, então os
-          valores (sem cor própria) pegam esse token. Nome de cada métrica
-          com destaque "marca-texto" (fundo cinza claro translúcido,
-          cantos quase retos — rounded-sm, mais reto que o rounded-card
-          usado no resto da página) — só o nome, o valor continua sendo o
-          elemento de maior peso visual, sem esse tratamento. */}
+          visual de "barra de status", não "blocos empilhados". Cada seção
+          é 1 linha só (nome com destaque "marca-texto" + valor pequeno e
+          discreto ao lado) — sem ícone, sem anel, sem texto de fórmula/
+          período: a faixa é um resumo mínimo, não um dashboard.
+          Estática/não responsiva de propósito (min-w por seção + rolagem
+          horizontal em telas estreitas, ver overflow-x-auto), diferente
+          do board de colunas logo abaixo. */}
       <div className="overflow-x-auto">
         <div className={`flex divide-x divide-vexo-border/20 overflow-hidden rounded-card border border-vexo-border/20 ${PIPELINE_HEADER_BG} text-vexo-pipelineHeaderFont`}>
-          <div className="flex min-w-[160px] flex-1 items-center gap-2.5 px-3 py-1">
-            <ColorBadge color="accent" size="h-8 w-8">
-              <UserPlus className="h-4 w-4" strokeWidth={2} />
-            </ColorBadge>
-            <div className="min-w-0 flex-1">
-              <span className="inline-block max-w-full truncate rounded-sm bg-white/10 px-1.5 py-0.5 text-caption font-normal text-vexo-fg">
-                Novos contatos
-              </span>
-              <div className="mt-1 flex min-w-0 items-baseline gap-1.5">
-                <span className="shrink-0 text-lg font-semibold leading-none tracking-tight">{newContacts}</span>
-                <span className="min-w-0 flex-1 truncate text-card text-vexo-muted">Últimos 7 dias</span>
-              </div>
-            </div>
+          <div className="flex min-w-[160px] flex-1 items-center gap-2 px-3 py-1.5">
+            <span className="inline-block max-w-full shrink-0 truncate rounded-sm bg-white/10 px-1.5 py-0.5 text-caption font-normal text-vexo-fg">
+              Novos contatos
+            </span>
+            <span className="truncate text-card font-medium text-vexo-muted">{newContacts}</span>
           </div>
-          <div className="flex min-w-[160px] flex-1 items-center gap-2.5 px-3 py-1">
-            <ColorBadge color="accent" size="h-8 w-8">
-              <MessageCircle className="h-4 w-4" strokeWidth={2} />
-            </ColorBadge>
-            <div className="min-w-0 flex-1">
-              <span className="inline-block max-w-full truncate rounded-sm bg-white/10 px-1.5 py-0.5 text-caption font-normal text-vexo-fg">
-                Taxa de resposta
-              </span>
-              <div className="mt-1 flex min-w-0 items-center gap-1.5">
-                <ResponseRateRing value={responseRate} compact />
-                <span className="min-w-0 flex-1 truncate text-card text-vexo-muted">Novo contato → Em conversa</span>
-              </div>
-            </div>
+          <div className="flex min-w-[160px] flex-1 items-center gap-2 px-3 py-1.5">
+            <span className="inline-block max-w-full shrink-0 truncate rounded-sm bg-white/10 px-1.5 py-0.5 text-caption font-normal text-vexo-fg">
+              Taxa de resposta
+            </span>
+            <span className="truncate text-card font-medium text-vexo-muted">{formatPercent(responseRate)}</span>
           </div>
-          <div className="flex min-w-[160px] flex-1 items-center gap-2.5 px-3 py-1">
-            <ColorBadge color="success" size="h-8 w-8">
-              <CalendarDays className="h-4 w-4" strokeWidth={2} />
-            </ColorBadge>
-            <div className="min-w-0 flex-1">
-              <span className="inline-block max-w-full truncate rounded-sm bg-white/10 px-1.5 py-0.5 text-caption font-normal text-vexo-fg">
-                Agendados
-              </span>
-              <div className="mt-1 flex min-w-0 items-baseline gap-1.5">
-                <span className="shrink-0 text-lg font-semibold leading-none tracking-tight">{scheduled}</span>
-                <span className="min-w-0 flex-1 truncate text-card text-vexo-muted">Últimos 7 dias</span>
-              </div>
-            </div>
+          <div className="flex min-w-[160px] flex-1 items-center gap-2 px-3 py-1.5">
+            <span className="inline-block max-w-full shrink-0 truncate rounded-sm bg-white/10 px-1.5 py-0.5 text-caption font-normal text-vexo-fg">
+              Agendados
+            </span>
+            <span className="truncate text-card font-medium text-vexo-muted">{scheduled}</span>
           </div>
-          <div className="flex min-w-[160px] flex-1 items-center gap-2.5 px-3 py-1">
-            <ColorBadge color={attendanceRingColor(attendanceRate)} size="h-8 w-8">
-              <CheckCircle2 className="h-4 w-4" strokeWidth={2} />
-            </ColorBadge>
-            <div className="min-w-0 flex-1">
-              <span className="inline-block max-w-full truncate rounded-sm bg-white/10 px-1.5 py-0.5 text-caption font-normal text-vexo-fg">
-                Taxa de comparecimento
-              </span>
-              <div className="mt-1 flex min-w-0 items-center gap-1.5">
-                <ResponseRateRing value={attendanceRate} color={attendanceRingColor(attendanceRate)} compact />
-                <span className="min-w-0 flex-1 truncate text-card text-vexo-muted">Compareceu x Não compareceu</span>
-              </div>
-            </div>
+          <div className="flex min-w-[160px] flex-1 items-center gap-2 px-3 py-1.5">
+            <span className="inline-block max-w-full shrink-0 truncate rounded-sm bg-white/10 px-1.5 py-0.5 text-caption font-normal text-vexo-fg">
+              Taxa de comparecimento
+            </span>
+            <span className="truncate text-card font-medium text-vexo-muted">{formatPercent(attendanceRate)}</span>
           </div>
         </div>
       </div>
@@ -222,7 +181,7 @@ export default async function ClinicPipelinePage({ params }: { params: { id: str
             const items = byStatus[col.status] ?? [];
             const tint = columnTint(col.status);
             return (
-              <div key={col.status} className="w-64 shrink-0 rounded-card border border-vexo-border/30 bg-vexo-surface2 p-3">
+              <div key={col.status} className="w-64 shrink-0 rounded-card border border-vexo-border/30 bg-vexo-surface2 px-1.5 py-3">
                 {/* Cabeçalho compacto (nome + contador no mesmo bloco) em
                     vez de texto solto acima da coluna — usa
                     PIPELINE_HEADER_BG (mesmo tom da faixa de métricas do
