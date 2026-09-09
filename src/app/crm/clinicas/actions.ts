@@ -11,6 +11,7 @@ import { setAppointmentAttendance } from "@/lib/appointments";
 import { disconnectWhatsapp, renameWhatsappInstance, resetWhatsappInstanceName } from "@/lib/whatsapp-connection";
 import { disconnectGoogleCalendar } from "@/lib/google-calendar";
 import { disconnectInstagram } from "@/lib/instagram";
+import { saveUploadedAttachment, deleteUploadedAttachment } from "@/lib/uploads";
 
 const CONNECTION_LINK_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 dias
 
@@ -90,8 +91,25 @@ export async function updateAiAgentSettings(clinicId: string, formData: FormData
   await requireInternalSession();
 
   const aiSystemPrompt = String(formData.get("aiSystemPrompt") ?? "").trim() || null;
-  const confirmationVideoUrl = String(formData.get("confirmationVideoUrl") ?? "").trim() || null;
   const notifyWhatsappNumber = String(formData.get("notifyWhatsappNumber") ?? "").trim() || null;
+
+  // Mesmo padrão de upload do anexo de follow-up (ver
+  // src/app/crm/(global)/follow-up/actions.ts): campo de arquivo em vez de
+  // URL colada — troca o vídeo mantendo a URL atual se nada for enviado, e
+  // limpa o arquivo antigo do disco quando substituído ou removido.
+  const currentConfirmationVideoUrl = String(formData.get("currentConfirmationVideoUrl") ?? "").trim() || null;
+  const removeConfirmationVideo = formData.get("removeConfirmationVideo") === "on";
+  const confirmationVideoFile = formData.get("confirmationVideoFile");
+  const file = confirmationVideoFile instanceof File && confirmationVideoFile.size > 0 ? confirmationVideoFile : null;
+
+  let confirmationVideoUrl = currentConfirmationVideoUrl;
+  if (file) {
+    confirmationVideoUrl = await saveUploadedAttachment(file, "confirmation-video");
+    await deleteUploadedAttachment(currentConfirmationVideoUrl);
+  } else if (removeConfirmationVideo) {
+    await deleteUploadedAttachment(currentConfirmationVideoUrl);
+    confirmationVideoUrl = null;
+  }
 
   await prisma.clinic.update({
     where: { id: clinicId },

@@ -79,19 +79,37 @@ export default async function ClinicAiAgentPage({ params }: { params: { id: stri
           </h2>
 
           <div>
-            <label className="mb-1 block text-xs text-vexo-muted" htmlFor="confirmationVideoUrl">
-              URL do vídeo de confirmação de agendamento (reforça comparecimento)
+            <label className="mb-1 block text-xs text-vexo-muted" htmlFor="confirmationVideoFile">
+              Vídeo de confirmação de agendamento (reforça comparecimento)
             </label>
+            {clinic.confirmationVideoUrl && (
+              <div className="mb-1.5 flex items-center justify-between gap-2 rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5">
+                <a
+                  href={clinic.confirmationVideoUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="min-w-0 truncate text-xs text-vexo-accent hover:underline"
+                >
+                  Ver vídeo atual
+                </a>
+                <label className="flex shrink-0 items-center gap-1 text-card text-vexo-muted">
+                  <input type="checkbox" name="removeConfirmationVideo" className="rounded border-vexo-border" />
+                  Remover
+                </label>
+              </div>
+            )}
+            <input type="hidden" name="currentConfirmationVideoUrl" value={clinic.confirmationVideoUrl ?? ""} />
             <input
-              id="confirmationVideoUrl"
-              name="confirmationVideoUrl"
-              defaultValue={clinic.confirmationVideoUrl ?? ""}
-              placeholder="https://..."
-              className="w-full rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5 text-xs outline-none focus:border-vexo-accent"
+              id="confirmationVideoFile"
+              name="confirmationVideoFile"
+              type="file"
+              accept="video/*"
+              className="block w-full text-xs text-vexo-muted file:mr-2 file:rounded-lg file:border file:border-vexo-border file:bg-vexo-bg file:px-2.5 file:py-1.5 file:text-xs file:text-vexo-fg hover:file:border-vexo-accent"
             />
             <p className="mt-1 text-caption text-vexo-muted">
-              Enviado automaticamente pelo Instagram assim que um agendamento é confirmado na
-              conversa — não é preciso disparar manualmente.
+              {clinic.confirmationVideoUrl ? "Escolher um novo arquivo substitui o atual. " : ""}
+              MP4, MOV ou WEBM — até 25MB. Enviado automaticamente pelo Instagram assim que um
+              agendamento é confirmado na conversa — não é preciso disparar manualmente.
             </p>
           </div>
 
