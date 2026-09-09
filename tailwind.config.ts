@@ -52,6 +52,7 @@ const config: Config = {
           // padrão do Pipeline (columnTint). Sem token de borda por status
           // mais — borda agora é uniforme/fina em todos, igual ao Pipeline.
           agendaCardBg: "rgb(var(--vexo-agenda-card-bg) / <alpha-value>)",
+          agendaStatusCancelledPill: "rgb(var(--vexo-agenda-status-cancelled-pill) / <alpha-value>)",
           agendaStatusUpcomingBg: "rgb(var(--vexo-agenda-status-upcoming-bg) / <alpha-value>)",
           agendaStatusUpcomingPill: "rgb(var(--vexo-agenda-status-upcoming-pill) / <alpha-value>)",
           agendaStatusCompletedBg: "rgb(var(--vexo-agenda-status-completed-bg) / <alpha-value>)",

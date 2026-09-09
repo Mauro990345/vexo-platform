@@ -15,8 +15,9 @@ export const dynamic = "force-dynamic";
 // Compareceu tem tom PRÓPRIO (separado do grupo acima de propósito: numa
 // semana típica a maioria dos agendamentos está em Agendado ou Compareceu,
 // então agrupar os dois deixava só o raro "Faltou" com cor diferente na
-// grade real — pouco útil pra escanear rápido). Faltou e Cancelado
-// continuam cada um com o seu.
+// grade real — pouco útil pra escanear rápido). Cancelado usa roxo na
+// etiqueta (pedido explícito do usuário) sobre o fundo navy
+// (agenda.cardBackground, #1c2a3b por padrão).
 function agendaStatusTint(status: string): { bg: string; tagBg: string; tagText: string } {
   switch (status) {
     case "SCHEDULED":
@@ -27,7 +28,7 @@ function agendaStatusTint(status: string): { bg: string; tagBg: string; tagText:
     case "NO_SHOW":
       return { bg: "bg-vexo-agendaStatusNegativeBg", tagBg: "bg-vexo-agendaStatusNegativePill/45", tagText: "text-vexo-fg" };
     default: // CANCELLED e qualquer status futuro sem grupo definido
-      return { bg: "bg-vexo-agendaCardBg", tagBg: "bg-vexo-border/80", tagText: "text-vexo-muted" };
+      return { bg: "bg-vexo-agendaCardBg", tagBg: "bg-vexo-agendaStatusCancelledPill/45", tagText: "text-vexo-fg" };
   }
 }
 

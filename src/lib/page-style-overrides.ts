@@ -28,6 +28,7 @@ export type PageStyleFieldKey =
   | "pipeline.column.followUp.pill"
   | "agenda.cardFont"
   | "agenda.cardBackground"
+  | "agenda.status.cancelled.pill"
   | "agenda.status.upcoming.background"
   | "agenda.status.upcoming.pill"
   | "agenda.status.completed.background"
@@ -139,10 +140,17 @@ export const PAGE_STYLE_SECTIONS: {
       {
         key: "agenda.cardBackground",
         cssVar: "--vexo-agenda-card-bg",
-        followsGlobalKey: "vexoPetrol",
+        defaultHex: "#1c2a3b",
         label: "Fundo do card (Cancelado)",
         description:
           "Cor de fundo dos cards de agendamento cancelado — os outros status (Agendado/Confirmado, Compareceu, Faltou) têm campo próprio logo abaixo, mesma lógica de tom por status já usada no Pipeline.",
+      },
+      {
+        key: "agenda.status.cancelled.pill",
+        cssVar: "--vexo-agenda-status-cancelled-pill",
+        defaultHex: "#553678",
+        label: "Cancelado — etiqueta de status",
+        description: "Cor da etiqueta \"marca-texto\" (nome do status) dentro do card, quando o agendamento foi cancelado.",
       },
       {
         key: "agenda.status.upcoming.background",
