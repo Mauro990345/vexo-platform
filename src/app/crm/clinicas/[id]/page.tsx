@@ -34,7 +34,11 @@ type PipelineStatus = (typeof PIPELINE_COLUMNS)[number]["status"];
 // já nascendo sutis/dessaturados. tagBg precisa ser uma classe Tailwind
 // TOTALMENTE literal (não montada por template string em runtime) pro JIT
 // conseguir achá-la por análise estática do arquivo — por isso não dá pra
-// derivar `${pillBg}/25` na hora de usar, tem que vir pronta daqui.
+// derivar `${pillBg}/opacidade` na hora de usar, tem que vir pronta daqui.
+// A opacidade de tagBg (mesma cor da pílula, só mais translúcida) é
+// deliberadamente mais alta que a do fundo do card — a etiqueta precisa se
+// destacar do fundo, não ficar quase igual a ele; a cor da pílula do
+// cabeçalho em si (pillBg) não muda.
 // "Precisa de humano"/"Perdido" não têm campo próprio (só as 4 colunas
 // citadas pelo usuário) — usam o token antigo (pipelineCardBg, ainda
 // editável) + a cor semântica já existente pro resto.
@@ -51,7 +55,7 @@ function columnTint(status: PipelineStatus): {
         bg: "bg-vexo-pipelineColNewBg",
         pillBg: "bg-vexo-pipelineColNewPill",
         pillText: "text-vexo-fg",
-        tagBg: "bg-vexo-pipelineColNewPill/25",
+        tagBg: "bg-vexo-pipelineColNewPill/45",
         tagText: "text-vexo-fg",
       };
     case "IN_CONVERSATION":
@@ -59,7 +63,7 @@ function columnTint(status: PipelineStatus): {
         bg: "bg-vexo-pipelineColConversationBg",
         pillBg: "bg-vexo-pipelineColConversationPill",
         pillText: "text-vexo-fg",
-        tagBg: "bg-vexo-pipelineColConversationPill/25",
+        tagBg: "bg-vexo-pipelineColConversationPill/45",
         tagText: "text-vexo-fg",
       };
     case "SCHEDULED":
@@ -67,7 +71,7 @@ function columnTint(status: PipelineStatus): {
         bg: "bg-vexo-pipelineColScheduledBg",
         pillBg: "bg-vexo-pipelineColScheduledPill",
         pillText: "text-vexo-fg",
-        tagBg: "bg-vexo-pipelineColScheduledPill/25",
+        tagBg: "bg-vexo-pipelineColScheduledPill/45",
         tagText: "text-vexo-fg",
       };
     case "FOLLOW_UP":
@@ -75,7 +79,7 @@ function columnTint(status: PipelineStatus): {
         bg: "bg-vexo-pipelineColFollowupBg",
         pillBg: "bg-vexo-pipelineColFollowupPill",
         pillText: "text-vexo-fg",
-        tagBg: "bg-vexo-pipelineColFollowupPill/25",
+        tagBg: "bg-vexo-pipelineColFollowupPill/45",
         tagText: "text-vexo-fg",
       };
     case "NEEDS_HUMAN":
@@ -83,7 +87,7 @@ function columnTint(status: PipelineStatus): {
         bg: "bg-vexo-pipelineCardBg",
         pillBg: "bg-vexo-error/20",
         pillText: "text-vexo-error",
-        tagBg: "bg-vexo-error/15",
+        tagBg: "bg-vexo-error/30",
         tagText: "text-vexo-error",
       };
     case "LOST":
@@ -91,7 +95,7 @@ function columnTint(status: PipelineStatus): {
         bg: "bg-vexo-pipelineCardBg",
         pillBg: "bg-vexo-border",
         pillText: "text-vexo-muted",
-        tagBg: "bg-vexo-border/60",
+        tagBg: "bg-vexo-border/80",
         tagText: "text-vexo-muted",
       };
   }
