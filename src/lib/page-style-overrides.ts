@@ -28,8 +28,10 @@ export type PageStyleFieldKey =
   | "pipeline.column.followUp.pill"
   | "agenda.cardFont"
   | "agenda.cardBackground"
-  | "agenda.status.positive.background"
-  | "agenda.status.positive.pill"
+  | "agenda.status.upcoming.background"
+  | "agenda.status.upcoming.pill"
+  | "agenda.status.completed.background"
+  | "agenda.status.completed.pill"
   | "agenda.status.negative.background"
   | "agenda.status.negative.pill";
 
@@ -140,21 +142,35 @@ export const PAGE_STYLE_SECTIONS: {
         followsGlobalKey: "vexoPetrol",
         label: "Fundo do card (Cancelado)",
         description:
-          "Cor de fundo dos cards de agendamento cancelado — os outros status (Agendado/Confirmado/Compareceu, Faltou) têm campo próprio logo abaixo, mesma lógica de tom por status já usada no Pipeline.",
+          "Cor de fundo dos cards de agendamento cancelado — os outros status (Agendado/Confirmado, Compareceu, Faltou) têm campo próprio logo abaixo, mesma lógica de tom por status já usada no Pipeline.",
       },
       {
-        key: "agenda.status.positive.background",
-        cssVar: "--vexo-agenda-status-positive-bg",
+        key: "agenda.status.upcoming.background",
+        cssVar: "--vexo-agenda-status-upcoming-bg",
         defaultHex: "#29301c",
-        label: "Agendado/Confirmado/Compareceu — fundo do card",
-        description: "Cor de fundo (tingida, dessaturada) dos cards de agendamento nesses 3 status.",
+        label: "Agendado/Confirmado — fundo do card",
+        description: "Cor de fundo (tingida, dessaturada) dos cards de agendamento ainda não realizado.",
       },
       {
-        key: "agenda.status.positive.pill",
-        cssVar: "--vexo-agenda-status-positive-pill",
+        key: "agenda.status.upcoming.pill",
+        cssVar: "--vexo-agenda-status-upcoming-pill",
         defaultHex: "#546a2f",
-        label: "Agendado/Confirmado/Compareceu — etiqueta de status",
-        description: "Cor da etiqueta \"marca-texto\" (nome do status) dentro do card, nesses 3 status.",
+        label: "Agendado/Confirmado — etiqueta de status",
+        description: "Cor da etiqueta \"marca-texto\" (nome do status) dentro do card, nesses 2 status.",
+      },
+      {
+        key: "agenda.status.completed.background",
+        cssVar: "--vexo-agenda-status-completed-bg",
+        defaultHex: "#1f2d37",
+        label: "Compareceu — fundo do card",
+        description: "Cor de fundo (tingida, dessaturada) dos cards de agendamento com comparecimento confirmado — tom próprio, separado de Agendado/Confirmado, pra diferenciar \"já aconteceu\" de \"ainda vai acontecer\".",
+      },
+      {
+        key: "agenda.status.completed.pill",
+        cssVar: "--vexo-agenda-status-completed-pill",
+        defaultHex: "#365c78",
+        label: "Compareceu — etiqueta de status",
+        description: "Cor da etiqueta \"marca-texto\" (nome do status) dentro do card, quando o lead compareceu.",
       },
       {
         key: "agenda.status.negative.background",

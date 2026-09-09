@@ -47,13 +47,15 @@ const config: Config = {
           pipelineColFollowupBg: "rgb(var(--vexo-pipeline-col-followup-bg) / <alpha-value>)",
           pipelineColFollowupPill: "rgb(var(--vexo-pipeline-col-followup-pill) / <alpha-value>)",
           agendaCardFont: "rgb(var(--vexo-agenda-card-font) / <alpha-value>)",
-          // Fundo do card só pro status Cancelado — os outros 2 grupos
-          // (positive/negative) usam os pares abaixo, mesmo padrão do
-          // Pipeline (columnTint). Sem token de borda por status mais —
-          // borda agora é uniforme/fina em todos, igual ao Pipeline.
+          // Fundo do card só pro status Cancelado — os outros 3 grupos
+          // (upcoming/completed/negative) usam os pares abaixo, mesmo
+          // padrão do Pipeline (columnTint). Sem token de borda por status
+          // mais — borda agora é uniforme/fina em todos, igual ao Pipeline.
           agendaCardBg: "rgb(var(--vexo-agenda-card-bg) / <alpha-value>)",
-          agendaStatusPositiveBg: "rgb(var(--vexo-agenda-status-positive-bg) / <alpha-value>)",
-          agendaStatusPositivePill: "rgb(var(--vexo-agenda-status-positive-pill) / <alpha-value>)",
+          agendaStatusUpcomingBg: "rgb(var(--vexo-agenda-status-upcoming-bg) / <alpha-value>)",
+          agendaStatusUpcomingPill: "rgb(var(--vexo-agenda-status-upcoming-pill) / <alpha-value>)",
+          agendaStatusCompletedBg: "rgb(var(--vexo-agenda-status-completed-bg) / <alpha-value>)",
+          agendaStatusCompletedPill: "rgb(var(--vexo-agenda-status-completed-pill) / <alpha-value>)",
           agendaStatusNegativeBg: "rgb(var(--vexo-agenda-status-negative-bg) / <alpha-value>)",
           agendaStatusNegativePill: "rgb(var(--vexo-agenda-status-negative-pill) / <alpha-value>)",
         },

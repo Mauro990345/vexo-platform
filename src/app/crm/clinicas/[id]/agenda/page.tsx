@@ -10,17 +10,20 @@ export const dynamic = "force-dynamic";
 // Mesma lógica de tom por status já usada no Pipeline (columnTint): fundo
 // tingido/dessaturado + etiqueta "marca-texto" mais clara que o fundo, sem
 // borda colorida (a borda agora é uniforme/fina em todo card, ver
-// className mais abaixo). Agrupado em 3 tons (não 5, um por status bruto)
-// de propósito — Agendado/Confirmado/Compareceu são todos desfechos
-// "positivos" e ficariam quase idênticos entre si como 3 verdes
-// separados; a palavra exata do status já vem no texto da etiqueta, então
-// o agrupamento não perde precisão, só evita colorido demais.
+// className mais abaixo). Agrupado em 4 tons (não 5, um por status bruto)
+// — Agendado/Confirmado compartilham um tom (ambos "ainda vai acontecer"),
+// Compareceu tem tom PRÓPRIO (separado do grupo acima de propósito: numa
+// semana típica a maioria dos agendamentos está em Agendado ou Compareceu,
+// então agrupar os dois deixava só o raro "Faltou" com cor diferente na
+// grade real — pouco útil pra escanear rápido). Faltou e Cancelado
+// continuam cada um com o seu.
 function agendaStatusTint(status: string): { bg: string; tagBg: string; tagText: string } {
   switch (status) {
     case "SCHEDULED":
     case "CONFIRMED":
+      return { bg: "bg-vexo-agendaStatusUpcomingBg", tagBg: "bg-vexo-agendaStatusUpcomingPill/45", tagText: "text-vexo-fg" };
     case "COMPLETED":
-      return { bg: "bg-vexo-agendaStatusPositiveBg", tagBg: "bg-vexo-agendaStatusPositivePill/45", tagText: "text-vexo-fg" };
+      return { bg: "bg-vexo-agendaStatusCompletedBg", tagBg: "bg-vexo-agendaStatusCompletedPill/45", tagText: "text-vexo-fg" };
     case "NO_SHOW":
       return { bg: "bg-vexo-agendaStatusNegativeBg", tagBg: "bg-vexo-agendaStatusNegativePill/45", tagText: "text-vexo-fg" };
     default: // CANCELLED e qualquer status futuro sem grupo definido
