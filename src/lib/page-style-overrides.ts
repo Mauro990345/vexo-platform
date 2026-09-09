@@ -140,10 +140,10 @@ export const PAGE_STYLE_SECTIONS: {
       {
         key: "agenda.cardBackground",
         cssVar: "--vexo-agenda-card-bg",
-        defaultHex: "#1c2a3b",
+        defaultHex: "#2a1e38",
         label: "Fundo do card (Cancelado)",
         description:
-          "Cor de fundo dos cards de agendamento cancelado — os outros status (Agendado/Confirmado, Compareceu, Faltou) têm campo próprio logo abaixo, mesma lógica de tom por status já usada no Pipeline.",
+          "Cor de fundo dos cards de agendamento cancelado — mesma família de cor (roxo) da etiqueta de status logo abaixo, os dois precisam acompanhar juntos. Os outros status (Agendado/Confirmado, Compareceu, Faltou) têm campo próprio mais abaixo, mesma lógica de tom por status já usada no Pipeline.",
       },
       {
         key: "agenda.status.cancelled.pill",
@@ -169,10 +169,10 @@ export const PAGE_STYLE_SECTIONS: {
       {
         key: "agenda.status.completed.background",
         cssVar: "--vexo-agenda-status-completed-bg",
-        defaultHex: "#1e3748",
+        defaultHex: "#12233b",
         label: "Compareceu — fundo do card",
         description:
-          "Cor de fundo (tingida, dessaturada) dos cards de agendamento com comparecimento confirmado — tom próprio, separado de Agendado/Confirmado, pra diferenciar \"já aconteceu\" de \"ainda vai acontecer\". Mais saturado/claro que o fundo do Cancelado de propósito — os dois são tons de azul/navy escuros e ficavam quase idênticos com valores muito próximos.",
+          "Cor de fundo dos cards de agendamento com comparecimento confirmado — tom próprio (azul), separado de Agendado/Confirmado (verde) e do Cancelado (roxo), pra diferenciar \"já aconteceu\" de \"ainda vai acontecer\".",
       },
       {
         key: "agenda.status.completed.pill",
