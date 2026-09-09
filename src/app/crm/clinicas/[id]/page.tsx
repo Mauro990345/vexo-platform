@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { AtSign, MoreHorizontal } from "lucide-react";
+import { AtSign, MoreHorizontal, UserPlus, MessageCircle, CalendarDays, CheckCircle2 } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { ResponseRateRing } from "@/components/ResponseRateRing";
+import { ColorBadge, type BadgeColor } from "@/components/ColorBadge";
+import { InitialsAvatar } from "@/components/InitialsAvatar";
 import { startOfDay, addDays } from "@/lib/metrics";
 
 export const dynamic = "force-dynamic";
@@ -25,7 +27,7 @@ const LEAD_CARD_CLASS =
 // Faixas da cor do anel de comparecimento — decisão de exibição, não de
 // dado (o número em si vem sempre certo do banco). Ajustável se a clínica
 // achar essas faixas erradas pra realidade dela.
-function attendanceRingColor(rate: number | null): "success" | "warning" | "error" {
+function attendanceRingColor(rate: number | null): BadgeColor {
   if (rate === null || rate >= 0.75) return "success";
   if (rate >= 0.5) return "warning";
   return "error";
@@ -113,32 +115,52 @@ export default async function ClinicPipelinePage({ params }: { params: { id: str
           card) — com truncate, as 4 legendas ficam sempre em 1 linha,
           então as 4 alturas batem certo em qualquer largura de tela. */}
       <div className="grid grid-cols-2 items-stretch gap-3 text-vexo-pipelineHeaderFont sm:grid-cols-4">
-        <div className="rounded-lg border border-vexo-border bg-vexo-surface2 px-2.5 py-0.5">
-          <p className="truncate text-card font-medium text-vexo-muted">Novos contatos</p>
-          <div className="mt-0.5 flex min-w-0 items-baseline gap-1.5">
-            <span className="shrink-0 text-lg font-semibold leading-none tracking-tight">{newContacts}</span>
-            <span className="min-w-0 flex-1 truncate text-card text-vexo-muted">Últimos 7 dias</span>
+        <div className="flex items-center gap-2.5 rounded-lg border border-vexo-border/50 bg-vexo-surface2 px-2.5 py-1.5">
+          <ColorBadge color="accent" size="h-8 w-8">
+            <UserPlus className="h-4 w-4" strokeWidth={2} />
+          </ColorBadge>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-card font-medium text-vexo-muted">Novos contatos</p>
+            <div className="mt-0.5 flex min-w-0 items-baseline gap-1.5">
+              <span className="shrink-0 text-lg font-semibold leading-none tracking-tight">{newContacts}</span>
+              <span className="min-w-0 flex-1 truncate text-card text-vexo-muted">Últimos 7 dias</span>
+            </div>
           </div>
         </div>
-        <div className="rounded-lg border border-vexo-border bg-vexo-surface2 px-2.5 py-0.5">
-          <p className="truncate text-card font-medium text-vexo-muted">Taxa de resposta</p>
-          <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
-            <ResponseRateRing value={responseRate} compact />
-            <span className="min-w-0 flex-1 truncate text-card text-vexo-muted">Novo contato → Em conversa</span>
+        <div className="flex items-center gap-2.5 rounded-lg border border-vexo-border/50 bg-vexo-surface2 px-2.5 py-1.5">
+          <ColorBadge color="accent" size="h-8 w-8">
+            <MessageCircle className="h-4 w-4" strokeWidth={2} />
+          </ColorBadge>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-card font-medium text-vexo-muted">Taxa de resposta</p>
+            <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
+              <ResponseRateRing value={responseRate} compact />
+              <span className="min-w-0 flex-1 truncate text-card text-vexo-muted">Novo contato → Em conversa</span>
+            </div>
           </div>
         </div>
-        <div className="rounded-lg border border-vexo-border bg-vexo-surface2 px-2.5 py-0.5">
-          <p className="truncate text-card font-medium text-vexo-muted">Agendados</p>
-          <div className="mt-0.5 flex min-w-0 items-baseline gap-1.5">
-            <span className="shrink-0 text-lg font-semibold leading-none tracking-tight">{scheduled}</span>
-            <span className="min-w-0 flex-1 truncate text-card text-vexo-muted">Últimos 7 dias</span>
+        <div className="flex items-center gap-2.5 rounded-lg border border-vexo-border/50 bg-vexo-surface2 px-2.5 py-1.5">
+          <ColorBadge color="success" size="h-8 w-8">
+            <CalendarDays className="h-4 w-4" strokeWidth={2} />
+          </ColorBadge>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-card font-medium text-vexo-muted">Agendados</p>
+            <div className="mt-0.5 flex min-w-0 items-baseline gap-1.5">
+              <span className="shrink-0 text-lg font-semibold leading-none tracking-tight">{scheduled}</span>
+              <span className="min-w-0 flex-1 truncate text-card text-vexo-muted">Últimos 7 dias</span>
+            </div>
           </div>
         </div>
-        <div className="rounded-lg border border-vexo-border bg-vexo-surface2 px-2.5 py-0.5">
-          <p className="truncate text-card font-medium text-vexo-muted">Taxa de comparecimento</p>
-          <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
-            <ResponseRateRing value={attendanceRate} color={attendanceRingColor(attendanceRate)} compact />
-            <span className="min-w-0 flex-1 truncate text-card text-vexo-muted">Compareceu x Não compareceu</span>
+        <div className="flex items-center gap-2.5 rounded-lg border border-vexo-border/50 bg-vexo-surface2 px-2.5 py-1.5">
+          <ColorBadge color={attendanceRingColor(attendanceRate)} size="h-8 w-8">
+            <CheckCircle2 className="h-4 w-4" strokeWidth={2} />
+          </ColorBadge>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-card font-medium text-vexo-muted">Taxa de comparecimento</p>
+            <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
+              <ResponseRateRing value={attendanceRate} color={attendanceRingColor(attendanceRate)} compact />
+              <span className="min-w-0 flex-1 truncate text-card text-vexo-muted">Compareceu x Não compareceu</span>
+            </div>
           </div>
         </div>
       </div>
@@ -182,30 +204,41 @@ export default async function ClinicPipelinePage({ params }: { params: { id: str
                     if (col.status === "SCHEDULED") {
                       return (
                         <div key={conv.id} className={`${LEAD_CARD_CLASS} px-3.5 py-2.5`}>
-                          <Link href={`/crm/conversas/${conv.id}`} className="block transition hover:text-vexo-accent">
-                            <p className="truncate text-sm font-semibold">{name}</p>
+                          <Link
+                            href={`/crm/conversas/${conv.id}`}
+                            className="flex items-center gap-2.5 transition hover:text-vexo-accent"
+                          >
+                            <InitialsAvatar name={name} />
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-sm font-semibold">{name}</p>
+                              {appt && (
+                                <p className="mt-1 text-caption font-medium text-vexo-muted">
+                                  {formatDateTime(appt.scheduledAt)}
+                                </p>
+                              )}
+                            </div>
                           </Link>
-
-                          {appt && (
-                            <p className="mt-1 text-caption font-medium text-vexo-muted">
-                              {formatDateTime(appt.scheduledAt)}
-                            </p>
-                          )}
                         </div>
                       );
                     }
 
                     return (
                       <div key={conv.id} className={`${LEAD_CARD_CLASS} px-3.5 py-2.5`}>
-                        <Link href={`/crm/conversas/${conv.id}`} className="block transition hover:text-vexo-accent">
-                          <div className="flex items-start justify-between gap-2">
-                            <p className="truncate text-sm font-semibold">{name}</p>
-                            <MoreHorizontal className="h-3.5 w-3.5 shrink-0 text-vexo-muted" strokeWidth={2} />
-                          </div>
+                        <Link
+                          href={`/crm/conversas/${conv.id}`}
+                          className="flex items-start gap-2.5 transition hover:text-vexo-accent"
+                        >
+                          <InitialsAvatar name={name} className="mt-0.5 h-7 w-7" />
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-start justify-between gap-2">
+                              <p className="truncate text-sm font-semibold">{name}</p>
+                              <MoreHorizontal className="h-3.5 w-3.5 shrink-0 text-vexo-muted" strokeWidth={2} />
+                            </div>
 
-                          <div className="mt-1 flex items-center gap-1.5 text-caption text-vexo-muted">
-                            <AtSign className="h-3 w-3 shrink-0" strokeWidth={2} />
-                            <span>{conv.lastMessageAt ? formatDateTime(conv.lastMessageAt) : "—"}</span>
+                            <div className="mt-1 flex items-center gap-1.5 text-caption text-vexo-muted">
+                              <AtSign className="h-3 w-3 shrink-0" strokeWidth={2} />
+                              <span>{conv.lastMessageAt ? formatDateTime(conv.lastMessageAt) : "—"}</span>
+                            </div>
                           </div>
                         </Link>
                       </div>
