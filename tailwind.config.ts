@@ -34,8 +34,18 @@ const config: Config = {
           // global equivalente; só passa a ter valor próprio quando
           // personalizada na tela de Configurações.
           pipelineHeaderFont: "rgb(var(--vexo-pipeline-header-font) / <alpha-value>)",
+          // Fundo do card de lead nas 2 colunas sem tom próprio (Precisa de
+          // humano / Perdido) — as outras 4 usam os pares col*Bg/col*Pill
+          // logo abaixo, um por coluna (ver page-style-overrides.ts).
           pipelineCardBg: "rgb(var(--vexo-pipeline-card-bg) / <alpha-value>)",
-          pipelineCardBorder: "rgb(var(--vexo-pipeline-card-border) / <alpha-value>)",
+          pipelineColNewBg: "rgb(var(--vexo-pipeline-col-new-bg) / <alpha-value>)",
+          pipelineColNewPill: "rgb(var(--vexo-pipeline-col-new-pill) / <alpha-value>)",
+          pipelineColConversationBg: "rgb(var(--vexo-pipeline-col-conversation-bg) / <alpha-value>)",
+          pipelineColConversationPill: "rgb(var(--vexo-pipeline-col-conversation-pill) / <alpha-value>)",
+          pipelineColScheduledBg: "rgb(var(--vexo-pipeline-col-scheduled-bg) / <alpha-value>)",
+          pipelineColScheduledPill: "rgb(var(--vexo-pipeline-col-scheduled-pill) / <alpha-value>)",
+          pipelineColFollowupBg: "rgb(var(--vexo-pipeline-col-followup-bg) / <alpha-value>)",
+          pipelineColFollowupPill: "rgb(var(--vexo-pipeline-col-followup-pill) / <alpha-value>)",
           agendaCardFont: "rgb(var(--vexo-agenda-card-font) / <alpha-value>)",
           agendaCardBg: "rgb(var(--vexo-agenda-card-bg) / <alpha-value>)",
           agendaCardBorder: "rgb(var(--vexo-agenda-card-border) / <alpha-value>)",

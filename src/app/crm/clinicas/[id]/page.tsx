@@ -1,28 +1,12 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { AtSign, MoreHorizontal, UserPlus, MessageCircle, CalendarDays, CheckCircle2 } from "lucide-react";
+import { MoreHorizontal, UserPlus, MessageCircle, CalendarDays, CheckCircle2 } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { ResponseRateRing } from "@/components/ResponseRateRing";
 import { ColorBadge, type BadgeColor } from "@/components/ColorBadge";
-import { InitialsAvatar } from "@/components/InitialsAvatar";
 import { startOfDay, addDays } from "@/lib/metrics";
 
 export const dynamic = "force-dynamic";
-
-// Fundo/borda dos cards de lead — usa os tokens de página
-// (vexo-pipelineCardBg/vexo-pipelineCardBorder, ver
-// src/lib/page-style-overrides.ts), que por padrão seguem vexoPetrol/
-// vexoPetrolBorder (mesma aparência de sempre) mas podem ser
-// personalizados só pro Pipeline, sem afetar o card de agendamento da
-// Agenda, na tela de Configurações.
-//
-// Mesma receita do card de agendamento da Agenda: a borda "ambiente" (as 4
-// faces) fica em vexo-petrolBorder, sem token de página — só a lateral
-// esquerda troca de cor (border-l-vexo-pipelineCardBorder), senão
-// personalizar essa cor pintava o contorno inteiro do card, não só a
-// faixa da esquerda.
-const LEAD_CARD_CLASS =
-  "rounded-xl border border-vexo-petrolBorder border-l-[3px] border-l-vexo-pipelineCardBorder bg-vexo-pipelineCardBg";
 
 // Faixas da cor do anel de comparecimento — decisão de exibição, não de
 // dado (o número em si vem sempre certo do banco). Ajustável se a clínica
@@ -41,6 +25,77 @@ const PIPELINE_COLUMNS = [
   { status: "NEEDS_HUMAN", label: "Precisa de humano" },
   { status: "LOST", label: "Perdido" },
 ] as const;
+
+type PipelineStatus = (typeof PIPELINE_COLUMNS)[number]["status"];
+
+// Tom por status do card de lead + cabeçalho em pílula da coluna. bg/pillBg
+// usam os tokens de página (vexo-pipelineCol*, ver
+// src/lib/page-style-overrides.ts) — editáveis um por um em Configurações,
+// já nascendo sutis/dessaturados. tagBg precisa ser uma classe Tailwind
+// TOTALMENTE literal (não montada por template string em runtime) pro JIT
+// conseguir achá-la por análise estática do arquivo — por isso não dá pra
+// derivar `${pillBg}/25` na hora de usar, tem que vir pronta daqui.
+// "Precisa de humano"/"Perdido" não têm campo próprio (só as 4 colunas
+// citadas pelo usuário) — usam o token antigo (pipelineCardBg, ainda
+// editável) + a cor semântica já existente pro resto.
+function columnTint(status: PipelineStatus): {
+  bg: string;
+  pillBg: string;
+  pillText: string;
+  tagBg: string;
+  tagText: string;
+} {
+  switch (status) {
+    case "NEW":
+      return {
+        bg: "bg-vexo-pipelineColNewBg",
+        pillBg: "bg-vexo-pipelineColNewPill",
+        pillText: "text-vexo-fg",
+        tagBg: "bg-vexo-pipelineColNewPill/25",
+        tagText: "text-vexo-fg",
+      };
+    case "IN_CONVERSATION":
+      return {
+        bg: "bg-vexo-pipelineColConversationBg",
+        pillBg: "bg-vexo-pipelineColConversationPill",
+        pillText: "text-vexo-fg",
+        tagBg: "bg-vexo-pipelineColConversationPill/25",
+        tagText: "text-vexo-fg",
+      };
+    case "SCHEDULED":
+      return {
+        bg: "bg-vexo-pipelineColScheduledBg",
+        pillBg: "bg-vexo-pipelineColScheduledPill",
+        pillText: "text-vexo-fg",
+        tagBg: "bg-vexo-pipelineColScheduledPill/25",
+        tagText: "text-vexo-fg",
+      };
+    case "FOLLOW_UP":
+      return {
+        bg: "bg-vexo-pipelineColFollowupBg",
+        pillBg: "bg-vexo-pipelineColFollowupPill",
+        pillText: "text-vexo-fg",
+        tagBg: "bg-vexo-pipelineColFollowupPill/25",
+        tagText: "text-vexo-fg",
+      };
+    case "NEEDS_HUMAN":
+      return {
+        bg: "bg-vexo-pipelineCardBg",
+        pillBg: "bg-vexo-error/20",
+        pillText: "text-vexo-error",
+        tagBg: "bg-vexo-error/15",
+        tagText: "text-vexo-error",
+      };
+    case "LOST":
+      return {
+        bg: "bg-vexo-pipelineCardBg",
+        pillBg: "bg-vexo-border",
+        pillText: "text-vexo-muted",
+        tagBg: "bg-vexo-border/60",
+        tagText: "text-vexo-muted",
+      };
+  }
+}
 
 function formatDateTime(date: Date): string {
   return new Date(date).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
@@ -101,21 +156,16 @@ export default async function ClinicPipelinePage({ params }: { params: { id: str
       {/* text-vexo-pipelineHeaderFont aqui em cima, não em cada número —
           color é herdado, então os valores (sem cor própria) pegam esse
           token; os labels/legendas continuam explicitamente vexo-muted,
-          por isso não mudam junto. */}
-      {/* py-0.5 + valores em text-lg + só 2 linhas (label; valor + legenda
-          lado a lado) — de propósito mais compactos que os cards de lead
-          dentro das colunas do funil: são um resumo de apoio, não o foco
-          principal da tela, então não deveriam competir em peso visual com
-          o conteúdo do funil.
-          items-stretch explícito (já seria o padrão do grid, mas fica
-          garantido) + truncate na legenda de cada card: sem truncate, a
-          legenda mais longa ("Compareceu x Não compareceu") podia quebrar
-          pra uma segunda linha num card e não nos outros, deixando só
-          aquele card mais alto no mobile (grid-cols-2, menos largura por
-          card) — com truncate, as 4 legendas ficam sempre em 1 linha,
-          então as 4 alturas batem certo em qualquer largura de tela. */}
+          por isso não mudam junto. Fundo de cada card reaproveita o MESMO
+          tom da coluna que ele resume (Novos contatos/Taxa de resposta ~
+          Novo contato/Em conversa; Agendados/Taxa de comparecimento ~
+          Agendado) — mesma lógica de tom por status pedida pros cards de
+          lead, só que aqui os 4 tokens já existiam, não precisou de novo
+          campo em Configurações. Borda fina/baixa opacidade e raio pequeno
+          (rounded-card) — objetivo é elegância, não quantidade de
+          elementos. */}
       <div className="grid grid-cols-2 items-stretch gap-3 text-vexo-pipelineHeaderFont sm:grid-cols-4">
-        <div className="flex items-center gap-2.5 rounded-lg border border-vexo-border/50 bg-vexo-surface2 px-2.5 py-1.5">
+        <div className="flex items-center gap-2.5 rounded-card border border-vexo-border/20 bg-vexo-pipelineColNewBg px-2.5 py-1.5">
           <ColorBadge color="accent" size="h-8 w-8">
             <UserPlus className="h-4 w-4" strokeWidth={2} />
           </ColorBadge>
@@ -127,7 +177,7 @@ export default async function ClinicPipelinePage({ params }: { params: { id: str
             </div>
           </div>
         </div>
-        <div className="flex items-center gap-2.5 rounded-lg border border-vexo-border/50 bg-vexo-surface2 px-2.5 py-1.5">
+        <div className="flex items-center gap-2.5 rounded-card border border-vexo-border/20 bg-vexo-pipelineColConversationBg px-2.5 py-1.5">
           <ColorBadge color="accent" size="h-8 w-8">
             <MessageCircle className="h-4 w-4" strokeWidth={2} />
           </ColorBadge>
@@ -139,7 +189,7 @@ export default async function ClinicPipelinePage({ params }: { params: { id: str
             </div>
           </div>
         </div>
-        <div className="flex items-center gap-2.5 rounded-lg border border-vexo-border/50 bg-vexo-surface2 px-2.5 py-1.5">
+        <div className="flex items-center gap-2.5 rounded-card border border-vexo-border/20 bg-vexo-pipelineColScheduledBg px-2.5 py-1.5">
           <ColorBadge color="success" size="h-8 w-8">
             <CalendarDays className="h-4 w-4" strokeWidth={2} />
           </ColorBadge>
@@ -151,7 +201,7 @@ export default async function ClinicPipelinePage({ params }: { params: { id: str
             </div>
           </div>
         </div>
-        <div className="flex items-center gap-2.5 rounded-lg border border-vexo-border/50 bg-vexo-surface2 px-2.5 py-1.5">
+        <div className="flex items-center gap-2.5 rounded-card border border-vexo-border/20 bg-vexo-pipelineColScheduledBg px-2.5 py-1.5">
           <ColorBadge color={attendanceRingColor(attendanceRate)} size="h-8 w-8">
             <CheckCircle2 className="h-4 w-4" strokeWidth={2} />
           </ColorBadge>
@@ -173,73 +223,59 @@ export default async function ClinicPipelinePage({ params }: { params: { id: str
         <div className="flex items-start gap-3">
           {PIPELINE_COLUMNS.map((col) => {
             const items = byStatus[col.status] ?? [];
+            const tint = columnTint(col.status);
             return (
-              <div key={col.status} className="w-64 shrink-0 rounded-xl border border-vexo-border bg-vexo-surface p-3">
-                <div className="mb-2.5 flex items-center justify-between gap-2">
-                  {/* text-vexo-fg explícito — antes o título só herdava a
-                      cor do body sem nenhuma classe própria, o que deveria
-                      já dar o mesmo resultado nas 6 colunas, mas na prática
-                      duas apareciam mais apagadas que as outras. Fixando a
-                      cor aqui em vez de depender de herança, o título das 6
-                      colunas (estados irmãos do mesmo funil) fica garantido
-                      igual, independente da causa exata da inconsistência. */}
-                  <h2 className="truncate text-xs font-semibold text-vexo-fg">{col.label}</h2>
-                  <span className="shrink-0 rounded-full bg-vexo-surface2 px-1.5 py-0.5 text-caption font-medium text-vexo-muted">
+              <div key={col.status} className="w-64 shrink-0 rounded-card border border-vexo-border/30 bg-vexo-surface p-3">
+                {/* Cabeçalho em pílula (fundo colorido + nome + contador no
+                    mesmo bloco) em vez de texto solto acima da coluna —
+                    bg-black/15 no contador dá contraste em cima de
+                    qualquer tom de pílula, sem precisar de um token extra
+                    por coluna só pra isso. */}
+                <div className={`mb-2.5 flex items-center justify-between gap-2 rounded-card ${tint.pillBg} px-2.5 py-1.5`}>
+                  <h2 className={`truncate text-xs font-semibold ${tint.pillText}`}>{col.label}</h2>
+                  <span className={`shrink-0 rounded-card bg-black/15 px-1.5 py-0.5 text-caption font-medium ${tint.pillText}`}>
                     {items.length}
                   </span>
                 </div>
 
-                <div className="space-y-3">
+                <div className="space-y-2">
                   {items.map((conv) => {
                     const appt = conv.appointments[0];
                     const name = conv.lead.name ?? conv.lead.igUsername ?? "Lead";
+                    const cardClass = `rounded-card border border-vexo-border/20 ${tint.bg} px-3.5 py-2.5`;
 
-                    // A coluna Agendado usava padding/fonte menores (versão
-                    // compacta de quando ainda tinha os botões
-                    // "Compareceu"/"Faltou" dentro do card, removidos há
-                    // algumas rodadas) — agora usa o mesmo p-3.5 e mesmo
-                    // tamanho de texto do nome que as outras 5 colunas, só
-                    // trocando a segunda linha (data do agendamento em vez
-                    // de @ + última mensagem).
+                    // A coluna Agendado troca a segunda linha (data do
+                    // agendamento em vez de última mensagem) — resto do
+                    // card (nome, etiqueta de status) é igual às outras.
                     if (col.status === "SCHEDULED") {
                       return (
-                        <div key={conv.id} className={`${LEAD_CARD_CLASS} px-3.5 py-2.5`}>
-                          <Link
-                            href={`/crm/conversas/${conv.id}`}
-                            className="flex items-center gap-2.5 transition hover:text-vexo-accent"
-                          >
-                            <InitialsAvatar name={name} />
-                            <div className="min-w-0 flex-1">
-                              <p className="truncate text-sm font-semibold">{name}</p>
-                              {appt && (
-                                <p className="mt-1 text-caption font-medium text-vexo-muted">
-                                  {formatDateTime(appt.scheduledAt)}
-                                </p>
-                              )}
-                            </div>
+                        <div key={conv.id} className={cardClass}>
+                          <Link href={`/crm/conversas/${conv.id}`} className="block transition hover:text-vexo-accent">
+                            <p className="truncate text-sm font-medium">{name}</p>
+                            {appt && (
+                              <p className="mt-1 text-caption text-vexo-muted">{formatDateTime(appt.scheduledAt)}</p>
+                            )}
+                            <span className={`mt-1.5 inline-block rounded-card ${tint.tagBg} px-1.5 py-0.5 text-caption font-medium ${tint.tagText}`}>
+                              {col.label}
+                            </span>
                           </Link>
                         </div>
                       );
                     }
 
                     return (
-                      <div key={conv.id} className={`${LEAD_CARD_CLASS} px-3.5 py-2.5`}>
-                        <Link
-                          href={`/crm/conversas/${conv.id}`}
-                          className="flex items-start gap-2.5 transition hover:text-vexo-accent"
-                        >
-                          <InitialsAvatar name={name} className="mt-0.5 h-7 w-7" />
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-start justify-between gap-2">
-                              <p className="truncate text-sm font-semibold">{name}</p>
-                              <MoreHorizontal className="h-3.5 w-3.5 shrink-0 text-vexo-muted" strokeWidth={2} />
-                            </div>
-
-                            <div className="mt-1 flex items-center gap-1.5 text-caption text-vexo-muted">
-                              <AtSign className="h-3 w-3 shrink-0" strokeWidth={2} />
-                              <span>{conv.lastMessageAt ? formatDateTime(conv.lastMessageAt) : "—"}</span>
-                            </div>
+                      <div key={conv.id} className={cardClass}>
+                        <Link href={`/crm/conversas/${conv.id}`} className="block transition hover:text-vexo-accent">
+                          <div className="flex items-start justify-between gap-2">
+                            <p className="truncate text-sm font-medium">{name}</p>
+                            <MoreHorizontal className="h-3.5 w-3.5 shrink-0 text-vexo-muted" strokeWidth={2} />
                           </div>
+                          <p className="mt-1 text-caption text-vexo-muted">
+                            {conv.lastMessageAt ? formatDateTime(conv.lastMessageAt) : "—"}
+                          </p>
+                          <span className={`mt-1.5 inline-block rounded-card ${tint.tagBg} px-1.5 py-0.5 text-caption font-medium ${tint.tagText}`}>
+                            {col.label}
+                          </span>
                         </Link>
                       </div>
                     );

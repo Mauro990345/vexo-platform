@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireInternalSession } from "@/lib/session";
 import { getThemeColors, THEME_FIELDS, type ThemeColorKey } from "@/lib/theme";
-import { PAGE_STYLE_SECTIONS, getPageStyleOverrides, resolveEffectiveColor } from "@/lib/page-style-overrides";
+import { PAGE_STYLE_SECTIONS, getPageStyleOverrides, resolveEffectiveColor, followsLabelFor } from "@/lib/page-style-overrides";
 import { ColorField } from "@/components/ColorField";
 import { PageStyleColorField } from "@/components/PageStyleColorField";
 import { ConfirmSubmitButton } from "@/components/ConfirmSubmitButton";
@@ -102,7 +102,7 @@ export default async function ClinicConfiguracoesPage({ params }: { params: { id
                   name={field.key}
                   label={field.label}
                   description={field.description}
-                  followsLabel={globalFieldLabelByKey[field.followsGlobalKey]}
+                  followsLabel={followsLabelFor(field, globalFieldLabelByKey)}
                   currentColor={resolveEffectiveColor(field, pageStyleOverrides, colors)}
                   initiallyOverridden={Boolean(pageStyleOverrides[field.key])}
                 />
