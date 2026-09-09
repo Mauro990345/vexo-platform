@@ -100,6 +100,11 @@ export type AgentTools = {
   // só no texto da mensagem, sem ficar disponível pra secretária no CRM
   // nem pros lembretes automáticos por WhatsApp (que dependem de Lead.phone).
   saveLeadPhone: (args: { phone: string }) => Promise<{ saved: true } | { error: string }>;
+  // Busca uma foto de resultado (antes/depois) cadastrada pra clínica na
+  // categoria mais próxima do procedimento que o lead demonstrou interesse.
+  // Trava em no máximo 1 envio por conversa — ver resultPhotoSentAt em
+  // conversation-pipeline.ts.
+  sendResultPhoto: (args: { category: string }) => Promise<{ sent: true } | { error: string }>;
 };
 
 const TOOLS: Anthropic.Tool[] = [
@@ -139,6 +144,18 @@ const TOOLS: Anthropic.Tool[] = [
         phone: { type: "string", description: "Número de WhatsApp informado pelo lead, no formato que ele mandou." },
       },
       required: ["phone"],
+    },
+  },
+  {
+    name: "send_result_photo",
+    description:
+      "Envia uma foto de resultado (antes/depois) de um procedimento específico, quando o lead demonstrar interesse claro naquele procedimento durante a conversa. Use a categoria mais próxima do procedimento mencionado (ex: 'botox', 'preenchimento labial', 'harmonização facial'). No máximo uma vez por conversa — não chame de novo se já tiver enviado antes.",
+    input_schema: {
+      type: "object",
+      properties: {
+        category: { type: "string", description: "Categoria/procedimento mencionado pelo lead (ex: 'botox')." },
+      },
+      required: ["category"],
     },
   },
 ];
@@ -193,6 +210,8 @@ export async function generateLeadReply(params: {
         }
       } else if (block.name === "save_lead_phone") {
         result = await params.tools.saveLeadPhone(block.input as { phone: string });
+      } else if (block.name === "send_result_photo") {
+        result = await params.tools.sendResultPhoto(block.input as { category: string });
       } else {
         result = { error: `Ferramenta desconhecida: ${block.name}` };
       }

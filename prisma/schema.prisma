@@ -83,6 +83,7 @@ model Clinic {
   appointments    Appointment[]
   weeklySummaries WeeklySummary[]
   approachLogs    ApproachLog[]
+  resultPhotos    ResultPhoto[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -224,6 +225,12 @@ model Conversation {
   lastLeadMessageAt DateTime?
   lastAiMessageAt   DateTime?
   lastMessageAt     DateTime?
+
+  // Marca que a IA já enviou uma foto de resultado (antes/depois) nesta
+  // conversa — usado pra travar em no máximo 1 por conversa (ver
+  // send_result_photo em src/lib/anthropic.ts), mesma receita do
+  // Appointment.confirmationVideoSentAt.
+  resultPhotoSentAt DateTime?
 
   messages     Message[]
   appointments Appointment[]
@@ -503,6 +510,25 @@ model ApproachLog {
   createdAt DateTime @default(now())
 
   @@index([clinicId, loggedDate])
+}
+
+// Fotos de resultado (antes/depois) cadastradas por clínica, cada uma com
+// uma categoria/tag livre (ex: "botox", "preenchimento labial") — a IA
+// busca por categoria e anexa numa resposta quando o lead demonstra
+// interesse específico naquele procedimento (ver send_result_photo em
+// src/lib/anthropic.ts). Categoria é texto livre, não enum: procedimentos
+// variam demais entre clínicas pra travar numa lista fixa.
+model ResultPhoto {
+  id       String @id @default(cuid())
+  clinicId String
+  clinic   Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  category String
+  imageUrl String
+
+  createdAt DateTime @default(now())
+
+  @@index([clinicId, category])
 }
 
 // ---------------------------------------------------------------------------

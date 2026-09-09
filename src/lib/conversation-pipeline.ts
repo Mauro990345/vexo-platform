@@ -158,6 +158,8 @@ export async function handleInboundInstagramMessage(event: InboundInstagramEvent
 
   let scheduledStartTime: string | undefined;
   let capturedLeadPhone: string | undefined;
+  let capturedResultPhotoUrl: string | undefined;
+  let resultPhotoAlreadySent = Boolean(conversation.resultPhotoSentAt);
 
   const reply = await generateLeadReply({
     systemPrompt: clinic.aiSystemPrompt || DEFAULT_CONVERSATION_SYSTEM_PROMPT,
@@ -173,6 +175,23 @@ export async function handleInboundInstagramMessage(event: InboundInstagramEvent
         if (!phone) return { error: "Número vazio." };
         capturedLeadPhone = phone;
         return { saved: true };
+      },
+      async sendResultPhoto(args) {
+        if (resultPhotoAlreadySent) {
+          return { error: "Já foi enviada uma foto de resultado nesta conversa — não envie outra." };
+        }
+        const category = args.category.trim();
+        if (!category) return { error: "Categoria vazia." };
+        const photo = await prisma.resultPhoto.findFirst({
+          where: { clinicId: clinic.id, category: { contains: category, mode: "insensitive" } },
+          orderBy: { createdAt: "desc" },
+        });
+        if (!photo) {
+          return { error: `Nenhuma foto de resultado cadastrada para a categoria "${category}".` };
+        }
+        capturedResultPhotoUrl = photo.imageUrl;
+        resultPhotoAlreadySent = true;
+        return { sent: true };
       },
     },
   });
@@ -200,6 +219,27 @@ export async function handleInboundInstagramMessage(event: InboundInstagramEvent
 
   if (capturedLeadPhone) {
     await prisma.lead.update({ where: { id: lead.id }, data: { phone: capturedLeadPhone } });
+  }
+
+  if (capturedResultPhotoUrl) {
+    // +5s pra chegar logo depois da resposta em texto, não junto/antes dela.
+    await prisma.$transaction([
+      prisma.message.create({
+        data: {
+          conversationId: conversation.id,
+          direction: "OUTBOUND",
+          sender: "AI",
+          content: "[foto de resultado]",
+          mediaUrl: capturedResultPhotoUrl,
+          status: "PENDING",
+          scheduledFor: new Date(scheduledFor.getTime() + 5_000),
+        },
+      }),
+      prisma.conversation.update({
+        where: { id: conversation.id },
+        data: { resultPhotoSentAt: new Date() },
+      }),
+    ]);
   }
 
   if (scheduledStartTime) {

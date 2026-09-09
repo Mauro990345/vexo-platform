@@ -379,6 +379,41 @@ export async function disconnectWhatsappAction(clinicId: string) {
   revalidatePath("/crm");
 }
 
+// Fotos de resultado (antes/depois) usadas pela IA via send_result_photo
+// (ver src/lib/anthropic.ts e conversation-pipeline.ts) — mesma
+// infraestrutura de upload do vídeo de confirmação, subdir própria.
+export async function addResultPhoto(clinicId: string, formData: FormData) {
+  await requireInternalSession();
+
+  const category = String(formData.get("category") ?? "").trim();
+  if (!category) throw new Error("Categoria é obrigatória.");
+
+  const file = formData.get("photoFile");
+  if (!(file instanceof File) || file.size === 0) {
+    throw new Error("Selecione uma foto.");
+  }
+
+  const imageUrl = await saveUploadedAttachment(file, "result-photos");
+
+  await prisma.resultPhoto.create({
+    data: { clinicId, category, imageUrl },
+  });
+
+  revalidatePath(`/crm/clinicas/${clinicId}/fotos`);
+}
+
+export async function deleteResultPhoto(clinicId: string, photoId: string) {
+  await requireInternalSession();
+
+  const photo = await prisma.resultPhoto.findUnique({ where: { id: photoId } });
+  if (!photo || photo.clinicId !== clinicId) return;
+
+  await prisma.resultPhoto.delete({ where: { id: photoId } });
+  await deleteUploadedAttachment(photo.imageUrl);
+
+  revalidatePath(`/crm/clinicas/${clinicId}/fotos`);
+}
+
 export async function sendHumanReply(conversationId: string, formData: FormData) {
   await requireInternalSession();
 
