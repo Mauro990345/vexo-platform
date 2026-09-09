@@ -169,14 +169,15 @@ export const PAGE_STYLE_SECTIONS: {
       {
         key: "agenda.status.completed.background",
         cssVar: "--vexo-agenda-status-completed-bg",
-        defaultHex: "#1f2d37",
+        defaultHex: "#1e3748",
         label: "Compareceu — fundo do card",
-        description: "Cor de fundo (tingida, dessaturada) dos cards de agendamento com comparecimento confirmado — tom próprio, separado de Agendado/Confirmado, pra diferenciar \"já aconteceu\" de \"ainda vai acontecer\".",
+        description:
+          "Cor de fundo (tingida, dessaturada) dos cards de agendamento com comparecimento confirmado — tom próprio, separado de Agendado/Confirmado, pra diferenciar \"já aconteceu\" de \"ainda vai acontecer\". Mais saturado/claro que o fundo do Cancelado de propósito — os dois são tons de azul/navy escuros e ficavam quase idênticos com valores muito próximos.",
       },
       {
         key: "agenda.status.completed.pill",
         cssVar: "--vexo-agenda-status-completed-pill",
-        defaultHex: "#365c78",
+        defaultHex: "#306991",
         label: "Compareceu — etiqueta de status",
         description: "Cor da etiqueta \"marca-texto\" (nome do status) dentro do card, quando o lead compareceu.",
       },
