@@ -157,63 +157,73 @@ export default async function ClinicPipelinePage({ params }: { params: { id: str
         <p className="mt-1 text-sm text-vexo-muted">{clinic.name}</p>
       </div>
 
-      {/* text-vexo-pipelineHeaderFont aqui em cima, não em cada número —
+      {/* Uma única faixa escura (bg-vexo-surface2) dividida em 4 seções por
+          um divisor fino (divide-x), não mais 4 cards separados com borda
+          própria cada — visual de "barra de status", não "blocos
+          empilhados". overflow-x-auto é rede de segurança pra telas bem
+          estreitas (a faixa não quebra linha; abaixo de min-w cada seção
+          vira scroll horizontal em vez de espremer o conteúdo).
+          text-vexo-pipelineHeaderFont aqui em cima, não em cada número —
           color é herdado, então os valores (sem cor própria) pegam esse
-          token; os labels/legendas continuam explicitamente vexo-muted,
-          por isso não mudam junto. Fundo de cada card reaproveita o MESMO
-          tom da coluna que ele resume (Novos contatos/Taxa de resposta ~
-          Novo contato/Em conversa; Agendados/Taxa de comparecimento ~
-          Agendado) — mesma lógica de tom por status pedida pros cards de
-          lead, só que aqui os 4 tokens já existiam, não precisou de novo
-          campo em Configurações. Borda fina/baixa opacidade e raio pequeno
-          (rounded-card) — objetivo é elegância, não quantidade de
-          elementos. */}
-      <div className="grid grid-cols-2 items-stretch gap-3 text-vexo-pipelineHeaderFont sm:grid-cols-4">
-        <div className="flex items-center gap-2.5 rounded-card border border-vexo-border/20 bg-vexo-pipelineColNewBg px-2.5 py-1.5">
-          <ColorBadge color="accent" size="h-8 w-8">
-            <UserPlus className="h-4 w-4" strokeWidth={2} />
-          </ColorBadge>
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-card font-medium text-vexo-muted">Novos contatos</p>
-            <div className="mt-0.5 flex min-w-0 items-baseline gap-1.5">
-              <span className="shrink-0 text-lg font-semibold leading-none tracking-tight">{newContacts}</span>
-              <span className="min-w-0 flex-1 truncate text-card text-vexo-muted">Últimos 7 dias</span>
+          token. Nome de cada métrica com destaque "marca-texto" (fundo
+          cinza claro translúcido) — só o nome, o valor continua sendo o
+          elemento de maior peso visual, sem esse tratamento. */}
+      <div className="overflow-x-auto">
+        <div className="flex divide-x divide-vexo-border/20 overflow-hidden rounded-card border border-vexo-border/20 bg-vexo-surface2 text-vexo-pipelineHeaderFont">
+          <div className="flex min-w-[160px] flex-1 items-center gap-2.5 px-3 py-2">
+            <ColorBadge color="accent" size="h-8 w-8">
+              <UserPlus className="h-4 w-4" strokeWidth={2} />
+            </ColorBadge>
+            <div className="min-w-0 flex-1">
+              <span className="inline-block max-w-full truncate rounded-card bg-white/10 px-1.5 py-0.5 text-caption font-normal text-vexo-fg">
+                Novos contatos
+              </span>
+              <div className="mt-1 flex min-w-0 items-baseline gap-1.5">
+                <span className="shrink-0 text-lg font-semibold leading-none tracking-tight">{newContacts}</span>
+                <span className="min-w-0 flex-1 truncate text-card text-vexo-muted">Últimos 7 dias</span>
+              </div>
             </div>
           </div>
-        </div>
-        <div className="flex items-center gap-2.5 rounded-card border border-vexo-border/20 bg-vexo-pipelineColConversationBg px-2.5 py-1.5">
-          <ColorBadge color="accent" size="h-8 w-8">
-            <MessageCircle className="h-4 w-4" strokeWidth={2} />
-          </ColorBadge>
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-card font-medium text-vexo-muted">Taxa de resposta</p>
-            <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
-              <ResponseRateRing value={responseRate} compact />
-              <span className="min-w-0 flex-1 truncate text-card text-vexo-muted">Novo contato → Em conversa</span>
+          <div className="flex min-w-[160px] flex-1 items-center gap-2.5 px-3 py-2">
+            <ColorBadge color="accent" size="h-8 w-8">
+              <MessageCircle className="h-4 w-4" strokeWidth={2} />
+            </ColorBadge>
+            <div className="min-w-0 flex-1">
+              <span className="inline-block max-w-full truncate rounded-card bg-white/10 px-1.5 py-0.5 text-caption font-normal text-vexo-fg">
+                Taxa de resposta
+              </span>
+              <div className="mt-1 flex min-w-0 items-center gap-1.5">
+                <ResponseRateRing value={responseRate} compact />
+                <span className="min-w-0 flex-1 truncate text-card text-vexo-muted">Novo contato → Em conversa</span>
+              </div>
             </div>
           </div>
-        </div>
-        <div className="flex items-center gap-2.5 rounded-card border border-vexo-border/20 bg-vexo-pipelineColScheduledBg px-2.5 py-1.5">
-          <ColorBadge color="success" size="h-8 w-8">
-            <CalendarDays className="h-4 w-4" strokeWidth={2} />
-          </ColorBadge>
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-card font-medium text-vexo-muted">Agendados</p>
-            <div className="mt-0.5 flex min-w-0 items-baseline gap-1.5">
-              <span className="shrink-0 text-lg font-semibold leading-none tracking-tight">{scheduled}</span>
-              <span className="min-w-0 flex-1 truncate text-card text-vexo-muted">Últimos 7 dias</span>
+          <div className="flex min-w-[160px] flex-1 items-center gap-2.5 px-3 py-2">
+            <ColorBadge color="success" size="h-8 w-8">
+              <CalendarDays className="h-4 w-4" strokeWidth={2} />
+            </ColorBadge>
+            <div className="min-w-0 flex-1">
+              <span className="inline-block max-w-full truncate rounded-card bg-white/10 px-1.5 py-0.5 text-caption font-normal text-vexo-fg">
+                Agendados
+              </span>
+              <div className="mt-1 flex min-w-0 items-baseline gap-1.5">
+                <span className="shrink-0 text-lg font-semibold leading-none tracking-tight">{scheduled}</span>
+                <span className="min-w-0 flex-1 truncate text-card text-vexo-muted">Últimos 7 dias</span>
+              </div>
             </div>
           </div>
-        </div>
-        <div className="flex items-center gap-2.5 rounded-card border border-vexo-border/20 bg-vexo-pipelineColScheduledBg px-2.5 py-1.5">
-          <ColorBadge color={attendanceRingColor(attendanceRate)} size="h-8 w-8">
-            <CheckCircle2 className="h-4 w-4" strokeWidth={2} />
-          </ColorBadge>
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-card font-medium text-vexo-muted">Taxa de comparecimento</p>
-            <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
-              <ResponseRateRing value={attendanceRate} color={attendanceRingColor(attendanceRate)} compact />
-              <span className="min-w-0 flex-1 truncate text-card text-vexo-muted">Compareceu x Não compareceu</span>
+          <div className="flex min-w-[160px] flex-1 items-center gap-2.5 px-3 py-2">
+            <ColorBadge color={attendanceRingColor(attendanceRate)} size="h-8 w-8">
+              <CheckCircle2 className="h-4 w-4" strokeWidth={2} />
+            </ColorBadge>
+            <div className="min-w-0 flex-1">
+              <span className="inline-block max-w-full truncate rounded-card bg-white/10 px-1.5 py-0.5 text-caption font-normal text-vexo-fg">
+                Taxa de comparecimento
+              </span>
+              <div className="mt-1 flex min-w-0 items-center gap-1.5">
+                <ResponseRateRing value={attendanceRate} color={attendanceRingColor(attendanceRate)} compact />
+                <span className="min-w-0 flex-1 truncate text-card text-vexo-muted">Compareceu x Não compareceu</span>
+              </div>
             </div>
           </div>
         </div>
