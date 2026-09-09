@@ -28,7 +28,10 @@ export type PageStyleFieldKey =
   | "pipeline.column.followUp.pill"
   | "agenda.cardFont"
   | "agenda.cardBackground"
-  | "agenda.cardBorderLeft";
+  | "agenda.status.positive.background"
+  | "agenda.status.positive.pill"
+  | "agenda.status.negative.background"
+  | "agenda.status.negative.pill";
 
 type PageStyleFieldBase = {
   key: PageStyleFieldKey;
@@ -135,16 +138,37 @@ export const PAGE_STYLE_SECTIONS: {
         key: "agenda.cardBackground",
         cssVar: "--vexo-agenda-card-bg",
         followsGlobalKey: "vexoPetrol",
-        label: "Fundo do card",
-        description: "Cor de fundo dos cards de agendamento na grade da Agenda.",
+        label: "Fundo do card (Cancelado)",
+        description:
+          "Cor de fundo dos cards de agendamento cancelado — os outros status (Agendado/Confirmado/Compareceu, Faltou) têm campo próprio logo abaixo, mesma lógica de tom por status já usada no Pipeline.",
       },
       {
-        key: "agenda.cardBorderLeft",
-        cssVar: "--vexo-agenda-card-border",
-        followsGlobalKey: "vexoPetrolBorder",
-        label: "Borda esquerda do card",
-        description:
-          "Hoje essa borda varia por status (verde=agendado/confirmado, azul=compareceu, vermelho=faltou, cinza=cancelado). Personalizar aqui define UMA cor fixa pra todos os agendamentos, substituindo essa variação por status enquanto estiver ativado.",
+        key: "agenda.status.positive.background",
+        cssVar: "--vexo-agenda-status-positive-bg",
+        defaultHex: "#29301c",
+        label: "Agendado/Confirmado/Compareceu — fundo do card",
+        description: "Cor de fundo (tingida, dessaturada) dos cards de agendamento nesses 3 status.",
+      },
+      {
+        key: "agenda.status.positive.pill",
+        cssVar: "--vexo-agenda-status-positive-pill",
+        defaultHex: "#546a2f",
+        label: "Agendado/Confirmado/Compareceu — etiqueta de status",
+        description: "Cor da etiqueta \"marca-texto\" (nome do status) dentro do card, nesses 3 status.",
+      },
+      {
+        key: "agenda.status.negative.background",
+        cssVar: "--vexo-agenda-status-negative-bg",
+        defaultHex: "#37221b",
+        label: "Faltou — fundo do card",
+        description: "Cor de fundo (tingida, dessaturada) dos cards de agendamento com falta.",
+      },
+      {
+        key: "agenda.status.negative.pill",
+        cssVar: "--vexo-agenda-status-negative-pill",
+        defaultHex: "#77402c",
+        label: "Faltou — etiqueta de status",
+        description: "Cor da etiqueta \"marca-texto\" (nome do status) dentro do card, quando o lead faltou.",
       },
     ],
   },

@@ -1,4 +1,7 @@
-const STATUS_LABELS: Record<string, string> = {
+// Exportado — reaproveitado pela Agenda pra rotular a etiqueta "marca-texto"
+// dentro do card (ver agendaStatusTint em agenda/page.tsx) sem duplicar as
+// mesmas strings de status em dois lugares.
+export const STATUS_LABELS: Record<string, string> = {
   SCHEDULED: "Agendado",
   CONFIRMED: "Confirmado",
   COMPLETED: "Compareceu",
@@ -15,21 +18,6 @@ const STATUS_CLASSES: Record<string, string> = {
   NO_SHOW: "border-vexo-error/30 text-vexo-error",
   CANCELLED: "border-vexo-border text-vexo-muted",
 };
-
-// Mesmo mapeamento de status, mas pra borda sólida à esquerda do card (ver
-// Agenda) — cor cheia em vez de translúcida, pra ficar visível como uma
-// faixa de identificação, não como badge.
-const STATUS_BORDER_CLASSES: Record<string, string> = {
-  SCHEDULED: "border-l-vexo-success",
-  CONFIRMED: "border-l-vexo-success",
-  COMPLETED: "border-l-vexo-accent",
-  NO_SHOW: "border-l-vexo-error",
-  CANCELLED: "border-l-vexo-muted",
-};
-
-export function appointmentStatusBorderClass(status: string): string {
-  return STATUS_BORDER_CLASSES[status] ?? "border-l-vexo-muted";
-}
 
 export function AppointmentStatusBadge({ status, compact }: { status: string; compact?: boolean }) {
   const classes = STATUS_CLASSES[status] ?? "border-vexo-border text-vexo-muted";

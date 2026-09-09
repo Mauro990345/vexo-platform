@@ -3,10 +3,30 @@ import { Fragment } from "react";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireInternalSession } from "@/lib/session";
-import { AppointmentStatusBadge, appointmentStatusBorderClass } from "@/components/AppointmentStatusBadge";
-import { getPageStyleOverrides } from "@/lib/page-style-overrides";
+import { STATUS_LABELS } from "@/components/AppointmentStatusBadge";
 
 export const dynamic = "force-dynamic";
+
+// Mesma lógica de tom por status já usada no Pipeline (columnTint): fundo
+// tingido/dessaturado + etiqueta "marca-texto" mais clara que o fundo, sem
+// borda colorida (a borda agora é uniforme/fina em todo card, ver
+// className mais abaixo). Agrupado em 3 tons (não 5, um por status bruto)
+// de propósito — Agendado/Confirmado/Compareceu são todos desfechos
+// "positivos" e ficariam quase idênticos entre si como 3 verdes
+// separados; a palavra exata do status já vem no texto da etiqueta, então
+// o agrupamento não perde precisão, só evita colorido demais.
+function agendaStatusTint(status: string): { bg: string; tagBg: string; tagText: string } {
+  switch (status) {
+    case "SCHEDULED":
+    case "CONFIRMED":
+    case "COMPLETED":
+      return { bg: "bg-vexo-agendaStatusPositiveBg", tagBg: "bg-vexo-agendaStatusPositivePill/45", tagText: "text-vexo-fg" };
+    case "NO_SHOW":
+      return { bg: "bg-vexo-agendaStatusNegativeBg", tagBg: "bg-vexo-agendaStatusNegativePill/45", tagText: "text-vexo-fg" };
+    default: // CANCELLED e qualquer status futuro sem grupo definido
+      return { bg: "bg-vexo-agendaCardBg", tagBg: "bg-vexo-border/80", tagText: "text-vexo-muted" };
+  }
+}
 
 // 14 tem que bater com o "repeat(14,...)" de grid-rows mais abaixo — mudou
 // o range de horas, muda os dois juntos.
@@ -54,13 +74,6 @@ export default async function ClinicAgendaPage({
   });
 
   const base = `/crm/clinicas/${clinic.id}/agenda`;
-
-  // Personalizar a borda esquerda nesta página (Configurações) troca a
-  // variação por status (verde/vermelho/etc., ver appointmentStatusBorderClass)
-  // por UMA cor fixa — as duas coisas não fazem sentido juntas, então uma
-  // suspende a outra enquanto o toggle estiver ligado.
-  const pageStyleOverrides = await getPageStyleOverrides();
-  const borderLeftOverridden = Boolean(pageStyleOverrides["agenda.cardBorderLeft"]);
 
   return (
     <div className="-mt-3 space-y-3 sm:-mt-5">
@@ -140,21 +153,27 @@ export default async function ClinicAgendaPage({
                       // nome vem do manualTitle (título do evento no Google),
                       // não de um texto genérico fixo.
                       const label = a.lead ? a.lead.name ?? a.lead.igUsername ?? "Lead" : a.manualTitle ?? "Agendamento";
+                      const tint = agendaStatusTint(a.status);
                       const inner = (
                         <>
-                          <p className="truncate font-medium leading-tight">{label}</p>
+                          <p className="truncate font-normal leading-tight">{label}</p>
                           <div className="flex min-w-0 items-center gap-1.5 leading-none">
                             <span className="shrink-0 text-vexo-fg/70">
                               {a.scheduledAt.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
                             </span>
-                            <AppointmentStatusBadge status={a.status} compact />
+                            <span
+                              className={`inline-block max-w-full shrink truncate rounded-card px-1.5 py-0.5 text-caption font-medium ${tint.tagBg} ${tint.tagText}`}
+                            >
+                              {STATUS_LABELS[a.status] ?? a.status}
+                            </span>
                           </div>
                         </>
                       );
-                      const leftBorderClass = borderLeftOverridden
-                        ? "border-l-vexo-agendaCardBorder"
-                        : appointmentStatusBorderClass(a.status);
-                      const className = `flex min-w-0 flex-1 flex-col justify-center gap-0.5 rounded-card border border-vexo-petrolBorder border-l-[3px] bg-vexo-agendaCardBg p-1 text-caption text-vexo-agendaCardFont transition ${leftBorderClass}`;
+                      // Fundo tingido/dessaturado por grupo de status (ver
+                      // agendaStatusTint) + borda fina/uniforme — mesmo
+                      // padrão do Pipeline, sem mais borda esquerda colorida
+                      // por status.
+                      const className = `flex min-w-0 flex-1 flex-col justify-center gap-0.5 rounded-card border border-vexo-border/20 ${tint.bg} p-1 text-caption text-vexo-agendaCardFont transition`;
 
                       return a.conversationId ? (
                         <Link key={a.id} href={`/crm/conversas/${a.conversationId}`} className={`${className} hover:border-vexo-accent`}>
