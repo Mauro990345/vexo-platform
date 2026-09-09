@@ -63,3 +63,19 @@ export async function deleteUploadedAttachment(url: string | null): Promise<void
     // arquivo já não existe ou não é gerenciado por nós — ignora
   }
 }
+
+// saveUploadedAttachment devolve um caminho RELATIVO ("/uploads/x/y.mp4"),
+// de propósito — mantém o valor salvo no banco (Clinic.confirmationVideoUrl,
+// FollowUpStep.attachmentUrl) independente de domínio. Mas o Instagram busca
+// o anexo ele mesmo a partir da URL informada (attachment.payload.url) —
+// não aceita caminho relativo, precisa ser uma URL pública completa. Usado
+// em dispatch.ts, no único ponto que de fato envia mídia pro Instagram
+// (tanto vídeo de confirmação quanto anexo de follow-up passam por lá).
+export function toPublicUploadUrl(url: string): string {
+  if (/^https?:\/\//.test(url)) return url; // já é absoluta (ex: URL externa colada antes desta feature existir)
+  const base = process.env.APP_URL;
+  if (!base) {
+    throw new Error("APP_URL não configurada — não é possível transformar o caminho do upload numa URL pública.");
+  }
+  return `${base}${url}`;
+}

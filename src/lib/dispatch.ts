@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { sendInstagramMessage } from "@/lib/instagram";
+import { toPublicUploadUrl } from "@/lib/uploads";
 
 // Despacha mensagens OUTBOUND com status PENDING cujo horário de envio
 // (timing adaptativo) já chegou. Chamado periodicamente pelo worker.
@@ -39,7 +40,7 @@ export async function dispatchDueMessages(): Promise<{ sent: number; failed: num
         igUserId: igAccount.igUserId,
         recipientIgScopedId: message.conversation.lead.igScopedId,
         text: message.mediaUrl ? undefined : message.content,
-        mediaUrl: message.mediaUrl ?? undefined,
+        mediaUrl: message.mediaUrl ? toPublicUploadUrl(message.mediaUrl) : undefined,
       });
 
       const now = new Date();
