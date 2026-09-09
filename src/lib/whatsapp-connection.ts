@@ -63,6 +63,18 @@ export async function renameWhatsappInstance(clinicId: string, newName: string):
   });
 }
 
+// Volta o nome da instância pro slug da clínica (o padrão de sempre) sem
+// precisar que quem está mexendo saiba ou lembre qual é esse valor — útil
+// depois de ter renomeado pra reaproveitar outra instância e querer
+// desfazer isso.
+export async function resetWhatsappInstanceName(clinicId: string): Promise<void> {
+  const clinic = await prisma.clinic.findUniqueOrThrow({ where: { id: clinicId } });
+  await prisma.clinic.update({
+    where: { id: clinicId },
+    data: { whatsappInstanceName: clinic.slug, whatsappStatus: null, whatsappStatusCheckedAt: null },
+  });
+}
+
 export async function disconnectWhatsapp(clinicId: string): Promise<void> {
   const clinic = await prisma.clinic.findUniqueOrThrow({ where: { id: clinicId } });
   if (!clinic.whatsappInstanceName) return;

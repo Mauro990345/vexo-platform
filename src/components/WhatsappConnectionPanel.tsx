@@ -28,6 +28,7 @@ export function WhatsappConnectionPanel({
   description,
   disconnectAction,
   renameAction,
+  resetAction,
 }: {
   instanceName: string;
   status: WhatsappConnectionState;
@@ -37,6 +38,7 @@ export function WhatsappConnectionPanel({
   description: string;
   disconnectAction?: (formData: FormData) => Promise<void>;
   renameAction?: (formData: FormData) => Promise<void>;
+  resetAction?: () => Promise<void>;
 }) {
   const isOpen = status === "open";
 
@@ -100,11 +102,18 @@ export function WhatsappConnectionPanel({
       )}
 
       {renameAction && !isOpen && (
-        <form action={renameAction} className="space-y-1.5 border-t border-vexo-border pt-2">
-          <label className="block text-card text-vexo-muted" htmlFor="instanceName">
-            Nome da instância (avançado — ex: reaproveitar uma já conectada)
-          </label>
-          <div className="flex gap-1.5">
+        <div className="space-y-1.5 border-t border-vexo-border pt-2">
+          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+            <label className="block text-card text-vexo-muted" htmlFor="instanceName">
+              Nome da instância (avançado — ex: reaproveitar uma já conectada)
+            </label>
+            {resetAction && (
+              <form action={resetAction}>
+                <button className="shrink-0 text-card text-vexo-accent hover:underline">Restaurar nome padrão</button>
+              </form>
+            )}
+          </div>
+          <form action={renameAction} className="flex gap-1.5">
             <input
               id="instanceName"
               name="instanceName"
@@ -116,8 +125,8 @@ export function WhatsappConnectionPanel({
             <button className="rounded-lg border border-vexo-accent px-2.5 py-1 text-xs text-vexo-accent hover:bg-vexo-accent/10">
               Salvar
             </button>
-          </div>
-        </form>
+          </form>
+        </div>
       )}
     </div>
   );

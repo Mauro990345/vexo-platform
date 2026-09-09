@@ -8,7 +8,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireInternalSession } from "@/lib/session";
 import { setAppointmentAttendance } from "@/lib/appointments";
-import { disconnectWhatsapp, renameWhatsappInstance } from "@/lib/whatsapp-connection";
+import { disconnectWhatsapp, renameWhatsappInstance, resetWhatsappInstanceName } from "@/lib/whatsapp-connection";
 import { disconnectGoogleCalendar } from "@/lib/google-calendar";
 import { disconnectInstagram } from "@/lib/instagram";
 
@@ -344,6 +344,12 @@ export async function renameWhatsappInstanceAction(clinicId: string, formData: F
   await requireInternalSession();
   const instanceName = String(formData.get("instanceName") ?? "");
   await renameWhatsappInstance(clinicId, instanceName);
+  revalidatePath(`/crm/clinicas/${clinicId}/whatsapp`);
+}
+
+export async function resetWhatsappInstanceNameAction(clinicId: string) {
+  await requireInternalSession();
+  await resetWhatsappInstanceName(clinicId);
   revalidatePath(`/crm/clinicas/${clinicId}/whatsapp`);
 }
 
