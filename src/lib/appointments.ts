@@ -52,3 +52,19 @@ export async function setAppointmentAttendance(
     data: { status: targetStatus },
   });
 }
+
+// Alternância reversível de cancelamento (clicar de novo desfaz, volta pra
+// SCHEDULED) — mesma semântica de toggle do comparecimento acima, mas sem
+// nenhum efeito colateral de follow-up: cancelar não é a mesma coisa que
+// faltar, não deveria disparar a sequência de reengajamento de não
+// comparecimento (NO_SHOW). Hoje CANCELLED só era alcançado
+// automaticamente via sincronização do Google Calendar (ver
+// google-calendar-sync.ts); isso dá à secretária um jeito manual direto no
+// CRM, sem depender do Google Calendar.
+export async function setAppointmentCancelled(appointmentId: string, cancelled: boolean) {
+  const appt = await prisma.appointment.findUnique({ where: { id: appointmentId } });
+  if (!appt) return null;
+
+  const targetStatus = cancelled ? "CANCELLED" : "SCHEDULED";
+  return prisma.appointment.update({ where: { id: appointmentId }, data: { status: targetStatus } });
+}

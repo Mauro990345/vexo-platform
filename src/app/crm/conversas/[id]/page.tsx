@@ -4,6 +4,7 @@ import { ChevronLeft } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { StatusBadge } from "@/components/StatusBadge";
 import { AttendanceToggle } from "@/components/AttendanceToggle";
+import { CancelToggle } from "@/components/CancelToggle";
 import { setConversationStatus, sendHumanReply } from "../../clinicas/actions";
 
 export const dynamic = "force-dynamic";
@@ -122,8 +123,9 @@ export default async function ConversationDetailPage({ params }: { params: { id:
                 minute: "2-digit",
               })}
             </p>
-            <div className="mt-3">
+            <div className="mt-3 space-y-1">
               <AttendanceToggle appointmentId={appointment.id} status={appointment.status} />
+              <CancelToggle appointmentId={appointment.id} status={appointment.status} />
             </div>
           </div>
         )}

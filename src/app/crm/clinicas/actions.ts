@@ -7,7 +7,7 @@ import bcrypt from "bcryptjs";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireInternalSession } from "@/lib/session";
-import { setAppointmentAttendance } from "@/lib/appointments";
+import { setAppointmentAttendance, setAppointmentCancelled } from "@/lib/appointments";
 import { disconnectWhatsapp, renameWhatsappInstance, resetWhatsappInstanceName } from "@/lib/whatsapp-connection";
 import { disconnectGoogleCalendar } from "@/lib/google-calendar";
 import { disconnectInstagram } from "@/lib/instagram";
@@ -315,6 +315,20 @@ export async function setAppointmentAttendanceAction(
   const appt = await setAppointmentAttendance(appointmentId, status);
   if (appt) {
     revalidatePath(`/crm/clinicas/${appt.clinicId}`);
+    revalidatePath(`/crm/clinicas/${appt.clinicId}/agenda`);
+    if (appt.conversationId) revalidatePath(`/crm/conversas/${appt.conversationId}`);
+  }
+}
+
+// Cancelamento manual — até aqui só existia via sincronização do Google
+// Calendar (evento apagado lá). Reversível: clicar de novo desfaz (volta
+// pra SCHEDULED), mesmo padrão do toggle de comparecimento acima.
+export async function setAppointmentCancelledAction(appointmentId: string, cancelled: boolean) {
+  await requireInternalSession();
+  const appt = await setAppointmentCancelled(appointmentId, cancelled);
+  if (appt) {
+    revalidatePath(`/crm/clinicas/${appt.clinicId}`);
+    revalidatePath(`/crm/clinicas/${appt.clinicId}/agenda`);
     if (appt.conversationId) revalidatePath(`/crm/conversas/${appt.conversationId}`);
   }
 }
