@@ -9,14 +9,30 @@ import { SignOutButton } from "@/components/SignOutButton";
 // Server Component (os layouts) pra este Client Component não serializa
 // (React só sabe passar elementos/JSX pela fronteira server→client, não
 // referências de função soltas).
-export type NavItem = { href: string; label: string; icon: React.ReactNode };
+// activeMatch: rotas "órfãs" que devem contar como parte deste item pra fins
+// de destaque na sidebar, mesmo não sendo uma sub-rota dele na URL — ex:
+// "/whatsapp" é alcançada a partir do card de WhatsApp em "Conexões", mas
+// não vive em "/conexoes/whatsapp" (é rota irmã, não filha), então o
+// prefixo comum de URL sozinho não bastava pra ligar as duas.
+export type NavItem = { href: string; label: string; icon: React.ReactNode; activeMatch?: string[] };
 export type NavGroup = { label: string; items: NavItem[] };
 
 // Resolve o item ativo pelo prefixo mais específico — evita que "/crm" fique
 // destacado junto com "/crm/follow-up" quando ambos "batem" no pathname.
+//
+// Cuidado que gerou bug antes: o item "Pipeline" tem href igual à base da
+// clínica (ex: "/crm/clinicas/x"), que é PREFIXO de toda rota daquela
+// clínica — incluindo rotas órfãs sem item próprio na sidebar, como
+// "/whatsapp". Sem o activeMatch abaixo, "Pipeline" era o único item que
+// "batia" nessas rotas e ficava destacado por engano. O reduce por
+// item.href.length (não pelo prefixo que bateu) garante que, quando
+// "Conexões" também bate via activeMatch, ele vence por ter o href mais
+// longo/específico dos dois.
 function resolveActiveHref(pathname: string, groups: NavGroup[]): string | null {
   const items = groups.flatMap((g) => g.items);
-  const matches = items.filter((i) => pathname === i.href || pathname.startsWith(`${i.href}/`));
+  const matchesItem = (i: NavItem) =>
+    [i.href, ...(i.activeMatch ?? [])].some((p) => pathname === p || pathname.startsWith(`${p}/`));
+  const matches = items.filter(matchesItem);
   if (matches.length === 0) return null;
   return matches.reduce((best, item) => (item.href.length > best.href.length ? item : best)).href;
 }

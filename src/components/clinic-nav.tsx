@@ -39,7 +39,16 @@ export function buildClinicNavGroups(clinicId: string): NavGroup[] {
     {
       label: "Operação",
       items: [
-        { href: `${base}/conexoes`, label: "Conexões", icon: <Link2 className="h-3.5 w-3.5 shrink-0" strokeWidth={2} /> },
+        {
+          href: `${base}/conexoes`,
+          label: "Conexões",
+          icon: <Link2 className="h-3.5 w-3.5 shrink-0" strokeWidth={2} />,
+          // "/whatsapp" é rota irmã (não filha) de "/conexoes" na URL, mas é
+          // alcançada a partir de lá (card WhatsApp -> "Gerenciar") — sem
+          // isso, "Pipeline" ficava destacado por engano nessa tela (ver
+          // comentário em resolveActiveHref, AppShell.tsx).
+          activeMatch: [`${base}/whatsapp`],
+        },
         { href: `${base}/painel`, label: "Painel", icon: <LayoutDashboard className="h-3.5 w-3.5 shrink-0" strokeWidth={2} /> },
         { href: base, label: "Pipeline", icon: <Columns3 className="h-3.5 w-3.5 shrink-0" strokeWidth={2} /> },
         { href: `${base}/agenda`, label: "Agenda", icon: <CalendarDays className="h-3.5 w-3.5 shrink-0" strokeWidth={2} /> },
