@@ -46,6 +46,14 @@ async function getSettings() {
   };
 }
 
+// Exportado pra conversation-pipeline.ts reconhecer reengajamento (lead
+// voltando depois de sumir por muito tempo) com o MESMO limiar usado aqui
+// pra disparar follow-up automático — evita um segundo número mágico
+// desencontrado do primeiro.
+export async function getSilenceHours(): Promise<number> {
+  return (await getSettings()).silenceHours;
+}
+
 // Move a conversa pra FOLLOW_UP e abre um log — chamada tanto pela detecção
 // automática de silêncio quanto pela marcação manual de "não compareceu"
 // (src/lib/appointments.ts). `previousStatus` é opcional e só usado pelo

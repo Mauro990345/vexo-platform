@@ -4,7 +4,7 @@ import { checkAvailability, createCalendarEvent } from "@/lib/google-calendar";
 import { computeAdaptiveDelaySeconds, FAST_REPLY_DELAY_SECONDS } from "@/lib/scheduler";
 import { DEFAULT_CONVERSATION_SYSTEM_PROMPT } from "@/lib/default-prompt";
 import { sendWhatsappMessage, formatEscalationAlert } from "@/lib/whatsapp";
-import { cancelPendingFollowUp } from "@/lib/follow-up";
+import { cancelPendingFollowUp, getSilenceHours } from "@/lib/follow-up";
 import { toChatHistory } from "@/lib/chat-history";
 
 export { toChatHistory } from "@/lib/chat-history";
@@ -81,6 +81,21 @@ export async function handleInboundInstagramMessage(event: InboundInstagramEvent
 
   const reopeningFromFollowUp = conversation.status === "FOLLOW_UP";
 
+  // Reengajamento: o lead esfriou (entrou numa sequência de follow-up, OU
+  // simplesmente ficou calado por mais tempo que o limiar de silêncio —
+  // mesmo limiar que dispara o follow-up automático, ver silenceHours em
+  // follow-up.ts, pra não ter dois números diferentes definindo "esfriou")
+  // e voltou a interagir. Isso encerra o "fôlego" anterior da conversa —
+  // reseta a trava de resultPhotoSentAt logo abaixo, liberando a IA pra
+  // mandar outra foto de resultado se fizer sentido de novo, já que a trava
+  // de 1 foto só vale dentro do mesmo fôlego, não pra vida inteira da
+  // conversa.
+  const silenceHours = await getSilenceHours();
+  const wentSilent =
+    Boolean(conversation.lastLeadMessageAt) &&
+    event.timestamp.getTime() - conversation.lastLeadMessageAt!.getTime() > silenceHours * 60 * 60 * 1000;
+  const reengaged = reopeningFromFollowUp || wentSilent;
+
   const previousAiMessage = await prisma.message.findFirst({
     where: { conversationId: conversation.id, sender: "AI", direction: "OUTBOUND" },
     orderBy: { createdAt: "desc" },
@@ -103,6 +118,7 @@ export async function handleInboundInstagramMessage(event: InboundInstagramEvent
         lastLeadMessageAt: event.timestamp,
         lastMessageAt: event.timestamp,
         status: conversation.status === "NEW" || reopeningFromFollowUp ? "IN_CONVERSATION" : conversation.status,
+        ...(reengaged ? { resultPhotoSentAt: null } : {}),
       },
     }),
   ]);
@@ -159,7 +175,7 @@ export async function handleInboundInstagramMessage(event: InboundInstagramEvent
   let scheduledStartTime: string | undefined;
   let capturedLeadPhone: string | undefined;
   let capturedResultPhotoUrl: string | undefined;
-  let resultPhotoAlreadySent = Boolean(conversation.resultPhotoSentAt);
+  let resultPhotoAlreadySent = reengaged ? false : Boolean(conversation.resultPhotoSentAt);
 
   const reply = await generateLeadReply({
     systemPrompt: clinic.aiSystemPrompt || DEFAULT_CONVERSATION_SYSTEM_PROMPT,
