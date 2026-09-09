@@ -1,9 +1,10 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireInternalSession } from "@/lib/session";
-import { updateAiAgentSettings, updateAiAgentTiming } from "../../actions";
+import { updateAiAgentSettings, updateAiAgentTiming, addResultPhoto, deleteResultPhoto } from "../../actions";
 import { updateAiSettings, updateFollowUpWindow } from "@/app/crm/(global)/follow-up/actions";
 import { PromptTextarea } from "@/components/PromptTextarea";
+import { ConfirmSubmitButton } from "@/components/ConfirmSubmitButton";
 
 export const dynamic = "force-dynamic";
 
@@ -38,10 +39,11 @@ const WEEKDAY_LABELS = [
 export default async function ClinicAiAgentPage({ params }: { params: { id: string } }) {
   await requireInternalSession();
 
-  const [clinic, followUpSettings, aiSettings] = await Promise.all([
+  const [clinic, followUpSettings, aiSettings, resultPhotos] = await Promise.all([
     prisma.clinic.findUnique({ where: { id: params.id } }),
     prisma.followUpSettings.findUnique({ where: { id: "singleton" } }),
     prisma.aiSettings.findUnique({ where: { id: "singleton" } }),
+    prisma.resultPhoto.findMany({ where: { clinicId: params.id }, orderBy: { createdAt: "desc" } }),
   ]);
   if (!clinic) notFound();
 
@@ -139,7 +141,79 @@ export default async function ClinicAiAgentPage({ params }: { params: { id: stri
         </button>
       </form>
 
-      <section className="space-y-2.5">
+      <section className="space-y-2.5 border-t border-vexo-border pt-4">
+        <div>
+          <h2 className="text-sm font-semibold">Fotos de resultado (antes/depois)</h2>
+          <p className="mt-1 text-xs text-vexo-muted">
+            Fotos por procedimento, marcadas por categoria/tag. Durante a conversa, a IA busca a
+            foto da categoria mais próxima do que o lead demonstrou interesse e anexa na resposta
+            — no máximo uma por conversa.
+          </p>
+        </div>
+
+        <form
+          action={addResultPhoto.bind(null, clinic.id)}
+          className="flex flex-wrap items-end gap-2.5 rounded-xl border border-vexo-border bg-vexo-surface p-3.5"
+        >
+          <div className="min-w-0 flex-1">
+            <label className="mb-1 block text-xs text-vexo-muted" htmlFor="category">
+              Categoria/procedimento
+            </label>
+            <input
+              id="category"
+              name="category"
+              required
+              placeholder="ex: botox, preenchimento labial, harmonização facial"
+              className="w-full rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5 text-xs outline-none focus:border-vexo-accent"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs text-vexo-muted" htmlFor="photoFile">
+              Foto
+            </label>
+            <input
+              id="photoFile"
+              name="photoFile"
+              type="file"
+              accept="image/*"
+              required
+              className="block text-xs text-vexo-muted file:mr-2 file:rounded-lg file:border file:border-vexo-border file:bg-vexo-bg file:px-2.5 file:py-1.5 file:text-xs file:text-vexo-fg hover:file:border-vexo-accent"
+            />
+          </div>
+          <button
+            type="submit"
+            className="rounded-lg border border-vexo-accent px-2.5 py-1.5 text-xs font-medium text-vexo-accent hover:bg-vexo-accent/10"
+          >
+            Adicionar foto
+          </button>
+        </form>
+
+        {resultPhotos.length === 0 ? (
+          <p className="text-xs text-vexo-muted">Nenhuma foto cadastrada ainda.</p>
+        ) : (
+          <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
+            {resultPhotos.map((photo) => (
+              <div key={photo.id} className="overflow-hidden rounded-xl border border-vexo-border bg-vexo-surface">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={photo.imageUrl} alt={photo.category} className="h-32 w-full object-cover" />
+                <div className="flex items-center justify-between gap-2 p-2">
+                  <span className="min-w-0 truncate text-xs font-medium">{photo.category}</span>
+                  <form action={deleteResultPhoto.bind(null, clinic.id, photo.id)}>
+                    <ConfirmSubmitButton
+                      confirmMessage="Remover esta foto? Essa ação não pode ser desfeita."
+                      className="shrink-0 text-caption text-vexo-muted hover:text-red-500"
+                    >
+                      Remover
+                    </ConfirmSubmitButton>
+                  </form>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="space-y-2.5 border-t border-vexo-border pt-4">
         <div>
           <h2 className="text-sm font-semibold">Timing de resposta da IA</h2>
           <p className="mt-1 text-xs text-vexo-muted">
@@ -212,7 +286,7 @@ export default async function ClinicAiAgentPage({ params }: { params: { id: stri
         </form>
       </section>
 
-      <section className="space-y-2.5">
+      <section className="space-y-2.5 border-t border-vexo-border pt-4">
         <div>
           <h2 className="text-sm font-semibold">Janela de envio</h2>
           <p className="mt-1 text-xs text-vexo-muted">
