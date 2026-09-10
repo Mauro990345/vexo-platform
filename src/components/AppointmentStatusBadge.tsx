@@ -27,19 +27,34 @@ const STATUS_CLASSES: Record<string, string> = {
 // compact continua com STATUS_CLASSES acima, cores mais vivas de propósito
 // (tela interna do Mauro, fora do pedido de sutileza do Painel).
 //
+// /80 (não /45 como na 1a versão) — 45% deixava quase sem contraste com o
+// fundo do card (bg-vexo-surface, um cinza-azulado quase tão escuro quanto
+// os próprios tons de status). Diferença pro Pipeline: lá a tag fica DENTRO
+// de um card já tingido (dois tons de cor empilhados = mais presença); aqui
+// o card do Agendamento é neutro, então o badge sozinho precisa de mais
+// opacidade pra chegar num contraste parecido. Medido: mesmo a 100% de
+// opacidade esses tons batem só ~2.5:1 de contraste contra o fundo (são
+// tons de CARD do Pipeline, escuros por natureza) — ainda assim "davam
+// conta" lá porque tingem uma área grande; 80% aqui fica num meio-termo
+// perceptível sem chegar perto do "vibrante" (que seriam as cores
+// semânticas cruas, tipo vexo-success/error, states usados na versão NÃO-
+// compact acima). Mesmo motivo pro rounded-sm (raio pequeno, não mais
+// rounded-card — nesse tamanho de badge, 6px lia como arredondado demais).
+//
 // bg do "Faltou" (NO_SHOW) é a MESMA cor usada pelo botão "Não compareceu"
-// já marcado (ver NoShowButton) — os dois aparecem lado a lado na mesma
-// linha da lista, precisam ficar na mesma família de cor. Nenhum dos dois
-// tem borda — pedido explícito: só o fundo dessaturado, sem contorno.
+// já marcado (ver NoShowButton, também em /80 e rounded-sm) — os dois
+// aparecem lado a lado na mesma linha da lista, precisam ficar na mesma
+// família de cor E forma. Nenhum dos dois tem borda — pedido explícito: só
+// o fundo dessaturado, sem contorno.
 function statusTint(status: string): { bg: string; text: string } {
   switch (status) {
     case "SCHEDULED":
     case "CONFIRMED":
-      return { bg: "bg-vexo-panelStatusScheduledBg/45", text: "text-vexo-fg" };
+      return { bg: "bg-vexo-panelStatusScheduledBg/80", text: "text-vexo-fg" };
     case "COMPLETED":
-      return { bg: "bg-vexo-panelStatusCompletedBg/45", text: "text-vexo-fg" };
+      return { bg: "bg-vexo-panelStatusCompletedBg/80", text: "text-vexo-fg" };
     case "NO_SHOW":
-      return { bg: "bg-vexo-panelStatusNegativeBg/45", text: "text-vexo-fg" };
+      return { bg: "bg-vexo-panelStatusNegativeBg/80", text: "text-vexo-fg" };
     default: // CANCELLED e qualquer status futuro sem grupo definido
       return { bg: "bg-vexo-border/60", text: "text-vexo-muted" };
   }
@@ -51,7 +66,7 @@ export function AppointmentStatusBadge({ status, compact }: { status: string; co
   if (compact) {
     const tint = statusTint(status);
     return (
-      <span className={`inline-flex items-center rounded-card px-1.5 py-0.5 text-caption font-medium leading-none ${tint.bg} ${tint.text}`}>
+      <span className={`inline-flex items-center rounded-sm px-1.5 py-0.5 text-caption font-medium leading-none ${tint.bg} ${tint.text}`}>
         {label}
       </span>
     );
