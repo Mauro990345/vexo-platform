@@ -49,6 +49,13 @@ const config: Config = {
           // Destaque do Painel do cliente — só no valor de "Agendaram"
           // (ver PanelMetricCard). Ver page-style-overrides.ts.
           panelHighlight: "rgb(var(--vexo-painel-highlight) / <alpha-value>)",
+          // Fundo tingido dos badges de status na lista de Agendamentos do
+          // Painel (ver statusTint em AppointmentStatusBadge.tsx e
+          // NoShowButton.tsx) — mesmo padrão do Pipeline: tom já escuro/
+          // dessaturado, aplicado a baixa opacidade (ver uso com /45).
+          panelStatusScheduledBg: "rgb(var(--vexo-painel-status-scheduled-bg) / <alpha-value>)",
+          panelStatusCompletedBg: "rgb(var(--vexo-painel-status-completed-bg) / <alpha-value>)",
+          panelStatusNegativeBg: "rgb(var(--vexo-painel-status-negative-bg) / <alpha-value>)",
         },
       },
       fontFamily: {

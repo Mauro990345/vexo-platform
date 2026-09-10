@@ -38,7 +38,7 @@ export function NoShowButton({
       disabled={isPending}
       className={`rounded-md border px-2 py-1 text-caption font-medium transition disabled:opacity-50 ${
         isNoShow
-          ? "border-vexo-error bg-vexo-error/15 text-vexo-error"
+          ? "border-transparent bg-vexo-panelStatusNegativeBg/45 text-vexo-fg"
           : "border-vexo-border text-vexo-muted hover:border-vexo-error/50 hover:text-vexo-error"
       }`}
     >

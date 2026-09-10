@@ -26,7 +26,10 @@ export type PageStyleFieldKey =
   | "pipeline.column.scheduled.pill"
   | "pipeline.column.followUp.background"
   | "pipeline.column.followUp.pill"
-  | "painel.highlight";
+  | "painel.highlight"
+  | "painel.status.scheduled.background"
+  | "painel.status.completed.background"
+  | "painel.status.negative.background";
 
 type PageStyleFieldBase = {
   key: PageStyleFieldKey;
@@ -142,6 +145,38 @@ export const PAGE_STYLE_SECTIONS: {
         label: "Destaque do Painel (valor de \"Agendaram\")",
         description:
           "Cor do número na métrica \"Agendaram\" no Painel do cliente — a de maior relevância pro cliente. Usada só ali, com moderação; o resto da tela continua nos tons padrão.",
+      },
+      {
+        // Fundo tingido dos badges de status na lista de Agendamentos do
+        // Painel (ver statusTint em AppointmentStatusBadge.tsx) — mesmo
+        // padrão do Pipeline (tagBg aplicado a baixa opacidade sobre um
+        // tom já escuro/dessaturado, texto claro por cima, sem borda).
+        // Cobre "Agendado" e "Confirmado" (mesmo grupo semântico: "ainda
+        // vai acontecer").
+        key: "painel.status.scheduled.background",
+        cssVar: "--vexo-painel-status-scheduled-bg",
+        defaultHex: "#2b644c",
+        label: "Status \"Agendado/Confirmado\" — fundo do badge",
+        description: "Cor de fundo (tingida, baixa opacidade) do badge de status \"Agendado\"/\"Confirmado\" na lista de Agendamentos do Painel.",
+      },
+      {
+        key: "painel.status.completed.background",
+        cssVar: "--vexo-painel-status-completed-bg",
+        defaultHex: "#2c4f74",
+        label: "Status \"Compareceu\" — fundo do badge",
+        description: "Cor de fundo (tingida, baixa opacidade) do badge de status \"Compareceu\" na lista de Agendamentos do Painel.",
+      },
+      {
+        // Mesma cor usada pelo badge de status "Faltou" e pelo botão
+        // "Não compareceu" quando já marcado (ver NoShowButton) — os dois
+        // aparecem lado a lado na mesma linha, precisam ficar na mesma
+        // família de cor. Sem borda em nenhum dos dois (pedido explícito:
+        // só o fundo dessaturado, sem contorno destacado).
+        key: "painel.status.negative.background",
+        cssVar: "--vexo-painel-status-negative-bg",
+        defaultHex: "#77402c",
+        label: "Status \"Faltou\" — fundo do badge",
+        description: "Cor de fundo (tingida, baixa opacidade) do badge de status \"Faltou\" e do botão \"Não compareceu\" já marcado, na lista de Agendamentos do Painel.",
       },
     ],
   },
