@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { ClientPanelView } from "@/components/ClientPanelView";
 import { setAppointmentAttendanceAction } from "@/app/crm/clinicas/actions";
 
@@ -12,6 +11,11 @@ export const dynamic = "force-dynamic";
 // pra visão geral de todas as clínicas. standalone={false} porque o
 // AppShell (via clinicas/[id]/layout.tsx) já fornece min-h-screen/padding/
 // max-w-6xl — sem isso o conteúdo ficaria com o wrapper de página duplicado.
+//
+// Sem link "Ver painel de todas as clínicas" no topo — era redundante com
+// "Contas" no menu lateral, que já leva pra lista de todas as clínicas.
+// Sem wrapper próprio: ClientPanelView é o único filho, então renderiza
+// direto (o título "Painel" dela já é o topo real da página).
 export default async function ClinicPainelPage({
   params,
   searchParams,
@@ -20,18 +24,12 @@ export default async function ClinicPainelPage({
   searchParams: { week?: string };
 }) {
   return (
-    <div className="space-y-3">
-      <Link href="/crm/painel" className="inline-block text-xs text-vexo-muted hover:text-vexo-accent">
-        Ver painel de todas as clínicas →
-      </Link>
-
-      <ClientPanelView
-        clinicId={params.id}
-        week={searchParams.week}
-        base={`/crm/clinicas/${params.id}/painel`}
-        noShowAction={setAppointmentAttendanceAction}
-        standalone={false}
-      />
-    </div>
+    <ClientPanelView
+      clinicId={params.id}
+      week={searchParams.week}
+      base={`/crm/clinicas/${params.id}/painel`}
+      noShowAction={setAppointmentAttendanceAction}
+      standalone={false}
+    />
   );
 }

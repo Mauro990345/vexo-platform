@@ -33,8 +33,9 @@ import type { NavGroup } from "@/components/AppShell";
 // atalho pra /crm/painel (a visão geral de TODAS as clínicas) — aquilo
 // tirava o usuário do contexto da clínica que estava vendo, trocando a
 // sidebar inteira pela global só com "Contas". A visão geral continua
-// acessível a partir de dentro do painel da clínica (link "Ver painel de
-// todas as clínicas" em clinicas/[id]/painel/page.tsx) pra quem quiser.
+// acessível por "Contas" no menu global a qualquer momento — por isso
+// clinicas/[id]/painel/page.tsx não tem mais link nenhum de volta pra ela
+// (era redundante, "Contas" já mostra a lista de todas as clínicas).
 export function buildClinicNavGroups(clinicId: string): NavGroup[] {
   const base = `/crm/clinicas/${clinicId}`;
 
