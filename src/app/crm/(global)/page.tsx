@@ -21,7 +21,7 @@ export default async function ClinicsOverviewPage() {
           href="/crm/clinicas/nova"
           className="rounded-lg bg-vexo-accent px-3 py-1.5 text-sm font-medium text-vexo-accentFg hover:opacity-90"
         >
-          + Nova clínica
+          Criar conta
         </Link>
       </div>
 

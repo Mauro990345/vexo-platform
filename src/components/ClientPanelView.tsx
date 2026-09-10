@@ -35,19 +35,24 @@ function toDateParam(d: Date): string {
 // min-h-screen/padding/max-w-6xl, como o AppShell da clínica). noShowAction
 // é injetável porque a ação por trás do botão "Não compareceu" precisa
 // rodar sob uma sessão diferente em cada contexto (CLIENT vs
-// INTERNAL_ADMIN/STAFF) — ver NoShowButton.
+// INTERNAL_ADMIN/STAFF) — ver NoShowButton. headerAction é um slot opcional
+// ao lado do título "Painel" (canto superior direito) — só o Painel de
+// dentro do contexto de uma clínica usa (botão "Criar painel", ver
+// ClientAccessModal); /dashboard e /crm/painel-cliente/[id] não passam nada.
 export async function ClientPanelView({
   clinicId,
   week,
   base,
   noShowAction,
   standalone = true,
+  headerAction,
 }: {
   clinicId: string;
   week?: string;
   base: string;
   noShowAction?: (appointmentId: string, status: "COMPLETED" | "NO_SHOW") => Promise<unknown>;
   standalone?: boolean;
+  headerAction?: React.ReactNode;
 }) {
   const now = new Date();
   const todayStart = startOfDay(now);
@@ -83,9 +88,12 @@ export async function ClientPanelView({
   return (
     <div className={standalone ? "min-h-screen bg-vexo-bg px-4 pt-4 pb-6 sm:px-8 sm:pt-6 sm:pb-8" : undefined}>
       <div className={standalone ? "mx-auto max-w-6xl" : undefined}>
-        <div className="mb-8">
-          <h1 className="text-lg font-semibold tracking-tight">Painel</h1>
-          <p className="text-sm text-vexo-muted">Acompanhamento em tempo real das abordagens no Instagram.</p>
+        <div className="mb-8 flex items-start justify-between gap-3">
+          <div>
+            <h1 className="text-lg font-semibold tracking-tight">Painel</h1>
+            <p className="text-sm text-vexo-muted">Acompanhamento em tempo real das abordagens no Instagram.</p>
+          </div>
+          {headerAction}
         </div>
 
         <div className="grid gap-6 lg:grid-cols-2">
