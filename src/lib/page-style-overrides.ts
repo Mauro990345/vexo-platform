@@ -17,7 +17,7 @@ import { THEME_FIELDS, hexToRgbTriple, type ThemeColorKey, type ThemeColors } fr
 //   tom escuro, editável do mesmo jeito na tela de Configurações.
 export type PageStyleFieldKey =
   | "pipeline.headerFont"
-  | "pipeline.cardBackground"
+  | "pipeline.column.other.background"
   | "pipeline.column.new.background"
   | "pipeline.column.new.pill"
   | "pipeline.column.conversation.background"
@@ -27,7 +27,7 @@ export type PageStyleFieldKey =
   | "pipeline.column.followUp.background"
   | "pipeline.column.followUp.pill"
   | "agenda.cardFont"
-  | "agenda.cardBackground"
+  | "agenda.status.cancelled.background"
   | "agenda.status.cancelled.pill"
   | "agenda.status.upcoming.background"
   | "agenda.status.upcoming.pill"
@@ -61,8 +61,15 @@ export const PAGE_STYLE_SECTIONS: {
           "Cor dos números nos 4 cards de métrica no topo do Pipeline (Novos contatos, Taxa de resposta, Agendados, Taxa de comparecimento).",
       },
       {
-        key: "pipeline.cardBackground",
-        cssVar: "--vexo-pipeline-card-bg",
+        // Chave nova de propósito (não reaproveita "pipeline.cardBackground",
+        // usada até 2026-09 quando esse campo cobria as 6 colunas — uma
+        // eventual linha salva sob a chave antiga ficaria órfã em vez de
+        // vazar pra esse escopo mais estreito; foi exatamente esse tipo de
+        // reaproveitamento de chave que causou o bug do fundo roxo/azul
+        // desencontrado na Agenda, ver agenda.status.cancelled.background
+        // logo abaixo).
+        key: "pipeline.column.other.background",
+        cssVar: "--vexo-pipeline-col-other-bg",
         followsGlobalKey: "vexoPetrol",
         label: "Fundo do card de lead (Precisa de humano / Perdido)",
         description:
@@ -138,12 +145,23 @@ export const PAGE_STYLE_SECTIONS: {
         description: "Cor do nome do paciente/lead dentro dos cards de agendamento na grade da Agenda.",
       },
       {
-        key: "agenda.cardBackground",
-        cssVar: "--vexo-agenda-card-bg",
+        // Chave nova de propósito — RAIZ DO BUG relatado pelo usuário
+        // (fundo do card Cancelado ficava azul/desencontrado da etiqueta
+        // roxa mesmo em produção, sem cache de nenhum tipo envolvido):
+        // esse campo reaproveitava a chave antiga "agenda.cardBackground",
+        // que até 2026-09 cobria TODOS os status da Agenda (não só
+        // Cancelado). Se alguém já tivesse personalizado essa cor em
+        // Configurações ANTES da mudança pra tom-por-status, aquela linha
+        // salva no banco continuava vencendo o defaultHex do código pra
+        // sempre — só que agora aplicada só no Cancelado, sem ninguém ter
+        // pedido isso ali. Uma chave nova zera esse histórico: a linha
+        // antiga (se existir) fica órfã/inerte, e o campo nasce limpo.
+        key: "agenda.status.cancelled.background",
+        cssVar: "--vexo-agenda-status-cancelled-bg",
         defaultHex: "#2a1e38",
-        label: "Fundo do card (Cancelado)",
+        label: "Cancelado — fundo do card",
         description:
-          "Cor de fundo dos cards de agendamento cancelado — mesma família de cor (roxo) da etiqueta de status logo abaixo, os dois precisam acompanhar juntos. Os outros status (Agendado/Confirmado, Compareceu, Faltou) têm campo próprio mais abaixo, mesma lógica de tom por status já usada no Pipeline.",
+          "Cor de fundo dos cards de agendamento cancelado — mesma família de cor (roxo) da etiqueta de status logo abaixo, os dois precisam acompanhar juntos.",
       },
       {
         key: "agenda.status.cancelled.pill",

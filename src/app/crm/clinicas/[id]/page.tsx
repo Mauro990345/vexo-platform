@@ -44,8 +44,11 @@ type PipelineStatus = (typeof PIPELINE_COLUMNS)[number]["status"];
 // alta — a etiqueta precisa se destacar do fundo do card, não ficar quase
 // igual a ele.
 // "Precisa de humano"/"Perdido" não têm campo próprio (só as 4 colunas
-// citadas pelo usuário) — usam o token antigo (pipelineCardBg, ainda
-// editável) + a cor semântica já existente pro resto.
+// citadas pelo usuário) — usam pipelineColOtherBg (chave nova, ver
+// page-style-overrides.ts — antes era "pipeline.cardBackground", chave
+// reaproveitada de antes do redesign por status; mesmo mecanismo de bug
+// corrigido na Agenda, ver agenda.status.cancelled.background) + a cor
+// semântica já existente pro resto.
 function columnTint(status: PipelineStatus): { bg: string; tagBg: string; tagText: string } {
   switch (status) {
     case "NEW":
@@ -69,9 +72,9 @@ function columnTint(status: PipelineStatus): { bg: string; tagBg: string; tagTex
         tagText: "text-vexo-fg",
       };
     case "NEEDS_HUMAN":
-      return { bg: "bg-vexo-pipelineCardBg", tagBg: "bg-vexo-error/30", tagText: "text-vexo-error" };
+      return { bg: "bg-vexo-pipelineColOtherBg", tagBg: "bg-vexo-error/30", tagText: "text-vexo-error" };
     case "LOST":
-      return { bg: "bg-vexo-pipelineCardBg", tagBg: "bg-vexo-border/80", tagText: "text-vexo-muted" };
+      return { bg: "bg-vexo-pipelineColOtherBg", tagBg: "bg-vexo-border/80", tagText: "text-vexo-muted" };
   }
 }
 
