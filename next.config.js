@@ -10,6 +10,19 @@ const nextConfig = {
     serverActions: {
       bodySizeLimit: "25mb",
     },
+    // staleTimes.dynamic desliga o CACHE DE ROTA DO CLIENTE (Router Cache)
+    // pras páginas dinâmicas — algo diferente e independente de
+    // `export const dynamic = "force-dynamic"` de cada página, que só
+    // controla o cache do SERVIDOR. Sem isso, o Next reaproveita a última
+    // versão renderizada de uma rota por até 30s numa navegação client-side
+    // (ex: clicar num <Link> pra voltar pra Agenda), mesmo que uma Server
+    // Action em outra página já tenha chamado revalidatePath — foi
+    // exatamente o bug relatado (mudar o status de um agendamento na tela
+    // da conversa e voltar pra Agenda ainda mostrando o card antigo/
+    // parcialmente desatualizado). 0 = sempre busca de novo no servidor.
+    staleTimes: {
+      dynamic: 0,
+    },
   },
 };
 
