@@ -271,6 +271,7 @@ export async function createClientLogin(
 
   revalidatePath("/crm/painel");
   revalidatePath(`/crm/clinicas/${clinicId}`);
+  revalidatePath(`/crm/clinicas/${clinicId}/painel`);
   return { error: null };
 }
 
@@ -281,7 +282,9 @@ export async function removeClientLogin(clinicId: string, userId: string) {
   // evita que o formulário seja usado pra apagar qualquer usuário por id.
   await prisma.user.deleteMany({ where: { id: userId, clinicId, role: "CLIENT" } });
 
+  revalidatePath("/crm/painel");
   revalidatePath(`/crm/clinicas/${clinicId}`);
+  revalidatePath(`/crm/clinicas/${clinicId}/painel`);
 }
 
 export async function setConversationStatus(
