@@ -24,6 +24,27 @@ const nextConfig = {
       dynamic: 0,
     },
   },
+  // Cache-Control explícito pra todo /crm/* — reforço defensivo além do
+  // `export const dynamic = "force-dynamic"` de cada página (que já devia
+  // ser suficiente pro Next não deixar CACHEAR essas respostas) e do
+  // staleTimes acima (cache do CLIENTE). Isso aqui cobre uma 3ª camada
+  // possível: um proxy/CDN NA FRENTE do Next (ex: edge da Railway) que não
+  // respeite os headers de cache que o Next já manda por padrão pra rota
+  // dinâmica, e sirva uma resposta HTML antiga em cache pra requisição
+  // seguinte — cenário investigado depois de confirmar que nem o código
+  // (mesma fonte gerando fundo+etiqueta) nem o deploy (commit mais recente
+  // já confirmadamente ativo) explicam um bug de fundo/etiqueta
+  // desencontrados reproduzido de novo em produção.
+  async headers() {
+    return [
+      {
+        source: "/crm/:path*",
+        headers: [
+          { key: "Cache-Control", value: "no-store, must-revalidate" },
+        ],
+      },
+    ];
+  },
 };
 
 module.exports = nextConfig;
