@@ -89,6 +89,10 @@ export default function LoginPage() {
         </form>
 
         <p className="mt-4 text-center text-xs text-vexo-muted">
+          <Link href="/termos-de-uso" className="hover:text-vexo-fg">
+            Termos de Uso
+          </Link>
+          {" · "}
           <Link href="/privacidade" className="hover:text-vexo-fg">
             Política de Privacidade
           </Link>
