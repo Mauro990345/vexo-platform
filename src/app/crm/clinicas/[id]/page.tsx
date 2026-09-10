@@ -47,7 +47,7 @@ type PipelineStatus = (typeof PIPELINE_COLUMNS)[number]["status"];
 // citadas pelo usuário) — usam pipelineColOtherBg (chave nova, ver
 // page-style-overrides.ts — antes era "pipeline.cardBackground", chave
 // reaproveitada de antes do redesign por status; mesmo mecanismo de bug
-// corrigido na Agenda, ver agenda.status.cancelled.background) + a cor
+// corrigido na extinta tela Agenda, removida do sistema) + a cor
 // semântica já existente pro resto.
 function columnTint(status: PipelineStatus): { bg: string; tagBg: string; tagText: string } {
   switch (status) {

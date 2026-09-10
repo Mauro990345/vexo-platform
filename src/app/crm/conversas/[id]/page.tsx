@@ -24,10 +24,11 @@ export default async function ConversationDetailPage({ params }: { params: { id:
   const appointment = conversation.appointments[0];
   // Sidebar já tem um "← Contas" pra voltar pro CRM global (ver
   // contextHeader em conversas/[id]/layout.tsx) — esse aqui é diferente:
-  // volta pra tela ESPECÍFICA da clínica de onde essa conversa foi aberta
-  // (Agenda quando tem agendamento, Pipeline quando não tem).
-  const backHref = appointment ? `/crm/clinicas/${conversation.clinicId}/agenda` : `/crm/clinicas/${conversation.clinicId}`;
-  const backLabel = appointment ? "Agenda" : "Pipeline";
+  // volta pro Pipeline da clínica de onde essa conversa foi aberta. (Antes
+  // ia pra Agenda quando a conversa tinha agendamento — a tela Agenda foi
+  // removida do sistema, então agora é sempre Pipeline.)
+  const backHref = `/crm/clinicas/${conversation.clinicId}`;
+  const backLabel = "Pipeline";
 
   return (
     <div className="grid gap-6 lg:grid-cols-[1fr_280px]">

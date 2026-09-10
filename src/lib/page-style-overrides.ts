@@ -7,7 +7,7 @@ import { THEME_FIELDS, hexToRgbTriple, type ThemeColorKey, type ThemeColors } fr
 //   quando personalizado (nunca muda depois de criado, senão perde o
 //   vínculo com overrides já salvos).
 // - cssVar: a variável CSS que esse elemento usa nas classes Tailwind
-//   (ver tailwind.config.ts, entradas vexo.pipeline*/vexo.agenda*).
+//   (ver tailwind.config.ts, entradas vexo.pipeline*).
 // - followsGlobalKey: qual cor de THEME_FIELDS esse campo segue enquanto
 //   ninguém personalizar — é daí que vem o valor mostrado/aplicado por
 //   padrão. Alguns campos (ex: o fundo tingido de cada coluna do Pipeline)
@@ -25,16 +25,7 @@ export type PageStyleFieldKey =
   | "pipeline.column.scheduled.background"
   | "pipeline.column.scheduled.pill"
   | "pipeline.column.followUp.background"
-  | "pipeline.column.followUp.pill"
-  | "agenda.cardFont"
-  | "agenda.status.cancelled.background"
-  | "agenda.status.cancelled.pill"
-  | "agenda.status.upcoming.background"
-  | "agenda.status.upcoming.pill"
-  | "agenda.status.completed.background"
-  | "agenda.status.completed.pill"
-  | "agenda.status.negative.background"
-  | "agenda.status.negative.pill";
+  | "pipeline.column.followUp.pill";
 
 type PageStyleFieldBase = {
   key: PageStyleFieldKey;
@@ -65,9 +56,8 @@ export const PAGE_STYLE_SECTIONS: {
         // usada até 2026-09 quando esse campo cobria as 6 colunas — uma
         // eventual linha salva sob a chave antiga ficaria órfã em vez de
         // vazar pra esse escopo mais estreito; foi exatamente esse tipo de
-        // reaproveitamento de chave que causou o bug do fundo roxo/azul
-        // desencontrado na Agenda, ver agenda.status.cancelled.background
-        // logo abaixo).
+        // reaproveitamento de chave que causou um bug de fundo/etiqueta
+        // desencontrados na extinta tela Agenda, removida do sistema).
         key: "pipeline.column.other.background",
         cssVar: "--vexo-pipeline-col-other-bg",
         followsGlobalKey: "vexoPetrol",
@@ -131,87 +121,6 @@ export const PAGE_STYLE_SECTIONS: {
         defaultHex: "#765b2d",
         label: "Follow-up — pílula do cabeçalho",
         description: "Cor de fundo do cabeçalho (nome + contador) e da etiqueta de status dentro do card, na coluna Follow-up.",
-      },
-    ],
-  },
-  {
-    page: "Agenda",
-    fields: [
-      {
-        key: "agenda.cardFont",
-        cssVar: "--vexo-agenda-card-font",
-        followsGlobalKey: "vexoFg",
-        label: "Cor da fonte",
-        description: "Cor do nome do paciente/lead dentro dos cards de agendamento na grade da Agenda.",
-      },
-      {
-        // Chave nova de propósito — RAIZ DO BUG relatado pelo usuário
-        // (fundo do card Cancelado ficava azul/desencontrado da etiqueta
-        // roxa mesmo em produção, sem cache de nenhum tipo envolvido):
-        // esse campo reaproveitava a chave antiga "agenda.cardBackground",
-        // que até 2026-09 cobria TODOS os status da Agenda (não só
-        // Cancelado). Se alguém já tivesse personalizado essa cor em
-        // Configurações ANTES da mudança pra tom-por-status, aquela linha
-        // salva no banco continuava vencendo o defaultHex do código pra
-        // sempre — só que agora aplicada só no Cancelado, sem ninguém ter
-        // pedido isso ali. Uma chave nova zera esse histórico: a linha
-        // antiga (se existir) fica órfã/inerte, e o campo nasce limpo.
-        key: "agenda.status.cancelled.background",
-        cssVar: "--vexo-agenda-status-cancelled-bg",
-        defaultHex: "#2a1e38",
-        label: "Cancelado — fundo do card",
-        description:
-          "Cor de fundo dos cards de agendamento cancelado — mesma família de cor (roxo) da etiqueta de status logo abaixo, os dois precisam acompanhar juntos.",
-      },
-      {
-        key: "agenda.status.cancelled.pill",
-        cssVar: "--vexo-agenda-status-cancelled-pill",
-        defaultHex: "#553678",
-        label: "Cancelado — etiqueta de status",
-        description: "Cor da etiqueta \"marca-texto\" (nome do status) dentro do card, quando o agendamento foi cancelado.",
-      },
-      {
-        key: "agenda.status.upcoming.background",
-        cssVar: "--vexo-agenda-status-upcoming-bg",
-        defaultHex: "#29301c",
-        label: "Agendado/Confirmado — fundo do card",
-        description: "Cor de fundo (tingida, dessaturada) dos cards de agendamento ainda não realizado.",
-      },
-      {
-        key: "agenda.status.upcoming.pill",
-        cssVar: "--vexo-agenda-status-upcoming-pill",
-        defaultHex: "#546a2f",
-        label: "Agendado/Confirmado — etiqueta de status",
-        description: "Cor da etiqueta \"marca-texto\" (nome do status) dentro do card, nesses 2 status.",
-      },
-      {
-        key: "agenda.status.completed.background",
-        cssVar: "--vexo-agenda-status-completed-bg",
-        defaultHex: "#12233b",
-        label: "Compareceu — fundo do card",
-        description:
-          "Cor de fundo dos cards de agendamento com comparecimento confirmado — tom próprio (azul), separado de Agendado/Confirmado (verde) e do Cancelado (roxo), pra diferenciar \"já aconteceu\" de \"ainda vai acontecer\".",
-      },
-      {
-        key: "agenda.status.completed.pill",
-        cssVar: "--vexo-agenda-status-completed-pill",
-        defaultHex: "#306991",
-        label: "Compareceu — etiqueta de status",
-        description: "Cor da etiqueta \"marca-texto\" (nome do status) dentro do card, quando o lead compareceu.",
-      },
-      {
-        key: "agenda.status.negative.background",
-        cssVar: "--vexo-agenda-status-negative-bg",
-        defaultHex: "#37221b",
-        label: "Faltou — fundo do card",
-        description: "Cor de fundo (tingida, dessaturada) dos cards de agendamento com falta.",
-      },
-      {
-        key: "agenda.status.negative.pill",
-        cssVar: "--vexo-agenda-status-negative-pill",
-        defaultHex: "#77402c",
-        label: "Faltou — etiqueta de status",
-        description: "Cor da etiqueta \"marca-texto\" (nome do status) dentro do card, quando o lead faltou.",
       },
     ],
   },

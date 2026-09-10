@@ -1,7 +1,4 @@
-// Exportado — reaproveitado pela Agenda pra rotular a etiqueta "marca-texto"
-// dentro do card (ver agendaStatusTint em agenda/page.tsx) sem duplicar as
-// mesmas strings de status em dois lugares.
-export const STATUS_LABELS: Record<string, string> = {
+const STATUS_LABELS: Record<string, string> = {
   SCHEDULED: "Agendado",
   CONFIRMED: "Confirmado",
   COMPLETED: "Compareceu",

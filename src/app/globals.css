@@ -36,13 +36,16 @@
   --vexo-accent: 59 130 246; /* #3b82f6 — azul da marca (botão primário, item ativo, links) */
   --vexo-accent-fg: 255 255 255; /* #ffffff — texto EM CIMA de um fundo accent (ex: texto do botão primário) */
 
-  /* Azul petróleo — só pro fundo dos cards de agendamento na Agenda. Veio
-     direto do usuário (cor exata pedida); petrol-border é um tom mais claro
-     derivado dela só pra dar contorno visível ao card. */
+  /* Azul petróleo — fundo do item selecionado/hover do menu lateral, e
+     (via followsGlobalKey) fundo padrão do card de lead nas colunas do
+     Pipeline sem tom próprio. Veio direto do usuário (cor exata pedida).
+     petrol-border não é mais aplicado em nenhum elemento — era usado pelos
+     cards da extinta tela Agenda; ver comentário em THEME_COLOR_KEYS
+     (src/lib/theme.ts) sobre por que a variável continua declarada aqui. */
   --vexo-petrol: 11 36 54; /* #0B2436 */
   --vexo-petrol-border: 30 68 89; /* #1e4459 */
 
-  /* Semânticas de status/badge — usadas em qualquer tela (pipeline, agenda,
+  /* Semânticas de status/badge — usadas em qualquer tela (pipeline,
      follow-up, conexões...). "Info" reaproveita a cor de marca (accent) de
      propósito: já eram a mesma cor antes de virar variável, então não faz
      sentido ter uma segunda cor de azul. */

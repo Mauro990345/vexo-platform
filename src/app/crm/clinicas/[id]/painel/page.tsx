@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 // lista de agendamentos que o cliente vê em /dashboard e que o admin vê em
 // /crm/painel-cliente/[id] (aberto em nova aba, sem sidebar), só que aqui
 // dentro da árvore /crm/clinicas/[id]/*, então herda a sidebar da própria
-// clínica (Conexões, Pipeline, Agenda...) em vez de trocar de contexto
+// clínica (Conexões, Pipeline...) em vez de trocar de contexto
 // pra visão geral de todas as clínicas. standalone={false} porque o
 // AppShell (via clinicas/[id]/layout.tsx) já fornece min-h-screen/padding/
 // max-w-6xl — sem isso o conteúdo ficaria com o wrapper de página duplicado.

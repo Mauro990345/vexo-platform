@@ -13,8 +13,7 @@ const ACTIONABLE_STATUSES = ["SCHEDULED", "CONFIRMED", "NO_SHOW"];
 
 const WEEKDAY_LABELS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
 
-// Segunda como início da semana (getDay(): 0=dom..6=sáb) — mesmo critério
-// da Agenda interna (src/app/crm/clinicas/[id]/agenda/page.tsx).
+// Segunda como início da semana (getDay(): 0=dom..6=sáb).
 function startOfWeek(d: Date): Date {
   const diff = (d.getDay() + 6) % 7;
   return startOfDay(addDays(d, -diff));
@@ -28,7 +27,7 @@ function toDateParam(d: Date): string {
 // (/crm/painel-cliente/[id], sem sidebar nenhuma, aberta em nova aba a
 // partir de /crm/painel) e o item "Painel" de dentro do contexto de uma
 // clínica (/crm/clinicas/[id]/painel — mantém a sidebar da clínica visível,
-// Pipeline/Agenda/Follow-up etc. continuam ali, só o conteúdo muda). As três
+// Pipeline/Follow-up etc. continuam ali, só o conteúdo muda). As três
 // telas renderizam este mesmo componente, só trocando de onde o clinicId
 // vem, pra onde os links de navegação de semana apontam (base), e se o
 // componente desenha sua própria página inteira ou só o conteúdo

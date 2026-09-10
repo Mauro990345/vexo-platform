@@ -2,6 +2,13 @@ import { prisma } from "@/lib/prisma";
 
 // Nomes das variáveis (chave = coluna do ThemeSettings = nome do <input> no
 // formulário; cssVar = variável CSS correspondente em globals.css).
+//
+// "vexoPetrolBorder" continua aqui (e em THEME_DEFAULTS/schema.prisma) só
+// pra não exigir uma migration de banco — mas não aparece mais em
+// THEME_FIELDS abaixo, então sumiu da tela de Configurações. Seu único uso
+// documentado (borda dos cards da tela Agenda) deixou de existir quando a
+// Agenda foi removida do sistema; a coluna fica órfã/inerte, mesmo padrão
+// já usado pra chaves de PageStyleOverride legadas (ver page-style-overrides.ts).
 export const THEME_COLOR_KEYS = [
   "vexoBg",
   "vexoSurface",
@@ -106,20 +113,14 @@ export const THEME_FIELDS: {
     ],
   },
   {
-    section: "Sidebar (menu lateral) e Agenda",
+    section: "Sidebar (menu lateral)",
     fields: [
       {
         key: "vexoPetrol",
         cssVar: "--vexo-petrol",
         label: "Fundo do item do menu selecionado / com o mouse em cima",
         description:
-          "Cor de fundo quando um item do menu lateral está selecionado OU quando o mouse passa por cima dele. Essa mesma cor também é o fundo dos cards de agendamento na tela Agenda.",
-      },
-      {
-        key: "vexoPetrolBorder",
-        cssVar: "--vexo-petrol-border",
-        label: "Borda dos cards de agendamento",
-        description: "Cor da borda dos cards na tela Agenda — um tom mais claro da cor de fundo acima.",
+          "Cor de fundo quando um item do menu lateral está selecionado OU quando o mouse passa por cima dele. Essa mesma cor também segue no fundo do card de lead das colunas sem tom próprio no Pipeline (ver Configurações → Pipeline).",
       },
     ],
   },
@@ -131,7 +132,7 @@ export const THEME_FIELDS: {
         cssVar: "--vexo-accent",
         label: "Cor de destaque da marca (azul)",
         description:
-          "A cor principal do sistema. Aparece em: fundo do botão primário, borda e texto dos botões secundários, texto do item de menu selecionado, badges \"Novo contato\"/\"Em conversa\", status \"Compareceu\" na Agenda, e em links.",
+          "A cor principal do sistema. Aparece em: fundo do botão primário, borda e texto dos botões secundários, texto do item de menu selecionado, badges \"Novo contato\"/\"Em conversa\", e em links.",
       },
       {
         key: "vexoAccentFg",
@@ -148,13 +149,13 @@ export const THEME_FIELDS: {
         key: "vexoSuccess",
         cssVar: "--vexo-success",
         label: "Sucesso / positivo",
-        description: "Cor verde usada para: bolinha \"conectado\" em Conexões, status \"Agendado\"/\"Confirmado\"/\"Compareceu\" na Agenda, badges de sucesso.",
+        description: "Cor verde usada para: bolinha \"conectado\" em Conexões, badges de sucesso.",
       },
       {
         key: "vexoError",
         cssVar: "--vexo-error",
         label: "Erro / negativo",
-        description: "Cor vermelha usada para: mensagens de erro, status \"Faltou\" na Agenda, badge \"Precisa de humano\", botões de remover/desconectar.",
+        description: "Cor vermelha usada para: mensagens de erro, badge \"Precisa de humano\", botões de remover/desconectar.",
       },
       {
         key: "vexoWarning",
