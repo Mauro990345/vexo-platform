@@ -25,7 +25,8 @@ export type PageStyleFieldKey =
   | "pipeline.column.scheduled.background"
   | "pipeline.column.scheduled.pill"
   | "pipeline.column.followUp.background"
-  | "pipeline.column.followUp.pill";
+  | "pipeline.column.followUp.pill"
+  | "painel.highlight";
 
 type PageStyleFieldBase = {
   key: PageStyleFieldKey;
@@ -121,6 +122,26 @@ export const PAGE_STYLE_SECTIONS: {
         defaultHex: "#765b2d",
         label: "Follow-up — pílula do cabeçalho",
         description: "Cor de fundo do cabeçalho (nome + contador) e da etiqueta de status dentro do card, na coluna Follow-up.",
+      },
+    ],
+  },
+  {
+    page: "Painel",
+    fields: [
+      {
+        // Tom de destaque próprio do Painel do cliente (não é o azul
+        // vexoAccent do resto do sistema) — usado com moderação de
+        // propósito: só no VALOR da métrica "Agendaram" (ver
+        // PanelMetricCard), pra dar identidade visual mais distinta sem
+        // espalhar uma cor nova pela tela toda. Sem followsGlobalKey: não
+        // existe uma cor "dourado sutil" no tema geral pra seguir — nasce
+        // com defaultHex próprio, igual aos tons de coluna do Pipeline.
+        key: "painel.highlight",
+        cssVar: "--vexo-painel-highlight",
+        defaultHex: "#caa85c",
+        label: "Destaque do Painel (valor de \"Agendaram\")",
+        description:
+          "Cor do número na métrica \"Agendaram\" no Painel do cliente — a de maior relevância pro cliente. Usada só ali, com moderação; o resto da tela continua nos tons padrão.",
       },
     ],
   },

@@ -46,6 +46,9 @@ const config: Config = {
           pipelineColScheduledPill: "rgb(var(--vexo-pipeline-col-scheduled-pill) / <alpha-value>)",
           pipelineColFollowupBg: "rgb(var(--vexo-pipeline-col-followup-bg) / <alpha-value>)",
           pipelineColFollowupPill: "rgb(var(--vexo-pipeline-col-followup-pill) / <alpha-value>)",
+          // Destaque do Painel do cliente — só no valor de "Agendaram"
+          // (ver PanelMetricCard). Ver page-style-overrides.ts.
+          panelHighlight: "rgb(var(--vexo-painel-highlight) / <alpha-value>)",
         },
       },
       fontFamily: {
@@ -66,6 +69,21 @@ const config: Config = {
       },
       boxShadow: {
         card: "0 1px 2px 0 rgb(0 0 0 / 0.4)",
+      },
+      // Animação de entrada do gráfico "Abordagens por dia" (ver
+      // ApproachChart) — cresce da esquerda pra direita ao montar, em vez
+      // de aparecer com a largura final já pronta. scaleX (não width) de
+      // propósito: funciona pra qualquer largura final sem precisar saber
+      // o valor-alvo em CSS estático, só a barra precisa de
+      // transform-origin: left (ver className no componente).
+      keyframes: {
+        "bar-grow": {
+          from: { transform: "scaleX(0)" },
+          to: { transform: "scaleX(1)" },
+        },
+      },
+      animation: {
+        "bar-grow": "bar-grow 700ms cubic-bezier(0.16, 1, 0.3, 1) both",
       },
     },
   },

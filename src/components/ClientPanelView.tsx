@@ -1,8 +1,9 @@
 import Link from "next/link";
-import { AtSign } from "lucide-react";
+import { AtSign, Calendar, MessageCircle } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { getClinicMetrics, getDailyApproachCounts, startOfDay, addDays } from "@/lib/metrics";
-import { StatCard } from "@/components/StatCard";
+import { ApproachChart } from "@/components/ApproachChart";
+import { ApproachMetricsToggle } from "@/components/ApproachMetricsToggle";
 import { AppointmentStatusBadge } from "@/components/AppointmentStatusBadge";
 import { NoShowButton } from "@/components/NoShowButton";
 import { ChannelStatusPill } from "@/components/ChannelStatusPill";
@@ -10,8 +11,6 @@ import { ChannelStatusPill } from "@/components/ChannelStatusPill";
 // Marcar "Não compareceu" só faz sentido pra agendamento ainda em aberto —
 // já compareceu ou já foi cancelado não tem o que alternar aqui.
 const ACTIONABLE_STATUSES = ["SCHEDULED", "CONFIRMED", "NO_SHOW"];
-
-const WEEKDAY_LABELS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
 
 // Segunda como início da semana (getDay(): 0=dom..6=sáb).
 function startOfWeek(d: Date): Date {
@@ -60,7 +59,6 @@ export async function ClientPanelView({
 
   const parsedRef = week ? new Date(week) : now;
   const weekStart = startOfWeek(Number.isNaN(parsedRef.getTime()) ? now : parsedRef);
-  const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
 
   const [clinic, today, last7Days, appointments, dailyApproached] = await Promise.all([
     prisma.clinic.findUniqueOrThrow({
@@ -82,8 +80,6 @@ export async function ClientPanelView({
     }),
     getDailyApproachCounts(clinicId, weekStart),
   ]);
-
-  const maxApproached = Math.max(1, ...dailyApproached);
 
   return (
     <div className={standalone ? "min-h-screen bg-vexo-bg px-4 pt-4 pb-6 sm:px-8 sm:pt-6 sm:pb-8" : undefined}>
@@ -109,10 +105,25 @@ export async function ClientPanelView({
                   <span className="h-2 w-2 shrink-0 rounded-full bg-vexo-success" />
                   <h2 className="font-medium">{clinic.name}</h2>
                 </div>
-                <div className="flex flex-wrap gap-1.5 text-xs">
-                  <ChannelStatusPill connected={Boolean(clinic.instagramAccount)} label="Instagram" />
-                  <ChannelStatusPill connected={Boolean(clinic.googleCalendarAccount)} label="Calendar" />
-                  <ChannelStatusPill connected={clinic.whatsappStatus === "open"} label="WhatsApp" />
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <ChannelStatusPill
+                    connected={Boolean(clinic.instagramAccount)}
+                    label="Instagram"
+                    icon={<AtSign className="h-3 w-3" strokeWidth={2.5} />}
+                    iconBg="bg-pink-500"
+                  />
+                  <ChannelStatusPill
+                    connected={Boolean(clinic.googleCalendarAccount)}
+                    label="Google Calendar"
+                    icon={<Calendar className="h-3 w-3" strokeWidth={2.5} />}
+                    iconBg="bg-blue-500"
+                  />
+                  <ChannelStatusPill
+                    connected={clinic.whatsappStatus === "open"}
+                    label="WhatsApp"
+                    icon={<MessageCircle className="h-3 w-3" strokeWidth={2.5} />}
+                    iconBg="bg-emerald-500"
+                  />
                 </div>
               </div>
 
@@ -135,53 +146,17 @@ export async function ClientPanelView({
                   </Link>
                 </div>
 
-                <div className="space-y-1.5 border-t border-vexo-border pt-3">
+                <div className="space-y-2 border-t border-vexo-border pt-3">
                   <p className="text-caption font-medium uppercase tracking-wide text-vexo-muted">
                     Abordagens por dia · {weekStart.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })} –{" "}
                     {addDays(weekStart, 6).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}
                   </p>
-                  <div className="space-y-1">
-                    {weekDays.map((day, i) => {
-                      const count = dailyApproached[i] ?? 0;
-                      return (
-                        <div key={day.getTime()} className="flex items-center gap-2">
-                          <span className="w-7 shrink-0 text-caption leading-none text-vexo-muted">
-                            {WEEKDAY_LABELS[i]}
-                          </span>
-                          <div className="flex h-2.5 flex-1 items-center rounded-full bg-vexo-accent/15">
-                            <div
-                              className="h-1 rounded-full bg-vexo-accent"
-                              style={{ width: `${(count / maxApproached) * 100}%` }}
-                            />
-                          </div>
-                          <span className="w-4 shrink-0 text-right text-caption font-medium leading-none">
-                            {count}
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
+                  <ApproachChart counts={dailyApproached} />
                 </div>
               </div>
             </div>
 
-            <div className="space-y-3">
-              <h2 className="text-caption font-medium uppercase tracking-wide text-vexo-muted">Hoje</h2>
-              <div className="grid grid-cols-3 gap-2.5">
-                <StatCard label="Abordados" value={String(today.approached)} />
-                <StatCard label="Em conversa" value={String(today.responded)} />
-                <StatCard label="Agendaram" value={String(today.scheduled)} />
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              <h2 className="text-caption font-medium uppercase tracking-wide text-vexo-muted">Últimos 7 dias</h2>
-              <div className="grid grid-cols-3 gap-2.5">
-                <StatCard label="Abordados" value={String(last7Days.approached)} />
-                <StatCard label="Em conversa" value={String(last7Days.responded)} />
-                <StatCard label="Agendaram" value={String(last7Days.scheduled)} />
-              </div>
-            </div>
+            <ApproachMetricsToggle today={today} last7Days={last7Days} />
           </div>
 
           {/* Coluna direita: agendamentos */}
