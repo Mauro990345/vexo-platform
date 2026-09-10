@@ -3,8 +3,7 @@ import { notFound } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { StatusBadge } from "@/components/StatusBadge";
-import { AttendanceToggle } from "@/components/AttendanceToggle";
-import { CancelToggle } from "@/components/CancelToggle";
+import { AppointmentStatusBadge } from "@/components/AppointmentStatusBadge";
 import { setConversationStatus, sendHumanReply } from "../../clinicas/actions";
 
 export const dynamic = "force-dynamic";
@@ -113,6 +112,11 @@ export default async function ConversationDetailPage({ params }: { params: { id:
         </div>
 
         {appointment && (
+          // Somente leitura de propósito: mudar comparecimento (Compareceu/
+          // Faltou) ou cancelar é responsabilidade exclusiva da secretária
+          // da clínica, feita diretamente com o lead (pelo Painel dela, ou
+          // por telefone/presencial) — o Mauro não tem controle equivalente
+          // aqui, pra essa responsabilidade nunca recair sobre ele.
           <div className="rounded-2xl border border-vexo-border bg-vexo-surface p-4 text-sm">
             <h2 className="mb-2 text-xs font-medium uppercase tracking-wide text-vexo-muted">Agendamento</h2>
             <p>
@@ -123,9 +127,8 @@ export default async function ConversationDetailPage({ params }: { params: { id:
                 minute: "2-digit",
               })}
             </p>
-            <div className="mt-3 space-y-1">
-              <AttendanceToggle appointmentId={appointment.id} status={appointment.status} />
-              <CancelToggle appointmentId={appointment.id} status={appointment.status} />
+            <div className="mt-3">
+              <AppointmentStatusBadge status={appointment.status} />
             </div>
           </div>
         )}

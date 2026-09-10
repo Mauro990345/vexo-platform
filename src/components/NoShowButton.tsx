@@ -4,9 +4,8 @@ import { useTransition } from "react";
 import { setAppointmentAttendanceClientAction } from "@/app/dashboard/actions";
 
 // Único botão que o cliente vê no Painel — reversível: clicar de novo
-// desfaz (mesma semântica do AttendanceToggle usado internamente, só que
-// aqui é um botão só em vez de dois lado a lado, já que "Compareceu" não é
-// uma ação que a clínica precisa disparar por aqui).
+// desfaz. Um botão só (não dois lado a lado), já que "Compareceu" não é
+// uma ação que a clínica precisa disparar por aqui.
 //
 // "action" é injetável porque este componente também é usado pela visão
 // "Ver painel de [clínica]" do CRM interno (ClientPanelView, renderizado

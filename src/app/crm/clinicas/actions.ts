@@ -7,7 +7,7 @@ import bcrypt from "bcryptjs";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireInternalSession } from "@/lib/session";
-import { setAppointmentAttendance, setAppointmentCancelled } from "@/lib/appointments";
+import { setAppointmentAttendance } from "@/lib/appointments";
 import { disconnectWhatsapp, renameWhatsappInstance, resetWhatsappInstanceName } from "@/lib/whatsapp-connection";
 import { disconnectGoogleCalendar } from "@/lib/google-calendar";
 import { disconnectInstagram } from "@/lib/instagram";
@@ -303,29 +303,17 @@ export async function setConversationStatus(
 }
 
 // Chave de comparecimento — a única coisa que a secretária precisa fazer na
-// plataforma no dia a dia — por isso fica exposta direto no card do
-// agendamento (pipeline e tela da conversa), nunca atrás de configuração.
-// Reversível: clicar na opção já marcada desmarca; clicar na outra troca
-// direto.
+// plataforma no dia a dia — por isso fica exposta direto no Painel dela
+// (ver NoShowButton), nunca atrás de configuração. Não é exposta na tela
+// de conversa (uso do Mauro): comparecimento e remarcação são decisão da
+// secretária com o próprio lead, nunca do Mauro. Reversível: clicar na
+// opção já marcada desmarca; clicar na outra troca direto.
 export async function setAppointmentAttendanceAction(
   appointmentId: string,
   status: "COMPLETED" | "NO_SHOW"
 ) {
   await requireInternalSession();
   const appt = await setAppointmentAttendance(appointmentId, status);
-  if (appt) {
-    revalidatePath(`/crm/clinicas/${appt.clinicId}`);
-    revalidatePath(`/crm/clinicas/${appt.clinicId}/agenda`);
-    if (appt.conversationId) revalidatePath(`/crm/conversas/${appt.conversationId}`);
-  }
-}
-
-// Cancelamento manual — até aqui só existia via sincronização do Google
-// Calendar (evento apagado lá). Reversível: clicar de novo desfaz (volta
-// pra SCHEDULED), mesmo padrão do toggle de comparecimento acima.
-export async function setAppointmentCancelledAction(appointmentId: string, cancelled: boolean) {
-  await requireInternalSession();
-  const appt = await setAppointmentCancelled(appointmentId, cancelled);
   if (appt) {
     revalidatePath(`/crm/clinicas/${appt.clinicId}`);
     revalidatePath(`/crm/clinicas/${appt.clinicId}/agenda`);
