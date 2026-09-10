@@ -157,16 +157,27 @@ export default async function ClinicAgendaPage({
                     className="flex min-w-0 flex-col gap-0.5 overflow-hidden border-b border-r border-vexo-border p-1 last:border-r-0"
                   >
                     {cellAppointments.map((a) => {
-                      // Sem conversationId = importado do Google Calendar sem
-                      // Lead vinculado (paciente conhecido, agendado
-                      // manualmente) — não tem conversa pra abrir, então o
-                      // card não é clicável, só informativo. Nesse caso o
-                      // nome vem do manualTitle (título do evento no Google),
-                      // não de um texto genérico fixo.
+                      // Card SEMPRE não-clicável (nunca <Link>), tenha ou não
+                      // conversationId — a Agenda é um espelho de leitura do
+                      // status sincronizado com o Google Calendar, sem NENHUMA
+                      // interação que leve a mudar status (isso inclui
+                      // navegar pra tela de conversa, onde ficam os toggles
+                      // Compareceu/Cancelar). Mudar comparecimento é
+                      // responsabilidade exclusiva da secretária da clínica,
+                      // pelo toggle "Não compareceu" no Painel do cliente —
+                      // o Mauro não tem controle equivalente aqui de propósito,
+                      // pra essa responsabilidade nunca recair sobre ele
+                      // conforme o número de clínicas crescer.
                       const label = a.lead ? a.lead.name ?? a.lead.igUsername ?? "Lead" : a.manualTitle ?? "Agendamento";
                       const tint = agendaStatusTint(a.status);
-                      const inner = (
-                        <>
+                      // Fundo tingido/dessaturado por grupo de status (ver
+                      // agendaStatusTint) + borda fina/uniforme — mesmo
+                      // padrão do Pipeline, sem mais borda esquerda colorida
+                      // por status.
+                      const className = `flex min-w-0 flex-1 flex-col justify-center gap-0.5 rounded-card border border-vexo-border/20 ${tint.bg} p-1 text-caption text-vexo-agendaCardFont`;
+
+                      return (
+                        <div key={a.id} className={className}>
                           <p className="truncate font-normal leading-tight">{label}</p>
                           <div className="flex min-w-0 items-center gap-1.5 leading-none">
                             <span className="shrink-0 text-vexo-fg/70">
@@ -178,21 +189,6 @@ export default async function ClinicAgendaPage({
                               {STATUS_LABELS[a.status] ?? a.status}
                             </span>
                           </div>
-                        </>
-                      );
-                      // Fundo tingido/dessaturado por grupo de status (ver
-                      // agendaStatusTint) + borda fina/uniforme — mesmo
-                      // padrão do Pipeline, sem mais borda esquerda colorida
-                      // por status.
-                      const className = `flex min-w-0 flex-1 flex-col justify-center gap-0.5 rounded-card border border-vexo-border/20 ${tint.bg} p-1 text-caption text-vexo-agendaCardFont transition`;
-
-                      return a.conversationId ? (
-                        <Link key={a.id} href={`/crm/conversas/${a.conversationId}`} className={`${className} hover:border-vexo-accent`}>
-                          {inner}
-                        </Link>
-                      ) : (
-                        <div key={a.id} className={className}>
-                          {inner}
                         </div>
                       );
                     })}
