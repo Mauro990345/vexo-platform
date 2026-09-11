@@ -1,4 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
+import { isInternal } from "@/lib/session";
 import { exchangeInstagramCode } from "@/lib/instagram";
 import { verifyOAuthState } from "@/lib/oauth-state";
 import { encryptToken } from "@/lib/crypto";
@@ -60,6 +63,22 @@ export async function GET(req: NextRequest) {
 
   const { clinicId, connectToken } = parsedState;
 
+  // O botão "Conectar" da Conexões (uso interno) NÃO chama esse endpoint
+  // direto pra ele mesmo — pra Instagram e Google Calendar, esse botão é o
+  // ConnectionLinkButton, que sempre gera um link público de auto-conexão
+  // (connectToken) pra depois enviar pra secretária da clínica; mas na
+  // prática o Mauro/equipe abre esse mesmo link na hora, na mesma aba/
+  // sessão, só pra testar. Ou seja: connectToken presente no state NÃO
+  // significa "veio da secretária" — as duas situações produzem exatamente
+  // o mesmo state. O jeito confiável de diferenciar é olhar quem está
+  // completando ESTE request agora: se o cookie de sessão do NextAuth (que
+  // viaja normalmente num redirect top-level como esse, por ser
+  // sameSite=lax) pertence a alguém da equipe interna, é o Mauro testando
+  // o próprio link — não a secretária, que nunca teria essa sessão no
+  // navegador dela.
+  const session = await getServerSession(authOptions);
+  const hasInternalSession = Boolean(session && isInternal(session.user.role));
+
   try {
     const result = await exchangeInstagramCode(code);
 
@@ -99,15 +118,15 @@ export async function GET(req: NextRequest) {
   } catch (err) {
     console.error("[vexo] Falha no callback OAuth do Instagram:", err);
 
-    // Detalhe técnico (resposta crua da API do Meta) só é exposto quando o
-    // destino é a tela interna de Conexões (uso do Mauro/equipe, pra
-    // depurar sem precisar dos logs do Railway) — nunca no link público de
-    // auto-conexão (/conectar/[token], usado pela secretária da clínica,
-    // ver errorRedirect acima) nem no fallback sem state (Contas): expor a
-    // resposta crua da API do Meta pra alguém não-técnico fora da equipe
-    // não ajuda em nada e vaza detalhe técnico desnecessário. Truncado pra
-    // não estourar o card com uma resposta HTML/JSON gigante.
-    if (!parsedState?.connectToken && parsedState?.clinicId) {
+    // Detalhe técnico (resposta crua da API do Meta) só é exposto quando
+    // QUEM está completando esse callback agora tem sessão interna válida
+    // (Mauro/equipe testando, mesmo que tenha caído em /conectar/[token] —
+    // ver comentário acima sobre por que connectToken sozinho não serve pra
+    // essa distinção). Uma secretária de clínica de verdade, abrindo o link
+    // no navegador dela sem estar logada no CRM, nunca tem essa sessão —
+    // continua vendo só a mensagem genérica. Truncado pra não estourar o
+    // card com uma resposta HTML/JSON gigante.
+    if (hasInternalSession && parsedState?.clinicId) {
       const detail = err instanceof Error ? err.message : String(err);
       // Sem prefixo próprio aqui — conexoes/page.tsx já compõe "Não foi
       // possível conectar o Instagram: {reason}" sozinha.
