@@ -427,8 +427,27 @@ export async function resubscribeInstagramWebhookAction(clinicId: string) {
     );
   }
 
+  // Auto-correção pra contas conectadas ANTES da mudança que troca a
+  // origem do igUserId salvo (api.instagram.com/oauth/access_token →
+  // graph.instagram.com/me, ver exchangeInstagramCode em
+  // src/lib/instagram.ts) — essas contas ficaram com o ID do namespace
+  // errado, que nunca bate com o "entry.id" que o webhook manda de
+  // verdade. profileCheck.id (já buscado acima, mesma fonte que o
+  // OAuth passou a usar) é a correção; só grava se for diferente do que
+  // já está salvo, pra não gerar update à toa.
+  if (profileCheck.id !== account.igUserId) {
+    await prisma.instagramAccount.update({
+      where: { clinicId },
+      data: { igUserId: profileCheck.id },
+    });
+  }
+
   revalidatePath(conexoesPath);
-  redirect(`${conexoesPath}?status=webhook-ok`);
+  redirect(
+    profileCheck.id !== account.igUserId
+      ? `${conexoesPath}?status=webhook-ok&idFixed=${encodeURIComponent(`${account.igUserId} → ${profileCheck.id}`)}`
+      : `${conexoesPath}?status=webhook-ok`
+  );
 }
 
 // Diagnóstico: o subscribe (ação acima) só confirma que a Meta ACEITOU o

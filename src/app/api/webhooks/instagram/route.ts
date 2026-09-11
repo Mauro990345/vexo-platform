@@ -25,6 +25,15 @@ type MetaMessagingEntry = {
     recipient: { id: string };
     timestamp: number;
     message?: { mid: string; text?: string; is_echo?: boolean };
+    // Estrutura análoga à do Messenger Platform (infra compartilhada com
+    // o Instagram Messaging — mesma razão dos dois namespaces de ID
+    // documentada em exchangeInstagramCode) pra notificação de mensagem
+    // editada: chave "message_edit" paralela a "message", em vez de um
+    // "message" com alguma flag de edição. NÃO CONFIRMADO contra um
+    // payload real do Instagram ainda — ver /crm/webhook-logs pra pegar o
+    // corpo bruto de um evento "message_edit" de verdade e confirmar (ou
+    // corrigir) os nomes dos campos aqui.
+    message_edit?: { mid: string; text?: string };
   }[];
 };
 
@@ -40,9 +49,15 @@ export async function POST(req: NextRequest) {
   // alguma coisa nessa rota (e o quê, exatamente), sem depender de log
   // externo nenhum. ANTES de qualquer validação, e nunca deixa uma falha
   // ao gravar esse log derrubar o processamento normal do webhook.
-  await prisma.webhookLog
+  // Guarda o id da linha criada (quando a gravação funciona) pra
+  // handleInboundInstagramMessage anotar nela o motivo, se descartar o
+  // evento por não achar a conta — ver conversation-pipeline.ts.
+  const webhookLog = await prisma.webhookLog
     .create({ data: { method: "POST", rawBody, signatureValid } })
-    .catch((err) => console.error("[vexo] Falha ao gravar log de diagnóstico do webhook:", err));
+    .catch((err) => {
+      console.error("[vexo] Falha ao gravar log de diagnóstico do webhook:", err);
+      return null;
+    });
 
   if (!signatureValid) {
     return new NextResponse("Invalid signature", { status: 401 });
@@ -58,17 +73,26 @@ export async function POST(req: NextRequest) {
 
   for (const entry of payload.entry ?? []) {
     for (const event of entry.messaging ?? []) {
-      // Ignora eco de mensagens enviadas pela própria página (nossas próprias respostas).
-      if (!event.message || event.message.is_echo || !event.message.text) continue;
+      // Ignora eco de mensagens enviadas pela própria página (nossas
+      // próprias respostas) — "is_echo" só existe em "message", nunca em
+      // "message_edit" (não tem eco de edição). Trata o texto final de
+      // uma mensagem editada igual a uma mensagem nova: é o que o lead
+      // disse de verdade agora, independente de ter sido digitado ou
+      // corrigido depois.
+      const inbound = event.message?.is_echo ? undefined : event.message ?? event.message_edit;
+      if (!inbound?.text) continue;
 
       try {
-        await handleInboundInstagramMessage({
-          igUserId: event.recipient.id,
-          leadIgScopedId: event.sender.id,
-          leadText: event.message.text,
-          timestamp: new Date(event.timestamp),
-          igMessageId: event.message.mid,
-        });
+        await handleInboundInstagramMessage(
+          {
+            igUserId: event.recipient.id,
+            leadIgScopedId: event.sender.id,
+            leadText: inbound.text,
+            timestamp: new Date(event.timestamp),
+            igMessageId: inbound.mid,
+          },
+          webhookLog?.id
+        );
       } catch (err) {
         console.error("[vexo] Erro ao processar mensagem do Instagram:", err);
       }

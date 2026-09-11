@@ -149,7 +149,7 @@ export default async function ClinicConexoesPage({
   searchParams,
 }: {
   params: { id: string };
-  searchParams: { status?: string; channel?: string; reason?: string; fields?: string };
+  searchParams: { status?: string; channel?: string; reason?: string; fields?: string; idFixed?: string };
 }) {
   await requireInternalSession();
 
@@ -224,6 +224,13 @@ export default async function ClinicConexoesPage({
       {searchParams.status === "webhook-ok" && (
         <p className="rounded-lg border border-vexo-success/30 bg-vexo-success/10 p-2 text-xs text-vexo-success">
           Webhook reativado — o Instagram foi reinscrito e deve voltar a entregar mensagens novas.
+          {searchParams.idFixed && (
+            <>
+              {" "}
+              Também corrigido o ID salvo dessa conta, que estava desatualizado e nunca batia com o
+              que o webhook manda de verdade: <strong>{searchParams.idFixed}</strong>.
+            </>
+          )}
         </p>
       )}
 

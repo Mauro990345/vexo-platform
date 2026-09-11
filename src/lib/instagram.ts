@@ -164,24 +164,9 @@ export async function exchangeInstagramCode(code: string): Promise<{
       `Falha ao trocar code por token (HTTP ${tokenRes.status}): ${tokenBodyText}`
     );
   }
-  // user_id vem como NÚMERO no JSON desse endpoint (não string, apesar do
-  // nome sugerir um ID opaco) — confirmado batendo com o erro real do
-  // Prisma em produção (upsert falhando ao gravar um Int num campo String).
-  // IDs do Instagram passam facilmente de Number.MAX_SAFE_INTEGER (17
-  // dígitos vs. ~16 seguros); JSON.parse converte esse literal numérico
-  // pra float64 durante o parse em si, então por mais que a gente já
-  // converta pra string logo depois, alguns valores (que não caiam num
-  // múltiplo exato representável no range de bits daquela magnitude) já
-  // teriam perdido precisão ANTES de qualquer conversão — string(numero)
-  // não resgata um dígito que o parser já arredondou. Evita isso extraindo
-  // user_id como sequência de dígitos direto do texto cru, sem nunca virar
-  // number em nenhum momento (igUserId é sempre tratado como identificador
-  // opaco no resto do app, nunca em conta aritmética).
-  const userIdMatch = tokenBodyText.match(/"user_id"\s*:\s*(\d+)/);
-  if (!userIdMatch?.[1]) {
-    throw new Error(`Resposta do Instagram sem user_id: ${tokenBodyText}`);
-  }
-  const shortLivedUserId = userIdMatch[1];
+  // O "user_id" desse endpoint NÃO é usado como igUserId (ver por quê no
+  // comentário grande abaixo, no passo 3) — só o access_token de curta
+  // duração importa daqui.
   const shortLived = JSON.parse(tokenBodyText) as { access_token: string };
 
   // 2. Long-lived token (60 dias) — grant_type diferente do Facebook
@@ -196,16 +181,40 @@ export async function exchangeInstagramCode(code: string): Promise<{
   }
   const { access_token: longLivedToken } = (await llRes.json()) as { access_token: string };
 
-  // 3. Username da própria conta — o igUserId já veio no passo 1, não
-  // precisa descobrir Página nem conta vinculada.
+  // 3. Username E ID da própria conta — o "user_id" que veio no passo 1
+  // (api.instagram.com/oauth/access_token) é de um NAMESPACE DIFERENTE do
+  // "id" que graph.instagram.com/me devolve pra essa mesma conta. Isso
+  // explica um bug real encontrado em produção: o valor salvo como
+  // igUserId (vindo do passo 1) nunca batia com o "entry.id"/"recipient.id"
+  // que a Meta manda de verdade nos eventos de webhook — a mensagem
+  // chegava (assinatura válida, confirmado via WebhookLog), mas
+  // handleInboundInstagramMessage nunca achava a conta correspondente e
+  // descartava tudo em silêncio.
+  //
+  // Por quê: api.instagram.com é host compartilhado com a antiga
+  // Instagram Basic Display API (já anotado no passo 1, pro formato
+  // multipart) — seu "user_id" é dessa API antiga, num namespace de ID
+  // que não é o mesmo da Graph API moderna (graph.instagram.com), que é
+  // por onde a mensageria de verdade roda (webhook, /me, /messages,
+  // /subscribed_apps). O "id" devolvido por graph.instagram.com/me é o
+  // node ID da Graph API pra essa conta — o MESMO namespace usado pelo
+  // webhook. Todo o resto do código já usa "me" em vez do ID numérico
+  // pras chamadas de saída (ver subscribeInstagramWebhook,
+  // verifyInstagramTokenAndId, sendInstagramMessage), então isso nunca
+  // dava erro nelas — só aparecia na hora de CASAR o evento recebido com
+  // a conta certa no banco, que é a única coisa que ainda depende do
+  // valor numérico do ID.
   const meRes = await fetch(
-    `${IG_GRAPH_BASE}/me?fields=username&access_token=${encodeURIComponent(longLivedToken)}`
+    `${IG_GRAPH_BASE}/me?fields=id,username&access_token=${encodeURIComponent(longLivedToken)}`
   );
-  const meData = (await meRes.json()) as { username?: string };
+  const meData = (await meRes.json()) as { id?: string; username?: string };
+  if (!meData.id) {
+    throw new Error(`Resposta de /me sem "id": ${JSON.stringify(meData)}`);
+  }
 
   return {
     accessToken: longLivedToken,
-    igUserId: shortLivedUserId,
+    igUserId: meData.id,
     igUsername: meData.username,
   };
 }
