@@ -4,16 +4,17 @@ import { verifyOAuthState } from "@/lib/oauth-state";
 import { encryptToken } from "@/lib/crypto";
 import { prisma } from "@/lib/prisma";
 
-// Meta pode voltar aqui com um erro em vez de "code" — ex: domínio/URI de
-// redirecionamento não cadastrado no produto Facebook Login do app (campo
-// "URIs de redirecionamento OAuth válidos", em App Dashboard > Facebook
-// Login > Configurações — separado do "Domínios do app" genérico em
-// Configurações > Básico), app em modo de desenvolvimento sem o usuário
-// como tester, ou o próprio usuário cancelando a autorização. Nesses casos
-// NUNCA vem "code", só error/error_code/error_message — sem esse
-// tratamento, a ausência de "code" caía direto no branch de "parâmetros
-// ausentes" e mostrava um texto cru pro usuário, sem explicação nenhuma do
-// que aconteceu nem como voltar a tentar.
+// Meta pode voltar aqui com um erro em vez de "code" — ex: URI de
+// redirecionamento não cadastrado no produto do app no App Dashboard (campo
+// "URIs de redirecionamento OAuth válidos" — separado do "Domínios do app"
+// genérico em Configurações > Básico; ver src/lib/instagram.ts pro produto
+// exato usado aqui, Instagram API with Instagram Login), app em modo de
+// desenvolvimento sem o usuário como tester, ou o próprio usuário
+// cancelando a autorização. Nesses casos NUNCA vem "code", só
+// error/error_code/error_message — sem esse tratamento, a ausência de
+// "code" caía direto no branch de "parâmetros ausentes" e mostrava um texto
+// cru pro usuário, sem explicação nenhuma do que aconteceu nem como voltar
+// a tentar.
 function readMetaError(params: URLSearchParams): string | null {
   const message =
     params.get("error_message") ?? params.get("error_description") ?? params.get("error_reason");
@@ -62,20 +63,22 @@ export async function GET(req: NextRequest) {
   try {
     const result = await exchangeInstagramCode(code);
 
+    // facebookPageId não é preenchido de propósito — não existe mais
+    // Página do Facebook nesse fluxo (Instagram API with Instagram Login),
+    // e nada mais no app lê essa coluna (só era escrita aqui). Uma linha já
+    // existente de antes da migração mantém o valor antigo, inerte.
     await prisma.instagramAccount.upsert({
       where: { clinicId },
       update: {
         igUserId: result.igUserId,
         igUsername: result.igUsername,
-        facebookPageId: result.facebookPageId,
-        accessTokenEnc: encryptToken(result.pageAccessToken),
+        accessTokenEnc: encryptToken(result.accessToken),
       },
       create: {
         clinicId,
         igUserId: result.igUserId,
         igUsername: result.igUsername,
-        facebookPageId: result.facebookPageId,
-        accessTokenEnc: encryptToken(result.pageAccessToken),
+        accessTokenEnc: encryptToken(result.accessToken),
       },
     });
 

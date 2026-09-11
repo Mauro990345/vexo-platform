@@ -117,11 +117,16 @@ model InstagramAccount {
   clinicId String @unique
   clinic   Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
 
-  igUserId       String // ID do usuário/página profissional no Instagram
+  igUserId       String // ID da conta profissional no Instagram
   igUsername     String?
-  facebookPageId String
+  // Opcional — o fluxo atual (Instagram API with Instagram Login) não passa
+  // mais por uma Página do Facebook, então nunca é preenchido em conexões
+  // novas. Coluna mantida (não removida) só pra não quebrar linhas antigas
+  // de antes dessa migração, que ainda têm o valor da Página vinculada na
+  // época; nada no app lê esse campo.
+  facebookPageId String?
 
-  accessTokenEnc String    @db.Text // token de página, criptografado em repouso
+  accessTokenEnc String    @db.Text // token de acesso do Instagram, criptografado em repouso
   tokenExpiresAt DateTime?
 
   connectedAt DateTime @default(now())

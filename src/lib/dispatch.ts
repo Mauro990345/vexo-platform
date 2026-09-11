@@ -36,7 +36,7 @@ export async function dispatchDueMessages(): Promise<{ sent: number; failed: num
 
     try {
       const result = await sendInstagramMessage({
-        pageAccessTokenEnc: igAccount.accessTokenEnc,
+        accessTokenEnc: igAccount.accessTokenEnc,
         igUserId: igAccount.igUserId,
         recipientIgScopedId: message.conversation.lead.igScopedId,
         text: message.mediaUrl ? undefined : message.content,

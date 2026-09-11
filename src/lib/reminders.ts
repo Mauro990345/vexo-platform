@@ -60,7 +60,7 @@ export async function processReminders(): Promise<{ sent: number }> {
           await sendWhatsappMessage(appt.clinic.whatsappInstanceName, appt.lead.phone!, text);
         } else if (appt.clinic.instagramAccount) {
           await sendInstagramMessage({
-            pageAccessTokenEnc: appt.clinic.instagramAccount.accessTokenEnc,
+            accessTokenEnc: appt.clinic.instagramAccount.accessTokenEnc,
             igUserId: appt.clinic.instagramAccount.igUserId,
             recipientIgScopedId: appt.lead.igScopedId,
             text,
