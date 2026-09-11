@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { requireInternalSession } from "@/lib/session";
+import { LocalDateTime } from "@/components/LocalDateTime";
 
 export const dynamic = "force-dynamic";
 
@@ -23,7 +24,8 @@ export default async function WebhookLogsPage() {
         <h1 className="text-base font-semibold tracking-tight">Logs do webhook (Instagram)</h1>
         <p className="mt-0.5 text-xs text-vexo-muted">
           As últimas {logs.length} requisições recebidas em /api/webhooks/instagram, mais recente
-          primeiro — inclui as que falharam na verificação de assinatura. Ferramenta de diagnóstico
+          primeiro — inclui as que falharam na verificação de assinatura. Horário mostrado no fuso
+          do seu navegador (aparece em UTC só brevemente, até carregar). Ferramenta de diagnóstico
           temporária.
         </p>
       </div>
@@ -37,7 +39,9 @@ export default async function WebhookLogsPage() {
           {logs.map((log) => (
             <div key={log.id} className="rounded-xl border border-vexo-border bg-vexo-surface p-3 text-xs">
               <div className="flex flex-wrap items-center gap-2 text-vexo-muted">
-                <span className="font-medium text-vexo-fg">{log.receivedAt.toLocaleString("pt-BR")}</span>
+                <span className="font-medium text-vexo-fg">
+                  <LocalDateTime iso={log.receivedAt.toISOString()} />
+                </span>
                 <span className="rounded border border-vexo-border px-1.5 py-0.5">{log.method}</span>
                 <span
                   className={
