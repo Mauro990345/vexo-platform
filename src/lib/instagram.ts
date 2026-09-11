@@ -212,6 +212,28 @@ export async function exchangeInstagramCode(code: string): Promise<{
 // a conta conecta normalmente (OAuth completo, token salvo) mas nunca
 // entrega webhook nenhum — sintoma idêntico ao relatado (nada chega no
 // endpoint, apesar do toggle do app estar ativo).
+// Diagnóstico: lê o perfil da própria conta (GET simples, sem side effect
+// nenhum) com o mesmo par (igUserId, accessToken) usado no subscribe
+// logo abaixo. Isola se um "Object with ID ... does not exist" no
+// subscribe é o token/ID em si sendo inválido (essa leitura também falha,
+// do mesmo jeito) ou é específico do endpoint /subscribed_apps — ex:
+// exigindo Advanced Access/App Review pra esse edge, mesmo com o par
+// (token, ID) válido pra tudo mais (essa leitura funciona normalmente).
+export async function verifyInstagramTokenAndId(
+  igUserId: string,
+  accessToken: string
+): Promise<{ id: string; username?: string }> {
+  const url = new URL(`${IG_GRAPH_BASE}/${igUserId}`);
+  url.searchParams.set("fields", "id,username");
+  url.searchParams.set("access_token", accessToken);
+
+  const res = await fetch(url.toString());
+  if (!res.ok) {
+    throw new Error(`Falha ao verificar token/ID (HTTP ${res.status}): ${await res.text()}`);
+  }
+  return (await res.json()) as { id: string; username?: string };
+}
+
 export async function subscribeInstagramWebhook(igUserId: string, accessToken: string): Promise<void> {
   const url = new URL(`${IG_GRAPH_BASE}/${igUserId}/subscribed_apps`);
   url.searchParams.set("subscribed_fields", "messages");

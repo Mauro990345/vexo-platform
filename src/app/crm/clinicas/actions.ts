@@ -10,7 +10,7 @@ import { requireInternalSession } from "@/lib/session";
 import { setAppointmentAttendance } from "@/lib/appointments";
 import { disconnectWhatsapp, renameWhatsappInstance, resetWhatsappInstanceName } from "@/lib/whatsapp-connection";
 import { disconnectGoogleCalendar } from "@/lib/google-calendar";
-import { disconnectInstagram, subscribeInstagramWebhook } from "@/lib/instagram";
+import { disconnectInstagram, subscribeInstagramWebhook, verifyInstagramTokenAndId } from "@/lib/instagram";
 import { decryptToken } from "@/lib/crypto";
 import { saveUploadedAttachment, deleteUploadedAttachment } from "@/lib/uploads";
 
@@ -380,14 +380,41 @@ export async function resubscribeInstagramWebhookAction(clinicId: string) {
     redirect(`${conexoesPath}?status=erro&channel=instagram&reason=${encodeURIComponent("Instagram não está conectado nesta clínica.")}`);
   }
 
+  const accessToken = decryptToken(account.accessTokenEnc);
+
+  // Diagnóstico antes do subscribe em si: um GET simples (sem side effect)
+  // com o MESMO par (igUserId, token) isola se um erro no subscribe é
+  // token/ID inválido em geral (essa leitura falha do mesmo jeito) ou é
+  // específico do endpoint /subscribed_apps (essa leitura funciona, só o
+  // subscribe falha — aponta pra permissão/Advanced Access faltando nesse
+  // edge específico, não pro par token/ID em si). Ver verifyInstagramTokenAndId
+  // em src/lib/instagram.ts.
+  let profileCheck: { id: string; username?: string };
   try {
-    await subscribeInstagramWebhook(account.igUserId, decryptToken(account.accessTokenEnc));
+    profileCheck = await verifyInstagramTokenAndId(account.igUserId, accessToken);
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    redirect(
+      `${conexoesPath}?status=erro&channel=instagram&reason=${encodeURIComponent(
+        `Leitura de diagnóstico falhou (token/ID inválidos ou expirados): ${detail}`
+      )}`
+    );
+  }
+
+  try {
+    await subscribeInstagramWebhook(account.igUserId, accessToken);
   } catch (err) {
     // Mesmo espírito do callback do OAuth: detalhe técnico completo aqui,
     // já que esse botão só existe na tela interna e só admin com sessão
     // chega até ele (requireInternalSession acima já barra o resto).
+    // Prefixo deixa explícito que a leitura funcionou — a falha é
+    // específica do /subscribed_apps, não do par token/ID em si.
     const detail = err instanceof Error ? err.message : String(err);
-    redirect(`${conexoesPath}?status=erro&channel=instagram&reason=${encodeURIComponent(detail)}`);
+    redirect(
+      `${conexoesPath}?status=erro&channel=instagram&reason=${encodeURIComponent(
+        `Leitura OK (id=${profileCheck.id}, username=${profileCheck.username ?? "?"}), mas o subscribe falhou: ${detail}`
+      )}`
+    );
   }
 
   revalidatePath(conexoesPath);
