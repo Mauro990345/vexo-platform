@@ -25,7 +25,15 @@ import { prisma } from "@/lib/prisma";
 // do Instagram. client_secret continua sendo o App Secret geral
 // (META_APP_SECRET) — só o ID tem essa duplicidade, não o secret.
 
-const GRAPH_API_VERSION = "v21.0";
+// "Instagram API with Instagram Login" é produto recente da Meta — edges
+// específicos dele (como /subscribed_apps num IG User, sem Página de
+// Facebook no meio) podem não existir ainda em versões mais antigas da
+// Graph API. O exemplo oficial da Meta pra POST .../subscribed_apps usa
+// v24.0; v21.0 (usada aqui antes) retornava "Unsupported post request...
+// does not exist" pra esse mesmo IG User ID, exatamente o tipo de erro
+// que a Graph API dá quando a versão da API não reconhece aquele
+// edge/objeto — não confundir com o objeto realmente não existir.
+const GRAPH_API_VERSION = "v24.0";
 // Base pra chamadas autenticadas com o token de Instagram Login (envio de
 // mensagem, leitura de perfil) — graph.instagram.com, não graph.facebook.com:
 // um token obtido via Instagram Login não é aceito pelo host do Facebook.
@@ -150,10 +158,22 @@ export async function exchangeInstagramCode(code: string): Promise<{
   // user_id vem como NÚMERO no JSON desse endpoint (não string, apesar do
   // nome sugerir um ID opaco) — confirmado batendo com o erro real do
   // Prisma em produção (upsert falhando ao gravar um Int num campo String).
-  // Convertido pra string logo abaixo, no retorno, já que igUserId no banco
-  // é String (é tratado como identificador opaco em todo o resto do app,
-  // nunca usado em conta aritmética).
-  const shortLived = JSON.parse(tokenBodyText) as { access_token: string; user_id: number };
+  // IDs do Instagram passam facilmente de Number.MAX_SAFE_INTEGER (17
+  // dígitos vs. ~16 seguros); JSON.parse converte esse literal numérico
+  // pra float64 durante o parse em si, então por mais que a gente já
+  // converta pra string logo depois, alguns valores (que não caiam num
+  // múltiplo exato representável no range de bits daquela magnitude) já
+  // teriam perdido precisão ANTES de qualquer conversão — string(numero)
+  // não resgata um dígito que o parser já arredondou. Evita isso extraindo
+  // user_id como sequência de dígitos direto do texto cru, sem nunca virar
+  // number em nenhum momento (igUserId é sempre tratado como identificador
+  // opaco no resto do app, nunca em conta aritmética).
+  const userIdMatch = tokenBodyText.match(/"user_id"\s*:\s*(\d+)/);
+  if (!userIdMatch?.[1]) {
+    throw new Error(`Resposta do Instagram sem user_id: ${tokenBodyText}`);
+  }
+  const shortLivedUserId = userIdMatch[1];
+  const shortLived = JSON.parse(tokenBodyText) as { access_token: string };
 
   // 2. Long-lived token (60 dias) — grant_type diferente do Facebook
   // (ig_exchange_token, não fb_exchange_token), e host graph.instagram.com.
@@ -176,7 +196,7 @@ export async function exchangeInstagramCode(code: string): Promise<{
 
   return {
     accessToken: longLivedToken,
-    igUserId: String(shortLived.user_id),
+    igUserId: shortLivedUserId,
     igUsername: meData.username,
   };
 }
