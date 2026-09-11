@@ -18,6 +18,20 @@ import { prisma } from "@/lib/prisma";
 // "code" caía direto no branch de "parâmetros ausentes" e mostrava um texto
 // cru pro usuário, sem explicação nenhuma do que aconteceu nem como voltar
 // a tentar.
+// Erros do Prisma (ex: PrismaClientValidationError) colocam a causa raiz
+// real ("Invalid value for argument `x`. Expected Y, provided Z.") DEPOIS
+// do dump formatado da query inteira — truncar só pelo início (como antes)
+// cortava exatamente a parte útil da mensagem antes dela aparecer. Mantém
+// um pedaço do começo (contexto de qual chamada falhou) e SEMPRE o final
+// (onde a causa raiz normalmente está), em vez de só os primeiros N chars.
+const MAX_DETAIL_LEN = 2000;
+function truncateDetail(detail: string): string {
+  if (detail.length <= MAX_DETAIL_LEN) return detail;
+  const headLen = 300;
+  const tailLen = MAX_DETAIL_LEN - headLen;
+  return `${detail.slice(0, headLen)}\n…\n${detail.slice(-tailLen)}`;
+}
+
 function readMetaError(params: URLSearchParams): string | null {
   const message =
     params.get("error_message") ?? params.get("error_description") ?? params.get("error_reason");
@@ -124,13 +138,12 @@ export async function GET(req: NextRequest) {
     // ver comentário acima sobre por que connectToken sozinho não serve pra
     // essa distinção). Uma secretária de clínica de verdade, abrindo o link
     // no navegador dela sem estar logada no CRM, nunca tem essa sessão —
-    // continua vendo só a mensagem genérica. Truncado pra não estourar o
-    // card com uma resposta HTML/JSON gigante.
+    // continua vendo só a mensagem genérica.
     if (hasInternalSession && parsedState?.clinicId) {
       const detail = err instanceof Error ? err.message : String(err);
       // Sem prefixo próprio aqui — conexoes/page.tsx já compõe "Não foi
       // possível conectar o Instagram: {reason}" sozinha.
-      return errorRedirect(detail.length > 500 ? `${detail.slice(0, 500)}…` : detail);
+      return errorRedirect(truncateDetail(detail));
     }
     return errorRedirect("Não foi possível concluir a conexão com o Instagram.");
   }

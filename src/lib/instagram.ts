@@ -147,7 +147,13 @@ export async function exchangeInstagramCode(code: string): Promise<{
       `Falha ao trocar code por token (HTTP ${tokenRes.status}): ${tokenBodyText}`
     );
   }
-  const shortLived = JSON.parse(tokenBodyText) as { access_token: string; user_id: string };
+  // user_id vem como NÚMERO no JSON desse endpoint (não string, apesar do
+  // nome sugerir um ID opaco) — confirmado batendo com o erro real do
+  // Prisma em produção (upsert falhando ao gravar um Int num campo String).
+  // Convertido pra string logo abaixo, no retorno, já que igUserId no banco
+  // é String (é tratado como identificador opaco em todo o resto do app,
+  // nunca usado em conta aritmética).
+  const shortLived = JSON.parse(tokenBodyText) as { access_token: string; user_id: number };
 
   // 2. Long-lived token (60 dias) — grant_type diferente do Facebook
   // (ig_exchange_token, não fb_exchange_token), e host graph.instagram.com.
@@ -170,7 +176,7 @@ export async function exchangeInstagramCode(code: string): Promise<{
 
   return {
     accessToken: longLivedToken,
-    igUserId: shortLived.user_id,
+    igUserId: String(shortLived.user_id),
     igUsername: meData.username,
   };
 }
