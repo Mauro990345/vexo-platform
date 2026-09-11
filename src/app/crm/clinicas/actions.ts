@@ -127,8 +127,8 @@ export async function updateAiAgentTiming(clinicId: string, formData: FormData) 
   await requireInternalSession();
 
   const firstBandDelaySeconds = parseInt(String(formData.get("firstBandDelaySeconds") ?? ""), 10);
-  if (!Number.isFinite(firstBandDelaySeconds) || firstBandDelaySeconds < 30 || firstBandDelaySeconds > 60) {
-    throw new Error("O delay da faixa de até 1h precisa ser entre 30 e 60 segundos.");
+  if (!Number.isFinite(firstBandDelaySeconds) || firstBandDelaySeconds < 5 || firstBandDelaySeconds > 60) {
+    throw new Error("O delay da faixa de até 1h precisa ser entre 5 e 60 segundos.");
   }
 
   await prisma.clinic.update({

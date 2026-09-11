@@ -67,7 +67,7 @@ model Clinic {
   // Delay de resposta da IA quando o lead está em silêncio há até 1h (ver
   // computeAdaptiveDelaySeconds em src/lib/scheduler.ts) — por clínica,
   // não global: cada uma pode querer um tom de "primeira resposta"
-  // diferente. Válido de 30 a 60 (segundos); validado em
+  // diferente. Válido de 5 a 60 (segundos); validado em
   // updateAiAgentSettings. As outras duas faixas (1-6h, 6h+) continuam
   // fixas e globais, sem campo — nem aqui nem em AiSettings.
   firstBandDelaySeconds Int @default(45)
