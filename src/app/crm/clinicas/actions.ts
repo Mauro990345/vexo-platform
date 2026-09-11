@@ -445,13 +445,23 @@ export async function checkInstagramWebhookSubscriptionAction(clinicId: string) 
     redirect(`${conexoesPath}?status=erro&channel=instagram&reason=${encodeURIComponent("Instagram não está conectado nesta clínica.")}`);
   }
 
+  // redirect() (next/navigation) lança um erro especial (NEXT_REDIRECT)
+  // internamente pra interromper a execução — chamar ele DENTRO do try
+  // faz esse próprio throw cair no catch logo abaixo, tratado como se
+  // fosse uma falha real de getSubscribedFields (era exatamente o bug
+  // reportado: banner de erro mostrando "NEXT_REDIRECT" no lugar da
+  // lista de campos). Por isso o redirect de sucesso fica DEPOIS do
+  // try/catch, nunca dentro dele — mesmo padrão já usado (certo) em
+  // resubscribeInstagramWebhookAction logo acima.
+  let fields: string[];
   try {
-    const fields = await getSubscribedFields(decryptToken(account.accessTokenEnc));
-    redirect(`${conexoesPath}?status=webhook-fields&fields=${encodeURIComponent(fields.join(", ") || "(nenhum)")}`);
+    fields = await getSubscribedFields(decryptToken(account.accessTokenEnc));
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err);
     redirect(`${conexoesPath}?status=erro&channel=instagram&reason=${encodeURIComponent(detail)}`);
   }
+
+  redirect(`${conexoesPath}?status=webhook-fields&fields=${encodeURIComponent(fields.join(", ") || "(nenhum)")}`);
 }
 
 export async function renameWhatsappInstanceAction(clinicId: string, formData: FormData) {
