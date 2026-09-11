@@ -11,6 +11,7 @@ import {
   disconnectGoogleCalendarAction,
   disconnectInstagramAction,
   resubscribeInstagramWebhookAction,
+  checkInstagramWebhookSubscriptionAction,
 } from "../../actions";
 
 export const dynamic = "force-dynamic";
@@ -148,7 +149,7 @@ export default async function ClinicConexoesPage({
   searchParams,
 }: {
   params: { id: string };
-  searchParams: { status?: string; channel?: string; reason?: string };
+  searchParams: { status?: string; channel?: string; reason?: string; fields?: string };
 }) {
   await requireInternalSession();
 
@@ -193,12 +194,19 @@ export default async function ClinicConexoesPage({
     <div className="space-y-3">
       <RefreshOnFocus />
 
-      <div>
-        <h1 className="text-base font-semibold tracking-tight">Conexões</h1>
-        <p className="mt-0.5 text-xs text-vexo-muted">
-          Canais desta clínica, organizados num só lugar. O status atualiza sozinho conforme cada
-          canal conecta ou cai.
-        </p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-base font-semibold tracking-tight">Conexões</h1>
+          <p className="mt-0.5 text-xs text-vexo-muted">
+            Canais desta clínica, organizados num só lugar. O status atualiza sozinho conforme cada
+            canal conecta ou cai.
+          </p>
+        </div>
+        {/* Diagnóstico temporário (sem acesso a logs do Railway) — ver
+            WebhookLog no schema e /api/webhooks/instagram/route.ts. */}
+        <Link href="/crm/webhook-logs" className="shrink-0 whitespace-nowrap text-card text-vexo-muted underline hover:text-vexo-fg">
+          Logs do webhook (Instagram)
+        </Link>
       </div>
 
       {searchParams.status === "erro" && (
@@ -216,6 +224,20 @@ export default async function ClinicConexoesPage({
       {searchParams.status === "webhook-ok" && (
         <p className="rounded-lg border border-vexo-success/30 bg-vexo-success/10 p-2 text-xs text-vexo-success">
           Webhook reativado — o Instagram foi reinscrito e deve voltar a entregar mensagens novas.
+        </p>
+      )}
+
+      {searchParams.status === "webhook-fields" && (
+        <p className="rounded-lg border border-vexo-border bg-vexo-surface p-2 text-xs text-vexo-fg">
+          {/* Resposta de verdade da Meta pros campos inscritos AGORA — não
+              confundir com "o subscribe retornou sucesso" (ver
+              checkInstagramWebhookSubscriptionAction em ../../actions.ts):
+              já aconteceu de o POST de subscribe devolver 200 sem
+              "messages" acabar na lista de verdade. */}
+          Campos inscritos no webhook desta conta: <strong>{searchParams.fields}</strong>
+          {!searchParams.fields?.includes("messages") && (
+            <span className="text-vexo-error"> — &quot;messages&quot; não está na lista, por isso nada chega.</span>
+          )}
         </p>
       )}
 
@@ -247,15 +269,26 @@ export default async function ClinicConexoesPage({
             <ConnectionLinkButton clinicId={clinic.id} channel="instagram" pendingToken={pendingInstagramLink?.token ?? null} />
           }
           connectedExtraAction={
-            <form action={resubscribeInstagramWebhookAction.bind(null, clinic.id)}>
-              <button
-                type="submit"
-                title="Reinscreve esta conta no webhook de mensagens — use se o Instagram conectou mas nenhuma mensagem chega no VEXO."
-                className="rounded-lg border border-vexo-border px-2.5 py-1 text-card font-medium text-vexo-muted hover:bg-vexo-border/30"
-              >
-                Reativar webhook
-              </button>
-            </form>
+            <>
+              <form action={checkInstagramWebhookSubscriptionAction.bind(null, clinic.id)}>
+                <button
+                  type="submit"
+                  title="Consulta na Meta quais campos estão realmente inscritos pra essa conta agora — o subscribe pode retornar sucesso sem 'messages' entrar na lista de verdade."
+                  className="rounded-lg border border-vexo-border px-2.5 py-1 text-card font-medium text-vexo-muted hover:bg-vexo-border/30"
+                >
+                  Ver campos inscritos
+                </button>
+              </form>
+              <form action={resubscribeInstagramWebhookAction.bind(null, clinic.id)}>
+                <button
+                  type="submit"
+                  title="Reinscreve esta conta no webhook de mensagens — use se o Instagram conectou mas nenhuma mensagem chega no VEXO."
+                  className="rounded-lg border border-vexo-border px-2.5 py-1 text-card font-medium text-vexo-muted hover:bg-vexo-border/30"
+                >
+                  Reativar webhook
+                </button>
+              </form>
+            </>
           }
         />
         <ConnectionCard

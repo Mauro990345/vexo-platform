@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyWebhookSignature } from "@/lib/instagram";
 import { handleInboundInstagramMessage } from "@/lib/conversation-pipeline";
+import { prisma } from "@/lib/prisma";
 
 // Webhook do Instagram Messaging (Meta). GET = handshake de verificação;
 // POST = eventos de mensagem recebida.
@@ -30,12 +31,30 @@ type MetaMessagingEntry = {
 export async function POST(req: NextRequest) {
   const rawBody = await req.text();
   const signature = req.headers.get("x-hub-signature-256");
+  const signatureValid = verifyWebhookSignature(rawBody, signature);
 
-  if (!verifyWebhookSignature(rawBody, signature)) {
+  // Diagnóstico temporário (sem acesso a logs do Railway): grava TODA
+  // requisição que chega aqui, mesmo com assinatura inválida ou payload
+  // que não vai nem parsear como JSON — é o que permite confirmar, pela
+  // própria interface do VEXO, se a Meta está de fato tentando entregar
+  // alguma coisa nessa rota (e o quê, exatamente), sem depender de log
+  // externo nenhum. ANTES de qualquer validação, e nunca deixa uma falha
+  // ao gravar esse log derrubar o processamento normal do webhook.
+  await prisma.webhookLog
+    .create({ data: { method: "POST", rawBody, signatureValid } })
+    .catch((err) => console.error("[vexo] Falha ao gravar log de diagnóstico do webhook:", err));
+
+  if (!signatureValid) {
     return new NextResponse("Invalid signature", { status: 401 });
   }
 
-  const payload = JSON.parse(rawBody) as { entry?: MetaMessagingEntry[] };
+  let payload: { entry?: MetaMessagingEntry[] };
+  try {
+    payload = JSON.parse(rawBody) as { entry?: MetaMessagingEntry[] };
+  } catch (err) {
+    console.error("[vexo] Payload do webhook do Instagram não é JSON válido:", err);
+    return NextResponse.json({ received: true });
+  }
 
   for (const entry of payload.entry ?? []) {
     for (const event of entry.messaging ?? []) {

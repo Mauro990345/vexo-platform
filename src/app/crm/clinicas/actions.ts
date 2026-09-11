@@ -15,6 +15,7 @@ import {
   subscribeInstagramWebhook,
   verifyInstagramTokenAndId,
   tokenFingerprint,
+  getSubscribedFields,
 } from "@/lib/instagram";
 import { decryptToken } from "@/lib/crypto";
 import { saveUploadedAttachment, deleteUploadedAttachment } from "@/lib/uploads";
@@ -428,6 +429,29 @@ export async function resubscribeInstagramWebhookAction(clinicId: string) {
 
   revalidatePath(conexoesPath);
   redirect(`${conexoesPath}?status=webhook-ok`);
+}
+
+// Diagnóstico: o subscribe (ação acima) só confirma que a Meta ACEITOU o
+// POST — não confirma quais campos ficaram realmente inscritos. Já
+// aconteceu de um subscribe "bem-sucedido" não resultar em entrega de
+// mensagem nenhuma; essa leitura elimina a dúvida, consultando a lista
+// de verdade (ver getSubscribedFields em src/lib/instagram.ts).
+export async function checkInstagramWebhookSubscriptionAction(clinicId: string) {
+  await requireInternalSession();
+
+  const conexoesPath = `/crm/clinicas/${clinicId}/conexoes`;
+  const account = await prisma.instagramAccount.findUnique({ where: { clinicId } });
+  if (!account) {
+    redirect(`${conexoesPath}?status=erro&channel=instagram&reason=${encodeURIComponent("Instagram não está conectado nesta clínica.")}`);
+  }
+
+  try {
+    const fields = await getSubscribedFields(decryptToken(account.accessTokenEnc));
+    redirect(`${conexoesPath}?status=webhook-fields&fields=${encodeURIComponent(fields.join(", ") || "(nenhum)")}`);
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    redirect(`${conexoesPath}?status=erro&channel=instagram&reason=${encodeURIComponent(detail)}`);
+  }
 }
 
 export async function renameWhatsappInstanceAction(clinicId: string, formData: FormData) {

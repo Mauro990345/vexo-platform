@@ -264,6 +264,23 @@ export async function subscribeInstagramWebhook(accessToken: string): Promise<vo
   }
 }
 
+// Diagnóstico: o subscribe acima só confirma que a CHAMADA teve sucesso
+// (a Meta aceitou o POST) — não confirma quais campos ficaram realmente
+// inscritos pra essa conta. Essa leitura devolve a lista de verdade
+// (ex: pode vir vazia, ou sem "messages", mesmo com o POST anterior tendo
+// retornado 200).
+export async function getSubscribedFields(accessToken: string): Promise<string[]> {
+  const url = new URL(`${IG_GRAPH_BASE}/me/subscribed_apps`);
+  url.searchParams.set("access_token", accessToken);
+
+  const res = await fetch(url.toString());
+  if (!res.ok) {
+    throw new Error(`Falha ao consultar inscrição do webhook (HTTP ${res.status}): ${await res.text()}`);
+  }
+  const data = (await res.json()) as { data?: { subscribed_fields?: string[] }[] };
+  return data.data?.[0]?.subscribed_fields ?? [];
+}
+
 // Fingerprint (não reversível pra exibição) de um token — comprimento e
 // alguns caracteres do início/fim, o suficiente pra comparar visualmente
 // contra outro log/print do "mesmo" token sem nunca expor o valor inteiro

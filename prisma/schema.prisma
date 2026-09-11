@@ -563,3 +563,23 @@ model WeeklySummary {
 
   @@unique([clinicId, weekStart])
 }
+
+// ---------------------------------------------------------------------------
+// Diagnóstico de webhook (temporário — sem acesso a logs do Railway)
+// ---------------------------------------------------------------------------
+
+// Registra TODA requisição que chega em /api/webhooks/instagram, mesmo
+// payload inválido ou assinatura que falha na verificação — propósito é
+// confirmar, pela própria interface do VEXO, se a Meta está de fato
+// tentando entregar alguma coisa (e o que exatamente), sem depender dos
+// logs do Railway (sem acesso). Ver src/app/api/webhooks/instagram/route.ts.
+model WebhookLog {
+  id         String   @id @default(cuid())
+  receivedAt DateTime @default(now())
+
+  method         String
+  rawBody        String  @db.Text
+  signatureValid Boolean
+
+  @@index([receivedAt])
+}
