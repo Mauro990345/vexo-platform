@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { isInternal } from "@/lib/session";
-import { exchangeInstagramCode } from "@/lib/instagram";
+import { exchangeInstagramCode, subscribeInstagramWebhook } from "@/lib/instagram";
 import { verifyOAuthState } from "@/lib/oauth-state";
 import { encryptToken } from "@/lib/crypto";
 import { prisma } from "@/lib/prisma";
@@ -114,6 +114,17 @@ export async function GET(req: NextRequest) {
         accessTokenEnc: encryptToken(result.accessToken),
       },
     });
+
+    // Sem essa chamada a conta salva acima nunca recebe webhook nenhum —
+    // ver comentário em subscribeInstagramWebhook (src/lib/instagram.ts)
+    // pra por que o toggle do App Dashboard sozinho não basta. Lançar daqui
+    // pra dentro do catch abaixo é intencional: uma conexão que não recebe
+    // mensagem nenhuma não é uma conexão que funcionou, mesmo com o token
+    // salvo com sucesso — melhor falhar visivelmente aqui (com o detalhe
+    // técnico já exposto pra sessão interna, ver hasInternalSession acima)
+    // do que deixar a clínica "conectada" sem nunca saber que não vai
+    // receber mensagem nenhuma.
+    await subscribeInstagramWebhook(result.igUserId, result.accessToken);
 
     // Veio do link público de auto-conexão (não da tela admin) — invalida o
     // token (não reutilizável) e manda pra tela pública de sucesso em vez

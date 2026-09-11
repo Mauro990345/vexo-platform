@@ -7,7 +7,11 @@ import { refreshWhatsappStatus, type WhatsappConnectionState } from "@/lib/whats
 import { ConnectOAuthButton } from "@/components/ConnectOAuthButton";
 import { RefreshOnFocus } from "@/components/RefreshOnFocus";
 import { ConnectionLinkButton } from "@/components/ConnectionLinkButton";
-import { disconnectGoogleCalendarAction, disconnectInstagramAction } from "../../actions";
+import {
+  disconnectGoogleCalendarAction,
+  disconnectInstagramAction,
+  resubscribeInstagramWebhookAction,
+} from "../../actions";
 
 export const dynamic = "force-dynamic";
 
@@ -50,6 +54,7 @@ function ConnectionCard({
   openInNewTab,
   disconnectAction,
   notConnectedAction,
+  connectedExtraAction,
 }: {
   icon: React.ReactNode;
   iconBg: string;
@@ -68,6 +73,9 @@ function ConnectionCard({
   // por Instagram e Google Calendar (ver ConnectionLinkButton). Ausente
   // pro WhatsApp, que continua com o link/botão de sempre.
   notConnectedAction?: React.ReactNode;
+  // Ação extra ao lado de "Desconectar", só quando conectado — hoje só o
+  // Instagram usa (botão "Reativar webhook", ver resubscribeInstagramWebhookAction).
+  connectedExtraAction?: React.ReactNode;
 }) {
   return (
     <div className="flex flex-col gap-2 rounded-xl border border-vexo-border bg-vexo-surface p-3.5">
@@ -91,14 +99,17 @@ function ConnectionCard({
         <div className="flex shrink-0 items-center gap-1.5">
           {connected ? (
             disconnectAction ? (
-              <form action={disconnectAction}>
-                <button
-                  type="submit"
-                  className="rounded-lg border border-vexo-error/40 px-2.5 py-1 text-card font-medium text-vexo-error hover:bg-vexo-error/10"
-                >
-                  Desconectar
-                </button>
-              </form>
+              <>
+                {connectedExtraAction}
+                <form action={disconnectAction}>
+                  <button
+                    type="submit"
+                    className="rounded-lg border border-vexo-error/40 px-2.5 py-1 text-card font-medium text-vexo-error hover:bg-vexo-error/10"
+                  >
+                    Desconectar
+                  </button>
+                </form>
+              </>
             ) : openInNewTab ? (
               <ConnectOAuthButton href={href} label="Gerenciar" />
             ) : (
@@ -202,6 +213,12 @@ export default async function ClinicConexoesPage({
         </p>
       )}
 
+      {searchParams.status === "webhook-ok" && (
+        <p className="rounded-lg border border-vexo-success/30 bg-vexo-success/10 p-2 text-xs text-vexo-success">
+          Webhook reativado — o Instagram foi reinscrito e deve voltar a entregar mensagens novas.
+        </p>
+      )}
+
       <div className="grid grid-cols-3 gap-3">
         <ConnectionCard
           icon={<MessageCircle className="h-3.5 w-3.5" strokeWidth={2} />}
@@ -228,6 +245,17 @@ export default async function ClinicConexoesPage({
           disconnectAction={disconnectInstagramAction.bind(null, clinic.id)}
           notConnectedAction={
             <ConnectionLinkButton clinicId={clinic.id} channel="instagram" pendingToken={pendingInstagramLink?.token ?? null} />
+          }
+          connectedExtraAction={
+            <form action={resubscribeInstagramWebhookAction.bind(null, clinic.id)}>
+              <button
+                type="submit"
+                title="Reinscreve esta conta no webhook de mensagens — use se o Instagram conectou mas nenhuma mensagem chega no VEXO."
+                className="rounded-lg border border-vexo-border px-2.5 py-1 text-card font-medium text-vexo-muted hover:bg-vexo-border/30"
+              >
+                Reativar webhook
+              </button>
+            </form>
           }
         />
         <ConnectionCard

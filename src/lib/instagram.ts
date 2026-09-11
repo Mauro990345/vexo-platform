@@ -181,6 +181,28 @@ export async function exchangeInstagramCode(code: string): Promise<{
   };
 }
 
+// Ativar o toggle "Webhook Subscription" no App Dashboard (Produtos >
+// Webhooks) só configura o app: URL de callback + quais campos ele PODE
+// receber. Isso é global ao app, não à conta. A Meta só começa a mandar
+// eventos de mensagem de uma conta profissional do Instagram específica
+// depois de UMA CHAMADA EXTRA, por conta, inscrevendo aquele igUserId no
+// app — exatamente como o antigo /{page-id}/subscribed_apps do fluxo de
+// Facebook Login, só que aqui é no host graph.instagram.com e autenticado
+// com o próprio token da conta (não um token de Página). Sem essa chamada,
+// a conta conecta normalmente (OAuth completo, token salvo) mas nunca
+// entrega webhook nenhum — sintoma idêntico ao relatado (nada chega no
+// endpoint, apesar do toggle do app estar ativo).
+export async function subscribeInstagramWebhook(igUserId: string, accessToken: string): Promise<void> {
+  const url = new URL(`${IG_GRAPH_BASE}/${igUserId}/subscribed_apps`);
+  url.searchParams.set("subscribed_fields", "messages");
+  url.searchParams.set("access_token", accessToken);
+
+  const res = await fetch(url.toString(), { method: "POST" });
+  if (!res.ok) {
+    throw new Error(`Falha ao inscrever a conta no webhook (HTTP ${res.status}): ${await res.text()}`);
+  }
+}
+
 // Remove a conexão local — o token de Instagram Login não expira sozinho e
 // a Graph API não tem um endpoint de revogação equivalente ao refreshToken
 // do Google pra esse tipo de token, então "desconectar" aqui é parar o VEXO

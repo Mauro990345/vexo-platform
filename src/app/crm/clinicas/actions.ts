@@ -10,7 +10,8 @@ import { requireInternalSession } from "@/lib/session";
 import { setAppointmentAttendance } from "@/lib/appointments";
 import { disconnectWhatsapp, renameWhatsappInstance, resetWhatsappInstanceName } from "@/lib/whatsapp-connection";
 import { disconnectGoogleCalendar } from "@/lib/google-calendar";
-import { disconnectInstagram } from "@/lib/instagram";
+import { disconnectInstagram, subscribeInstagramWebhook } from "@/lib/instagram";
+import { decryptToken } from "@/lib/crypto";
 import { saveUploadedAttachment, deleteUploadedAttachment } from "@/lib/uploads";
 
 const CONNECTION_LINK_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 dias
@@ -360,6 +361,37 @@ export async function disconnectInstagramAction(clinicId: string) {
   revalidatePath(`/crm/clinicas/${clinicId}/conexoes`);
   revalidatePath(`/crm/clinicas/${clinicId}`);
   revalidatePath("/crm/painel");
+}
+
+// Corrige contas já conectadas ANTES da inscrição no webhook por conta
+// (subscribeInstagramWebhook em src/lib/instagram.ts) ter passado a rodar
+// no callback do OAuth — sem essa chamada extra, a conta autoriza e salva
+// o token normalmente, mas a Meta nunca manda evento nenhum de mensagem
+// recebida (o toggle "Webhook Subscription" do App Dashboard só configura
+// o app, não inscreve cada conta). Pra essas contas antigas, refazer todo
+// o OAuth de novo não é necessário: o token já salvo ainda é válido, só
+// falta essa chamada — daqui dá pra rodar ela sozinha, sem desconectar.
+export async function resubscribeInstagramWebhookAction(clinicId: string) {
+  await requireInternalSession();
+
+  const conexoesPath = `/crm/clinicas/${clinicId}/conexoes`;
+  const account = await prisma.instagramAccount.findUnique({ where: { clinicId } });
+  if (!account) {
+    redirect(`${conexoesPath}?status=erro&channel=instagram&reason=${encodeURIComponent("Instagram não está conectado nesta clínica.")}`);
+  }
+
+  try {
+    await subscribeInstagramWebhook(account.igUserId, decryptToken(account.accessTokenEnc));
+  } catch (err) {
+    // Mesmo espírito do callback do OAuth: detalhe técnico completo aqui,
+    // já que esse botão só existe na tela interna e só admin com sessão
+    // chega até ele (requireInternalSession acima já barra o resto).
+    const detail = err instanceof Error ? err.message : String(err);
+    redirect(`${conexoesPath}?status=erro&channel=instagram&reason=${encodeURIComponent(detail)}`);
+  }
+
+  revalidatePath(conexoesPath);
+  redirect(`${conexoesPath}?status=webhook-ok`);
 }
 
 export async function renameWhatsappInstanceAction(clinicId: string, formData: FormData) {
