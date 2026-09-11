@@ -16,6 +16,14 @@ import { prisma } from "@/lib/prisma";
 // (instagram_business_*) não são reconhecidos pelo dialog do Facebook.
 //
 // Autenticação sempre por OAuth oficial — nunca senha. Ver /api/oauth/instagram/*.
+//
+// client_id usa META_INSTAGRAM_APP_ID, NÃO META_APP_ID (esse aqui não é
+// mais lido em lugar nenhum do código) — o produto "Instagram API with
+// Instagram Login" tem um "Instagram app ID" PRÓPRIO, diferente do App ID
+// geral mostrado na tela principal do app no Meta for Developers. Usar o
+// App ID geral aqui dá erro "Invalid platform app" na tela de autorização
+// do Instagram. client_secret continua sendo o App Secret geral
+// (META_APP_SECRET) — só o ID tem essa duplicidade, não o secret.
 
 const GRAPH_API_VERSION = "v21.0";
 // Base pra chamadas autenticadas com o token de Instagram Login (envio de
@@ -73,10 +81,10 @@ export async function sendInstagramMessage(params: {
 // -----------------------------------------------------------------------
 
 export function buildInstagramOAuthUrl(state: string): string {
-  const clientId = process.env.META_APP_ID;
+  const clientId = process.env.META_INSTAGRAM_APP_ID;
   const redirectUri = process.env.META_OAUTH_REDIRECT_URI;
   if (!clientId || !redirectUri) {
-    throw new Error("META_APP_ID / META_OAUTH_REDIRECT_URI não configurados.");
+    throw new Error("META_INSTAGRAM_APP_ID / META_OAUTH_REDIRECT_URI não configurados.");
   }
 
   // Esses 3 são os únicos scopes do produto "Instagram API with Instagram
@@ -106,7 +114,7 @@ export async function exchangeInstagramCode(code: string): Promise<{
   igUserId: string;
   igUsername?: string;
 }> {
-  const clientId = process.env.META_APP_ID;
+  const clientId = process.env.META_INSTAGRAM_APP_ID;
   const clientSecret = process.env.META_APP_SECRET;
   const redirectUri = process.env.META_OAUTH_REDIRECT_URI;
   if (!clientId || !clientSecret || !redirectUri) {
