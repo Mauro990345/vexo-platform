@@ -98,6 +98,21 @@ export async function GET(req: NextRequest) {
     );
   } catch (err) {
     console.error("[vexo] Falha no callback OAuth do Instagram:", err);
+
+    // Detalhe técnico (resposta crua da API do Meta) só é exposto quando o
+    // destino é a tela interna de Conexões (uso do Mauro/equipe, pra
+    // depurar sem precisar dos logs do Railway) — nunca no link público de
+    // auto-conexão (/conectar/[token], usado pela secretária da clínica,
+    // ver errorRedirect acima) nem no fallback sem state (Contas): expor a
+    // resposta crua da API do Meta pra alguém não-técnico fora da equipe
+    // não ajuda em nada e vaza detalhe técnico desnecessário. Truncado pra
+    // não estourar o card com uma resposta HTML/JSON gigante.
+    if (!parsedState?.connectToken && parsedState?.clinicId) {
+      const detail = err instanceof Error ? err.message : String(err);
+      // Sem prefixo próprio aqui — conexoes/page.tsx já compõe "Não foi
+      // possível conectar o Instagram: {reason}" sozinha.
+      return errorRedirect(detail.length > 500 ? `${detail.slice(0, 500)}…` : detail);
+    }
     return errorRedirect("Não foi possível concluir a conexão com o Instagram.");
   }
 }

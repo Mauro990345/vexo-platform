@@ -124,21 +124,30 @@ export async function exchangeInstagramCode(code: string): Promise<{
   // 1. Troca o code por um token de curta duração — já vem com o
   // igUserId junto (a conta profissional do Instagram autenticada), sem
   // precisar passar por nenhuma Página do Facebook. Único endpoint OAuth
-  // desse fluxo que é POST + form-urlencoded, não GET com querystring.
-  const form = new URLSearchParams({
-    client_id: clientId,
-    client_secret: clientSecret,
-    grant_type: "authorization_code",
-    redirect_uri: redirectUri,
-    code,
-  });
+  // desse fluxo que é POST, não GET com querystring — e precisa ser
+  // multipart/form-data (FormData), não application/x-www-form-urlencoded:
+  // o exemplo oficial da Meta pra esse endpoint específico usa `curl -F`
+  // (multipart), herdado da antiga Instagram Basic Display API que roda no
+  // mesmo host (api.instagram.com). Urlencoded aqui é aceito silenciosamente
+  // por alguns endpoints OAuth2 genéricos, mas não necessariamente por esse.
+  const form = new FormData();
+  form.set("client_id", clientId);
+  form.set("client_secret", clientSecret);
+  form.set("grant_type", "authorization_code");
+  form.set("redirect_uri", redirectUri);
+  form.set("code", code);
+
   const tokenRes = await fetch("https://api.instagram.com/oauth/access_token", {
     method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: form.toString(),
+    body: form,
   });
-  if (!tokenRes.ok) throw new Error(`Falha ao trocar code por token: ${await tokenRes.text()}`);
-  const shortLived = (await tokenRes.json()) as { access_token: string; user_id: string };
+  const tokenBodyText = await tokenRes.text();
+  if (!tokenRes.ok) {
+    throw new Error(
+      `Falha ao trocar code por token (HTTP ${tokenRes.status}): ${tokenBodyText}`
+    );
+  }
+  const shortLived = JSON.parse(tokenBodyText) as { access_token: string; user_id: string };
 
   // 2. Long-lived token (60 dias) — grant_type diferente do Facebook
   // (ig_exchange_token, não fb_exchange_token), e host graph.instagram.com.
@@ -147,7 +156,9 @@ export async function exchangeInstagramCode(code: string): Promise<{
   llUrl.searchParams.set("client_secret", clientSecret);
   llUrl.searchParams.set("access_token", shortLived.access_token);
   const llRes = await fetch(llUrl.toString());
-  if (!llRes.ok) throw new Error(`Falha ao obter token de longa duração: ${await llRes.text()}`);
+  if (!llRes.ok) {
+    throw new Error(`Falha ao obter token de longa duração (HTTP ${llRes.status}): ${await llRes.text()}`);
+  }
   const { access_token: longLivedToken } = (await llRes.json()) as { access_token: string };
 
   // 3. Username da própria conta — o igUserId já veio no passo 1, não
