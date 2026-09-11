@@ -29,7 +29,7 @@ export default async function ConectarPage({
   searchParams,
 }: {
   params: { token: string };
-  searchParams: { status?: string };
+  searchParams: { status?: string; reason?: string };
 }) {
   const link = await prisma.connectionLink.findUnique({
     where: { token: params.token },
@@ -69,7 +69,9 @@ export default async function ConectarPage({
 
               {searchParams.status === "erro" && (
                 <p className="mt-4 rounded-lg border border-vexo-error/30 bg-vexo-error/10 p-2 text-xs text-vexo-error">
-                  Falha ao conectar. Tente novamente.
+                  Não foi possível conectar
+                  {searchParams.reason ? `: ${searchParams.reason.replace(/\.+$/, "")}.` : "."} Tente
+                  novamente pelo botão abaixo.
                 </p>
               )}
 

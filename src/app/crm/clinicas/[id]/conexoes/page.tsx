@@ -137,7 +137,7 @@ export default async function ClinicConexoesPage({
   searchParams,
 }: {
   params: { id: string };
-  searchParams: { status?: string; channel?: string };
+  searchParams: { status?: string; channel?: string; reason?: string };
 }) {
   await requireInternalSession();
 
@@ -192,7 +192,13 @@ export default async function ClinicConexoesPage({
 
       {searchParams.status === "erro" && (
         <p className="rounded-lg border border-vexo-error/30 bg-vexo-error/10 p-2 text-xs text-vexo-error">
-          Falha ao conectar{searchParams.channel ? ` o ${CHANNEL_NAMES[searchParams.channel] ?? searchParams.channel}` : ""}. Tente novamente.
+          {/* reason vem do callback OAuth (ver instagram/callback/route.ts)
+              com o motivo exato que o Instagram/Facebook devolveu — cai pro
+              texto genérico de sempre quando ausente (ex: falha vinda do
+              Google Calendar, que ainda não repassa reason). */}
+          Não foi possível conectar{searchParams.channel ? ` o ${CHANNEL_NAMES[searchParams.channel] ?? searchParams.channel}` : ""}
+          {searchParams.reason ? `: ${searchParams.reason.replace(/\.+$/, "")}.` : "."} Tente novamente
+          clicando em &quot;Conectar&quot; abaixo.
         </p>
       )}
 
