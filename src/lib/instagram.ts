@@ -65,7 +65,16 @@ export async function sendInstagramMessage(params: {
     ? { attachment: { type: "video", payload: { url: params.mediaUrl, is_reusable: true } } }
     : { text: params.text ?? "" };
 
-  const res = await fetch(`${IG_GRAPH_BASE}/${params.igUserId}/messages`, {
+  // "me", não params.igUserId, no path — ver comentário grande em
+  // verifyInstagramTokenAndId/subscribeInstagramWebhook logo abaixo sobre
+  // por que endereçar a própria conta pelo ID numérico não funciona nesse
+  // produto. Ainda não tinha sido testado de verdade (nenhuma mensagem
+  // chegou a esse ponto — o próprio subscribe do webhook nunca funcionou
+  // até agora), mas é o mesmo padrão exato, corrigido preventivamente
+  // pela mesma razão. params.igUserId continua sendo usado noutro lugar
+  // (handleInboundInstagramMessage, pra achar a clínica dona do evento
+  // recebido) — só parou de ser usado AQUI, no path da chamada de envio.
+  const res = await fetch(`${IG_GRAPH_BASE}/me/messages`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -213,29 +222,39 @@ export async function exchangeInstagramCode(code: string): Promise<{
 // entrega webhook nenhum — sintoma idêntico ao relatado (nada chega no
 // endpoint, apesar do toggle do app estar ativo).
 // Diagnóstico: lê o perfil da própria conta (GET simples, sem side effect
-// nenhum) com o mesmo par (igUserId, accessToken) usado no subscribe
-// logo abaixo. Isola se um "Object with ID ... does not exist" no
-// subscribe é o token/ID em si sendo inválido (essa leitura também falha,
-// do mesmo jeito) ou é específico do endpoint /subscribed_apps — ex:
-// exigindo Advanced Access/App Review pra esse edge, mesmo com o par
-// (token, ID) válido pra tudo mais (essa leitura funciona normalmente).
+// nenhum) com o mesmo accessToken usado no subscribe logo abaixo. Isola se
+// um "Object with ID ... does not exist" no subscribe é o token em si
+// sendo inválido (essa leitura também falha, do mesmo jeito) ou é
+// específico do endpoint /subscribed_apps.
+//
+// Endereça a própria conta como "me", não pelo igUserId numérico — um
+// "Instagram User access token" desse produto (Instagram API with
+// Instagram Login) só endereça a própria conta por esse atalho, igual
+// todo exemplo oficial da Meta pra esse produto (mensagens, conversas
+// etc). Não é só estilo: era exatamente o motivo do "Object with ID
+// '...' does not exist" persistir mesmo depois de corrigir versão da API
+// e formato do ID (v24.0 + extração sem perda de precisão) — o servidor
+// da Meta não resolve o node pelo ID numérico pra esse tipo de token,
+// mesmo sendo o ID correto. Evidência que já existia no próprio código
+// antes dessa correção: exchangeInstagramCode (passo 3, leitura de
+// username) sempre usou "me" e sempre funcionou; só as chamadas que
+// usavam o ID numérico direto falhavam.
 export async function verifyInstagramTokenAndId(
-  igUserId: string,
   accessToken: string
 ): Promise<{ id: string; username?: string }> {
-  const url = new URL(`${IG_GRAPH_BASE}/${igUserId}`);
+  const url = new URL(`${IG_GRAPH_BASE}/me`);
   url.searchParams.set("fields", "id,username");
   url.searchParams.set("access_token", accessToken);
 
   const res = await fetch(url.toString());
   if (!res.ok) {
-    throw new Error(`Falha ao verificar token/ID (HTTP ${res.status}): ${await res.text()}`);
+    throw new Error(`Falha ao verificar token (HTTP ${res.status}): ${await res.text()}`);
   }
   return (await res.json()) as { id: string; username?: string };
 }
 
-export async function subscribeInstagramWebhook(igUserId: string, accessToken: string): Promise<void> {
-  const url = new URL(`${IG_GRAPH_BASE}/${igUserId}/subscribed_apps`);
+export async function subscribeInstagramWebhook(accessToken: string): Promise<void> {
+  const url = new URL(`${IG_GRAPH_BASE}/me/subscribed_apps`);
   url.searchParams.set("subscribed_fields", "messages");
   url.searchParams.set("access_token", accessToken);
 
@@ -243,6 +262,19 @@ export async function subscribeInstagramWebhook(igUserId: string, accessToken: s
   if (!res.ok) {
     throw new Error(`Falha ao inscrever a conta no webhook (HTTP ${res.status}): ${await res.text()}`);
   }
+}
+
+// Fingerprint (não reversível pra exibição) de um token — comprimento e
+// alguns caracteres do início/fim, o suficiente pra comparar visualmente
+// contra outro log/print do "mesmo" token sem nunca expor o valor inteiro
+// em texto (nem pra sessão interna). Só entra em uso se a chamada com
+// "me" acima também falhar: nesse ponto o suspeito deixa de ser o
+// endereçamento (ID vs. "me") e passa a ser o token em si — salvo
+// truncado, salvo corrompido na criptografia/decriptação, ou nunca foi o
+// token de longa duração pra começo de conversa.
+export function tokenFingerprint(token: string): string {
+  if (token.length <= 16) return `len=${token.length}`;
+  return `len=${token.length}, começa "${token.slice(0, 8)}", termina "${token.slice(-8)}"`;
 }
 
 // Remove a conexão local — o token de Instagram Login não expira sozinho e

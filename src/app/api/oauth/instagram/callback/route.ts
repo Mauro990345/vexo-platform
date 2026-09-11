@@ -124,7 +124,7 @@ export async function GET(req: NextRequest) {
     // técnico já exposto pra sessão interna, ver hasInternalSession acima)
     // do que deixar a clínica "conectada" sem nunca saber que não vai
     // receber mensagem nenhuma.
-    await subscribeInstagramWebhook(result.igUserId, result.accessToken);
+    await subscribeInstagramWebhook(result.accessToken);
 
     // Veio do link público de auto-conexão (não da tela admin) — invalida o
     // token (não reutilizável) e manda pra tela pública de sucesso em vez

@@ -10,7 +10,12 @@ import { requireInternalSession } from "@/lib/session";
 import { setAppointmentAttendance } from "@/lib/appointments";
 import { disconnectWhatsapp, renameWhatsappInstance, resetWhatsappInstanceName } from "@/lib/whatsapp-connection";
 import { disconnectGoogleCalendar } from "@/lib/google-calendar";
-import { disconnectInstagram, subscribeInstagramWebhook, verifyInstagramTokenAndId } from "@/lib/instagram";
+import {
+  disconnectInstagram,
+  subscribeInstagramWebhook,
+  verifyInstagramTokenAndId,
+  tokenFingerprint,
+} from "@/lib/instagram";
 import { decryptToken } from "@/lib/crypto";
 import { saveUploadedAttachment, deleteUploadedAttachment } from "@/lib/uploads";
 
@@ -382,27 +387,31 @@ export async function resubscribeInstagramWebhookAction(clinicId: string) {
 
   const accessToken = decryptToken(account.accessTokenEnc);
 
-  // Diagnóstico antes do subscribe em si: um GET simples (sem side effect)
-  // com o MESMO par (igUserId, token) isola se um erro no subscribe é
-  // token/ID inválido em geral (essa leitura falha do mesmo jeito) ou é
-  // específico do endpoint /subscribed_apps (essa leitura funciona, só o
-  // subscribe falha — aponta pra permissão/Advanced Access faltando nesse
-  // edge específico, não pro par token/ID em si). Ver verifyInstagramTokenAndId
-  // em src/lib/instagram.ts.
+  // Diagnóstico antes do subscribe em si: um GET simples (sem side effect),
+  // endereçando a própria conta como "me" (não pelo igUserId numérico — ver
+  // comentário grande em verifyInstagramTokenAndId, src/lib/instagram.ts,
+  // sobre por que isso importa nesse produto específico). Isola se um erro
+  // no subscribe é o token em si sendo inválido (essa leitura falha do
+  // mesmo jeito) ou é específico do endpoint /subscribed_apps (essa
+  // leitura funciona, só o subscribe falha).
   let profileCheck: { id: string; username?: string };
   try {
-    profileCheck = await verifyInstagramTokenAndId(account.igUserId, accessToken);
+    profileCheck = await verifyInstagramTokenAndId(accessToken);
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err);
+    // Se até "me" falhar, o suspeito deixa de ser o endereçamento (ID vs.
+    // "me") e passa a ser o token salvo em si — fingerprint (nunca o
+    // token inteiro) junto do erro pra comparar contra outro log/print,
+    // sem token exposto por completo em lugar nenhum.
     redirect(
       `${conexoesPath}?status=erro&channel=instagram&reason=${encodeURIComponent(
-        `Leitura de diagnóstico falhou (token/ID inválidos ou expirados): ${detail}`
+        `Leitura de diagnóstico falhou mesmo usando "me" (token inválido/expirado/corrompido — ${tokenFingerprint(accessToken)}): ${detail}`
       )}`
     );
   }
 
   try {
-    await subscribeInstagramWebhook(account.igUserId, accessToken);
+    await subscribeInstagramWebhook(accessToken);
   } catch (err) {
     // Mesmo espírito do callback do OAuth: detalhe técnico completo aqui,
     // já que esse botão só existe na tela interna e só admin com sessão
