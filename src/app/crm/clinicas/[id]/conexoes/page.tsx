@@ -12,6 +12,7 @@ import {
   disconnectInstagramAction,
   resubscribeInstagramWebhookAction,
   checkInstagramWebhookSubscriptionAction,
+  setInstagramWebhookIdAction,
 } from "../../actions";
 
 export const dynamic = "force-dynamic";
@@ -318,6 +319,43 @@ export default async function ClinicConexoesPage({
           }
         />
       </div>
+
+      {instagramConnected && (
+        <div className="rounded-xl border border-vexo-border bg-vexo-surface p-3.5 text-xs">
+          <p className="font-semibold text-vexo-fg">Corrigir ID do webhook do Instagram (avançado)</p>
+          <p className="mt-1 text-vexo-muted">
+            Nenhum endpoint de OAuth desse produto devolve o mesmo ID que a Meta manda de verdade
+            nos eventos de webhook (entry.id/recipient.id) — o único jeito confiável de saber esse
+            valor é vendo um evento real chegar. Se{" "}
+            <Link href="/crm/webhook-logs" className="underline hover:text-vexo-fg">
+              Logs do webhook
+            </Link>{" "}
+            mostrar um &quot;Nenhuma InstagramAccount encontrada pra igUserId=...&quot;, cole aqui o
+            ID que aparece nessa mensagem (só números).
+          </p>
+          <form
+            action={setInstagramWebhookIdAction.bind(null, clinic.id)}
+            className="mt-2 flex flex-wrap items-center gap-2"
+          >
+            <input
+              type="text"
+              name="igUserId"
+              inputMode="numeric"
+              pattern="\d+"
+              required
+              placeholder="Ex: 17841429744434753"
+              defaultValue={clinic.instagramAccount!.igUserId}
+              className="w-56 rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5 text-card outline-none focus:border-vexo-accent"
+            />
+            <button
+              type="submit"
+              className="rounded-lg border border-vexo-accent px-2.5 py-1 font-medium text-vexo-accent hover:bg-vexo-accent/10"
+            >
+              Salvar ID
+            </button>
+          </form>
+        </div>
+      )}
     </div>
   );
 }

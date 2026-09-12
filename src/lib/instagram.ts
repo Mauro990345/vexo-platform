@@ -39,6 +39,23 @@ const GRAPH_API_VERSION = "v24.0";
 // um token obtido via Instagram Login não é aceito pelo host do Facebook.
 const IG_GRAPH_BASE = `https://graph.instagram.com/${GRAPH_API_VERSION}`;
 
+// Extrai um campo de ID (sequência de dígitos) direto do texto CRU de uma
+// resposta JSON, sem nunca passar por JSON.parse()/res.json() pra esse
+// campo específico — IDs do Instagram passam de Number.MAX_SAFE_INTEGER
+// (17 dígitos vs. ~16 seguros), e um `res.json() as { id: string }` só
+// engana o TypeScript: se a Meta manda esse campo como número (sem aspas)
+// em vez de string, o parser de JSON do próprio JS já converte pra
+// float64 na hora do parse, ANTES de qualquer cast — um "as string"
+// depois disso não resgata dígito nenhum que já tenha sido arredondado.
+// Aceita o valor com ou sem aspas no JSON (`"id":"123"` ou `"id":123`),
+// já que não dá pra saber de antemão qual formato a Meta vai usar em cada
+// endpoint (endpoints diferentes desse mesmo produto já se mostraram
+// inconsistentes nisso).
+function extractIdField(rawText: string, fieldName: string): string | null {
+  const match = rawText.match(new RegExp(`"${fieldName}"\\s*:\\s*"?(\\d+)"?`));
+  return match?.[1] ?? null;
+}
+
 export function verifyWebhookSignature(rawBody: string, signatureHeader: string | null): boolean {
   const appSecret = process.env.META_APP_SECRET;
   if (!appSecret || !signatureHeader) return false;
@@ -181,41 +198,41 @@ export async function exchangeInstagramCode(code: string): Promise<{
   }
   const { access_token: longLivedToken } = (await llRes.json()) as { access_token: string };
 
-  // 3. Username E ID da própria conta — o "user_id" que veio no passo 1
-  // (api.instagram.com/oauth/access_token) é de um NAMESPACE DIFERENTE do
-  // "id" que graph.instagram.com/me devolve pra essa mesma conta. Isso
-  // explica um bug real encontrado em produção: o valor salvo como
-  // igUserId (vindo do passo 1) nunca batia com o "entry.id"/"recipient.id"
-  // que a Meta manda de verdade nos eventos de webhook — a mensagem
-  // chegava (assinatura válida, confirmado via WebhookLog), mas
-  // handleInboundInstagramMessage nunca achava a conta correspondente e
-  // descartava tudo em silêncio.
+  // 3. Username e "id" da própria conta segundo graph.instagram.com/me.
   //
-  // Por quê: api.instagram.com é host compartilhado com a antiga
-  // Instagram Basic Display API (já anotado no passo 1, pro formato
-  // multipart) — seu "user_id" é dessa API antiga, num namespace de ID
-  // que não é o mesmo da Graph API moderna (graph.instagram.com), que é
-  // por onde a mensageria de verdade roda (webhook, /me, /messages,
-  // /subscribed_apps). O "id" devolvido por graph.instagram.com/me é o
-  // node ID da Graph API pra essa conta — o MESMO namespace usado pelo
-  // webhook. Todo o resto do código já usa "me" em vez do ID numérico
-  // pras chamadas de saída (ver subscribeInstagramWebhook,
-  // verifyInstagramTokenAndId, sendInstagramMessage), então isso nunca
-  // dava erro nelas — só aparecia na hora de CASAR o evento recebido com
-  // a conta certa no banco, que é a única coisa que ainda depende do
-  // valor numérico do ID.
+  // AVISO IMPORTANTE (histórico do bug de descompasso de ID, atualizado):
+  // por um tempo este comentário afirmava que o "id" de /me era o mesmo
+  // namespace usado pelo webhook (entry.id/recipient.id) — ACHO QUE ISSO
+  // ESTAVA ERRADO. Evidência: numa conta real em produção, o "id" de /me
+  // veio bem próximo do "user_id" antigo de api.instagram.com (mesma
+  // família de número, ~27874369612264796), enquanto o entry.id que o
+  // webhook manda de verdade é COMPLETAMENTE diferente
+  // (~17841429744434753, outra quantidade de dígitos no prefixo). Ou
+  // seja: api.instagram.com/oauth/access_token (passo 1) e
+  // graph.instagram.com/me (aqui) aparentam devolver a MESMA conta no
+  // MESMO namespace — só que o webhook usa um terceiro namespace
+  // diferente dos dois, que NENHUM endpoint acessível nesse produto
+  // (Instagram API with Instagram Login, sem Página do Facebook no meio)
+  // parece expor. Guardado aqui mesmo assim (ainda é um identificador
+  // válido e estável da conta, só não serve pra casar webhook recebido
+  // com conta salva) — a correção do ID usado pra essa finalidade agora é
+  // manual, alimentada pelo que os webhooks reais mostram (ver
+  // setInstagramWebhookIdAction em src/app/crm/clinicas/actions.ts e o
+  // motivo de descarte visível em /crm/webhook-logs).
   const meRes = await fetch(
     `${IG_GRAPH_BASE}/me?fields=id,username&access_token=${encodeURIComponent(longLivedToken)}`
   );
-  const meData = (await meRes.json()) as { id?: string; username?: string };
-  if (!meData.id) {
-    throw new Error(`Resposta de /me sem "id": ${JSON.stringify(meData)}`);
+  const meText = await meRes.text();
+  const meId = extractIdField(meText, "id");
+  if (!meId) {
+    throw new Error(`Resposta de /me sem "id": ${meText}`);
   }
+  const meUsername = (JSON.parse(meText) as { username?: string }).username;
 
   return {
     accessToken: longLivedToken,
-    igUserId: meData.id,
-    igUsername: meData.username,
+    igUserId: meId,
+    igUsername: meUsername,
   };
 }
 
@@ -256,10 +273,20 @@ export async function verifyInstagramTokenAndId(
   url.searchParams.set("access_token", accessToken);
 
   const res = await fetch(url.toString());
+  const bodyText = await res.text();
   if (!res.ok) {
-    throw new Error(`Falha ao verificar token (HTTP ${res.status}): ${await res.text()}`);
+    throw new Error(`Falha ao verificar token (HTTP ${res.status}): ${bodyText}`);
   }
-  return (await res.json()) as { id: string; username?: string };
+  // Extrai "id" do texto cru, nunca via res.json() — mesmo motivo do
+  // meData.id em exchangeInstagramCode: esse campo já passou de
+  // Number.MAX_SAFE_INTEGER numa conta real e um "as { id: string }" não
+  // protege contra o parser de JSON arredondar o valor antes do cast.
+  const id = extractIdField(bodyText, "id");
+  if (!id) {
+    throw new Error(`Resposta de /me sem "id": ${bodyText}`);
+  }
+  const username = (JSON.parse(bodyText) as { username?: string }).username;
+  return { id, username };
 }
 
 export async function subscribeInstagramWebhook(accessToken: string): Promise<void> {

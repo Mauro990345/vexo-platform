@@ -427,27 +427,18 @@ export async function resubscribeInstagramWebhookAction(clinicId: string) {
     );
   }
 
-  // Auto-correção pra contas conectadas ANTES da mudança que troca a
-  // origem do igUserId salvo (api.instagram.com/oauth/access_token →
-  // graph.instagram.com/me, ver exchangeInstagramCode em
-  // src/lib/instagram.ts) — essas contas ficaram com o ID do namespace
-  // errado, que nunca bate com o "entry.id" que o webhook manda de
-  // verdade. profileCheck.id (já buscado acima, mesma fonte que o
-  // OAuth passou a usar) é a correção; só grava se for diferente do que
-  // já está salvo, pra não gerar update à toa.
-  if (profileCheck.id !== account.igUserId) {
-    await prisma.instagramAccount.update({
-      where: { clinicId },
-      data: { igUserId: profileCheck.id },
-    });
-  }
-
+  // NÃO grava profileCheck.id como igUserId aqui (chegou a fazer isso —
+  // removido). Uma conta real em produção provou que /me devolve um "id"
+  // que NÃO é o mesmo namespace que o webhook manda em entry.id/
+  // recipient.id (ver comentário grande em exchangeInstagramCode, src/
+  // lib/instagram.ts) — esse "self-heal" automático só ficava reescrevendo
+  // o valor salvo por um outro valor IGUALMENTE errado pra fins de casar
+  // com o webhook (na prática, os dois vêm do mesmo namespace errado). A
+  // correção do ID usado pra casar com o webhook agora é manual, feita
+  // com o valor observado de verdade num evento real (ver
+  // setInstagramWebhookIdAction abaixo e /crm/webhook-logs).
   revalidatePath(conexoesPath);
-  redirect(
-    profileCheck.id !== account.igUserId
-      ? `${conexoesPath}?status=webhook-ok&idFixed=${encodeURIComponent(`${account.igUserId} → ${profileCheck.id}`)}`
-      : `${conexoesPath}?status=webhook-ok`
-  );
+  redirect(`${conexoesPath}?status=webhook-ok`);
 }
 
 // Diagnóstico: o subscribe (ação acima) só confirma que a Meta ACEITOU o
@@ -481,6 +472,46 @@ export async function checkInstagramWebhookSubscriptionAction(clinicId: string) 
   }
 
   redirect(`${conexoesPath}?status=webhook-fields&fields=${encodeURIComponent(fields.join(", ") || "(nenhum)")}`);
+}
+
+// Correção manual do igUserId usado pra casar evento de webhook recebido
+// com a conta salva (ver handleInboundInstagramMessage,
+// conversation-pipeline.ts). Existe porque NENHUM endpoint acessível no
+// fluxo de OAuth desse produto (api.instagram.com/oauth/access_token,
+// graph.instagram.com/me — já tentados os dois) devolve o mesmo ID que a
+// Meta manda de verdade em entry.id/recipient.id nos webhooks; o único
+// jeito confiável de saber esse valor é observando um evento real (ver
+// matchFailureReason em /crm/webhook-logs, que mostra o ID recebido
+// quando não bate com nada salvo).
+//
+// formData.get("igUserId") é tratado como STRING do início ao fim — nunca
+// convertido pra Number em nenhuma etapa (nem validação, nem log, nem
+// comparação) — só validado como sequência de dígitos via regex, já que é
+// exatamente esse tipo de conversão implícita (JSON.parse/Number em algum
+// ponto do caminho) que already causou perda de precisão nesse mesmo
+// campo mais de uma vez neste projeto.
+export async function setInstagramWebhookIdAction(clinicId: string, formData: FormData) {
+  await requireInternalSession();
+
+  const conexoesPath = `/crm/clinicas/${clinicId}/conexoes`;
+  const igUserId = String(formData.get("igUserId") ?? "").trim();
+
+  if (!/^\d+$/.test(igUserId)) {
+    redirect(
+      `${conexoesPath}?status=erro&channel=instagram&reason=${encodeURIComponent(
+        `ID inválido — precisa ser só dígitos (recebido: "${igUserId}").`
+      )}`
+    );
+  }
+
+  const account = await prisma.instagramAccount.findUnique({ where: { clinicId } });
+  if (!account) {
+    redirect(`${conexoesPath}?status=erro&channel=instagram&reason=${encodeURIComponent("Instagram não está conectado nesta clínica.")}`);
+  }
+
+  await prisma.instagramAccount.update({ where: { clinicId }, data: { igUserId } });
+  revalidatePath(conexoesPath);
+  redirect(`${conexoesPath}?status=webhook-ok&idFixed=${encodeURIComponent(`${account.igUserId} → ${igUserId}`)}`);
 }
 
 export async function renameWhatsappInstanceAction(clinicId: string, formData: FormData) {
