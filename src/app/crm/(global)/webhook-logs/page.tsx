@@ -63,6 +63,16 @@ export default async function WebhookLogsPage() {
                   {log.matchFailureReason}
                 </p>
               )}
+              {log.processingError && (
+                <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap break-all rounded-lg border border-vexo-error/30 bg-vexo-error/10 p-2 text-vexo-error">
+                  {/* Gravado quando a conta É encontrada mas algo quebra
+                      depois disso (classificação, geração de resposta da
+                      IA, criação de lead/conversa/mensagem etc.) — antes
+                      só virava console.error na rota, invisível sem log
+                      do Railway. */}
+                  {log.processingError}
+                </pre>
+              )}
               <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-all rounded-lg bg-vexo-bg p-2 text-card text-vexo-fg">
                 {log.rawBody || "(corpo vazio)"}
               </pre>

@@ -590,5 +590,14 @@ model WebhookLog {
   // normalmente, ou nem chegou a ter evento de mensagem).
   matchFailureReason String? @db.Text
 
+  // Preenchido quando a conta É encontrada mas handleInboundInstagramMessage
+  // lança uma exceção em qualquer ponto do processamento (classificação,
+  // geração de resposta da IA, criação de lead/conversa/mensagem etc.) —
+  // antes só virava console.error na rota (api/webhooks/instagram/route.ts),
+  // invisível sem acesso a logs do Railway. Guarda o erro completo (mensagem
+  // + stack) pra diagnosticar direto pela interface do VEXO, sem precisar
+  // adivinhar em qual das várias etapas internas travou.
+  processingError String? @db.Text
+
   @@index([receivedAt])
 }

@@ -95,6 +95,20 @@ export async function POST(req: NextRequest) {
         );
       } catch (err) {
         console.error("[vexo] Erro ao processar mensagem do Instagram:", err);
+        // Mesmo espírito do matchFailureReason (conversation-pipeline.ts):
+        // sem isso, uma exceção aqui (conta encontrada, mas algo quebrou
+        // depois — classificação, geração de resposta da IA, criação de
+        // lead/conversa/mensagem) só existia no console do Railway, sem
+        // acesso. Grava na MESMA linha de WebhookLog dessa requisição pra
+        // dar pra ver direto em /crm/webhook-logs.
+        if (webhookLog?.id) {
+          const detail = err instanceof Error ? `${err.message}\n${err.stack ?? ""}` : String(err);
+          await prisma.webhookLog
+            .update({ where: { id: webhookLog.id }, data: { processingError: detail.slice(0, 4000) } })
+            .catch((updateErr) =>
+              console.error("[vexo] Falha ao gravar erro de processamento no WebhookLog:", updateErr)
+            );
+        }
       }
     }
   }
