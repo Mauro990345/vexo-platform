@@ -204,10 +204,16 @@ export default async function ClinicConexoesPage({
           </p>
         </div>
         {/* Diagnóstico temporário (sem acesso a logs do Railway) — ver
-            WebhookLog no schema e /api/webhooks/instagram/route.ts. */}
-        <Link href="/crm/webhook-logs" className="shrink-0 whitespace-nowrap text-card text-vexo-muted underline hover:text-vexo-fg">
-          Logs do webhook (Instagram)
-        </Link>
+            WebhookLog no schema e /api/webhooks/instagram/route.ts, e
+            dispatch-status/page.tsx pro envio de mensagens. */}
+        <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 text-right">
+          <Link href="/crm/webhook-logs" className="whitespace-nowrap text-card text-vexo-muted underline hover:text-vexo-fg">
+            Logs do webhook (Instagram)
+          </Link>
+          <Link href="/crm/dispatch-status" className="whitespace-nowrap text-card text-vexo-muted underline hover:text-vexo-fg">
+            Envio de mensagens
+          </Link>
+        </div>
       </div>
 
       {searchParams.status === "erro" && (
