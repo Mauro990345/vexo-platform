@@ -13,6 +13,7 @@ import {
   resubscribeInstagramWebhookAction,
   checkInstagramWebhookSubscriptionAction,
   setInstagramWebhookIdAction,
+  setInstagramAccessTokenAction,
 } from "../../actions";
 
 export const dynamic = "force-dynamic";
@@ -241,6 +242,12 @@ export default async function ClinicConexoesPage({
         </p>
       )}
 
+      {searchParams.status === "token-ok" && (
+        <p className="rounded-lg border border-vexo-success/30 bg-vexo-success/10 p-2 text-xs text-vexo-success">
+          Token salvo — próximas chamadas do Instagram pra essa conta já usam esse valor.
+        </p>
+      )}
+
       {searchParams.status === "webhook-fields" && (
         <p className="rounded-lg border border-vexo-border bg-vexo-surface p-2 text-xs text-vexo-fg">
           {/* Resposta de verdade da Meta pros campos inscritos AGORA — não
@@ -358,6 +365,37 @@ export default async function ClinicConexoesPage({
               className="rounded-lg border border-vexo-accent px-2.5 py-1 font-medium text-vexo-accent hover:bg-vexo-accent/10"
             >
               Salvar ID
+            </button>
+          </form>
+        </div>
+      )}
+
+      {instagramConnected && (
+        <div className="rounded-xl border border-vexo-border bg-vexo-surface p-3.5 text-xs">
+          <p className="font-semibold text-vexo-fg">Colar access token do Instagram manualmente (avançado)</p>
+          <p className="mt-1 text-vexo-muted">
+            Pra testar com um token gerado direto no Meta for Developers (ex: botão &quot;Generate
+            token&quot; ao lado da conta), sem precisar desconectar e refazer o OAuth. O fluxo normal
+            continua sendo o botão &quot;Conectar&quot; acima — isso aqui é só pra teste rápido. O
+            valor não fica salvo neste campo depois de enviado (nunca é reexibido).
+          </p>
+          <form
+            action={setInstagramAccessTokenAction.bind(null, clinic.id)}
+            className="mt-2 flex flex-wrap items-center gap-2"
+          >
+            <input
+              type="password"
+              name="accessToken"
+              required
+              autoComplete="off"
+              placeholder="Cole o access token aqui"
+              className="w-72 rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5 text-card outline-none focus:border-vexo-accent"
+            />
+            <button
+              type="submit"
+              className="rounded-lg border border-vexo-accent px-2.5 py-1 font-medium text-vexo-accent hover:bg-vexo-accent/10"
+            >
+              Salvar token
             </button>
           </form>
         </div>

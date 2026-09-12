@@ -17,7 +17,7 @@ import {
   tokenFingerprint,
   getSubscribedFields,
 } from "@/lib/instagram";
-import { decryptToken } from "@/lib/crypto";
+import { decryptToken, encryptToken } from "@/lib/crypto";
 import { saveUploadedAttachment, deleteUploadedAttachment } from "@/lib/uploads";
 
 const CONNECTION_LINK_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 dias
@@ -512,6 +512,38 @@ export async function setInstagramWebhookIdAction(clinicId: string, formData: Fo
   await prisma.instagramAccount.update({ where: { clinicId }, data: { igUserId } });
   revalidatePath(conexoesPath);
   redirect(`${conexoesPath}?status=webhook-ok&idFixed=${encodeURIComponent(`${account.igUserId} → ${igUserId}`)}`);
+}
+
+// Cola manualmente um access token do Instagram já gerado — ex: pelo botão
+// "Generate token" do próprio Meta for Developers, ao lado da conta em
+// Produtos > Instagram > ... > Roles/Tokens (existe pra teste/depuração
+// direta da API, sem precisar repetir o fluxo de OAuth completo). O fluxo
+// normal (botão "Conectar" em Conexões) continua sendo a via oficial —
+// isso aqui é só um jeito rápido de testar com um token específico sem
+// desconectar e refazer o OAuth.
+//
+// O valor NUNCA aparece de volta em lugar nenhum depois de salvo — nem no
+// campo (sem defaultValue, ao contrário do de igUserId, que não é
+// segredo), nem no redirect de sucesso/erro (nunca vai pra query string),
+// nem em log (só a mensagem genérica de erro, nunca o valor recebido).
+export async function setInstagramAccessTokenAction(clinicId: string, formData: FormData) {
+  await requireInternalSession();
+
+  const conexoesPath = `/crm/clinicas/${clinicId}/conexoes`;
+  const accessToken = String(formData.get("accessToken") ?? "").trim();
+
+  if (!accessToken) {
+    redirect(`${conexoesPath}?status=erro&channel=instagram&reason=${encodeURIComponent("Token vazio.")}`);
+  }
+
+  const account = await prisma.instagramAccount.findUnique({ where: { clinicId } });
+  if (!account) {
+    redirect(`${conexoesPath}?status=erro&channel=instagram&reason=${encodeURIComponent("Instagram não está conectado nesta clínica.")}`);
+  }
+
+  await prisma.instagramAccount.update({ where: { clinicId }, data: { accessTokenEnc: encryptToken(accessToken) } });
+  revalidatePath(conexoesPath);
+  redirect(`${conexoesPath}?status=token-ok`);
 }
 
 export async function renameWhatsappInstanceAction(clinicId: string, formData: FormData) {
