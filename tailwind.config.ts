@@ -37,7 +37,7 @@ const config: Config = {
           // Fundo do card de lead nas 2 colunas sem tom próprio (Precisa de
           // humano / Perdido) — as outras 4 usam os pares col*Bg/col*Pill
           // logo abaixo, um por coluna (ver page-style-overrides.ts).
-          pipelineCardBg: "rgb(var(--vexo-pipeline-card-bg) / <alpha-value>)",
+          pipelineColOtherBg: "rgb(var(--vexo-pipeline-col-other-bg) / <alpha-value>)",
           pipelineColNewBg: "rgb(var(--vexo-pipeline-col-new-bg) / <alpha-value>)",
           pipelineColNewPill: "rgb(var(--vexo-pipeline-col-new-pill) / <alpha-value>)",
           pipelineColConversationBg: "rgb(var(--vexo-pipeline-col-conversation-bg) / <alpha-value>)",
@@ -46,19 +46,16 @@ const config: Config = {
           pipelineColScheduledPill: "rgb(var(--vexo-pipeline-col-scheduled-pill) / <alpha-value>)",
           pipelineColFollowupBg: "rgb(var(--vexo-pipeline-col-followup-bg) / <alpha-value>)",
           pipelineColFollowupPill: "rgb(var(--vexo-pipeline-col-followup-pill) / <alpha-value>)",
-          agendaCardFont: "rgb(var(--vexo-agenda-card-font) / <alpha-value>)",
-          // Fundo do card só pro status Cancelado — os outros 3 grupos
-          // (upcoming/completed/negative) usam os pares abaixo, mesmo
-          // padrão do Pipeline (columnTint). Sem token de borda por status
-          // mais — borda agora é uniforme/fina em todos, igual ao Pipeline.
-          agendaCardBg: "rgb(var(--vexo-agenda-card-bg) / <alpha-value>)",
-          agendaStatusCancelledPill: "rgb(var(--vexo-agenda-status-cancelled-pill) / <alpha-value>)",
-          agendaStatusUpcomingBg: "rgb(var(--vexo-agenda-status-upcoming-bg) / <alpha-value>)",
-          agendaStatusUpcomingPill: "rgb(var(--vexo-agenda-status-upcoming-pill) / <alpha-value>)",
-          agendaStatusCompletedBg: "rgb(var(--vexo-agenda-status-completed-bg) / <alpha-value>)",
-          agendaStatusCompletedPill: "rgb(var(--vexo-agenda-status-completed-pill) / <alpha-value>)",
-          agendaStatusNegativeBg: "rgb(var(--vexo-agenda-status-negative-bg) / <alpha-value>)",
-          agendaStatusNegativePill: "rgb(var(--vexo-agenda-status-negative-pill) / <alpha-value>)",
+          // Destaque do Painel do cliente — só no valor de "Agendaram"
+          // (ver PanelMetricCard). Ver page-style-overrides.ts.
+          panelHighlight: "rgb(var(--vexo-painel-highlight) / <alpha-value>)",
+          // Fundo tingido dos badges de status na lista de Agendamentos do
+          // Painel (ver statusTint em AppointmentStatusBadge.tsx e
+          // NoShowButton.tsx) — mesmo padrão do Pipeline: tom já escuro/
+          // dessaturado, aplicado a baixa opacidade (ver uso com /45).
+          panelStatusScheduledBg: "rgb(var(--vexo-painel-status-scheduled-bg) / <alpha-value>)",
+          panelStatusCompletedBg: "rgb(var(--vexo-painel-status-completed-bg) / <alpha-value>)",
+          panelStatusNegativeBg: "rgb(var(--vexo-painel-status-negative-bg) / <alpha-value>)",
         },
       },
       fontFamily: {
@@ -79,6 +76,21 @@ const config: Config = {
       },
       boxShadow: {
         card: "0 1px 2px 0 rgb(0 0 0 / 0.4)",
+      },
+      // Animação de entrada do gráfico "Abordagens por dia" (ver
+      // ApproachChart) — cresce da esquerda pra direita ao montar, em vez
+      // de aparecer com a largura final já pronta. scaleX (não width) de
+      // propósito: funciona pra qualquer largura final sem precisar saber
+      // o valor-alvo em CSS estático, só a barra precisa de
+      // transform-origin: left (ver className no componente).
+      keyframes: {
+        "bar-grow": {
+          from: { transform: "scaleX(0)" },
+          to: { transform: "scaleX(1)" },
+        },
+      },
+      animation: {
+        "bar-grow": "bar-grow 700ms cubic-bezier(0.16, 1, 0.3, 1) both",
       },
     },
   },

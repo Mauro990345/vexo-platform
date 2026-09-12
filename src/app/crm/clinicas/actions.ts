@@ -7,10 +7,17 @@ import bcrypt from "bcryptjs";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireInternalSession } from "@/lib/session";
-import { setAppointmentAttendance, setAppointmentCancelled } from "@/lib/appointments";
+import { setAppointmentAttendance } from "@/lib/appointments";
 import { disconnectWhatsapp, renameWhatsappInstance, resetWhatsappInstanceName } from "@/lib/whatsapp-connection";
 import { disconnectGoogleCalendar } from "@/lib/google-calendar";
-import { disconnectInstagram } from "@/lib/instagram";
+import {
+  disconnectInstagram,
+  subscribeInstagramWebhook,
+  verifyInstagramTokenAndId,
+  tokenFingerprint,
+  getSubscribedFields,
+} from "@/lib/instagram";
+import { decryptToken, encryptToken } from "@/lib/crypto";
 import { saveUploadedAttachment, deleteUploadedAttachment } from "@/lib/uploads";
 
 const CONNECTION_LINK_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 dias
@@ -127,8 +134,8 @@ export async function updateAiAgentTiming(clinicId: string, formData: FormData) 
   await requireInternalSession();
 
   const firstBandDelaySeconds = parseInt(String(formData.get("firstBandDelaySeconds") ?? ""), 10);
-  if (!Number.isFinite(firstBandDelaySeconds) || firstBandDelaySeconds < 30 || firstBandDelaySeconds > 60) {
-    throw new Error("O delay da faixa de até 1h precisa ser entre 30 e 60 segundos.");
+  if (!Number.isFinite(firstBandDelaySeconds) || firstBandDelaySeconds < 5 || firstBandDelaySeconds > 60) {
+    throw new Error("O delay da faixa de até 1h precisa ser entre 5 e 60 segundos.");
   }
 
   await prisma.clinic.update({
@@ -271,6 +278,7 @@ export async function createClientLogin(
 
   revalidatePath("/crm/painel");
   revalidatePath(`/crm/clinicas/${clinicId}`);
+  revalidatePath(`/crm/clinicas/${clinicId}/painel`);
   return { error: null };
 }
 
@@ -281,7 +289,9 @@ export async function removeClientLogin(clinicId: string, userId: string) {
   // evita que o formulário seja usado pra apagar qualquer usuário por id.
   await prisma.user.deleteMany({ where: { id: userId, clinicId, role: "CLIENT" } });
 
+  revalidatePath("/crm/painel");
   revalidatePath(`/crm/clinicas/${clinicId}`);
+  revalidatePath(`/crm/clinicas/${clinicId}/painel`);
 }
 
 export async function setConversationStatus(
@@ -303,10 +313,11 @@ export async function setConversationStatus(
 }
 
 // Chave de comparecimento — a única coisa que a secretária precisa fazer na
-// plataforma no dia a dia — por isso fica exposta direto no card do
-// agendamento (pipeline e tela da conversa), nunca atrás de configuração.
-// Reversível: clicar na opção já marcada desmarca; clicar na outra troca
-// direto.
+// plataforma no dia a dia — por isso fica exposta direto no Painel dela
+// (ver NoShowButton), nunca atrás de configuração. Não é exposta na tela
+// de conversa (uso do Mauro): comparecimento e remarcação são decisão da
+// secretária com o próprio lead, nunca do Mauro. Reversível: clicar na
+// opção já marcada desmarca; clicar na outra troca direto.
 export async function setAppointmentAttendanceAction(
   appointmentId: string,
   status: "COMPLETED" | "NO_SHOW"
@@ -315,20 +326,6 @@ export async function setAppointmentAttendanceAction(
   const appt = await setAppointmentAttendance(appointmentId, status);
   if (appt) {
     revalidatePath(`/crm/clinicas/${appt.clinicId}`);
-    revalidatePath(`/crm/clinicas/${appt.clinicId}/agenda`);
-    if (appt.conversationId) revalidatePath(`/crm/conversas/${appt.conversationId}`);
-  }
-}
-
-// Cancelamento manual — até aqui só existia via sincronização do Google
-// Calendar (evento apagado lá). Reversível: clicar de novo desfaz (volta
-// pra SCHEDULED), mesmo padrão do toggle de comparecimento acima.
-export async function setAppointmentCancelledAction(appointmentId: string, cancelled: boolean) {
-  await requireInternalSession();
-  const appt = await setAppointmentCancelled(appointmentId, cancelled);
-  if (appt) {
-    revalidatePath(`/crm/clinicas/${appt.clinicId}`);
-    revalidatePath(`/crm/clinicas/${appt.clinicId}/agenda`);
     if (appt.conversationId) revalidatePath(`/crm/conversas/${appt.conversationId}`);
   }
 }
@@ -370,6 +367,183 @@ export async function disconnectInstagramAction(clinicId: string) {
   revalidatePath(`/crm/clinicas/${clinicId}/conexoes`);
   revalidatePath(`/crm/clinicas/${clinicId}`);
   revalidatePath("/crm/painel");
+}
+
+// Corrige contas já conectadas ANTES da inscrição no webhook por conta
+// (subscribeInstagramWebhook em src/lib/instagram.ts) ter passado a rodar
+// no callback do OAuth — sem essa chamada extra, a conta autoriza e salva
+// o token normalmente, mas a Meta nunca manda evento nenhum de mensagem
+// recebida (o toggle "Webhook Subscription" do App Dashboard só configura
+// o app, não inscreve cada conta). Pra essas contas antigas, refazer todo
+// o OAuth de novo não é necessário: o token já salvo ainda é válido, só
+// falta essa chamada — daqui dá pra rodar ela sozinha, sem desconectar.
+export async function resubscribeInstagramWebhookAction(clinicId: string) {
+  await requireInternalSession();
+
+  const conexoesPath = `/crm/clinicas/${clinicId}/conexoes`;
+  const account = await prisma.instagramAccount.findUnique({ where: { clinicId } });
+  if (!account) {
+    redirect(`${conexoesPath}?status=erro&channel=instagram&reason=${encodeURIComponent("Instagram não está conectado nesta clínica.")}`);
+  }
+
+  const accessToken = decryptToken(account.accessTokenEnc);
+
+  // Diagnóstico antes do subscribe em si: um GET simples (sem side effect),
+  // endereçando a própria conta como "me" (não pelo igUserId numérico — ver
+  // comentário grande em verifyInstagramTokenAndId, src/lib/instagram.ts,
+  // sobre por que isso importa nesse produto específico). Isola se um erro
+  // no subscribe é o token em si sendo inválido (essa leitura falha do
+  // mesmo jeito) ou é específico do endpoint /subscribed_apps (essa
+  // leitura funciona, só o subscribe falha).
+  let profileCheck: { id: string; username?: string };
+  try {
+    profileCheck = await verifyInstagramTokenAndId(accessToken);
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    // Se até "me" falhar, o suspeito deixa de ser o endereçamento (ID vs.
+    // "me") e passa a ser o token salvo em si — fingerprint (nunca o
+    // token inteiro) junto do erro pra comparar contra outro log/print,
+    // sem token exposto por completo em lugar nenhum.
+    redirect(
+      `${conexoesPath}?status=erro&channel=instagram&reason=${encodeURIComponent(
+        `Leitura de diagnóstico falhou mesmo usando "me" (token inválido/expirado/corrompido — ${tokenFingerprint(accessToken)}): ${detail}`
+      )}`
+    );
+  }
+
+  try {
+    await subscribeInstagramWebhook(accessToken);
+  } catch (err) {
+    // Mesmo espírito do callback do OAuth: detalhe técnico completo aqui,
+    // já que esse botão só existe na tela interna e só admin com sessão
+    // chega até ele (requireInternalSession acima já barra o resto).
+    // Prefixo deixa explícito que a leitura funcionou — a falha é
+    // específica do /subscribed_apps, não do par token/ID em si.
+    const detail = err instanceof Error ? err.message : String(err);
+    redirect(
+      `${conexoesPath}?status=erro&channel=instagram&reason=${encodeURIComponent(
+        `Leitura OK (id=${profileCheck.id}, username=${profileCheck.username ?? "?"}), mas o subscribe falhou: ${detail}`
+      )}`
+    );
+  }
+
+  // NÃO grava profileCheck.id como igUserId aqui (chegou a fazer isso —
+  // removido). Uma conta real em produção provou que /me devolve um "id"
+  // que NÃO é o mesmo namespace que o webhook manda em entry.id/
+  // recipient.id (ver comentário grande em exchangeInstagramCode, src/
+  // lib/instagram.ts) — esse "self-heal" automático só ficava reescrevendo
+  // o valor salvo por um outro valor IGUALMENTE errado pra fins de casar
+  // com o webhook (na prática, os dois vêm do mesmo namespace errado). A
+  // correção do ID usado pra casar com o webhook agora é manual, feita
+  // com o valor observado de verdade num evento real (ver
+  // setInstagramWebhookIdAction abaixo e /crm/webhook-logs).
+  revalidatePath(conexoesPath);
+  redirect(`${conexoesPath}?status=webhook-ok`);
+}
+
+// Diagnóstico: o subscribe (ação acima) só confirma que a Meta ACEITOU o
+// POST — não confirma quais campos ficaram realmente inscritos. Já
+// aconteceu de um subscribe "bem-sucedido" não resultar em entrega de
+// mensagem nenhuma; essa leitura elimina a dúvida, consultando a lista
+// de verdade (ver getSubscribedFields em src/lib/instagram.ts).
+export async function checkInstagramWebhookSubscriptionAction(clinicId: string) {
+  await requireInternalSession();
+
+  const conexoesPath = `/crm/clinicas/${clinicId}/conexoes`;
+  const account = await prisma.instagramAccount.findUnique({ where: { clinicId } });
+  if (!account) {
+    redirect(`${conexoesPath}?status=erro&channel=instagram&reason=${encodeURIComponent("Instagram não está conectado nesta clínica.")}`);
+  }
+
+  // redirect() (next/navigation) lança um erro especial (NEXT_REDIRECT)
+  // internamente pra interromper a execução — chamar ele DENTRO do try
+  // faz esse próprio throw cair no catch logo abaixo, tratado como se
+  // fosse uma falha real de getSubscribedFields (era exatamente o bug
+  // reportado: banner de erro mostrando "NEXT_REDIRECT" no lugar da
+  // lista de campos). Por isso o redirect de sucesso fica DEPOIS do
+  // try/catch, nunca dentro dele — mesmo padrão já usado (certo) em
+  // resubscribeInstagramWebhookAction logo acima.
+  let fields: string[];
+  try {
+    fields = await getSubscribedFields(decryptToken(account.accessTokenEnc));
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    redirect(`${conexoesPath}?status=erro&channel=instagram&reason=${encodeURIComponent(detail)}`);
+  }
+
+  redirect(`${conexoesPath}?status=webhook-fields&fields=${encodeURIComponent(fields.join(", ") || "(nenhum)")}`);
+}
+
+// Correção manual do igUserId usado pra casar evento de webhook recebido
+// com a conta salva (ver handleInboundInstagramMessage,
+// conversation-pipeline.ts). Existe porque NENHUM endpoint acessível no
+// fluxo de OAuth desse produto (api.instagram.com/oauth/access_token,
+// graph.instagram.com/me — já tentados os dois) devolve o mesmo ID que a
+// Meta manda de verdade em entry.id/recipient.id nos webhooks; o único
+// jeito confiável de saber esse valor é observando um evento real (ver
+// matchFailureReason em /crm/webhook-logs, que mostra o ID recebido
+// quando não bate com nada salvo).
+//
+// formData.get("igUserId") é tratado como STRING do início ao fim — nunca
+// convertido pra Number em nenhuma etapa (nem validação, nem log, nem
+// comparação) — só validado como sequência de dígitos via regex, já que é
+// exatamente esse tipo de conversão implícita (JSON.parse/Number em algum
+// ponto do caminho) que already causou perda de precisão nesse mesmo
+// campo mais de uma vez neste projeto.
+export async function setInstagramWebhookIdAction(clinicId: string, formData: FormData) {
+  await requireInternalSession();
+
+  const conexoesPath = `/crm/clinicas/${clinicId}/conexoes`;
+  const igUserId = String(formData.get("igUserId") ?? "").trim();
+
+  if (!/^\d+$/.test(igUserId)) {
+    redirect(
+      `${conexoesPath}?status=erro&channel=instagram&reason=${encodeURIComponent(
+        `ID inválido — precisa ser só dígitos (recebido: "${igUserId}").`
+      )}`
+    );
+  }
+
+  const account = await prisma.instagramAccount.findUnique({ where: { clinicId } });
+  if (!account) {
+    redirect(`${conexoesPath}?status=erro&channel=instagram&reason=${encodeURIComponent("Instagram não está conectado nesta clínica.")}`);
+  }
+
+  await prisma.instagramAccount.update({ where: { clinicId }, data: { igUserId } });
+  revalidatePath(conexoesPath);
+  redirect(`${conexoesPath}?status=webhook-ok&idFixed=${encodeURIComponent(`${account.igUserId} → ${igUserId}`)}`);
+}
+
+// Cola manualmente um access token do Instagram já gerado — ex: pelo botão
+// "Generate token" do próprio Meta for Developers, ao lado da conta em
+// Produtos > Instagram > ... > Roles/Tokens (existe pra teste/depuração
+// direta da API, sem precisar repetir o fluxo de OAuth completo). O fluxo
+// normal (botão "Conectar" em Conexões) continua sendo a via oficial —
+// isso aqui é só um jeito rápido de testar com um token específico sem
+// desconectar e refazer o OAuth.
+//
+// O valor NUNCA aparece de volta em lugar nenhum depois de salvo — nem no
+// campo (sem defaultValue, ao contrário do de igUserId, que não é
+// segredo), nem no redirect de sucesso/erro (nunca vai pra query string),
+// nem em log (só a mensagem genérica de erro, nunca o valor recebido).
+export async function setInstagramAccessTokenAction(clinicId: string, formData: FormData) {
+  await requireInternalSession();
+
+  const conexoesPath = `/crm/clinicas/${clinicId}/conexoes`;
+  const accessToken = String(formData.get("accessToken") ?? "").trim();
+
+  if (!accessToken) {
+    redirect(`${conexoesPath}?status=erro&channel=instagram&reason=${encodeURIComponent("Token vazio.")}`);
+  }
+
+  const account = await prisma.instagramAccount.findUnique({ where: { clinicId } });
+  if (!account) {
+    redirect(`${conexoesPath}?status=erro&channel=instagram&reason=${encodeURIComponent("Instagram não está conectado nesta clínica.")}`);
+  }
+
+  await prisma.instagramAccount.update({ where: { clinicId }, data: { accessTokenEnc: encryptToken(accessToken) } });
+  revalidatePath(conexoesPath);
+  redirect(`${conexoesPath}?status=token-ok`);
 }
 
 export async function renameWhatsappInstanceAction(clinicId: string, formData: FormData) {

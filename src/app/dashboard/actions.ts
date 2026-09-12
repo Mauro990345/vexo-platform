@@ -5,12 +5,14 @@ import { requireClientSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { setAppointmentAttendance } from "@/lib/appointments";
 
-// Única ação que o cliente pode fazer no Painel — mesma function por trás
-// do botão da Agenda interna (src/lib/appointments.ts), só que exposta pra
-// sessão CLIENT em vez de INTERNAL_ADMIN/STAFF. Reversível: clicar de novo
-// desfaz (ver setAppointmentAttendance). clinicId sempre vem da sessão;
-// confirma que o agendamento é mesmo dessa clínica antes de mexer, pra não
-// dar brecha de alterar agendamento de outra.
+// Única ação que o cliente pode fazer no Painel — mesma function de base
+// (setAppointmentAttendance, em src/lib/appointments.ts) usada pela versão
+// interna equivalente (setAppointmentAttendanceAction, em
+// crm/clinicas/actions.ts), só que exposta pra sessão CLIENT em vez de
+// INTERNAL_ADMIN/STAFF. Reversível: clicar de novo desfaz (ver
+// setAppointmentAttendance). clinicId sempre vem da sessão; confirma que o
+// agendamento é mesmo dessa clínica antes de mexer, pra não dar brecha de
+// alterar agendamento de outra.
 export async function setAppointmentAttendanceClientAction(
   appointmentId: string,
   status: "COMPLETED" | "NO_SHOW"

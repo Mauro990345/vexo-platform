@@ -7,7 +7,14 @@ import { refreshWhatsappStatus, type WhatsappConnectionState } from "@/lib/whats
 import { ConnectOAuthButton } from "@/components/ConnectOAuthButton";
 import { RefreshOnFocus } from "@/components/RefreshOnFocus";
 import { ConnectionLinkButton } from "@/components/ConnectionLinkButton";
-import { disconnectGoogleCalendarAction, disconnectInstagramAction } from "../../actions";
+import {
+  disconnectGoogleCalendarAction,
+  disconnectInstagramAction,
+  resubscribeInstagramWebhookAction,
+  checkInstagramWebhookSubscriptionAction,
+  setInstagramWebhookIdAction,
+  setInstagramAccessTokenAction,
+} from "../../actions";
 
 export const dynamic = "force-dynamic";
 
@@ -50,6 +57,7 @@ function ConnectionCard({
   openInNewTab,
   disconnectAction,
   notConnectedAction,
+  connectedExtraAction,
 }: {
   icon: React.ReactNode;
   iconBg: string;
@@ -68,6 +76,9 @@ function ConnectionCard({
   // por Instagram e Google Calendar (ver ConnectionLinkButton). Ausente
   // pro WhatsApp, que continua com o link/botão de sempre.
   notConnectedAction?: React.ReactNode;
+  // Ação extra ao lado de "Desconectar", só quando conectado — hoje só o
+  // Instagram usa (botão "Reativar webhook", ver resubscribeInstagramWebhookAction).
+  connectedExtraAction?: React.ReactNode;
 }) {
   return (
     <div className="flex flex-col gap-2 rounded-xl border border-vexo-border bg-vexo-surface p-3.5">
@@ -91,14 +102,17 @@ function ConnectionCard({
         <div className="flex shrink-0 items-center gap-1.5">
           {connected ? (
             disconnectAction ? (
-              <form action={disconnectAction}>
-                <button
-                  type="submit"
-                  className="rounded-lg border border-vexo-error/40 px-2.5 py-1 text-card font-medium text-vexo-error hover:bg-vexo-error/10"
-                >
-                  Desconectar
-                </button>
-              </form>
+              <>
+                {connectedExtraAction}
+                <form action={disconnectAction}>
+                  <button
+                    type="submit"
+                    className="rounded-lg border border-vexo-error/40 px-2.5 py-1 text-card font-medium text-vexo-error hover:bg-vexo-error/10"
+                  >
+                    Desconectar
+                  </button>
+                </form>
+              </>
             ) : openInNewTab ? (
               <ConnectOAuthButton href={href} label="Gerenciar" />
             ) : (
@@ -137,7 +151,7 @@ export default async function ClinicConexoesPage({
   searchParams,
 }: {
   params: { id: string };
-  searchParams: { status?: string; channel?: string };
+  searchParams: { status?: string; channel?: string; reason?: string; fields?: string; idFixed?: string };
 }) {
   await requireInternalSession();
 
@@ -182,17 +196,69 @@ export default async function ClinicConexoesPage({
     <div className="space-y-3">
       <RefreshOnFocus />
 
-      <div>
-        <h1 className="text-base font-semibold tracking-tight">Conexões</h1>
-        <p className="mt-0.5 text-xs text-vexo-muted">
-          Canais desta clínica, organizados num só lugar. O status atualiza sozinho conforme cada
-          canal conecta ou cai.
-        </p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-base font-semibold tracking-tight">Conexões</h1>
+          <p className="mt-0.5 text-xs text-vexo-muted">
+            Canais desta clínica, organizados num só lugar. O status atualiza sozinho conforme cada
+            canal conecta ou cai.
+          </p>
+        </div>
+        {/* Diagnóstico temporário (sem acesso a logs do Railway) — ver
+            WebhookLog no schema e /api/webhooks/instagram/route.ts, e
+            dispatch-status/page.tsx pro envio de mensagens. */}
+        <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 text-right">
+          <Link href="/crm/webhook-logs" className="whitespace-nowrap text-card text-vexo-muted underline hover:text-vexo-fg">
+            Logs do webhook (Instagram)
+          </Link>
+          <Link href="/crm/dispatch-status" className="whitespace-nowrap text-card text-vexo-muted underline hover:text-vexo-fg">
+            Envio de mensagens
+          </Link>
+        </div>
       </div>
 
       {searchParams.status === "erro" && (
         <p className="rounded-lg border border-vexo-error/30 bg-vexo-error/10 p-2 text-xs text-vexo-error">
-          Falha ao conectar{searchParams.channel ? ` o ${CHANNEL_NAMES[searchParams.channel] ?? searchParams.channel}` : ""}. Tente novamente.
+          {/* reason vem do callback OAuth (ver instagram/callback/route.ts)
+              com o motivo exato que o Instagram/Facebook devolveu — cai pro
+              texto genérico de sempre quando ausente (ex: falha vinda do
+              Google Calendar, que ainda não repassa reason). */}
+          Não foi possível conectar{searchParams.channel ? ` o ${CHANNEL_NAMES[searchParams.channel] ?? searchParams.channel}` : ""}
+          {searchParams.reason ? `: ${searchParams.reason.replace(/\.+$/, "")}.` : "."} Tente novamente
+          clicando em &quot;Conectar&quot; abaixo.
+        </p>
+      )}
+
+      {searchParams.status === "webhook-ok" && (
+        <p className="rounded-lg border border-vexo-success/30 bg-vexo-success/10 p-2 text-xs text-vexo-success">
+          Webhook reativado — o Instagram foi reinscrito e deve voltar a entregar mensagens novas.
+          {searchParams.idFixed && (
+            <>
+              {" "}
+              Também corrigido o ID salvo dessa conta, que estava desatualizado e nunca batia com o
+              que o webhook manda de verdade: <strong>{searchParams.idFixed}</strong>.
+            </>
+          )}
+        </p>
+      )}
+
+      {searchParams.status === "token-ok" && (
+        <p className="rounded-lg border border-vexo-success/30 bg-vexo-success/10 p-2 text-xs text-vexo-success">
+          Token salvo — próximas chamadas do Instagram pra essa conta já usam esse valor.
+        </p>
+      )}
+
+      {searchParams.status === "webhook-fields" && (
+        <p className="rounded-lg border border-vexo-border bg-vexo-surface p-2 text-xs text-vexo-fg">
+          {/* Resposta de verdade da Meta pros campos inscritos AGORA — não
+              confundir com "o subscribe retornou sucesso" (ver
+              checkInstagramWebhookSubscriptionAction em ../../actions.ts):
+              já aconteceu de o POST de subscribe devolver 200 sem
+              "messages" acabar na lista de verdade. */}
+          Campos inscritos no webhook desta conta: <strong>{searchParams.fields}</strong>
+          {!searchParams.fields?.includes("messages") && (
+            <span className="text-vexo-error"> — &quot;messages&quot; não está na lista, por isso nada chega.</span>
+          )}
         </p>
       )}
 
@@ -223,6 +289,28 @@ export default async function ClinicConexoesPage({
           notConnectedAction={
             <ConnectionLinkButton clinicId={clinic.id} channel="instagram" pendingToken={pendingInstagramLink?.token ?? null} />
           }
+          connectedExtraAction={
+            <>
+              <form action={checkInstagramWebhookSubscriptionAction.bind(null, clinic.id)}>
+                <button
+                  type="submit"
+                  title="Consulta na Meta quais campos estão realmente inscritos pra essa conta agora — o subscribe pode retornar sucesso sem 'messages' entrar na lista de verdade."
+                  className="rounded-lg border border-vexo-border px-2.5 py-1 text-card font-medium text-vexo-muted hover:bg-vexo-border/30"
+                >
+                  Ver campos inscritos
+                </button>
+              </form>
+              <form action={resubscribeInstagramWebhookAction.bind(null, clinic.id)}>
+                <button
+                  type="submit"
+                  title="Reinscreve esta conta no webhook de mensagens — use se o Instagram conectou mas nenhuma mensagem chega no VEXO."
+                  className="rounded-lg border border-vexo-border px-2.5 py-1 text-card font-medium text-vexo-muted hover:bg-vexo-border/30"
+                >
+                  Reativar webhook
+                </button>
+              </form>
+            </>
+          }
         />
         <ConnectionCard
           icon={<Calendar className="h-3.5 w-3.5" strokeWidth={2} />}
@@ -244,6 +332,74 @@ export default async function ClinicConexoesPage({
           }
         />
       </div>
+
+      {instagramConnected && (
+        <div className="rounded-xl border border-vexo-border bg-vexo-surface p-3.5 text-xs">
+          <p className="font-semibold text-vexo-fg">Corrigir ID do webhook do Instagram (avançado)</p>
+          <p className="mt-1 text-vexo-muted">
+            Nenhum endpoint de OAuth desse produto devolve o mesmo ID que a Meta manda de verdade
+            nos eventos de webhook (entry.id/recipient.id) — o único jeito confiável de saber esse
+            valor é vendo um evento real chegar. Se{" "}
+            <Link href="/crm/webhook-logs" className="underline hover:text-vexo-fg">
+              Logs do webhook
+            </Link>{" "}
+            mostrar um &quot;Nenhuma InstagramAccount encontrada pra igUserId=...&quot;, cole aqui o
+            ID que aparece nessa mensagem (só números).
+          </p>
+          <form
+            action={setInstagramWebhookIdAction.bind(null, clinic.id)}
+            className="mt-2 flex flex-wrap items-center gap-2"
+          >
+            <input
+              type="text"
+              name="igUserId"
+              inputMode="numeric"
+              pattern="\d+"
+              required
+              placeholder="Ex: 17841429744434753"
+              defaultValue={clinic.instagramAccount!.igUserId}
+              className="w-56 rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5 text-card outline-none focus:border-vexo-accent"
+            />
+            <button
+              type="submit"
+              className="rounded-lg border border-vexo-accent px-2.5 py-1 font-medium text-vexo-accent hover:bg-vexo-accent/10"
+            >
+              Salvar ID
+            </button>
+          </form>
+        </div>
+      )}
+
+      {instagramConnected && (
+        <div className="rounded-xl border border-vexo-border bg-vexo-surface p-3.5 text-xs">
+          <p className="font-semibold text-vexo-fg">Colar access token do Instagram manualmente (avançado)</p>
+          <p className="mt-1 text-vexo-muted">
+            Pra testar com um token gerado direto no Meta for Developers (ex: botão &quot;Generate
+            token&quot; ao lado da conta), sem precisar desconectar e refazer o OAuth. O fluxo normal
+            continua sendo o botão &quot;Conectar&quot; acima — isso aqui é só pra teste rápido. O
+            valor não fica salvo neste campo depois de enviado (nunca é reexibido).
+          </p>
+          <form
+            action={setInstagramAccessTokenAction.bind(null, clinic.id)}
+            className="mt-2 flex flex-wrap items-center gap-2"
+          >
+            <input
+              type="password"
+              name="accessToken"
+              required
+              autoComplete="off"
+              placeholder="Cole o access token aqui"
+              className="w-72 rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5 text-card outline-none focus:border-vexo-accent"
+            />
+            <button
+              type="submit"
+              className="rounded-lg border border-vexo-accent px-2.5 py-1 font-medium text-vexo-accent hover:bg-vexo-accent/10"
+            >
+              Salvar token
+            </button>
+          </form>
+        </div>
+      )}
     </div>
   );
 }

@@ -67,7 +67,7 @@ model Clinic {
   // Delay de resposta da IA quando o lead está em silêncio há até 1h (ver
   // computeAdaptiveDelaySeconds em src/lib/scheduler.ts) — por clínica,
   // não global: cada uma pode querer um tom de "primeira resposta"
-  // diferente. Válido de 30 a 60 (segundos); validado em
+  // diferente. Válido de 5 a 60 (segundos); validado em
   // updateAiAgentSettings. As outras duas faixas (1-6h, 6h+) continuam
   // fixas e globais, sem campo — nem aqui nem em AiSettings.
   firstBandDelaySeconds Int @default(45)
@@ -117,11 +117,16 @@ model InstagramAccount {
   clinicId String @unique
   clinic   Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
 
-  igUserId       String // ID do usuário/página profissional no Instagram
+  igUserId       String // ID da conta profissional no Instagram
   igUsername     String?
-  facebookPageId String
+  // Opcional — o fluxo atual (Instagram API with Instagram Login) não passa
+  // mais por uma Página do Facebook, então nunca é preenchido em conexões
+  // novas. Coluna mantida (não removida) só pra não quebrar linhas antigas
+  // de antes dessa migração, que ainda têm o valor da Página vinculada na
+  // época; nada no app lê esse campo.
+  facebookPageId String?
 
-  accessTokenEnc String    @db.Text // token de página, criptografado em repouso
+  accessTokenEnc String    @db.Text // token de acesso do Instagram, criptografado em repouso
   tokenExpiresAt DateTime?
 
   connectedAt DateTime @default(now())
@@ -557,4 +562,42 @@ model WeeklySummary {
   createdAt DateTime @default(now())
 
   @@unique([clinicId, weekStart])
+}
+
+// ---------------------------------------------------------------------------
+// Diagnóstico de webhook (temporário — sem acesso a logs do Railway)
+// ---------------------------------------------------------------------------
+
+// Registra TODA requisição que chega em /api/webhooks/instagram, mesmo
+// payload inválido ou assinatura que falha na verificação — propósito é
+// confirmar, pela própria interface do VEXO, se a Meta está de fato
+// tentando entregar alguma coisa (e o que exatamente), sem depender dos
+// logs do Railway (sem acesso). Ver src/app/api/webhooks/instagram/route.ts.
+model WebhookLog {
+  id         String   @id @default(cuid())
+  receivedAt DateTime @default(now())
+
+  method         String
+  rawBody        String  @db.Text
+  signatureValid Boolean
+
+  // Preenchido só quando handleInboundInstagramMessage não encontra
+  // nenhuma InstagramAccount pro igUserId que veio no evento — antes só
+  // virava um console.warn (invisível sem acesso a logs do Railway).
+  // Guarda os dois lados da comparação (ID recebido vs. IDs conhecidos no
+  // banco nesse momento) pra dar pra diagnosticar direto pela interface do
+  // VEXO. NULL = não houve descarte por essa causa (requisição processada
+  // normalmente, ou nem chegou a ter evento de mensagem).
+  matchFailureReason String? @db.Text
+
+  // Preenchido quando a conta É encontrada mas handleInboundInstagramMessage
+  // lança uma exceção em qualquer ponto do processamento (classificação,
+  // geração de resposta da IA, criação de lead/conversa/mensagem etc.) —
+  // antes só virava console.error na rota (api/webhooks/instagram/route.ts),
+  // invisível sem acesso a logs do Railway. Guarda o erro completo (mensagem
+  // + stack) pra diagnosticar direto pela interface do VEXO, sem precisar
+  // adivinhar em qual das várias etapas internas travou.
+  processingError String? @db.Text
+
+  @@index([receivedAt])
 }

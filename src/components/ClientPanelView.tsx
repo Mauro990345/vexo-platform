@@ -1,8 +1,9 @@
 import Link from "next/link";
-import { AtSign } from "lucide-react";
+import { AtSign, Calendar, MessageCircle } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { getClinicMetrics, getDailyApproachCounts, startOfDay, addDays } from "@/lib/metrics";
-import { StatCard } from "@/components/StatCard";
+import { ApproachChart } from "@/components/ApproachChart";
+import { ApproachMetricsToggle } from "@/components/ApproachMetricsToggle";
 import { AppointmentStatusBadge } from "@/components/AppointmentStatusBadge";
 import { NoShowButton } from "@/components/NoShowButton";
 import { ChannelStatusPill } from "@/components/ChannelStatusPill";
@@ -11,10 +12,7 @@ import { ChannelStatusPill } from "@/components/ChannelStatusPill";
 // já compareceu ou já foi cancelado não tem o que alternar aqui.
 const ACTIONABLE_STATUSES = ["SCHEDULED", "CONFIRMED", "NO_SHOW"];
 
-const WEEKDAY_LABELS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
-
-// Segunda como início da semana (getDay(): 0=dom..6=sáb) — mesmo critério
-// da Agenda interna (src/app/crm/clinicas/[id]/agenda/page.tsx).
+// Segunda como início da semana (getDay(): 0=dom..6=sáb).
 function startOfWeek(d: Date): Date {
   const diff = (d.getDay() + 6) % 7;
   return startOfDay(addDays(d, -diff));
@@ -28,7 +26,7 @@ function toDateParam(d: Date): string {
 // (/crm/painel-cliente/[id], sem sidebar nenhuma, aberta em nova aba a
 // partir de /crm/painel) e o item "Painel" de dentro do contexto de uma
 // clínica (/crm/clinicas/[id]/painel — mantém a sidebar da clínica visível,
-// Pipeline/Agenda/Follow-up etc. continuam ali, só o conteúdo muda). As três
+// Pipeline/Follow-up etc. continuam ali, só o conteúdo muda). As três
 // telas renderizam este mesmo componente, só trocando de onde o clinicId
 // vem, pra onde os links de navegação de semana apontam (base), e se o
 // componente desenha sua própria página inteira ou só o conteúdo
@@ -36,19 +34,24 @@ function toDateParam(d: Date): string {
 // min-h-screen/padding/max-w-6xl, como o AppShell da clínica). noShowAction
 // é injetável porque a ação por trás do botão "Não compareceu" precisa
 // rodar sob uma sessão diferente em cada contexto (CLIENT vs
-// INTERNAL_ADMIN/STAFF) — ver NoShowButton.
+// INTERNAL_ADMIN/STAFF) — ver NoShowButton. headerAction é um slot opcional
+// ao lado do título "Painel" (canto superior direito) — só o Painel de
+// dentro do contexto de uma clínica usa (botão "Criar painel", ver
+// ClientAccessModal); /dashboard e /crm/painel-cliente/[id] não passam nada.
 export async function ClientPanelView({
   clinicId,
   week,
   base,
   noShowAction,
   standalone = true,
+  headerAction,
 }: {
   clinicId: string;
   week?: string;
   base: string;
   noShowAction?: (appointmentId: string, status: "COMPLETED" | "NO_SHOW") => Promise<unknown>;
   standalone?: boolean;
+  headerAction?: React.ReactNode;
 }) {
   const now = new Date();
   const todayStart = startOfDay(now);
@@ -56,7 +59,6 @@ export async function ClientPanelView({
 
   const parsedRef = week ? new Date(week) : now;
   const weekStart = startOfWeek(Number.isNaN(parsedRef.getTime()) ? now : parsedRef);
-  const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
 
   const [clinic, today, last7Days, appointments, dailyApproached] = await Promise.all([
     prisma.clinic.findUniqueOrThrow({
@@ -79,14 +81,15 @@ export async function ClientPanelView({
     getDailyApproachCounts(clinicId, weekStart),
   ]);
 
-  const maxApproached = Math.max(1, ...dailyApproached);
-
   return (
     <div className={standalone ? "min-h-screen bg-vexo-bg px-4 pt-4 pb-6 sm:px-8 sm:pt-6 sm:pb-8" : undefined}>
       <div className={standalone ? "mx-auto max-w-6xl" : undefined}>
-        <div className="mb-8">
-          <h1 className="text-lg font-semibold tracking-tight">Painel</h1>
-          <p className="text-sm text-vexo-muted">Acompanhamento em tempo real das abordagens no Instagram.</p>
+        <div className="mb-8 flex items-start justify-between gap-3">
+          <div>
+            <h1 className="text-lg font-semibold tracking-tight">Painel</h1>
+            <p className="text-sm text-vexo-muted">Acompanhamento em tempo real das abordagens no Instagram.</p>
+          </div>
+          {headerAction}
         </div>
 
         <div className="grid gap-6 lg:grid-cols-2">
@@ -102,10 +105,25 @@ export async function ClientPanelView({
                   <span className="h-2 w-2 shrink-0 rounded-full bg-vexo-success" />
                   <h2 className="font-medium">{clinic.name}</h2>
                 </div>
-                <div className="flex flex-wrap gap-1.5 text-xs">
-                  <ChannelStatusPill connected={Boolean(clinic.instagramAccount)} label="Instagram" />
-                  <ChannelStatusPill connected={Boolean(clinic.googleCalendarAccount)} label="Calendar" />
-                  <ChannelStatusPill connected={clinic.whatsappStatus === "open"} label="WhatsApp" />
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <ChannelStatusPill
+                    connected={Boolean(clinic.instagramAccount)}
+                    label="Instagram"
+                    icon={<AtSign className="h-3 w-3" strokeWidth={2.5} />}
+                    iconBg="bg-pink-500"
+                  />
+                  <ChannelStatusPill
+                    connected={Boolean(clinic.googleCalendarAccount)}
+                    label="Google Calendar"
+                    icon={<Calendar className="h-3 w-3" strokeWidth={2.5} />}
+                    iconBg="bg-blue-500"
+                  />
+                  <ChannelStatusPill
+                    connected={clinic.whatsappStatus === "open"}
+                    label="WhatsApp"
+                    icon={<MessageCircle className="h-3 w-3" strokeWidth={2.5} />}
+                    iconBg="bg-emerald-500"
+                  />
                 </div>
               </div>
 
@@ -128,53 +146,17 @@ export async function ClientPanelView({
                   </Link>
                 </div>
 
-                <div className="space-y-1.5 border-t border-vexo-border pt-3">
+                <div className="space-y-2 border-t border-vexo-border pt-3">
                   <p className="text-caption font-medium uppercase tracking-wide text-vexo-muted">
                     Abordagens por dia · {weekStart.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })} –{" "}
                     {addDays(weekStart, 6).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}
                   </p>
-                  <div className="space-y-1">
-                    {weekDays.map((day, i) => {
-                      const count = dailyApproached[i] ?? 0;
-                      return (
-                        <div key={day.getTime()} className="flex items-center gap-2">
-                          <span className="w-7 shrink-0 text-caption leading-none text-vexo-muted">
-                            {WEEKDAY_LABELS[i]}
-                          </span>
-                          <div className="flex h-2.5 flex-1 items-center rounded-full bg-vexo-accent/15">
-                            <div
-                              className="h-1 rounded-full bg-vexo-accent"
-                              style={{ width: `${(count / maxApproached) * 100}%` }}
-                            />
-                          </div>
-                          <span className="w-4 shrink-0 text-right text-caption font-medium leading-none">
-                            {count}
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
+                  <ApproachChart counts={dailyApproached} />
                 </div>
               </div>
             </div>
 
-            <div className="space-y-3">
-              <h2 className="text-caption font-medium uppercase tracking-wide text-vexo-muted">Hoje</h2>
-              <div className="grid grid-cols-3 gap-2.5">
-                <StatCard label="Abordados" value={String(today.approached)} />
-                <StatCard label="Em conversa" value={String(today.responded)} />
-                <StatCard label="Agendaram" value={String(today.scheduled)} />
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              <h2 className="text-caption font-medium uppercase tracking-wide text-vexo-muted">Últimos 7 dias</h2>
-              <div className="grid grid-cols-3 gap-2.5">
-                <StatCard label="Abordados" value={String(last7Days.approached)} />
-                <StatCard label="Em conversa" value={String(last7Days.responded)} />
-                <StatCard label="Agendaram" value={String(last7Days.scheduled)} />
-              </div>
-            </div>
+            <ApproachMetricsToggle today={today} last7Days={last7Days} />
           </div>
 
           {/* Coluna direita: agendamentos */}

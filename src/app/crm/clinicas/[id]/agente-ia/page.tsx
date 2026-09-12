@@ -222,7 +222,7 @@ export default async function ClinicAiAgentPage({ params }: { params: { id: stri
           </p>
           <ul className="mt-1.5 space-y-1 text-xs text-vexo-muted">
             <li>
-              <span className="font-medium text-vexo-fg">Até 1 hora sem resposta:</span> 30-60
+              <span className="font-medium text-vexo-fg">Até 1 hora sem resposta:</span> 5-60
               segundos (ajustável abaixo, só desta clínica)
             </li>
             <li>
@@ -242,13 +242,13 @@ export default async function ClinicAiAgentPage({ params }: { params: { id: stri
         >
           <div>
             <label className="mb-1 block text-xs" htmlFor="firstBandDelaySeconds">
-              Delay "até 1 hora" (segundos, entre 30 e 60)
+              Delay "até 1 hora" (segundos, entre 5 e 60)
             </label>
             <input
               id="firstBandDelaySeconds"
               name="firstBandDelaySeconds"
               type="number"
-              min={30}
+              min={5}
               max={60}
               step={1}
               required

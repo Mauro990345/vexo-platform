@@ -29,13 +29,37 @@ function buildAvailabilityCheck(clinicId: string): AgentTools["checkAvailability
   };
 }
 
-export async function handleInboundInstagramMessage(event: InboundInstagramEvent) {
+export async function handleInboundInstagramMessage(
+  event: InboundInstagramEvent,
+  // ID da linha em WebhookLog dessa requisição (ver
+  // api/webhooks/instagram/route.ts) — só usado pra gravar de volta nela o
+  // motivo do descarte quando a conta não é encontrada, tornando isso
+  // visível na tela /crm/webhook-logs em vez de só um console.warn
+  // perdido nos logs do Railway (sem acesso). Opcional pra não quebrar
+  // quem já chamava essa função sem esse contexto.
+  webhookLogId?: string
+) {
   const igAccount = await prisma.instagramAccount.findFirst({
     where: { igUserId: event.igUserId },
     include: { clinic: true },
   });
   if (!igAccount) {
-    console.warn(`[vexo] Webhook recebido para conta IG desconhecida: ${event.igUserId}`);
+    const knownAccounts = await prisma.instagramAccount.findMany({
+      select: { igUserId: true, igUsername: true },
+    });
+    const reason =
+      `Nenhuma InstagramAccount encontrada pra igUserId="${event.igUserId}" (vindo do webhook). ` +
+      `Contas conhecidas no banco: ${
+        knownAccounts.length
+          ? knownAccounts.map((a) => `${a.igUsername ?? "?"}=${a.igUserId}`).join(", ")
+          : "(nenhuma)"
+      }.`;
+    console.warn(`[vexo] ${reason}`);
+    if (webhookLogId) {
+      await prisma.webhookLog
+        .update({ where: { id: webhookLogId }, data: { matchFailureReason: reason } })
+        .catch((err) => console.error("[vexo] Falha ao gravar motivo do descarte no WebhookLog:", err));
+    }
     return;
   }
   const clinic = igAccount.clinic;

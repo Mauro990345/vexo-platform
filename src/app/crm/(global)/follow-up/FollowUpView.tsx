@@ -267,8 +267,8 @@ export async function FollowUpView() {
             content: (
               <section>
                 <p className="text-xs text-vexo-muted">
-                  Dispara só quando você clica em <strong>"Não compareceu"</strong> na Agenda —
-                  nunca automaticamente.
+                  Dispara só quando a secretária clica em <strong>"Não compareceu"</strong> no
+                  Painel — nunca automaticamente.
                 </p>
 
                 {noShowSteps.length > 0 && (

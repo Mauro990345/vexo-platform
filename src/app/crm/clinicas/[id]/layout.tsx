@@ -8,10 +8,10 @@ import { AppShell } from "@/components/AppShell";
 import { buildClinicNavGroups } from "@/components/clinic-nav";
 
 // Sidebar de UMA clínica específica — troca completamente em relação ao
-// CRM global (ver crm/(global)/layout.tsx): Pipeline, Follow-up, Agenda,
-// WhatsApp, Instagram, Google Calendar e Configurações viram itens de
-// primeiro nível, cada um com sua própria página, em vez de ficarem
-// escondidos dentro de uma única tela de detalhes.
+// CRM global (ver crm/(global)/layout.tsx): Pipeline, Follow-up, WhatsApp,
+// Instagram, Google Calendar e Configurações viram itens de primeiro
+// nível, cada um com sua própria página, em vez de ficarem escondidos
+// dentro de uma única tela de detalhes.
 export default async function ClinicLayout({
   children,
   params,
