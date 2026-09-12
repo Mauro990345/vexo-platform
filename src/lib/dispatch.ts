@@ -12,7 +12,26 @@ export async function dispatchDueMessages(): Promise<{ sent: number; failed: num
       conversation: {
         include: {
           lead: true,
-          clinic: { include: { instagramAccount: true } },
+          clinic: {
+            include: {
+              // select explícito, não `instagramAccount: true` — esse
+              // último traz TODAS as colunas do model, inclusive
+              // facebookPageId (String? — legado do fluxo antigo de
+              // Facebook Login, não preenchido nem lido em conexão
+              // nenhuma criada pelo fluxo atual; ver comentário no
+              // schema). Um Prisma Client gerado a partir de uma versão
+              // ANTERIOR do schema — ex: serviço "worker" que ainda não
+              // fez redeploy depois da migration que tornou essa coluna
+              // opcional — valida esse campo como não-nulo e quebra a
+              // query INTEIRA (P2032) assim que encontra uma linha com
+              // valor null, mesmo esse campo nunca sendo usado abaixo.
+              // Selecionar só os dois campos realmente lidos
+              // (accessTokenEnc, igUserId) evita esse tipo de
+              // incompatibilidade de client-desatualizado-vs-schema-atual
+              // por completo, independente de dessincronia de deploy.
+              instagramAccount: { select: { accessTokenEnc: true, igUserId: true } },
+            },
+          },
         },
       },
     },
