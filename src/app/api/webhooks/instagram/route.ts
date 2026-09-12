@@ -18,6 +18,39 @@ export async function GET(req: NextRequest) {
   return new NextResponse("Forbidden", { status: 403 });
 }
 
+// Todo campo literalmente chamado "id" nesse payload (entry.id,
+// messaging[].sender.id, messaging[].recipient.id) é um identificador
+// opaco do Instagram — nunca deveria virar Number em etapa nenhuma. Mas
+// esse mesmo produto (Instagram API with Instagram Login) já mostrou,
+// em pelo menos 3 endpoints diferentes ao longo dessa integração
+// (api.instagram.com/oauth/access_token, graph.instagram.com/me, e
+// aparentemente aqui também), que manda esses campos como NÚMERO no
+// JSON (sem aspas) em vez de string — e um JSON.parse(rawBody) direto,
+// como estava aqui, deixa o parser nativo do V8 arredondar qualquer um
+// desses valores que passe de Number.MAX_SAFE_INTEGER (17 dígitos vs.
+// ~16 seguros) ANTES de qualquer `as {...}` do TypeScript entrar em
+// cena — sem gerar erro nenhum, só corrompendo o valor em silêncio.
+//
+// Suspeita concreta motivada por um erro real em produção: "The action
+// is invalid since it's not the thread owner" (IGApiException, subcode
+// 2534037) ao enviar a resposta da IA — sempre no envio final, nunca na
+// geração. sender.id (a pessoa que mandou a mensagem) vira
+// Lead.igScopedId sem proteção nenhuma; se corrompido mesmo que por 1
+// dígito, o "recipient.id" que a gente manda de volta pro Instagram
+// não corresponde a nenhuma thread de verdade — Meta rejeita como "não
+// é dono dessa thread". entry.id (usado pra achar a InstagramAccount)
+// sobreviveu ilhado nos testes desta sessão por coincidência (o valor
+// específico usado era representável em float64), o que mascarou esse
+// mesmo problema nos outros dois campos.
+//
+// Substitui qualquer `"id":<dígitos>` (sem aspas) por `"id":"<dígitos>"`
+// no texto CRU, antes de JSON.parse — preserva a precisão sem tocar em
+// mais nada da estrutura do payload. Seguro mesmo se a Meta já mandar
+// esses campos como string (vira um no-op nesse caso).
+function quoteNumericIds(rawJson: string): string {
+  return rawJson.replace(/"id"\s*:\s*(\d+)(?=[,}\s])/g, '"id":"$1"');
+}
+
 type MetaMessagingEntry = {
   id: string; // igUserId da conta que recebeu o evento
   messaging?: {
@@ -65,7 +98,7 @@ export async function POST(req: NextRequest) {
 
   let payload: { entry?: MetaMessagingEntry[] };
   try {
-    payload = JSON.parse(rawBody) as { entry?: MetaMessagingEntry[] };
+    payload = JSON.parse(quoteNumericIds(rawBody)) as { entry?: MetaMessagingEntry[] };
   } catch (err) {
     console.error("[vexo] Payload do webhook do Instagram não é JSON válido:", err);
     return NextResponse.json({ received: true });
