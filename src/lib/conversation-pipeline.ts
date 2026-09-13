@@ -163,7 +163,22 @@ export async function handleInboundInstagramMessage(
 
   const chatHistory = toChatHistory(history);
 
-  const signal = await classifyConversation(chatHistory);
+  // classifyConversation julga a conversa INTEIRA que recebe, não só a
+  // mensagem nova — então, sem esse corte, o motivo que causou um
+  // escalonamento anterior continua no transcript pra sempre (a reclamação
+  // do lead não "deixa de ter acontecido" só porque um humano clicou
+  // "Devolver para a IA"), e a primeira mensagem seguinte reescalona de
+  // novo, mesmo sendo um assunto comercial normal e não repetitivo. Depois
+  // que humanReviewedAt é marcado (setConversationStatus, único caller que
+  // leva status pra IN_CONVERSATION), só as mensagens A PARTIR DESSE PONTO
+  // entram na classificação — o histórico completo (chatHistory, acima)
+  // continua indo pra geração da resposta da IA, que se beneficia do
+  // contexto inteiro; só o classificador de bastidor precisa desse corte.
+  const classifierHistory = conversation.humanReviewedAt
+    ? toChatHistory(history.filter((m) => m.createdAt > conversation.humanReviewedAt!))
+    : chatHistory;
+
+  const signal = await classifyConversation(classifierHistory);
 
   if (signal.needsHuman) {
     await prisma.conversation.update({
