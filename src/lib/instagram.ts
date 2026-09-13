@@ -279,6 +279,39 @@ export async function exchangeInstagramCode(code: string): Promise<{
   };
 }
 
+// Conversation Routing / Handover Protocol da Meta: configurar um "app
+// padrão" na tela de roteamento do Meta Business Suite (o que já fizemos
+// pras contas de teste) é só o PRÉ-REQUISITO — segundo a própria
+// documentação da Meta, "The Take Thread Control API is blocked unless a
+// default application is set. The Request Thread Control API is enabled
+// for any application but must be invoked to gain control.". Ou seja,
+// configurar o app padrão sozinho NÃO transfere o controle de threads que
+// JÁ EXISTIAM antes disso — é preciso uma chamada de API ativa pedindo
+// (ou tomando) o controle. Chamada automaticamente quando um evento chega
+// em modo "standby" (ver api/webhooks/instagram/route.ts).
+//
+// Incerteza real, registrada aqui de propósito: toda a documentação da
+// Meta sobre esse mecanismo (Handover Protocol / Conversation Routing)
+// que foi possível localizar vive sob messenger-platform/instagram — a
+// família do produto ANTIGO, com Página do Facebook — não sob
+// instagram-platform/instagram-api-with-instagram-login (o produto que o
+// VEXO usa). É o mesmo host (graph.instagram.com) e o mesmo padrão de
+// endereçamento ("me", como em subscribeInstagramWebhook logo abaixo) já
+// confirmados como corretos pra esse produto, mas não há confirmação
+// oficial de que esse edge específico existe aqui — assim como
+// me/thread_owner (removido de sendInstagramMessage por não existir
+// nesse produto). Se não existir, a resposta de erro abaixo já mostra
+// isso, exatamente como aconteceu com thread_owner.
+export async function requestThreadControl(accessToken: string, recipientId: string): Promise<string> {
+  const res = await fetch(`${IG_GRAPH_BASE}/me/request_thread_control`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ recipient: { id: recipientId }, access_token: accessToken }),
+  });
+  const bodyText = await res.text();
+  return `HTTP ${res.status}: ${bodyText}`;
+}
+
 // Ativar o toggle "Webhook Subscription" no App Dashboard (Produtos >
 // Webhooks) só configura o app: URL de callback + quais campos ele PODE
 // receber. Isso é global ao app, não à conta. A Meta só começa a mandar
