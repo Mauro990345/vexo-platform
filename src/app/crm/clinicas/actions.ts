@@ -302,7 +302,15 @@ export async function setConversationStatus(
 
   await prisma.conversation.update({
     where: { id: conversationId },
-    data: { status, ...(status === "IN_CONVERSATION" ? { needsHumanReason: null } : {}) },
+    data: {
+      status,
+      // Único ponto que leva status pra IN_CONVERSATION é o botão "Devolver
+      // para a IA" (ver conversas/[id]/page.tsx) — marca aqui o instante
+      // exato pra classifyConversation (conversation-pipeline.ts) parar de
+      // reescalonar com base no motivo antigo, que continua no histórico
+      // pra sempre mas já foi resolvido por um humano.
+      ...(status === "IN_CONVERSATION" ? { needsHumanReason: null, humanReviewedAt: new Date() } : {}),
+    },
   });
 
   const conversation = await prisma.conversation.findUniqueOrThrow({

@@ -237,6 +237,20 @@ model Conversation {
   // Appointment.confirmationVideoSentAt.
   resultPhotoSentAt DateTime?
 
+  // Preenchido em setConversationStatus quando alguém clica "Devolver para
+  // a IA" (única chamada real que leva status pra IN_CONVERSATION — ver
+  // clinicas/actions.ts). classifyConversation recebe o histórico INTEIRO
+  // da conversa a cada mensagem nova; sem esse corte, o motivo original do
+  // escalonamento continua lá no transcript pra sempre, e o classificador
+  // (que julga a conversa toda, não só a mensagem nova) reescalona de
+  // novo na primeira mensagem seguinte — mesmo com o texto sendo comercial
+  // normal, porque a reclamação/pedido antigo nunca "aconteceu" de verdade
+  // pro modelo, só o status no banco mudou. Ver handleInboundInstagramMessage
+  // em conversation-pipeline.ts: só as mensagens depois desse timestamp
+  // entram na classificação (o histórico completo continua indo pra
+  // geração da resposta da IA, que se beneficia do contexto).
+  humanReviewedAt DateTime?
+
   messages     Message[]
   appointments Appointment[]
   followUps    FollowUpLog[]
