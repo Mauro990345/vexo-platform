@@ -145,12 +145,18 @@ function addHours(date: Date, hours: number): Date {
 // na abordagem manual); cai pro igUsername quando não tem; string vazia se
 // nenhum dos dois existir (a mensagem sai sem o nome nesse caso, em vez de
 // deixar a variável sem substituir).
-function leadFirstName(lead: { name: string | null; igUsername: string | null }): string {
+//
+// Exportadas (não só usadas aqui): conversation-pipeline.ts também aplica
+// em clinic.aiSystemPrompt antes de mandar pro modelo — sem isso, um
+// prompt customizado escrito com essa mesma variável (convenção já usada
+// nos templates de lembrete/follow-up) sai literal na resposta da IA
+// ("Por nada, {{primeiro_nome}}...") em vez de virar o nome do lead.
+export function leadFirstName(lead: { name: string | null; igUsername: string | null }): string {
   const raw = (lead.name ?? lead.igUsername ?? "").trim();
   return raw.split(/\s+/)[0] ?? "";
 }
 
-function applyTemplateVariables(text: string, lead: { name: string | null; igUsername: string | null }): string {
+export function applyTemplateVariables(text: string, lead: { name: string | null; igUsername: string | null }): string {
   return text.replaceAll("{{primeiro_nome}}", leadFirstName(lead));
 }
 

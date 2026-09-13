@@ -4,7 +4,7 @@ import { checkAvailability, createCalendarEvent } from "@/lib/google-calendar";
 import { computeAdaptiveDelaySeconds, FAST_REPLY_DELAY_SECONDS } from "@/lib/scheduler";
 import { DEFAULT_CONVERSATION_SYSTEM_PROMPT } from "@/lib/default-prompt";
 import { sendWhatsappMessage, formatEscalationAlert } from "@/lib/whatsapp";
-import { cancelPendingFollowUp, getSilenceHours } from "@/lib/follow-up";
+import { cancelPendingFollowUp, getSilenceHours, applyTemplateVariables } from "@/lib/follow-up";
 import { toChatHistory } from "@/lib/chat-history";
 
 export { toChatHistory } from "@/lib/chat-history";
@@ -216,8 +216,13 @@ export async function handleInboundInstagramMessage(
   let capturedResultPhotoUrl: string | undefined;
   let resultPhotoAlreadySent = reengaged ? false : Boolean(conversation.resultPhotoSentAt);
 
+  // Mesma variável {{primeiro_nome}} já suportada nos templates de
+  // lembrete/follow-up (ver applyTemplateVariables em follow-up.ts) — sem
+  // aplicar aqui também, um prompt customizado escrito com essa convenção
+  // (razoável de esperar, já que é a mesma sintaxe usada nos outros dois
+  // lugares) sai literal na resposta da IA em vez de virar o nome do lead.
   const reply = await generateLeadReply({
-    systemPrompt: clinic.aiSystemPrompt || DEFAULT_CONVERSATION_SYSTEM_PROMPT,
+    systemPrompt: applyTemplateVariables(clinic.aiSystemPrompt || DEFAULT_CONVERSATION_SYSTEM_PROMPT, lead),
     history: chatHistory,
     tools: {
       checkAvailability: buildAvailabilityCheck(clinic.id),
