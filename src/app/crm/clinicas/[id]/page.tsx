@@ -79,7 +79,16 @@ function columnTint(status: PipelineStatus): { bg: string; tagBg: string; tagTex
 }
 
 function formatDateTime(date: Date): string {
-  return new Date(date).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+  // timeZone explícito — sem isso, toLocaleString usa o fuso do SERVIDOR
+  // (Railway roda em UTC), não o de Brasília, dificultando comparar com o
+  // horário real na hora de debugar.
+  return new Date(date).toLocaleString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "America/Sao_Paulo",
+  });
 }
 
 export default async function ClinicPipelinePage({ params }: { params: { id: string } }) {
