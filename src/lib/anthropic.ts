@@ -111,12 +111,20 @@ const TOOLS: Anthropic.Tool[] = [
   {
     name: "check_availability",
     description:
-      "Consulta horários livres na agenda (Google Calendar) da clínica dentro de um intervalo de datas. Use antes de oferecer qualquer horário ao lead.",
+      "Consulta horários livres na agenda (Google Calendar) da clínica dentro de um intervalo de datas. Use " +
+      "SEMPRE antes de oferecer ou confirmar qualquer horário ao lead — nunca ofereça um horário sem ter " +
+      "chamado essa ferramenta antes, mesmo que pareça óbvio que vai estar livre.",
     input_schema: {
       type: "object",
       properties: {
-        dateFrom: { type: "string", description: "Data/hora inicial em ISO 8601." },
-        dateTo: { type: "string", description: "Data/hora final em ISO 8601." },
+        dateFrom: {
+          type: "string",
+          description: "Data/hora inicial em ISO 8601 UTC, com sufixo \"Z\" (ex.: \"2026-09-14T12:00:00Z\").",
+        },
+        dateTo: {
+          type: "string",
+          description: "Data/hora final em ISO 8601 UTC, com sufixo \"Z\" (ex.: \"2026-09-14T21:00:00Z\").",
+        },
       },
       required: ["dateFrom", "dateTo"],
     },
@@ -124,11 +132,17 @@ const TOOLS: Anthropic.Tool[] = [
   {
     name: "schedule_appointment",
     description:
-      "Confirma o agendamento em um horário específico, já validado como disponível via check_availability. Só chame depois que o lead confirmar explicitamente o horário.",
+      "Confirma o agendamento em um horário específico, já validado como disponível via check_availability " +
+      "NESTA MESMA conversa. Só chame depois que o lead confirmar explicitamente o horário, e só depois de já " +
+      "ter chamado check_availability pra esse horário — nunca diga ao lead que o horário está confirmado " +
+      "antes de chamar esta ferramenta e ela retornar sucesso.",
     input_schema: {
       type: "object",
       properties: {
-        startTime: { type: "string", description: "Data/hora de início em ISO 8601." },
+        startTime: {
+          type: "string",
+          description: "Data/hora de início em ISO 8601 UTC, com sufixo \"Z\" (ex.: \"2026-09-14T17:00:00Z\").",
+        },
         leadName: { type: "string", description: "Nome do lead, se conhecido." },
       },
       required: ["startTime"],
