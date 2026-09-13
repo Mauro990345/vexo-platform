@@ -51,23 +51,39 @@ function quoteNumericIds(rawJson: string): string {
   return rawJson.replace(/"id"\s*:\s*(\d+)(?=[,}\s])/g, '"id":"$1"');
 }
 
+type MetaMessagingEvent = {
+  sender: { id: string };
+  recipient: { id: string };
+  timestamp: number;
+  message?: { mid: string; text?: string; is_echo?: boolean };
+  // Estrutura análoga à do Messenger Platform (infra compartilhada com
+  // o Instagram Messaging — mesma razão dos dois namespaces de ID
+  // documentada em exchangeInstagramCode) pra notificação de mensagem
+  // editada: chave "message_edit" paralela a "message", em vez de um
+  // "message" com alguma flag de edição. NÃO CONFIRMADO contra um
+  // payload real do Instagram ainda — ver /crm/webhook-logs pra pegar o
+  // corpo bruto de um evento "message_edit" de verdade e confirmar (ou
+  // corrigir) os nomes dos campos aqui.
+  message_edit?: { mid: string; text?: string };
+};
+
 type MetaMessagingEntry = {
-  id: string; // igUserId da conta que recebeu o evento
-  messaging?: {
-    sender: { id: string };
-    recipient: { id: string };
-    timestamp: number;
-    message?: { mid: string; text?: string; is_echo?: boolean };
-    // Estrutura análoga à do Messenger Platform (infra compartilhada com
-    // o Instagram Messaging — mesma razão dos dois namespaces de ID
-    // documentada em exchangeInstagramCode) pra notificação de mensagem
-    // editada: chave "message_edit" paralela a "message", em vez de um
-    // "message" com alguma flag de edição. NÃO CONFIRMADO contra um
-    // payload real do Instagram ainda — ver /crm/webhook-logs pra pegar o
-    // corpo bruto de um evento "message_edit" de verdade e confirmar (ou
-    // corrigir) os nomes dos campos aqui.
-    message_edit?: { mid: string; text?: string };
-  }[];
+  id: string; // igUserId da conta associada a este entry
+  messaging?: MetaMessagingEvent[];
+  // Handover Protocol do Messenger Platform (infra compartilhada com o
+  // Instagram Messaging): quando outro app/inbox tem o controle da
+  // thread pra essa conta, a Meta ainda entrega o evento aqui, só que na
+  // chave "standby" em vez de "messaging" — uma cópia PURAMENTE
+  // OBSERVACIONAL, sem autorização de resposta. Confirmado em produção
+  // via /crm/webhook-logs: toda mensagem endereçada a mauro.seller chega
+  // em "standby" (nunca em "messaging"), provando — direto do formato
+  // que a própria Meta usa pra entregar o evento, não só inferindo de um
+  // código de erro — que outro app é o dono dessa thread. É a causa raiz
+  // real, bem anterior, do "not the thread owner" investigado nesta
+  // sessão: mesmo que a IA gerasse e tentasse mandar uma resposta, a
+  // rejeição já estava garantida, porque a Meta nunca considerou o VEXO
+  // dono dessa conversa pra começo de conversa.
+  standby?: MetaMessagingEvent[];
 };
 
 export async function POST(req: NextRequest) {
@@ -102,6 +118,29 @@ export async function POST(req: NextRequest) {
   } catch (err) {
     console.error("[vexo] Payload do webhook do Instagram não é JSON válido:", err);
     return NextResponse.json({ received: true });
+  }
+
+  // Entries em "standby" (ver comentário em MetaMessagingEntry) NUNCA
+  // entram no processamento normal abaixo — o VEXO não tem controle da
+  // thread pra essa conta, então tentar responder só repetiria o mesmo
+  // erro "not the thread owner" (ou pior, duplicaria a resposta de quem
+  // for o dono de verdade). Só registra, de forma visível em
+  // /crm/webhook-logs, pra não voltar a ser um descarte silencioso — é
+  // o mesmo espírito do matchFailureReason (conversation-pipeline.ts),
+  // só que aqui o motivo é descoberto ANTES de sequer procurar a conta.
+  const standbyAccountIds = new Set<string>();
+  for (const entry of payload.entry ?? []) {
+    if (entry.standby?.length) standbyAccountIds.add(entry.id);
+  }
+  if (standbyAccountIds.size > 0 && webhookLog?.id) {
+    const reason =
+      `Recebido em modo "standby" (Handover Protocol da Meta) pra igUserId=${[...standbyAccountIds].join(", ")} — ` +
+      `o VEXO NÃO tem controle da thread pra essa conta (outro app/inbox é o dono, segundo a própria Meta). ` +
+      `Mensagem NÃO processada pela IA nem respondida. Verifique apps conectados / Conversation Routing dessa ` +
+      `conta específica no Meta Business Suite.`;
+    await prisma.webhookLog
+      .update({ where: { id: webhookLog.id }, data: { matchFailureReason: reason } })
+      .catch((err) => console.error("[vexo] Falha ao gravar motivo de standby no WebhookLog:", err));
   }
 
   for (const entry of payload.entry ?? []) {
