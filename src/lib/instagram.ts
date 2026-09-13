@@ -103,30 +103,49 @@ export async function sendInstagramMessage(params: {
 
   if (!res.ok) {
     const body = await res.text();
-    // Diagnóstico automático: as 3 hipóteses anteriores pro erro "The
-    // action is invalid since it's not the thread owner" (IGApiException,
-    // subcode 2534037) — ID de sender/recipient corrompido por perda de
-    // precisão, igUserId desatualizado (namespace errado), token colado
-    // manualmente com escopo insuficiente — foram todas descartadas em
-    // produção: o erro persiste idêntico mesmo depois de corrigir os 3
-    // pontos, inclusive numa conversa NOVA reconectada 100% via OAuth
-    // completo. A hipótese que sobra é do Handover Protocol / Conversation
-    // Routing da própria Meta: cada thread de DM tem um único "dono" (app
-    // ou inbox) que pode responder por ela, e por padrão isso costuma ser
-    // a Caixa de Entrada nativa do Meta/Instagram, não o app do VEXO — a
-    // menos que o VEXO peça controle da thread explicitamente. Isso explica
-    // o padrão observado: RECEBER webhook nunca exigiu ser dono da thread
-    // (daí a IA sempre gerar a resposta certa), só ENVIAR exige. Tenta
-    // consultar quem é o dono via o endpoint do Handover Protocol do
-    // Messenger Platform (me/thread_owner) — ainda não confirmado se esse
-    // edge existe de fato nesse produto (Instagram API with Instagram
-    // Login, sem Página do Facebook); mesmo uma falha nessa consulta já é
-    // informação (log abaixo mostra o motivo).
-    const ownerDiagnosis = await getThreadOwner(accessToken, params.recipientIgScopedId).catch(
-      (diagErr) => `falha ao consultar thread_owner: ${diagErr instanceof Error ? diagErr.message : String(diagErr)}`
-    );
+    // Diagnóstico automático pro erro "The action is invalid since it's
+    // not the thread owner" (IGApiException, subcode 2534037). Hipóteses
+    // já descartadas em produção, uma a uma, com teste real: ID de
+    // sender/recipient corrompido por perda de precisão; igUserId
+    // desatualizado (namespace errado); token colado manualmente com
+    // escopo insuficiente (falha idêntica com token 100% OAuth); modo
+    // desenvolvimento/Tester (duas contas JÁ testers conversando entre si
+    // falharam igual); thread pendente de aceitar (falhou até em
+    // conversas já na caixa principal); Conversation Routing/Handover
+    // Protocol desligado (configurado nas duas contas, sem efeito) — e
+    // esse último, aliás, confirmado sem sentido aqui: me/thread_owner
+    // (chamado por getThreadOwner, removido deste ponto) devolveu "Tried
+    // accessing nonexisting field (thread_owner)", ou seja, esse edge do
+    // Messenger Platform nem existe no produto "Instagram API with
+    // Instagram Login" — Conversation Routing pode não se aplicar a
+    // contas conectadas sem Página do Facebook.
+    //
+    // Hipótese atual: instagram_business_manage_messages aparece como
+    // "Pronto para teste" na aba Permissions and Features do App
+    // Dashboard, mas isso só confirma que o App PODE pedir esse escopo —
+    // não confirma que ESTE token especificamente o recebeu de fato no
+    // consentimento. debug_token é o endpoint universal da Graph API pra
+    // inspecionar os escopos reais de um token (usado por qualquer
+    // produto Meta, daí graph.facebook.com aqui e não graph.instagram.com
+    // — diferente das chamadas operacionais deste arquivo, que precisam
+    // do host específico do produto; esta é só leitura de metadado do
+    // token). Não confirmado ainda se esse host aceita consultar um token
+    // emitido via Instagram Login — se não aceitar, o corpo da resposta
+    // abaixo já mostra isso.
+    const appId = process.env.META_INSTAGRAM_APP_ID;
+    const appSecret = process.env.META_APP_SECRET;
+    const scopeDiagnosis =
+      appId && appSecret
+        ? await fetch(
+            `https://graph.facebook.com/debug_token?input_token=${encodeURIComponent(accessToken)}&access_token=${encodeURIComponent(`${appId}|${appSecret}`)}`
+          )
+            .then(async (diagRes) => `HTTP ${diagRes.status}: ${await diagRes.text()}`)
+            .catch(
+              (diagErr) => `falha ao consultar debug_token: ${diagErr instanceof Error ? diagErr.message : String(diagErr)}`
+            )
+        : "META_INSTAGRAM_APP_ID/META_APP_SECRET não configurados";
     throw new Error(
-      `Falha ao enviar mensagem no Instagram (${res.status}) para recipient=${params.recipientIgScopedId} (conta remetente igUserId=${params.igUserId}): ${body}\nDiagnóstico thread_owner: ${ownerDiagnosis}`
+      `Falha ao enviar mensagem no Instagram (${res.status}) para recipient=${params.recipientIgScopedId} (conta remetente igUserId=${params.igUserId}): ${body}\nDiagnóstico debug_token: ${scopeDiagnosis}`
     );
   }
 
@@ -311,25 +330,6 @@ export async function verifyInstagramTokenAndId(
   }
   const username = (JSON.parse(bodyText) as { username?: string }).username;
   return { id, username };
-}
-
-// Handover Protocol / Conversation Routing (Meta): cada thread de DM tem
-// um único "dono" (app ou inbox) autorizado a responder por ela — receber
-// webhook não exige isso, só enviar. GET simples, sem side effect, no
-// mesmo endpoint que o Messenger Platform usa há anos pra essa consulta
-// (me/thread_owner); ver comentário grande em sendInstagramMessage sobre
-// por que essa é a hipótese atual pro erro "not the thread owner". Se a
-// Meta devolver 404/erro de edge inexistente aqui, isso descarta ESSA
-// forma específica de checar (não necessariamente a hipótese em si) —
-// nesse caso o body da resposta abaixo já mostra o motivo exato.
-export async function getThreadOwner(accessToken: string, recipientId: string): Promise<string> {
-  const url = new URL(`${IG_GRAPH_BASE}/me/thread_owner`);
-  url.searchParams.set("recipient", recipientId);
-  url.searchParams.set("access_token", accessToken);
-
-  const res = await fetch(url.toString());
-  const bodyText = await res.text();
-  return `HTTP ${res.status}: ${bodyText}`;
 }
 
 export async function subscribeInstagramWebhook(accessToken: string): Promise<void> {
