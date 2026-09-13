@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyWebhookSignature } from "@/lib/instagram";
+import { verifyWebhookSignature, requestThreadControl } from "@/lib/instagram";
 import { handleInboundInstagramMessage } from "@/lib/conversation-pipeline";
+import { decryptToken } from "@/lib/crypto";
 import { prisma } from "@/lib/prisma";
 
 // Webhook do Instagram Messaging (Meta). GET = handshake de verificação;
@@ -128,16 +129,40 @@ export async function POST(req: NextRequest) {
   // /crm/webhook-logs, pra não voltar a ser um descarte silencioso — é
   // o mesmo espírito do matchFailureReason (conversation-pipeline.ts),
   // só que aqui o motivo é descoberto ANTES de sequer procurar a conta.
-  const standbyAccountIds = new Set<string>();
+  // Configurar um "app padrão" na tela de Conversation Routing do Meta
+  // Business Suite (já feito pras contas de teste) é só o PRÉ-REQUISITO —
+  // não transfere sozinho o controle de threads que já existiam antes.
+  // Tenta reivindicar automaticamente via requestThreadControl (ver
+  // comentário grande em instagram.ts sobre a incerteza real de esse edge
+  // existir pra esse produto) pra cada remetente que apareceu em modo
+  // standby — sem side effect destrutivo mesmo se a chamada falhar ou o
+  // endpoint não existir, só não teria efeito.
+  const standbyNotes: string[] = [];
   for (const entry of payload.entry ?? []) {
-    if (entry.standby?.length) standbyAccountIds.add(entry.id);
+    if (!entry.standby?.length) continue;
+
+    const igAccount = await prisma.instagramAccount.findFirst({ where: { igUserId: entry.id } });
+    if (!igAccount) {
+      standbyNotes.push(
+        `igUserId=${entry.id}: standby recebido, mas nenhuma InstagramAccount conectada com esse ID — não deu pra tentar reivindicar a thread.`
+      );
+      continue;
+    }
+
+    const accessToken = decryptToken(igAccount.accessTokenEnc);
+    const recipientIds = new Set(entry.standby.map((event) => event.sender.id));
+    for (const recipientId of recipientIds) {
+      const result = await requestThreadControl(accessToken, recipientId).catch(
+        (err) => `falha ao chamar request_thread_control: ${err instanceof Error ? err.message : String(err)}`
+      );
+      standbyNotes.push(`igUserId=${entry.id} (recipient=${recipientId}): ${result}`);
+    }
   }
-  if (standbyAccountIds.size > 0 && webhookLog?.id) {
+  if (standbyNotes.length > 0 && webhookLog?.id) {
     const reason =
-      `Recebido em modo "standby" (Handover Protocol da Meta) pra igUserId=${[...standbyAccountIds].join(", ")} — ` +
-      `o VEXO NÃO tem controle da thread pra essa conta (outro app/inbox é o dono, segundo a própria Meta). ` +
-      `Mensagem NÃO processada pela IA nem respondida. Verifique apps conectados / Conversation Routing dessa ` +
-      `conta específica no Meta Business Suite.`;
+      `Recebido em modo "standby" (Handover Protocol/Conversation Routing da Meta) — o VEXO NÃO tinha controle ` +
+      `da thread (outro app/inbox é o dono, segundo a própria Meta). Mensagem NÃO processada pela IA nem ` +
+      `respondida. Tentativa automática de request_thread_control:\n${standbyNotes.join("\n")}`;
     await prisma.webhookLog
       .update({ where: { id: webhookLog.id }, data: { matchFailureReason: reason } })
       .catch((err) => console.error("[vexo] Falha ao gravar motivo de standby no WebhookLog:", err));
