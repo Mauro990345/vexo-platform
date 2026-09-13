@@ -221,8 +221,43 @@ export async function handleInboundInstagramMessage(
   // aplicar aqui também, um prompt customizado escrito com essa convenção
   // (razoável de esperar, já que é a mesma sintaxe usada nos outros dois
   // lugares) sai literal na resposta da IA em vez de virar o nome do lead.
+  const basePrompt = applyTemplateVariables(clinic.aiSystemPrompt || DEFAULT_CONVERSATION_SYSTEM_PROMPT, lead);
+
+  // Bug real encontrado em produção: um agendamento pra "amanhã" saiu
+  // registrado com uma data completamente errada (mês diferente, não só
+  // fuso). Causa raiz: nada em lugar nenhum do prompt jamais disse ao
+  // modelo que dia é hoje — nem o prompt padrão (default-prompt.ts) nem
+  // o prompt customizado por clínica têm como saber disso sozinhos, então
+  // "hoje"/"amanhã" vira um chute do modelo sem nenhuma referência real.
+  // Esse bloco é gerado a cada mensagem (nunca fica desatualizado, ao
+  // contrário de um valor fixo no prompt customizado) e é sempre anexado,
+  // independente do que a clínica escreveu — nenhum prompt customizado
+  // deveria precisar se preocupar com isso por conta própria. Também
+  // reforça o formato exigido nas chamadas de ferramenta (UTC explícito
+  // com "Z"): sem isso, um ISO sem timezone escrito pelo modelo (ex.
+  // "2026-09-14T14:00:00", sem sufixo) seria interpretado pelo
+  // `new Date(...)` do servidor como horário LOCAL DO SERVIDOR (UTC no
+  // Railway) — silenciosamente 3h adiantado/atrasado do que o lead ouviu.
+  const now = new Date();
+  const dateTimeContext =
+    `[Contexto automático — data/hora atual: ${now.toLocaleString("pt-BR", {
+      weekday: "long",
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      timeZone: "America/Sao_Paulo",
+    })} (horário de Brasília, America/Sao_Paulo, UTC-3). Use isso como referência real ` +
+    `pra "hoje", "amanhã", "essa semana" etc. — nunca assuma outra data. Em toda chamada de ` +
+    `check_availability ou schedule_appointment, o horário DEVE ser ISO 8601 em UTC, com o ` +
+    `sufixo "Z" (ex.: 14h de Brasília = 17:00 UTC = "...T17:00:00Z") — nunca mande um horário ` +
+    `sem timezone explícito. NUNCA diga ao lead que um horário está reservado/confirmado antes ` +
+    `de check_availability confirmar que está livre E schedule_appointment ter sido chamado com ` +
+    `sucesso, nessa ordem — não confirme adiantado, mesmo que pareça óbvio que vai dar certo.]`;
+
   const reply = await generateLeadReply({
-    systemPrompt: applyTemplateVariables(clinic.aiSystemPrompt || DEFAULT_CONVERSATION_SYSTEM_PROMPT, lead),
+    systemPrompt: `${basePrompt}\n\n${dateTimeContext}`,
     history: chatHistory,
     tools: {
       checkAvailability: buildAvailabilityCheck(clinic.id),

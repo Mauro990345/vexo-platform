@@ -79,7 +79,14 @@ export default async function ConversationDetailPage({ params }: { params: { id:
                 )}
                 <p className="mt-1 text-caption opacity-60">
                   {m.sender === "AI" ? "IA" : m.sender === "HUMAN" ? "Humano" : m.sender === "SYSTEM" ? "Sistema" : "Lead"} ·{" "}
-                  {(m.sentAt ?? m.createdAt).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                  {(m.sentAt ?? m.createdAt).toLocaleString("pt-BR", {
+                    day: "2-digit",
+                    month: "2-digit",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    // Sem isso, usa o fuso do servidor (UTC), não o de Brasília.
+                    timeZone: "America/Sao_Paulo",
+                  })}
                   {m.status === "PENDING" ? " · agendada" : m.status === "FAILED" ? " · falhou" : ""}
                 </p>
               </div>
@@ -126,6 +133,8 @@ export default async function ConversationDetailPage({ params }: { params: { id:
                 month: "2-digit",
                 hour: "2-digit",
                 minute: "2-digit",
+                // Sem isso, usa o fuso do servidor (UTC), não o de Brasília.
+                timeZone: "America/Sao_Paulo",
               })}
             </p>
             <div className="mt-3">
