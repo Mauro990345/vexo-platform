@@ -153,6 +153,39 @@ export async function sendInstagramMessage(params: {
   return { messageId: data.message_id };
 }
 
+// User Profile API (instagram-platform/instagram-api-with-instagram-login,
+// produto que o VEXO usa — não a família antiga do Messenger Platform):
+// busca o nome de exibição de quem mandou mensagem, dado o IGSID
+// (Lead.igScopedId), pra popular Lead.name e {{primeiro_nome}} funcionar
+// de verdade em vez de ficar vazio. O payload do webhook (sender.id) NUNCA
+// traz nome/username — só o ID opaco — então sem essa chamada extra
+// Lead.name/igUsername ficam null pra sempre num lead novo, e a IA
+// legitimamente não tem nome nenhum pra usar (não é bug de substituição:
+// {{primeiro_nome}} substitui certinho por uma string vazia).
+//
+// Só pede "name", não "username": segundo relatos de outros
+// desenvolvedores na comunidade da Meta, "username" nem existe como campo
+// desse node (IGBusinessScopedID) — Meta restringe por privacidade o que
+// uma conta comercial pode puxar sobre quem manda mensagem pra ela. Mesmo
+// "name" não é garantido (depende das configurações de privacidade da
+// pessoa) — nesse caso o fallback de perguntar o nome na conversa
+// continua sendo o comportamento certo, não um bug.
+export async function getInstagramUserProfile(
+  accessToken: string,
+  igScopedId: string
+): Promise<{ name?: string }> {
+  const url = new URL(`${IG_GRAPH_BASE}/${igScopedId}`);
+  url.searchParams.set("fields", "name");
+  url.searchParams.set("access_token", accessToken);
+
+  const res = await fetch(url.toString());
+  if (!res.ok) {
+    throw new Error(`Falha ao buscar perfil do lead (HTTP ${res.status}): ${await res.text()}`);
+  }
+  const data = (await res.json()) as { name?: string };
+  return { name: data.name || undefined };
+}
+
 // -----------------------------------------------------------------------
 // OAuth (Instagram API with Instagram Login)
 // -----------------------------------------------------------------------
