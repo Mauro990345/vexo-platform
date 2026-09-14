@@ -1,6 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import { classifyConversation, generateLeadReply, type AgentTools } from "@/lib/anthropic";
 import { checkAvailability, createCalendarEvent } from "@/lib/google-calendar";
+import { getInstagramUserProfile } from "@/lib/instagram";
+import { decryptToken } from "@/lib/crypto";
 import { computeAdaptiveDelaySeconds, FAST_REPLY_DELAY_SECONDS } from "@/lib/scheduler";
 import { DEFAULT_CONVERSATION_SYSTEM_PROMPT } from "@/lib/default-prompt";
 import { sendWhatsappMessage, formatEscalationAlert } from "@/lib/whatsapp";
@@ -73,6 +75,26 @@ export async function handleInboundInstagramMessage(
       igUsername: event.leadIgUsername,
     },
   });
+
+  // O payload do webhook (event.sender.id) NUNCA traz nome/username do
+  // lead — só o ID opaco (ver leadIgUsername acima, que na prática nunca
+  // é preenchido por quem chama esta função a partir do webhook real).
+  // Sem essa busca extra, Lead.name/igUsername ficam null pra sempre, e
+  // {{primeiro_nome}} (ver applyTemplateVariables mais abaixo) substitui
+  // certinho por uma string vazia — não é bug de substituição, é falta de
+  // dado. Só tenta uma vez por lead (enquanto name estiver vazio) — best
+  // effort, uma falha aqui não pode impedir a conversa de continuar.
+  if (!lead.name) {
+    try {
+      const profile = await getInstagramUserProfile(decryptToken(igAccount.accessTokenEnc), lead.igScopedId);
+      if (profile.name) {
+        await prisma.lead.update({ where: { id: lead.id }, data: { name: profile.name } });
+        lead.name = profile.name;
+      }
+    } catch (err) {
+      console.error("[vexo] Falha ao buscar nome do perfil do lead:", err);
+    }
+  }
 
   let conversation = await prisma.conversation.findFirst({
     where: {
