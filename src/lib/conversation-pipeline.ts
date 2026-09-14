@@ -200,6 +200,63 @@ export async function handleInboundInstagramMessage(
     await cancelPendingFollowUp(conversation.id, event.timestamp);
   }
 
+  // Proteção contra loop automático: sem isso, se o "lead" do outro lado
+  // for na verdade outra conta comercial (a própria, ou qualquer bot
+  // externo) respondendo automaticamente, cada resposta da IA vira uma
+  // nova mensagem recebida pro outro lado, que responde de volta, e assim
+  // indefinidamente — sem nenhuma trava natural pra parar sozinho (visto
+  // em produção: dezenas de rodadas só interrompidas ao desconectar a
+  // conta manualmente). Risco real de custo (cada rodada consome tokens
+  // da API) além de péssima experiência. NÃO tenta identificar se o
+  // remetente é outra InstagramAccount conectada — o ID que chega no
+  // webhook (event.sender.id) é escopado por app/conversa, não dá pra
+  // comparar com segurança contra o igUserId de outra clínica. Em vez
+  // disso, um limite simples e independente de quem é o remetente: se a
+  // IA já respondeu demais nesta conversa numa janela de tempo curta, para
+  // e escalona pra humano revisar (@setConversationStatus é o único jeito
+  // de devolver a conversa pra IA depois), em vez de continuar
+  // respondendo automaticamente sem fim.
+  const LOOP_GUARD_WINDOW_MINUTES = 10;
+  const LOOP_GUARD_MAX_AI_MESSAGES = 8;
+  const recentAiMessageCount = await prisma.message.count({
+    where: {
+      conversationId: conversation.id,
+      sender: "AI",
+      direction: "OUTBOUND",
+      createdAt: { gte: new Date(event.timestamp.getTime() - LOOP_GUARD_WINDOW_MINUTES * 60 * 1000) },
+    },
+  });
+
+  if (recentAiMessageCount >= LOOP_GUARD_MAX_AI_MESSAGES) {
+    const reason =
+      `Possível loop automático: a IA já enviou ${recentAiMessageCount} mensagens nesta conversa nos ` +
+      `últimos ${LOOP_GUARD_WINDOW_MINUTES} minutos — pausada para revisão humana em vez de continuar ` +
+      `respondendo automaticamente (proteção contra loop com outro bot/conta conectada).`;
+    await prisma.conversation.update({
+      where: { id: conversation.id },
+      data: { status: "NEEDS_HUMAN", needsHumanReason: reason },
+    });
+    if (clinic.notifyWhatsappNumber && clinic.whatsappInstanceName) {
+      try {
+        await sendWhatsappMessage(
+          clinic.whatsappInstanceName,
+          clinic.notifyWhatsappNumber,
+          formatEscalationAlert({
+            clinicName: clinic.name,
+            leadName: lead.name ?? lead.igUsername ?? "lead sem nome",
+            leadPhone: lead.phone,
+            leadIgUsername: lead.igUsername,
+            reason,
+            conversationUrl: `${process.env.APP_URL ?? ""}/crm/conversas/${conversation.id}`,
+          })
+        );
+      } catch (err) {
+        console.error("[vexo] Falha ao notificar escalonamento (loop guard) via WhatsApp:", err);
+      }
+    }
+    return;
+  }
+
   const history = await prisma.message.findMany({
     where: { conversationId: conversation.id },
     orderBy: { createdAt: "asc" },
