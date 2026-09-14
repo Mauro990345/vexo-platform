@@ -287,6 +287,30 @@ export async function handleInboundInstagramMessage(
       data: { status: "NEEDS_HUMAN", needsHumanReason: signal.needsHumanReason ?? "Não especificado" },
     });
 
+    // Bug crítico real em produção: escalonar pra NEEDS_HUMAN nunca mandava
+    // NENHUMA mensagem de volta pro lead — só atualizava o status e (se
+    // configurado) avisava a clínica por WhatsApp, em silêncio. Do lado do
+    // lead isso é indistinguível de "a IA parou de responder": ele mandou
+    // uma mensagem nova (ex.: uma dúvida ou pedido relacionado à saúde,
+    // motivo legítimo de escalonamento pelo CLASSIFIER_SYSTEM_PROMPT) e
+    // simplesmente nunca recebeu nada de volta. Isso vale pra QUALQUER
+    // escalonamento, não só depois de agendamento confirmado — só ficou
+    // mais visível nesse teste porque a pergunta veio logo depois de
+    // marcar o horário. Mensagem curta e neutra, igual pra todo motivo de
+    // escalonamento (não tenta explicar o motivo específico ao lead) —
+    // só pra confirmar que a mensagem chegou e alguém vai continuar a
+    // conversa, em vez de deixar a conversa parecendo "morta".
+    await prisma.message.create({
+      data: {
+        conversationId: conversation.id,
+        direction: "OUTBOUND",
+        sender: "SYSTEM",
+        content: "Entendi! Vou repassar isso pra nossa equipe te dar mais detalhes por aqui, tá bom? 🙂",
+        status: "PENDING",
+        scheduledFor: new Date(Date.now() + FAST_REPLY_DELAY_SECONDS * 1000),
+      },
+    });
+
     if (clinic.notifyWhatsappNumber) {
       if (!clinic.whatsappInstanceName) {
         console.warn(`[vexo] Clínica ${clinic.id} sem WhatsApp conectado — notificação de escalonamento pulada.`);
@@ -530,6 +554,10 @@ export async function handleInboundInstagramMessage(
       leadId: lead.id,
       leadName: lead.name ?? lead.igUsername ?? undefined,
       startTimeIso: scheduledStartTime,
+      // Vídeo (se houver) só pode sair DEPOIS que a própria mensagem de
+      // confirmação (reply.text, criada acima com este mesmo scheduledFor)
+      // já tiver saído — ver comentário mais abaixo, dentro da função.
+      afterScheduledFor: scheduledFor,
     });
   }
 }
@@ -540,6 +568,7 @@ async function confirmAppointment(params: {
   leadId: string;
   leadName?: string;
   startTimeIso: string;
+  afterScheduledFor: Date;
 }) {
   // Buscado logo no início (não só mais abaixo, pra confirmationVideoUrl)
   // porque address também alimenta o evento do Google Calendar criado a
@@ -615,16 +644,43 @@ async function confirmAppointment(params: {
     data: { status: "SCHEDULED" },
   });
 
-  // Envio imediato (scheduledFor: agora) — dispatchDueMessages roda a
-  // cada 15s, então sai pro Instagram quase na hora, reforçando o
-  // comparecimento logo que o agendamento é confirmado na conversa.
+  // Bug real reportado em produção: o vídeo saía IMEDIATAMENTE
+  // (scheduledFor: agora), enquanto a própria mensagem de texto que
+  // confirma o agendamento pro lead (reply.text, criada em
+  // handleInboundInstagramMessage com um delay adaptativo de alguns
+  // segundos a poucos minutos — ver computeAdaptiveDelaySeconds) ainda
+  // estava PENDING, esperando esse delay passar. Resultado: o vídeo
+  // chegava pro lead antes da própria confirmação em texto (e antes de
+  // qualquer pedido de WhatsApp feito na mesma resposta) — sem contexto
+  // nenhum, "do nada". Corrigido ancorando o vídeo alguns segundos DEPOIS
+  // de params.afterScheduledFor (o scheduledFor da mensagem de
+  // confirmação), nunca antes dela.
+  //
+  // Também manda uma frase curta explicando o vídeo ANTES dele — a API do
+  // Instagram não permite combinar texto + mídia numa única mensagem (por
+  // isso vira dois envios separados, mesmo padrão já usado nos passos de
+  // follow-up com anexo em follow-up.ts), e sem isso o vídeo chegava sem
+  // nenhuma legenda/contexto (dispatchDueMessages descarta message.content
+  // quando mediaUrl está preenchido — só a mídia é enviada nesse caso).
   //
   // Trava contra reenvio: numa remarcação (bloco acima reaproveita o
   // MESMO Appointment em vez de criar outro), appointment.confirmationVideoSentAt
   // já reflete corretamente se o vídeo foi mandado antes — sem essa
   // checagem, ele seria disparado de novo a cada remarcação.
   if (clinic?.confirmationVideoUrl && !appointment.confirmationVideoSentAt) {
+    const introAt = new Date(params.afterScheduledFor.getTime() + 5_000);
+    const videoAt = new Date(params.afterScheduledFor.getTime() + 8_000);
     await prisma.$transaction([
+      prisma.message.create({
+        data: {
+          conversationId: params.conversationId,
+          direction: "OUTBOUND",
+          sender: "SYSTEM",
+          content: "Vou te mandar um vídeo rápido mostrando como é o nosso atendimento 🙂",
+          status: "PENDING",
+          scheduledFor: introAt,
+        },
+      }),
       prisma.message.create({
         data: {
           conversationId: params.conversationId,
@@ -633,7 +689,7 @@ async function confirmAppointment(params: {
           content: "[vídeo de confirmação de agendamento]",
           mediaUrl: clinic.confirmationVideoUrl,
           status: "PENDING",
-          scheduledFor: new Date(),
+          scheduledFor: videoAt,
         },
       }),
       prisma.appointment.update({
