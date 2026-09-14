@@ -82,17 +82,39 @@ export async function handleInboundInstagramMessage(
   // Sem essa busca extra, Lead.name/igUsername ficam null pra sempre, e
   // {{primeiro_nome}} (ver applyTemplateVariables mais abaixo) substitui
   // certinho por uma string vazia — não é bug de substituição, é falta de
-  // dado. Só tenta uma vez por lead (enquanto name estiver vazio) — best
-  // effort, uma falha aqui não pode impedir a conversa de continuar.
+  // dado. Tenta de novo em TODA mensagem enquanto name estiver vazio (não
+  // só na criação do lead) — um lead antigo, de antes dessa busca existir,
+  // já se autocorrige na próxima mensagem, sem precisar de backfill.
+  // Best effort, uma falha aqui não pode impedir a conversa de continuar
+  // — mas registra o resultado (sucesso, falha ou "sem nome retornado")
+  // em WebhookLog.processingError, senão uma falha nessa chamada
+  // específica ficaria invisível pra sempre (só no console do Railway,
+  // sem acesso), indistinguível de "a Meta genuinamente não devolveu
+  // nome" — motivo real reportado em produção: {{primeiro_nome}} continua
+  // vazio mesmo depois dessa correção, sem forma de saber por quê sem
+  // isso aqui.
   if (!lead.name) {
     try {
       const profile = await getInstagramUserProfile(decryptToken(igAccount.accessTokenEnc), lead.igScopedId);
       if (profile.name) {
         await prisma.lead.update({ where: { id: lead.id }, data: { name: profile.name } });
         lead.name = profile.name;
+      } else if (webhookLogId) {
+        await prisma.webhookLog
+          .update({
+            where: { id: webhookLogId },
+            data: { processingError: `getInstagramUserProfile não devolveu "name" pra igScopedId=${lead.igScopedId} (resposta sem esse campo).` },
+          })
+          .catch((updateErr) => console.error("[vexo] Falha ao gravar diagnóstico de perfil do lead:", updateErr));
       }
     } catch (err) {
       console.error("[vexo] Falha ao buscar nome do perfil do lead:", err);
+      if (webhookLogId) {
+        const detail = err instanceof Error ? `${err.message}\n${err.stack ?? ""}` : String(err);
+        await prisma.webhookLog
+          .update({ where: { id: webhookLogId }, data: { processingError: `Falha ao buscar nome do lead: ${detail}`.slice(0, 4000) } })
+          .catch((updateErr) => console.error("[vexo] Falha ao gravar diagnóstico de perfil do lead:", updateErr));
+      }
     }
   }
 
