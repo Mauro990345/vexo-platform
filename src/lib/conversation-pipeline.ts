@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { classifyConversation, generateLeadReply, type AgentTools } from "@/lib/anthropic";
-import { checkAvailability, createCalendarEvent } from "@/lib/google-calendar";
+import { checkAvailability, createCalendarEvent, getRawBusyPeriods } from "@/lib/google-calendar";
 import { getInstagramUserProfile } from "@/lib/instagram";
 import { decryptToken } from "@/lib/crypto";
 import { computeAdaptiveDelaySeconds, FAST_REPLY_DELAY_SECONDS } from "@/lib/scheduler";
@@ -343,6 +343,31 @@ export async function handleInboundInstagramMessage(
           () => [] as string[]
         );
         if (!freeSlots.includes(start.toISOString())) {
+          // Diagnóstico: registra o que o Google devolveu de verdade (conta,
+          // calendário, períodos ocupados crus do dia inteiro) em
+          // WebhookLog.processingError — sem isso, uma rejeição "estranha"
+          // (ex.: horário que deveria estar livre) fica sem forma de
+          // confirmar se é um evento genuíno na agenda conectada ou um bug
+          // na lógica de disponibilidade. Best effort — falha aqui não pode
+          // impedir a resposta normal ao lead.
+          if (webhookLogId) {
+            const dayStart = new Date(start);
+            dayStart.setUTCHours(0, 0, 0, 0);
+            const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
+            await getRawBusyPeriods(clinic.id, dayStart.toISOString(), dayEnd.toISOString())
+              .then((raw) =>
+                prisma.webhookLog.update({
+                  where: { id: webhookLogId },
+                  data: {
+                    processingError:
+                      `schedule_appointment rejeitou ${args.startTime} (não está em freeSlots). ` +
+                      `Conta Google: ${raw.googleAccountEmail} (calendarId=${raw.calendarId}). ` +
+                      `Períodos ocupados crus do dia (UTC): ${JSON.stringify(raw.busy)}`.slice(0, 4000),
+                  },
+                })
+              )
+              .catch((err) => console.error("[vexo] Falha ao gravar diagnóstico de disponibilidade:", err));
+          }
           return {
             error:
               `O horário ${args.startTime} não está livre (ou está fora do horário de funcionamento). ` +

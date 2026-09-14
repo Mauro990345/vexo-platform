@@ -100,6 +100,40 @@ export async function clientForClinic(clinicId: string) {
   return { client, calendarId: account.calendarId };
 }
 
+// Diagnóstico: expõe, sem nenhuma interpretação/filtro do VEXO, os
+// períodos "ocupados" crus que o Google devolveu pra uma janela, mais o
+// e-mail e o ID do calendário efetivamente consultados. Motivado por um
+// relato em produção: schedule_appointment rejeitou um horário numa
+// agenda "de teste completamente vazia", sugerindo (mas não provando)
+// bug na lógica de checkAvailability. Suspeita mais provável, olhando o
+// resto do código: não existe seletor de calendário em lugar nenhum da
+// interface — GoogleCalendarAccount.calendarId sempre usa o default
+// "primary" (ver schema.prisma), então o VEXO sempre lê o calendário
+// PRINCIPAL da conta Google autorizada. Se essa "agenda de teste" foi
+// conectada com uma conta Google pessoal/real (em vez de uma conta
+// dedicada só pra isso), "primary" aponta pro calendário de verdade
+// dessa pessoa — que pode ter compromissos reais sem nenhuma relação com
+// o VEXO. Essa função devolve o dado cru (googleAccountEmail +
+// calendarId + os períodos ocupados exatos) pra confirmar isso com
+// certeza, em vez de supor.
+export async function getRawBusyPeriods(
+  clinicId: string,
+  dateFrom: string,
+  dateTo: string
+): Promise<{ googleAccountEmail: string; calendarId: string; busy: { start?: string | null; end?: string | null }[] }> {
+  const account = await prisma.googleCalendarAccount.findUniqueOrThrow({ where: { clinicId } });
+  const { client, calendarId } = await clientForClinic(clinicId);
+  const calendar = google.calendar({ version: "v3", auth: client });
+  const { data } = await calendar.freebusy.query({
+    requestBody: { timeMin: dateFrom, timeMax: dateTo, items: [{ id: calendarId }] },
+  });
+  return {
+    googleAccountEmail: account.googleAccountEmail,
+    calendarId,
+    busy: data.calendars?.[calendarId]?.busy ?? [],
+  };
+}
+
 export async function checkAvailability(
   clinicId: string,
   dateFrom: string,
