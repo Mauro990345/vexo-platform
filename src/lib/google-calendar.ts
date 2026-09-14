@@ -202,3 +202,27 @@ export async function createCalendarEvent(
   if (!data.id) throw new Error("Google Calendar não retornou ID do evento criado.");
   return data.id;
 }
+
+// Move um evento JÁ EXISTENTE pra um novo horário (remarcação), em vez de
+// criar outro — usado por confirmAppointment (conversation-pipeline.ts)
+// quando a conversa já tem um Appointment ativo e o lead pede outro
+// horário. Bug real em produção: sem essa distinção entre "primeira
+// confirmação" e "remarcação", cada chamada bem-sucedida de
+// schedule_appointment criava um Appointment + evento novo no Google
+// Calendar, duplicando o compromisso na agenda real da clínica.
+export async function updateCalendarEvent(clinicId: string, eventId: string, startTimeIso: string): Promise<void> {
+  const { client, calendarId } = await clientForClinic(clinicId);
+  const calendar = google.calendar({ version: "v3", auth: client });
+
+  const start = new Date(startTimeIso);
+  const end = new Date(start.getTime() + 60 * 60 * 1000);
+
+  await calendar.events.patch({
+    calendarId,
+    eventId,
+    requestBody: {
+      start: { dateTime: start.toISOString() },
+      end: { dateTime: end.toISOString() },
+    },
+  });
+}

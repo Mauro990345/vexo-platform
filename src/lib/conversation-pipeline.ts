@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { classifyConversation, generateLeadReply, type AgentTools } from "@/lib/anthropic";
-import { checkAvailability, createCalendarEvent, getRawBusyPeriods } from "@/lib/google-calendar";
+import { checkAvailability, createCalendarEvent, updateCalendarEvent, getRawBusyPeriods } from "@/lib/google-calendar";
 import { getInstagramUserProfile } from "@/lib/instagram";
 import { decryptToken } from "@/lib/crypto";
 import { computeAdaptiveDelaySeconds, FAST_REPLY_DELAY_SECONDS } from "@/lib/scheduler";
@@ -473,28 +473,69 @@ async function confirmAppointment(params: {
   // precisar digitar de novo aqui.
   const clinic = await prisma.clinic.findUnique({ where: { id: params.clinicId } });
 
-  let googleEventId: string | undefined;
-  try {
-    googleEventId = await createCalendarEvent(
-      params.clinicId,
-      params.startTimeIso,
-      `VEXO — Avaliação: ${params.leadName ?? "lead"}`,
-      clinic?.address ?? undefined
-    );
-  } catch (err) {
-    console.error("[vexo] Falha ao criar evento no Google Calendar:", err);
+  // Idempotente por conversa — bug real em produção: cada chamada
+  // bem-sucedida de schedule_appointment nesta MESMA conversa criava um
+  // Appointment + evento NOVO no Google Calendar, em vez de reaproveitar
+  // o que já existia. Confirmado direto na agenda real (dois eventos
+  // reais, mesmo lead, mesma conversa). O comentário mais abaixo (trava
+  // de reenvio do vídeo de confirmação) já apontava esse risco, mas só
+  // cobria o efeito colateral do vídeo — nunca a duplicata em si.
+  const existing = await prisma.appointment.findFirst({
+    where: { conversationId: params.conversationId, status: { in: ["SCHEDULED", "CONFIRMED"] } },
+    orderBy: { createdAt: "desc" },
+  });
+
+  const newScheduledAt = new Date(params.startTimeIso);
+  let appointment: { id: string; confirmationVideoSentAt: Date | null };
+
+  if (existing) {
+    if (existing.scheduledAt.getTime() === newScheduledAt.getTime()) {
+      // Mesmo horário já confirmado antes nesta conversa (reenvio da
+      // mesma chamada, ou o modelo confirmando de novo o que já estava
+      // certo) — reaproveita sem mexer no Google Calendar nem duplicar.
+      appointment = existing;
+    } else {
+      // Horário diferente do já agendado nesta conversa = remarcação:
+      // move o evento EXISTENTE em vez de criar outro.
+      if (existing.googleEventId) {
+        try {
+          await updateCalendarEvent(params.clinicId, existing.googleEventId, params.startTimeIso);
+        } catch (err) {
+          console.error("[vexo] Falha ao mover evento no Google Calendar:", err);
+        }
+      }
+      appointment = await prisma.appointment.update({
+        where: { id: existing.id },
+        data: { scheduledAt: newScheduledAt },
+        select: { id: true, confirmationVideoSentAt: true },
+      });
+    }
+  } else {
+    let googleEventId: string | undefined;
+    try {
+      googleEventId = await createCalendarEvent(
+        params.clinicId,
+        params.startTimeIso,
+        `VEXO — Avaliação: ${params.leadName ?? "lead"}`,
+        clinic?.address ?? undefined
+      );
+    } catch (err) {
+      console.error("[vexo] Falha ao criar evento no Google Calendar:", err);
+    }
+
+    appointment = await prisma.appointment.create({
+      data: {
+        clinicId: params.clinicId,
+        conversationId: params.conversationId,
+        leadId: params.leadId,
+        scheduledAt: newScheduledAt,
+        googleEventId,
+        status: "SCHEDULED",
+      },
+      select: { id: true, confirmationVideoSentAt: true },
+    });
   }
 
-  const appointment = await prisma.appointment.create({
-    data: {
-      clinicId: params.clinicId,
-      conversationId: params.conversationId,
-      leadId: params.leadId,
-      scheduledAt: new Date(params.startTimeIso),
-      googleEventId,
-      status: "SCHEDULED",
-    },
-  });
   await prisma.conversation.update({
     where: { id: params.conversationId },
     data: { status: "SCHEDULED" },
@@ -504,17 +545,11 @@ async function confirmAppointment(params: {
   // cada 15s, então sai pro Instagram quase na hora, reforçando o
   // comparecimento logo que o agendamento é confirmado na conversa.
   //
-  // Trava contra reenvio: se o lead remarcar dentro da MESMA conversa,
-  // confirmAppointment roda de novo e criaria um Appointment novo — sem
-  // essa checagem, o vídeo seria disparado outra vez a cada remarcação.
-  // Busca em TODOS os agendamentos já feitos nesta conversationId (o que
-  // acabou de ser criado ainda não tem confirmationVideoSentAt, então
-  // nunca bate consigo mesmo) se algum já recebeu o vídeo.
-  const alreadySentVideo = await prisma.appointment.findFirst({
-    where: { conversationId: params.conversationId, confirmationVideoSentAt: { not: null } },
-    select: { id: true },
-  });
-  if (clinic?.confirmationVideoUrl && !alreadySentVideo) {
+  // Trava contra reenvio: numa remarcação (bloco acima reaproveita o
+  // MESMO Appointment em vez de criar outro), appointment.confirmationVideoSentAt
+  // já reflete corretamente se o vídeo foi mandado antes — sem essa
+  // checagem, ele seria disparado de novo a cada remarcação.
+  if (clinic?.confirmationVideoUrl && !appointment.confirmationVideoSentAt) {
     await prisma.$transaction([
       prisma.message.create({
         data: {
