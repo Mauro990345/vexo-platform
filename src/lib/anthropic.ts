@@ -43,8 +43,16 @@ puramente de bastidor: classificar o estado da conversa, nunca responder ao lead
 
 Responda SOMENTE com um JSON no formato:
 {
-  "needsHuman": boolean,       // true se houver reclamação, insatisfação, pedido explícito de humano,
-                                 // dúvida médica sensível fora do escopo comercial, ou mensagem hostil/abusiva
+  "needsHuman": boolean,       // true se houver insatisfação genuína (preço, atendimento, resultado do
+                                 // procedimento etc.), pedido EXPLÍCITO de falar com humano/atendente, dúvida
+                                 // médica sensível fora do escopo comercial, ou mensagem hostil/abusiva.
+                                 // IMPORTANTE: o lead apontando um erro ou contradição PONTUAL da própria IA
+                                 // nesta mesma conversa (ex: um horário que a IA disse estar livre e depois
+                                 // corrigiu, uma informação que mudou) NÃO conta como motivo de escalonamento
+                                 // sozinho — é um erro corrigível na hora, não uma reclamação sobre a clínica
+                                 // ou insatisfação real. Só escalone por causa disso se o lead, além de apontar
+                                 // o erro, também demonstrar insatisfação clara com o atendimento em si ou
+                                 // pedir explicitamente um humano.
   "needsHumanReason": string,   // curto motivo, vazio se needsHuman=false
   "summary": string,            // resumo de 1-2 frases do estado atual da conversa
   "suggestedFollowUp": boolean  // true se o lead sumiu sem concluir agendamento/recusa explícita
@@ -91,7 +99,7 @@ export type AgentTools = {
   checkAvailability: (args: { dateFrom: string; dateTo: string }) => Promise<
     { slots: string[] } | { error: string }
   >;
-  scheduleAppointment: (args: { startTime: string; leadName?: string }) => Promise<
+  scheduleAppointment: (args: { startTime: string; leadName?: string; leadConfirmationQuote?: string }) => Promise<
     { confirmed: true; startTime: string } | { error: string }
   >;
   // Chamada quando o lead informa o WhatsApp na conversa — normalmente logo
@@ -132,10 +140,13 @@ const TOOLS: Anthropic.Tool[] = [
   {
     name: "schedule_appointment",
     description:
-      "Confirma o agendamento em um horário específico, já validado como disponível via check_availability " +
-      "NESTA MESMA conversa. Só chame depois que o lead confirmar explicitamente o horário, e só depois de já " +
-      "ter chamado check_availability pra esse horário — nunca diga ao lead que o horário está confirmado " +
-      "antes de chamar esta ferramenta e ela retornar sucesso.",
+      "Confirma o agendamento em um horário específico. Regras rígidas, nessa ordem: (1) já ter chamado " +
+      "check_availability pra esse horário exato NESTA MESMA conversa; (2) o lead ter confirmado explícita e " +
+      "claramente ESSE horário específico — não chame se a conversa ficou ambígua ou contraditória sobre qual " +
+      "horário ficou combinado; (3) só então chamar esta ferramenta. A ferramenta reverifica a disponibilidade " +
+      "de novo por conta própria e rejeita se não estiver realmente livre. NUNCA diga ao lead que o horário " +
+      "está confirmado/reservado antes de chamar esta ferramenta e ela retornar sucesso — se ela retornar erro, " +
+      "NÃO diga que está confirmado; ofereça outro horário.",
     input_schema: {
       type: "object",
       properties: {
@@ -144,8 +155,14 @@ const TOOLS: Anthropic.Tool[] = [
           description: "Data/hora de início em ISO 8601 UTC, com sufixo \"Z\" (ex.: \"2026-09-14T17:00:00Z\").",
         },
         leadName: { type: "string", description: "Nome do lead, se conhecido." },
+        leadConfirmationQuote: {
+          type: "string",
+          description:
+            "Cite a mensagem exata (ou trecho dela) em que o lead confirmou ESSE horário específico. Obrigatório " +
+            "— se não houver uma confirmação clara e específica pra citar, não chame esta ferramenta ainda.",
+        },
       },
-      required: ["startTime"],
+      required: ["startTime", "leadConfirmationQuote"],
     },
   },
   {
@@ -216,7 +233,7 @@ export async function generateLeadReply(params: {
           block.input as { dateFrom: string; dateTo: string }
         );
       } else if (block.name === "schedule_appointment") {
-        const input = block.input as { startTime: string; leadName?: string };
+        const input = block.input as { startTime: string; leadName?: string; leadConfirmationQuote?: string };
         const outcome = await params.tools.scheduleAppointment(input);
         result = outcome;
         if ("confirmed" in outcome && outcome.confirmed) {

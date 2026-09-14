@@ -298,14 +298,57 @@ export async function handleInboundInstagramMessage(
     `sufixo "Z" (ex.: 14h de Brasília = 17:00 UTC = "...T17:00:00Z") — nunca mande um horário ` +
     `sem timezone explícito. NUNCA diga ao lead que um horário está reservado/confirmado antes ` +
     `de check_availability confirmar que está livre E schedule_appointment ter sido chamado com ` +
-    `sucesso, nessa ordem — não confirme adiantado, mesmo que pareça óbvio que vai dar certo.]`;
+    `sucesso, nessa ordem — não confirme adiantado, mesmo que pareça óbvio que vai dar certo. Se ` +
+    `depois de oferecer um horário você descobrir que ele não está mais livre, deixe claro pro ` +
+    `lead que aquele horário específico não está confirmado e pergunte qual dos horários ` +
+    `alternativos ele prefere — só chame schedule_appointment depois que ele responder claramente ` +
+    `qual dos horários quer; se a resposta dele ficar ambígua entre mais de um horário oferecido, ` +
+    `pergunte de novo pra confirmar qual exatamente, em vez de escolher um sozinho.]`;
 
   const reply = await generateLeadReply({
     systemPrompt: `${basePrompt}\n\n${dateTimeContext}`,
     history: chatHistory,
     tools: {
       checkAvailability: buildAvailabilityCheck(clinic.id),
+      // Nunca confia no que a conversa "disse" ter confirmado — bug real em
+      // produção: a IA ofereceu um horário sem checar disponibilidade de
+      // verdade, o lead confirmou, só DEPOIS a IA descobriu que estava
+      // ocupado, e mesmo com a contradição nunca resolvida (não ficou
+      // claro se o lead escolheu 11h ou 12h), um agendamento foi criado
+      // mesmo assim. Essa é a trava de fato: reverifica a disponibilidade
+      // real (Google Calendar) bem na hora de gravar, não importa quantas
+      // vezes check_availability já rodou antes na conversa — pode ter
+      // passado tempo, ou o modelo pode simplesmente não ter checado.
+      // Rejeita (força o modelo a chamar check_availability de novo e
+      // reoferecer) se o horário não estiver genuinamente livre.
       async scheduleAppointment(args) {
+        const start = new Date(args.startTime);
+        if (Number.isNaN(start.getTime())) {
+          return { error: "startTime inválido — precisa ser um ISO 8601 UTC válido (com sufixo \"Z\")." };
+        }
+        // Consentimento explícito do lead pra ESSE horário específico não dá
+        // pra verificar por código sozinho (entender linguagem natural) —
+        // mas exigir uma citação da mensagem real do lead reduz bastante
+        // confirmação inventada: sem uma frase de verdade pra citar, fica
+        // mais difícil o modelo simplesmente afirmar que foi confirmado.
+        if (!args.leadConfirmationQuote?.trim()) {
+          return {
+            error:
+              "Inclua leadConfirmationQuote com a mensagem exata em que o lead confirmou ESSE horário específico " +
+              "antes de chamar esta ferramenta.",
+          };
+        }
+        const end = new Date(start.getTime() + 60 * 60 * 1000);
+        const freeSlots = await checkAvailability(clinic.id, start.toISOString(), end.toISOString()).catch(
+          () => [] as string[]
+        );
+        if (!freeSlots.includes(start.toISOString())) {
+          return {
+            error:
+              `O horário ${args.startTime} não está livre (ou está fora do horário de funcionamento). ` +
+              `Chame check_availability de novo e ofereça outro horário — não confirme este ao lead.`,
+          };
+        }
         scheduledStartTime = args.startTime;
         return { confirmed: true, startTime: args.startTime };
       },
