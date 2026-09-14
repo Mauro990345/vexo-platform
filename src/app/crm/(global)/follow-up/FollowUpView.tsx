@@ -3,6 +3,7 @@ import type { FollowUpStep, FollowUpTrigger } from "@prisma/client";
 import { Clock, CalendarX } from "lucide-react";
 import { Tabs } from "@/components/Tabs";
 import { TemplateMessageField } from "@/components/TemplateMessageField";
+import { AttachmentField } from "@/components/AttachmentField";
 import {
   addFollowUpStep,
   updateFollowUpStep,
@@ -120,15 +121,12 @@ function StepList({
                     </div>
                   )}
                   <input type="hidden" name="currentAttachmentUrl" value={step.attachmentUrl ?? ""} />
-                  <input
-                    name="attachmentFile"
-                    type="file"
-                    accept="image/*,video/*"
-                    className="block w-full text-xs text-vexo-muted file:mr-2 file:rounded-lg file:border file:border-vexo-border file:bg-vexo-bg file:px-2.5 file:py-1.5 file:text-xs file:text-vexo-fg hover:file:border-vexo-accent"
+                  <AttachmentField
+                    key={step.attachmentUrl ?? "none"}
+                    helpText={
+                      step.attachmentUrl ? "Escolher um novo arquivo substitui o atual." : "JPG, PNG, WEBP, GIF, MP4, MOV ou WEBM — até 25MB."
+                    }
                   />
-                  <p className="mt-1 text-card text-vexo-muted">
-                    {step.attachmentUrl ? "Escolher um novo arquivo substitui o atual." : "JPG, PNG, WEBP, GIF, MP4, MOV ou WEBM — até 25MB."}
-                  </p>
                 </div>
 
                 <button
@@ -164,13 +162,7 @@ function StepList({
 
         <div>
           <label className="mb-1 block text-xs text-vexo-muted">Anexo (opcional — imagem ou vídeo)</label>
-          <input
-            name="attachmentFile"
-            type="file"
-            accept="image/*,video/*"
-            className="block w-full text-xs text-vexo-muted file:mr-2 file:rounded-lg file:border file:border-vexo-border file:bg-vexo-bg file:px-2.5 file:py-1.5 file:text-xs file:text-vexo-fg hover:file:border-vexo-accent"
-          />
-          <p className="mt-1 text-card text-vexo-muted">JPG, PNG, WEBP, GIF, MP4, MOV ou WEBM — até 25MB.</p>
+          <AttachmentField key={steps.length} helpText="JPG, PNG, WEBP, GIF, MP4, MOV ou WEBM — até 25MB." />
         </div>
 
         <button
