@@ -102,6 +102,12 @@ export type AgentTools = {
   scheduleAppointment: (args: { startTime: string; leadName?: string; leadConfirmationQuote?: string }) => Promise<
     { confirmed: true; startTime: string } | { error: string }
   >;
+  // Leitura pura, sem side effect — consulta o agendamento ativo do lead
+  // NESTA conversa (o sistema já sabe quem está conversando, não precisa
+  // perguntar). Usada tanto pra responder "esqueci meu horário"/"quando é
+  // minha consulta" quanto como primeiro passo antes de uma remarcação
+  // (ver schedule_appointment).
+  checkCurrentAppointment: () => Promise<{ scheduledAt: string } | { none: true }>;
   // Chamada quando o lead informa o WhatsApp na conversa — normalmente logo
   // depois de confirmar o agendamento, se o prompt da clínica pedir esse
   // dado nesse momento (ver Clinic.aiSystemPrompt). Sem isso o número fica
@@ -140,13 +146,18 @@ const TOOLS: Anthropic.Tool[] = [
   {
     name: "schedule_appointment",
     description:
-      "Confirma o agendamento em um horário específico. Regras rígidas, nessa ordem: (1) já ter chamado " +
-      "check_availability pra esse horário exato NESTA MESMA conversa; (2) o lead ter confirmado explícita e " +
-      "claramente ESSE horário específico — não chame se a conversa ficou ambígua ou contraditória sobre qual " +
-      "horário ficou combinado; (3) só então chamar esta ferramenta. A ferramenta reverifica a disponibilidade " +
-      "de novo por conta própria e rejeita se não estiver realmente livre. NUNCA diga ao lead que o horário " +
-      "está confirmado/reservado antes de chamar esta ferramenta e ela retornar sucesso — se ela retornar erro, " +
-      "NÃO diga que está confirmado; ofereça outro horário.",
+      "Confirma o agendamento em um horário específico — TAMBÉM é essa a ferramenta certa pra REMARCAR um " +
+      "agendamento que o lead já tem (ex.: \"quero mudar meu horário\", \"posso remarcar?\"): chame do mesmo " +
+      "jeito, com o horário NOVO — o sistema identifica sozinho que já existe um agendamento nesta conversa e " +
+      "MOVE ele pro novo horário em vez de criar um segundo. Se não tiver certeza se o lead já tem um horário " +
+      "marcado, chame check_current_appointment antes. Regras rígidas, nessa ordem, valem igual pra primeira " +
+      "marcação e pra remarcação: (1) já ter chamado check_availability pra esse horário exato NESTA MESMA " +
+      "conversa; (2) o lead ter confirmado explícita e claramente ESSE horário específico — não chame se a " +
+      "conversa ficou ambígua ou contraditória sobre qual horário ficou combinado; (3) só então chamar esta " +
+      "ferramenta. A ferramenta reverifica a disponibilidade de novo por conta própria e rejeita se não estiver " +
+      "realmente livre. NUNCA diga ao lead que o horário está confirmado/reservado (ou remarcado) antes de " +
+      "chamar esta ferramenta e ela retornar sucesso — se ela retornar erro, NÃO diga que está confirmado; " +
+      "ofereça outro horário.",
     input_schema: {
       type: "object",
       properties: {
@@ -176,6 +187,15 @@ const TOOLS: Anthropic.Tool[] = [
       },
       required: ["phone"],
     },
+  },
+  {
+    name: "check_current_appointment",
+    description:
+      "Consulta se o lead já tem um agendamento ativo NESTA conversa, e qual o horário — leitura pura, sem " +
+      "nenhum efeito colateral. Use antes de responder perguntas como \"esqueci meu horário\", \"quando é minha " +
+      "consulta?\" ou \"posso remarcar?\", e também como primeiro passo antes de uma remarcação (ver " +
+      "schedule_appointment) se não tiver certeza do horário atual.",
+    input_schema: { type: "object", properties: {}, required: [] },
   },
   {
     name: "send_result_photo",
@@ -239,6 +259,8 @@ export async function generateLeadReply(params: {
         if ("confirmed" in outcome && outcome.confirmed) {
           scheduled = { startTime: outcome.startTime };
         }
+      } else if (block.name === "check_current_appointment") {
+        result = await params.tools.checkCurrentAppointment();
       } else if (block.name === "save_lead_phone") {
         result = await params.tools.saveLeadPhone(block.input as { phone: string });
       } else if (block.name === "send_result_photo") {

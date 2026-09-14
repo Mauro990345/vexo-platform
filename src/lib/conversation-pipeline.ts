@@ -303,13 +303,30 @@ export async function handleInboundInstagramMessage(
     `lead que aquele horário específico não está confirmado e pergunte qual dos horários ` +
     `alternativos ele prefere — só chame schedule_appointment depois que ele responder claramente ` +
     `qual dos horários quer; se a resposta dele ficar ambígua entre mais de um horário oferecido, ` +
-    `pergunte de novo pra confirmar qual exatamente, em vez de escolher um sozinho.]`;
+    `pergunte de novo pra confirmar qual exatamente, em vez de escolher um sozinho. Se o lead ` +
+    `perguntar sobre o horário marcado (ex.: "esqueci meu horário", "quando é minha consulta?") ` +
+    `ou pedir pra remarcar, chame check_current_appointment antes de responder — não confie só no ` +
+    `histórico da conversa. Remarcação usa a MESMA schedule_appointment, com o horário novo (as ` +
+    `mesmas regras de confirmação valem); o sistema identifica sozinho que já existe um ` +
+    `agendamento e move ele em vez de criar outro.]`;
 
   const reply = await generateLeadReply({
     systemPrompt: `${basePrompt}\n\n${dateTimeContext}`,
     history: chatHistory,
     tools: {
       checkAvailability: buildAvailabilityCheck(clinic.id),
+      // Leitura pura (sem side effect) — mesma consulta que confirmAppointment
+      // já faz pra decidir criar vs. mover um agendamento, exposta aqui pra
+      // IA poder responder "esqueci meu horário"/"quando é minha consulta?"
+      // e servir de primeiro passo antes de uma remarcação.
+      async checkCurrentAppointment() {
+        const active = await prisma.appointment.findFirst({
+          where: { conversationId: conversation.id, status: { in: ["SCHEDULED", "CONFIRMED"] } },
+          orderBy: { createdAt: "desc" },
+        });
+        if (!active) return { none: true as const };
+        return { scheduledAt: active.scheduledAt.toISOString() };
+      },
       // Nunca confia no que a conversa "disse" ter confirmado — bug real em
       // produção: a IA ofereceu um horário sem checar disponibilidade de
       // verdade, o lead confirmou, só DEPOIS a IA descobriu que estava
