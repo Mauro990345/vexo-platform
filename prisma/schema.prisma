@@ -64,6 +64,14 @@ model Clinic {
   // agendamento confirmado, não no início do atendimento).
   confirmationVideoUrl String?
 
+  // Frase enviada como mensagem de texto separada, logo ANTES do vídeo
+  // acima (a API do Instagram não permite combinar texto + mídia numa
+  // mensagem só) — explica pro lead o que é aquele vídeo que está prestes
+  // a chegar. Antes era um texto fixo no código (não editável por
+  // clínica); null usa um texto padrão genérico (ver DEFAULT_
+  // CONFIRMATION_VIDEO_CAPTION em conversation-pipeline.ts).
+  confirmationVideoCaption String? @db.Text
+
   // Delay de resposta da IA quando o lead está em silêncio há até 1h (ver
   // computeAdaptiveDelaySeconds em src/lib/scheduler.ts) — por clínica,
   // não global: cada uma pode querer um tom de "primeira resposta"

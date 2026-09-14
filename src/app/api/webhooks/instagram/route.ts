@@ -170,13 +170,25 @@ export async function POST(req: NextRequest) {
 
   for (const entry of payload.entry ?? []) {
     for (const event of entry.messaging ?? []) {
-      // Ignora eco de mensagens enviadas pela própria página (nossas
-      // próprias respostas) — "is_echo" só existe em "message", nunca em
-      // "message_edit" (não tem eco de edição). Trata o texto final de
-      // uma mensagem editada igual a uma mensagem nova: é o que o lead
-      // disse de verdade agora, independente de ter sido digitado ou
-      // corrigido depois.
-      const inbound = event.message?.is_echo ? undefined : event.message ?? event.message_edit;
+      // Bug crítico real em produção: uma mensagem mandada MANUALMENTE
+      // pela própria clínica (a abordagem inicial, via app nativo do
+      // Instagram — nunca pelo VEXO, que não tem tela de envio manual)
+      // fez a IA responder sozinha ~20s depois, sem o lead ter dito nada
+      // — quebrando a estratégia central do produto (operador aborda,
+      // IA só assume depois que o LEAD responde). is_echo=true é o sinal
+      // "oficial" da Meta pra "esta mensagem foi enviada pela própria
+      // página", mas nada garante que ele venha preenchido pra mensagens
+      // mandadas pelo app nativo do Instagram (só documentado de forma
+      // confiável pra quem manda via Send API — nosso próprio envio via
+      // sendInstagramMessage) — esse produto (Instagram API with
+      // Instagram Login) já mostrou mais de uma vez nesta integração se
+      // comportar diferente do documentado pro Messenger clássico. Por
+      // isso NÃO confia só em is_echo: sender.id === entry.id (a própria
+      // conta profissional dona deste webhook) é prova estrutural e
+      // independente de que quem mandou foi a clínica, não um lead —
+      // funciona mesmo se is_echo vier ausente/false.
+      const fromOwnAccount = event.sender.id === entry.id || Boolean(event.message?.is_echo);
+      const inbound = fromOwnAccount ? undefined : event.message ?? event.message_edit;
       if (!inbound?.text) continue;
 
       try {

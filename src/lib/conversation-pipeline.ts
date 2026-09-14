@@ -11,6 +11,10 @@ import { toChatHistory } from "@/lib/chat-history";
 
 export { toChatHistory } from "@/lib/chat-history";
 
+// Usado quando Clinic.confirmationVideoCaption está vazio (editável em
+// /crm/clinicas/[id]/agente-ia) — ver confirmAppointment mais abaixo.
+const DEFAULT_CONFIRMATION_VIDEO_CAPTION = "Vou te mandar um vídeo rápido mostrando como é o nosso atendimento 🙂";
+
 export type InboundInstagramEvent = {
   igUserId: string; // ID da conta profissional do Instagram da clínica (destinatária)
   leadIgScopedId: string;
@@ -670,13 +674,14 @@ async function confirmAppointment(params: {
   if (clinic?.confirmationVideoUrl && !appointment.confirmationVideoSentAt) {
     const introAt = new Date(params.afterScheduledFor.getTime() + 5_000);
     const videoAt = new Date(params.afterScheduledFor.getTime() + 8_000);
+    const introText = clinic.confirmationVideoCaption?.trim() || DEFAULT_CONFIRMATION_VIDEO_CAPTION;
     await prisma.$transaction([
       prisma.message.create({
         data: {
           conversationId: params.conversationId,
           direction: "OUTBOUND",
           sender: "SYSTEM",
-          content: "Vou te mandar um vídeo rápido mostrando como é o nosso atendimento 🙂",
+          content: introText,
           status: "PENDING",
           scheduledFor: introAt,
         },
