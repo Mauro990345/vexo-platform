@@ -100,6 +100,40 @@ export async function clientForClinic(clinicId: string) {
   return { client, calendarId: account.calendarId };
 }
 
+// Diagnóstico: expõe, sem nenhuma interpretação/filtro do VEXO, os
+// períodos "ocupados" crus que o Google devolveu pra uma janela, mais o
+// e-mail e o ID do calendário efetivamente consultados. Motivado por um
+// relato em produção: schedule_appointment rejeitou um horário numa
+// agenda "de teste completamente vazia", sugerindo (mas não provando)
+// bug na lógica de checkAvailability. Suspeita mais provável, olhando o
+// resto do código: não existe seletor de calendário em lugar nenhum da
+// interface — GoogleCalendarAccount.calendarId sempre usa o default
+// "primary" (ver schema.prisma), então o VEXO sempre lê o calendário
+// PRINCIPAL da conta Google autorizada. Se essa "agenda de teste" foi
+// conectada com uma conta Google pessoal/real (em vez de uma conta
+// dedicada só pra isso), "primary" aponta pro calendário de verdade
+// dessa pessoa — que pode ter compromissos reais sem nenhuma relação com
+// o VEXO. Essa função devolve o dado cru (googleAccountEmail +
+// calendarId + os períodos ocupados exatos) pra confirmar isso com
+// certeza, em vez de supor.
+export async function getRawBusyPeriods(
+  clinicId: string,
+  dateFrom: string,
+  dateTo: string
+): Promise<{ googleAccountEmail: string; calendarId: string; busy: { start?: string | null; end?: string | null }[] }> {
+  const account = await prisma.googleCalendarAccount.findUniqueOrThrow({ where: { clinicId } });
+  const { client, calendarId } = await clientForClinic(clinicId);
+  const calendar = google.calendar({ version: "v3", auth: client });
+  const { data } = await calendar.freebusy.query({
+    requestBody: { timeMin: dateFrom, timeMax: dateTo, items: [{ id: calendarId }] },
+  });
+  return {
+    googleAccountEmail: account.googleAccountEmail,
+    calendarId,
+    busy: data.calendars?.[calendarId]?.busy ?? [],
+  };
+}
+
 export async function checkAvailability(
   clinicId: string,
   dateFrom: string,
@@ -167,4 +201,28 @@ export async function createCalendarEvent(
 
   if (!data.id) throw new Error("Google Calendar não retornou ID do evento criado.");
   return data.id;
+}
+
+// Move um evento JÁ EXISTENTE pra um novo horário (remarcação), em vez de
+// criar outro — usado por confirmAppointment (conversation-pipeline.ts)
+// quando a conversa já tem um Appointment ativo e o lead pede outro
+// horário. Bug real em produção: sem essa distinção entre "primeira
+// confirmação" e "remarcação", cada chamada bem-sucedida de
+// schedule_appointment criava um Appointment + evento novo no Google
+// Calendar, duplicando o compromisso na agenda real da clínica.
+export async function updateCalendarEvent(clinicId: string, eventId: string, startTimeIso: string): Promise<void> {
+  const { client, calendarId } = await clientForClinic(clinicId);
+  const calendar = google.calendar({ version: "v3", auth: client });
+
+  const start = new Date(startTimeIso);
+  const end = new Date(start.getTime() + 60 * 60 * 1000);
+
+  await calendar.events.patch({
+    calendarId,
+    eventId,
+    requestBody: {
+      start: { dateTime: start.toISOString() },
+      end: { dateTime: end.toISOString() },
+    },
+  });
 }
