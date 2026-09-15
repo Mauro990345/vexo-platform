@@ -121,7 +121,16 @@ export type AgentTools = {
   sendResultPhoto: (args: { category: string }) => Promise<{ sent: true } | { error: string }>;
 };
 
-const TOOLS: Anthropic.Tool[] = [
+// Anthropic.Beta.* (não Anthropic.Tool/MessageParam) — prompt caching
+// (cache_control) só existe no client `beta.messages` nesta versão do SDK
+// (@anthropic-ai/sdk@0.32.1); no client `messages` estável, TextBlockParam e
+// Tool desta versão nem têm o campo cache_control no tipo. Upgrade de major
+// version do SDK resolveria isso na raiz, mas é mudança maior/arriscada,
+// fora do escopo daqui — ver `sdk-upgrade` na skill claude-api. Nenhum
+// header de beta (`betas: [...]`) é necessário: prompt caching efêmero saiu
+// de beta faz tempo: client.beta.messages.create funciona igual ao client
+// estável, só com os tipos (e portanto o campo cache_control) mais completos.
+const TOOLS: Anthropic.Beta.BetaTool[] = [
   {
     name: "check_availability",
     description:
@@ -212,12 +221,28 @@ const TOOLS: Anthropic.Tool[] = [
 ];
 
 export async function generateLeadReply(params: {
+  // Prompt de conversação da clínica (Clinic.aiSystemPrompt, ou o padrão de
+  // fallback) — ESTÁVEL entre mensagens da mesma clínica (só muda se
+  // alguém editar em /crm/clinicas/[id]/agente-ia). Cacheado (cache_control
+  // logo abaixo), junto com TOOLS (idêntico pra toda clínica/conversa,
+  // nunca muda) — a "última posição" cacheável nesse conjunto, então o
+  // breakpoint aqui cobre os dois de uma vez (tools renderiza antes de
+  // system na ordem que a Anthropic processa o prompt).
   systemPrompt: string;
+  // Bloco de contexto que muda em TODA mensagem (data/hora atual, minuto a
+  // minuto — ver dateTimeContext em conversation-pipeline.ts). Vem DEPOIS
+  // do cache_control, de propósito: colar isso dentro do mesmo texto que
+  // systemPrompt (como era antes) invalidava o cache inteiro a cada
+  // chamada, já que qualquer byte diferente no prefixo derruba tudo que
+  // vem depois — é exatamente o anti-padrão "datetime.now() no system
+  // prompt" que a própria documentação de prompt caching da Anthropic lista
+  // como o jeito mais comum de quebrar cache sem perceber.
+  contextNote: string;
   history: ChatTurn[];
   tools: AgentTools;
 }): Promise<{ text: string; scheduled?: { startTime: string } }> {
   const client = anthropicClient();
-  const messages: Anthropic.MessageParam[] = params.history.map((t) => ({
+  const messages: Anthropic.Beta.BetaMessageParam[] = params.history.map((t) => ({
     role: t.role,
     content: t.content,
   }));
@@ -227,10 +252,22 @@ export async function generateLeadReply(params: {
   // Loop agentic: o modelo pode encadear chamadas de ferramenta antes do
   // texto final de resposta ao lead.
   for (let iteration = 0; iteration < 4; iteration++) {
-    const response = await client.messages.create({
+    const response = await client.beta.messages.create({
       model: CONVERSATION_MODEL,
       max_tokens: 1024,
-      system: params.systemPrompt,
+      system: [
+        // cache_control aqui = tools (renderizados antes) + este bloco
+        // ficam cacheados juntos. TTL padrão de 5min já cobre bem o ritmo
+        // normal de troca de mensagens numa conversa ativa, e — mais
+        // importante — esse prefixo é o MESMO pra qualquer conversa desta
+        // clínica, não só dentro de uma: leads diferentes conversando ao
+        // mesmo tempo (ou em sequência, dentro do TTL) com a mesma clínica
+        // reaproveitam o mesmo cache.
+        { type: "text", text: params.systemPrompt, cache_control: { type: "ephemeral" } },
+        // SEM cache_control — muda a cada chamada, fica de fora do prefixo
+        // cacheado.
+        { type: "text", text: params.contextNote },
+      ],
       tools: TOOLS,
       messages,
     });
@@ -243,7 +280,7 @@ export async function generateLeadReply(params: {
 
     messages.push({ role: "assistant", content: response.content });
 
-    const toolResults: Anthropic.ToolResultBlockParam[] = [];
+    const toolResults: Anthropic.Beta.BetaToolResultBlockParam[] = [];
     for (const block of response.content) {
       if (block.type !== "tool_use") continue;
 
