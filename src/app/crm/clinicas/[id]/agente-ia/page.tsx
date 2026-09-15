@@ -131,23 +131,6 @@ export default async function ClinicAiAgentPage({ params }: { params: { id: stri
               combinar texto e vídeo numa mensagem só). Vazio usa a frase padrão acima.
             </p>
           </div>
-
-          <div>
-            <label className="mb-1 block text-xs text-vexo-muted" htmlFor="notifyWhatsappNumber">
-              WhatsApp da secretária (avisa quando o lead pede atendimento humano)
-            </label>
-            <input
-              id="notifyWhatsappNumber"
-              name="notifyWhatsappNumber"
-              defaultValue={clinic.notifyWhatsappNumber ?? ""}
-              placeholder="+55 11 99999-9999"
-              className="w-full rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5 text-xs outline-none focus:border-vexo-accent"
-            />
-            <p className="mt-1 text-caption text-vexo-muted">
-              Recebe um alerta por WhatsApp sempre que a IA identifica que o lead precisa falar com
-              uma pessoa.
-            </p>
-          </div>
         </div>
 
         <button

@@ -98,7 +98,6 @@ export async function updateAiAgentSettings(clinicId: string, formData: FormData
   await requireInternalSession();
 
   const aiSystemPrompt = String(formData.get("aiSystemPrompt") ?? "").trim() || null;
-  const notifyWhatsappNumber = String(formData.get("notifyWhatsappNumber") ?? "").trim() || null;
   const confirmationVideoCaption = String(formData.get("confirmationVideoCaption") ?? "").trim() || null;
 
   // Mesmo padrão de upload do anexo de follow-up (ver
@@ -121,7 +120,7 @@ export async function updateAiAgentSettings(clinicId: string, formData: FormData
 
   await prisma.clinic.update({
     where: { id: clinicId },
-    data: { aiSystemPrompt, confirmationVideoUrl, confirmationVideoCaption, notifyWhatsappNumber },
+    data: { aiSystemPrompt, confirmationVideoUrl, confirmationVideoCaption },
   });
 
   revalidatePath(`/crm/clinicas/${clinicId}/agente-ia`);
@@ -158,6 +157,7 @@ export async function updateClinicSettings(clinicId: string, formData: FormData)
 
   const address = String(formData.get("address") ?? "").trim() || null;
   const clientWhatsappNumber = String(formData.get("clientWhatsappNumber") ?? "").trim() || null;
+  const notifyWhatsappNumber = String(formData.get("notifyWhatsappNumber") ?? "").trim() || null;
   const active = formData.get("active") === "on";
 
   const firstReminderHours = parseInt(String(formData.get("firstReminderHours") ?? ""), 10);
@@ -177,6 +177,7 @@ export async function updateClinicSettings(clinicId: string, formData: FormData)
     data: {
       address,
       clientWhatsappNumber,
+      notifyWhatsappNumber,
       active,
       reminderConfig: {
         upsert: {
