@@ -447,7 +447,11 @@ export async function handleInboundInstagramMessage(
     `agendamento e move ele em vez de criar outro.]`;
 
   const reply = await generateLeadReply({
-    systemPrompt: `${basePrompt}\n\n${dateTimeContext}`,
+    // Separados (não mais concatenados numa string só) pra permitir prompt
+    // caching: basePrompt é estável por clínica, dateTimeContext muda a
+    // cada mensagem — ver cache_control em generateLeadReply, anthropic.ts.
+    systemPrompt: basePrompt,
+    contextNote: dateTimeContext,
     history: chatHistory,
     tools: {
       checkAvailability: buildAvailabilityCheck(clinic.id),
