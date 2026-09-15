@@ -61,6 +61,27 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
             />
             <p className="mt-1 text-caption text-vexo-muted">
               Número que recebe o resumo semanal de atendimentos por WhatsApp, toda sexta-feira.
+              Inclua o código do país (55 para o Brasil) e o DDD — espaços, parênteses, traços ou
+              "+" não atrapalham, são removidos automaticamente, mas os dígitos do 55+DDD precisam
+              estar lá.
+            </p>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs" htmlFor="notifyWhatsappNumber">
+              WhatsApp da secretária (avisa quando o lead pede atendimento humano)
+            </label>
+            <input
+              id="notifyWhatsappNumber"
+              name="notifyWhatsappNumber"
+              defaultValue={clinic.notifyWhatsappNumber ?? ""}
+              placeholder="+55 11 99999-9999"
+              className="w-full rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5 text-xs outline-none focus:border-vexo-accent"
+            />
+            <p className="mt-1 text-caption text-vexo-muted">
+              Recebe um alerta por WhatsApp sempre que a IA identifica que o lead precisa falar com
+              uma pessoa. Pode ser um número diferente do resumo semanal acima. Mesmo formato:
+              código do país (55) + DDD, sem exigir "+" ou pontuação específica.
             </p>
           </div>
 
