@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
-import { classifyConversation, generateLeadReply, type AgentTools } from "@/lib/anthropic";
+import { classifyConversation, generateLeadReply, summarizeOlderTurns, type AgentTools } from "@/lib/anthropic";
+import { buildConversationContext, withOlderSummary } from "@/lib/conversation-context";
 import { checkAvailability, createCalendarEvent, updateCalendarEvent, getRawBusyPeriods } from "@/lib/google-calendar";
 import { getInstagramUserProfile } from "@/lib/instagram";
 import { decryptToken } from "@/lib/crypto";
@@ -391,6 +392,21 @@ export async function handleInboundInstagramMessage(
     return;
   }
 
+  // Janela de mensagens recentes mandadas por inteiro pra IA de
+  // conversação (generateLeadReply, mais abaixo) — o que ficar de fora
+  // vira um resumo curto (ver buildConversationContext/withOlderSummary em
+  // conversation-context.ts, e summarizeOlderTurns em anthropic.ts). Bug
+  // real de custo: sem isso, `chatHistory` (a conversa INTEIRA desde o
+  // primeiro dia) ia por completo pro Sonnet em toda mensagem nova, pra
+  // sempre — sem nenhum teto, o custo de input só cresce numa conversa
+  // longa. Calculado só aqui (depois do "return" de needsHuman acima) pra
+  // não gastar a chamada de resumo (Haiku) à toa quando a conversa
+  // escalona antes de gerar qualquer resposta. Só afeta a geração da
+  // resposta; o classificador acima continua vendo o histórico completo
+  // (classifierHistory), sem mudança nenhuma.
+  const conversationContext = await buildConversationContext(history, summarizeOlderTurns);
+  const windowedHistory = withOlderSummary(conversationContext);
+
   let scheduledStartTime: string | undefined;
   let capturedLeadPhone: string | undefined;
   let capturedResultPhotoUrl: string | undefined;
@@ -452,7 +468,7 @@ export async function handleInboundInstagramMessage(
     // cada mensagem — ver cache_control em generateLeadReply, anthropic.ts.
     systemPrompt: basePrompt,
     contextNote: dateTimeContext,
-    history: chatHistory,
+    history: windowedHistory,
     tools: {
       checkAvailability: buildAvailabilityCheck(clinic.id),
       // Leitura pura (sem side effect) — mesma consulta que confirmAppointment
