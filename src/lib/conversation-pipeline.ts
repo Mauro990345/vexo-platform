@@ -126,32 +126,43 @@ export async function handleInboundInstagramMessage(
   // Sem essa busca extra, Lead.name/igUsername ficam null pra sempre, e
   // {{primeiro_nome}} (ver applyTemplateVariables mais abaixo) substitui
   // certinho por uma string vazia — não é bug de substituição, é falta de
-  // dado. Tenta de novo em TODA mensagem enquanto name estiver vazio (não
-  // só na criação do lead) — um lead antigo, de antes dessa busca existir,
-  // já se autocorrige na próxima mensagem, sem precisar de backfill.
-  // Best effort, uma falha aqui não pode impedir a conversa de continuar
-  // — mas registra o resultado (sucesso, falha ou "sem nome retornado")
-  // em WebhookLog.processingError, senão uma falha nessa chamada
-  // específica ficaria invisível pra sempre (só no console do Railway,
-  // sem acesso), indistinguível de "a Meta genuinamente não devolveu
-  // nome" — motivo real reportado em produção: {{primeiro_nome}} continua
-  // vazio mesmo depois dessa correção, sem forma de saber por quê sem
-  // isso aqui.
-  if (!lead.name) {
+  // dado.
+  //
+  // Só tenta UMA VEZ por lead (nameLookupAttempted) — bug real em produção
+  // encontrado ao investigar por que a busca "tentava de novo em toda
+  // mensagem": pra uma conta pública normal, sem nada de privado, a busca
+  // voltava vazia (sem "name" na resposta) EM TODA mensagem da conversa,
+  // gastando uma chamada de API à toa a cada turno pra sempre, sem nunca
+  // ter chance de dar certo (resultado consistente, não uma falha
+  // transitória). @default(false) preserva a autocorreção pra leads já
+  // existentes antes deste campo — a primeira mensagem seguinte ainda
+  // tenta uma vez. Best effort, uma falha aqui não pode impedir a
+  // conversa de continuar — mas registra o resultado (sucesso, falha ou
+  // "sem nome retornado") em WebhookLog.processingError, senão uma falha
+  // nessa chamada específica ficaria invisível pra sempre (só no console
+  // do Railway, sem acesso), indistinguível de "a Meta genuinamente não
+  // devolveu nome".
+  if (!lead.name && !lead.nameLookupAttempted) {
     try {
       const profile = await getInstagramUserProfile(decryptToken(igAccount.accessTokenEnc), lead.igScopedId);
       if (profile.name) {
-        await prisma.lead.update({ where: { id: lead.id }, data: { name: profile.name } });
+        await prisma.lead.update({ where: { id: lead.id }, data: { name: profile.name, nameLookupAttempted: true } });
         lead.name = profile.name;
-      } else if (webhookLogId) {
-        await prisma.webhookLog
-          .update({
-            where: { id: webhookLogId },
-            data: { processingError: `getInstagramUserProfile não devolveu "name" pra igScopedId=${lead.igScopedId} (resposta sem esse campo).` },
-          })
-          .catch((updateErr) => console.error("[vexo] Falha ao gravar diagnóstico de perfil do lead:", updateErr));
+      } else {
+        await prisma.lead.update({ where: { id: lead.id }, data: { nameLookupAttempted: true } });
+        if (webhookLogId) {
+          await prisma.webhookLog
+            .update({
+              where: { id: webhookLogId },
+              data: { processingError: `getInstagramUserProfile não devolveu "name" pra igScopedId=${lead.igScopedId} (resposta sem esse campo).` },
+            })
+            .catch((updateErr) => console.error("[vexo] Falha ao gravar diagnóstico de perfil do lead:", updateErr));
+        }
       }
     } catch (err) {
+      // NÃO marca nameLookupAttempted aqui — um erro pode ser transitório
+      // (timeout, instabilidade da API), diferente de uma resposta válida
+      // sem "name" (que é definitivo). Tenta de novo na próxima mensagem.
       console.error("[vexo] Falha ao buscar nome do perfil do lead:", err);
       if (webhookLogId) {
         const detail = err instanceof Error ? `${err.message}\n${err.stack ?? ""}` : String(err);
