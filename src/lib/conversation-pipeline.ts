@@ -45,28 +45,68 @@ export async function handleInboundInstagramMessage(
   // quem já chamava essa função sem esse contexto.
   webhookLogId?: string
 ) {
-  const igAccount = await prisma.instagramAccount.findFirst({
+  let igAccount = await prisma.instagramAccount.findFirst({
     where: { igUserId: event.igUserId },
     include: { clinic: true },
   });
+
   if (!igAccount) {
-    const knownAccounts = await prisma.instagramAccount.findMany({
-      select: { igUserId: true, igUsername: true },
+    // Auto-correção (era o botão manual "Corrigir ID do webhook") —
+    // nenhum endpoint de OAuth desse produto devolve de antemão o ID que
+    // a Meta manda de verdade nos eventos de webhook (ver comentário
+    // grande em exchangeInstagramCode, src/lib/instagram.ts), então o
+    // primeiro evento real de uma conta recém-conectada SEMPRE bate aqui.
+    // Sem essa correção automática, isso exigia alguém abrir
+    // /crm/webhook-logs, copiar o ID reportado e colar manualmente em
+    // Conexões antes da primeira mensagem real ser respondida — pra toda
+    // clínica nova, sempre. Só corrige sozinho quando existe EXATAMENTE
+    // UMA conta ainda não confirmada (webhookIdVerified=false) — se houver
+    // mais de uma (duas clínicas conectadas em sequência antes de
+    // qualquer uma receber sua primeira mensagem real), a ambiguidade cai
+    // pro fluxo manual de sempre, pra nunca arriscar corrigir a conta
+    // errada.
+    const unverified = await prisma.instagramAccount.findMany({
+      where: { webhookIdVerified: false },
+      include: { clinic: true },
     });
-    const reason =
-      `Nenhuma InstagramAccount encontrada pra igUserId="${event.igUserId}" (vindo do webhook). ` +
-      `Contas conhecidas no banco: ${
-        knownAccounts.length
-          ? knownAccounts.map((a) => `${a.igUsername ?? "?"}=${a.igUserId}`).join(", ")
-          : "(nenhuma)"
-      }.`;
-    console.warn(`[vexo] ${reason}`);
-    if (webhookLogId) {
-      await prisma.webhookLog
-        .update({ where: { id: webhookLogId }, data: { matchFailureReason: reason } })
-        .catch((err) => console.error("[vexo] Falha ao gravar motivo do descarte no WebhookLog:", err));
+
+    const [onlyUnverified] = unverified;
+    if (unverified.length === 1 && onlyUnverified) {
+      const previousId = onlyUnverified.igUserId;
+      igAccount = await prisma.instagramAccount.update({
+        where: { id: onlyUnverified.id },
+        data: { igUserId: event.igUserId, webhookIdVerified: true },
+        include: { clinic: true },
+      });
+      const reason =
+        `ID do webhook corrigido automaticamente pra clínica "${igAccount.clinic.name}": ` +
+        `${previousId} → ${event.igUserId} (primeiro evento real confirmou o valor).`;
+      console.warn(`[vexo] ${reason}`);
+      if (webhookLogId) {
+        await prisma.webhookLog
+          .update({ where: { id: webhookLogId }, data: { matchFailureReason: reason } })
+          .catch((err) => console.error("[vexo] Falha ao gravar correção automática de ID no WebhookLog:", err));
+      }
+    } else {
+      const knownAccounts = await prisma.instagramAccount.findMany({
+        select: { igUserId: true, igUsername: true },
+      });
+      const reason =
+        `Nenhuma InstagramAccount encontrada pra igUserId="${event.igUserId}" (vindo do webhook) — ` +
+        `${unverified.length === 0 ? "nenhuma" : unverified.length} conta(s) não confirmada(s), auto-correção pulada ` +
+        `por ambiguidade. Contas conhecidas no banco: ${
+          knownAccounts.length
+            ? knownAccounts.map((a) => `${a.igUsername ?? "?"}=${a.igUserId}`).join(", ")
+            : "(nenhuma)"
+        }.`;
+      console.warn(`[vexo] ${reason}`);
+      if (webhookLogId) {
+        await prisma.webhookLog
+          .update({ where: { id: webhookLogId }, data: { matchFailureReason: reason } })
+          .catch((err) => console.error("[vexo] Falha ao gravar motivo do descarte no WebhookLog:", err));
+      }
+      return;
     }
-    return;
   }
   const clinic = igAccount.clinic;
 

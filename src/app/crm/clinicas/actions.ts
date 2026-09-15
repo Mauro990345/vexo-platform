@@ -519,7 +519,7 @@ export async function setInstagramWebhookIdAction(clinicId: string, formData: Fo
     redirect(`${conexoesPath}?status=erro&channel=instagram&reason=${encodeURIComponent("Instagram não está conectado nesta clínica.")}`);
   }
 
-  await prisma.instagramAccount.update({ where: { clinicId }, data: { igUserId } });
+  await prisma.instagramAccount.update({ where: { clinicId }, data: { igUserId, webhookIdVerified: true } });
   revalidatePath(conexoesPath);
   redirect(`${conexoesPath}?status=webhook-ok&idFixed=${encodeURIComponent(`${account.igUserId} → ${igUserId}`)}`);
 }

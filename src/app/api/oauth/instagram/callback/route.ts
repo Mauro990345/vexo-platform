@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { isInternal } from "@/lib/session";
-import { exchangeInstagramCode, subscribeInstagramWebhook } from "@/lib/instagram";
+import { exchangeInstagramCode, subscribeInstagramWebhook, getSubscribedFields } from "@/lib/instagram";
 import { verifyOAuthState } from "@/lib/oauth-state";
 import { encryptToken } from "@/lib/crypto";
 import { prisma } from "@/lib/prisma";
@@ -96,6 +96,19 @@ export async function GET(req: NextRequest) {
   try {
     const result = await exchangeInstagramCode(code);
 
+    // Se essa clínica já tinha uma conta com o ID confirmado por um
+    // webhook real (webhookIdVerified — ver schema), NÃO sobrescreve esse
+    // valor com o "id" que o OAuth devolveu: esse campo nunca bateu com o
+    // que a Meta manda de verdade nos eventos de webhook pra começo de
+    // conversa (ver AVISO IMPORTANTE em exchangeInstagramCode,
+    // src/lib/instagram.ts) — sobrescrever aqui reverteria uma correção já
+    // validada toda vez que a clínica reconectasse (ex: token expirado).
+    // Conta nova (ou ainda não confirmada) grava o palpite do OAuth mesmo
+    // assim, como ponto de partida — a auto-correção em
+    // handleInboundInstagramMessage (conversation-pipeline.ts) resolve
+    // sozinha assim que o primeiro evento de webhook real chegar.
+    const existingAccount = await prisma.instagramAccount.findUnique({ where: { clinicId } });
+
     // facebookPageId não é preenchido de propósito — não existe mais
     // Página do Facebook nesse fluxo (Instagram API with Instagram Login),
     // e nada mais no app lê essa coluna (só era escrita aqui). Uma linha já
@@ -103,7 +116,9 @@ export async function GET(req: NextRequest) {
     await prisma.instagramAccount.upsert({
       where: { clinicId },
       update: {
-        igUserId: result.igUserId,
+        ...(existingAccount?.webhookIdVerified
+          ? {}
+          : { igUserId: result.igUserId, webhookIdVerified: false }),
         igUsername: result.igUsername,
         accessTokenEnc: encryptToken(result.accessToken),
       },
@@ -112,6 +127,7 @@ export async function GET(req: NextRequest) {
         igUserId: result.igUserId,
         igUsername: result.igUsername,
         accessTokenEnc: encryptToken(result.accessToken),
+        webhookIdVerified: false,
       },
     });
 
@@ -125,6 +141,29 @@ export async function GET(req: NextRequest) {
     // do que deixar a clínica "conectada" sem nunca saber que não vai
     // receber mensagem nenhuma.
     await subscribeInstagramWebhook(result.accessToken);
+
+    // Auto-verificação (era o botão manual "Ver campos inscritos" +
+    // julgamento próprio sobre clicar ou não em "Reativar webhook") — o
+    // subscribe acima só confirma que a Meta ACEITOU o POST, não que
+    // "messages" realmente entrou na lista de campos inscritos (já
+    // aconteceu de um subscribe "bem-sucedido" não resultar em entrega
+    // nenhuma). Uma tentativa extra antes de desistir; se mesmo assim não
+    // pegar, falha visivelmente aqui em vez de deixar a clínica
+    // "conectada" sem saber que não vai receber mensagem nenhuma — o
+    // fallback manual ("Reativar webhook" em Conexões) continua existindo
+    // pra quando a inscrição cair meses depois, não só na conexão inicial.
+    let subscribedFields = await getSubscribedFields(result.accessToken).catch(() => [] as string[]);
+    if (!subscribedFields.includes("messages")) {
+      await subscribeInstagramWebhook(result.accessToken);
+      subscribedFields = await getSubscribedFields(result.accessToken).catch(() => [] as string[]);
+      if (!subscribedFields.includes("messages")) {
+        throw new Error(
+          `A Meta aceitou a inscrição no webhook, mas "messages" não aparece nos campos realmente inscritos ` +
+            `(recebido: ${subscribedFields.join(", ") || "nenhum"}). Tente novamente em alguns minutos pelo ` +
+            `botão "Reativar webhook" em Conexões.`
+        );
+      }
+    }
 
     // Veio do link público de auto-conexão (não da tela admin) — invalida o
     // token (não reutilizável) e manda pra tela pública de sucesso em vez
