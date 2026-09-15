@@ -90,19 +90,20 @@ function ConnectionCard({
 
       <p className="text-xs text-vexo-muted">{description}</p>
 
-      {/* Status e botão na mesma linha, botão à direita — a página real
-          (grid-cols-3 sem max-w extra) dá bastante largura por card, cabe
-          numa linha só sem truncar. */}
-      <div className="mt-auto flex items-center justify-between gap-2 pt-1">
-        <div className="flex min-w-0 items-center gap-1.5 text-card text-vexo-muted">
-          <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${statusDot}`} />
-          <span className="truncate">{statusLabel}</span>
-        </div>
-        <div className="flex shrink-0 items-center gap-1.5">
-          {connected ? (
-            disconnectAction ? (
-              <>
-                {connectedExtraAction}
+      {/* Status (inclui o @usuário conectado) e botão principal na mesma
+          linha — nunca disputam espaço com as ações extras de diagnóstico
+          (connectedExtraAction), que ficam na linha de baixo, com quebra
+          própria: informação básica (qual conta está conectada) sempre
+          visível, mesmo com várias ferramentas de diagnóstico acumuladas. */}
+      <div className="mt-auto flex flex-col gap-1.5 pt-1">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex min-w-0 items-center gap-1.5 text-card text-vexo-muted">
+            <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${statusDot}`} />
+            <span className="truncate">{statusLabel}</span>
+          </div>
+          <div className="flex shrink-0 items-center gap-1.5">
+            {connected ? (
+              disconnectAction ? (
                 <form action={disconnectAction}>
                   <button
                     type="submit"
@@ -111,30 +112,33 @@ function ConnectionCard({
                     Desconectar
                   </button>
                 </form>
-              </>
+              ) : openInNewTab ? (
+                <ConnectOAuthButton href={href} label="Gerenciar" />
+              ) : (
+                <Link
+                  href={href}
+                  className="rounded-lg border border-vexo-accent px-2.5 py-1 text-card font-medium text-vexo-accent hover:bg-vexo-accent/10"
+                >
+                  Gerenciar
+                </Link>
+              )
+            ) : notConnectedAction ? (
+              notConnectedAction
             ) : openInNewTab ? (
-              <ConnectOAuthButton href={href} label="Gerenciar" />
+              <ConnectOAuthButton href={href} label="Conectar" />
             ) : (
               <Link
                 href={href}
                 className="rounded-lg border border-vexo-accent px-2.5 py-1 text-card font-medium text-vexo-accent hover:bg-vexo-accent/10"
               >
-                Gerenciar
+                Conectar
               </Link>
-            )
-          ) : notConnectedAction ? (
-            notConnectedAction
-          ) : openInNewTab ? (
-            <ConnectOAuthButton href={href} label="Conectar" />
-          ) : (
-            <Link
-              href={href}
-              className="rounded-lg border border-vexo-accent px-2.5 py-1 text-card font-medium text-vexo-accent hover:bg-vexo-accent/10"
-            >
-              Conectar
-            </Link>
-          )}
+            )}
+          </div>
         </div>
+        {connected && connectedExtraAction && (
+          <div className="flex flex-wrap items-center justify-end gap-1.5">{connectedExtraAction}</div>
+        )}
       </div>
     </div>
   );

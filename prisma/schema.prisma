@@ -137,6 +137,18 @@ model InstagramAccount {
   accessTokenEnc String    @db.Text // token de acesso do Instagram, criptografado em repouso
   tokenExpiresAt DateTime?
 
+  // false logo após o OAuth de uma conta nova — nenhum endpoint desse fluxo
+  // (api.instagram.com/oauth/access_token, graph.instagram.com/me) devolve
+  // o mesmo ID que a Meta manda de verdade em entry.id/recipient.id nos
+  // webhooks (ver comentário grande em exchangeInstagramCode,
+  // src/lib/instagram.ts), então o igUserId salvo pelo OAuth é só um
+  // palpite até o primeiro evento de webhook real confirmar (ou corrigir)
+  // esse valor — ver a auto-correção em handleInboundInstagramMessage,
+  // conversation-pipeline.ts. Contas já existentes antes desse campo
+  // (@default(true)) são tratadas como já verificadas: se já recebiam
+  // mensagem normalmente, o ID salvo já está certo.
+  webhookIdVerified Boolean @default(true)
+
   connectedAt DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }
