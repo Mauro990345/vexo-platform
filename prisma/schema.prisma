@@ -221,6 +221,18 @@ model Lead {
   name       String? // nome usado na abordagem manual do Mauro
   phone      String?
 
+  // true depois da PRIMEIRA tentativa de getInstagramUserProfile (sucesso,
+  // erro ou resposta sem "name" — ver handleInboundInstagramMessage,
+  // conversation-pipeline.ts), pra nunca tentar de novo indefinidamente
+  // quando o resultado é vazio de forma consistente (bug real em produção:
+  // uma conta pública normal, sem nada de privado, ainda assim nunca
+  // devolveu "name" — provavelmente restrição do app em modo
+  // desenvolvimento da Meta pra contas que não são tester, não um erro de
+  // código; ver PR que introduziu este campo). @default(false) preserva o
+  // comportamento de autocorreção pra leads já existentes antes deste
+  // campo — a primeira mensagem seguinte ainda tenta uma vez.
+  nameLookupAttempted Boolean @default(false)
+
   conversations Conversation[]
   appointments  Appointment[]
 
