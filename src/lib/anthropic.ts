@@ -92,6 +92,50 @@ export async function classifyConversation(history: ChatTurn[]): Promise<Convers
 }
 
 // -----------------------------------------------------------------------
+// Bastidor (Haiku) — resumo do início de conversas longas
+// -----------------------------------------------------------------------
+
+// Usado por buildConversationContext (conversation-context.ts) quando a
+// conversa passa da janela de mensagens recentes mandada por inteiro pro
+// modelo (ver HISTORY_WINDOW_SIZE) — sem isso, uma conversa longa manda o
+// histórico inteiro desde o primeiro dia em toda mensagem nova, pra
+// sempre, sem nenhum teto de custo. Só o que sai da janela vira resumo; as
+// mensagens recentes continuam indo por inteiro.
+const SUMMARY_SYSTEM_PROMPT = `Você resume o INÍCIO de uma conversa de social selling (Instagram) entre um
+lead e a IA de uma clínica de saúde estética/odontológica — as mensagens
+mais recentes dessa mesma conversa NÃO estão aqui, já vão em separado pra
+quem for continuar o atendimento; resuma só o trecho que está fora dessa
+janela.
+
+Cubra especificamente, quando existir no trecho:
+- Procedimento(s) que o lead demonstrou interesse ou que já ficou combinado.
+- Datas, horários ou promessas específicas já feitas (por qualquer lado) —
+  inclusive se depois mudaram de ideia.
+- Objeções que o lead levantou e como foram resolvidas (ou não).
+
+Curto e direto, só o que for relevante pra continuar a conversa sem
+confusão — não é resumo literário, é contexto de trabalho. Responda
+SOMENTE com o resumo corrido, sem introdução nem comentário sobre a
+tarefa.`;
+
+export async function summarizeOlderTurns(turns: ChatTurn[]): Promise<string> {
+  if (turns.length === 0) return "";
+
+  const client = anthropicClient();
+  const transcript = turns.map((t) => `${t.role === "user" ? "LEAD" : "IA"}: ${t.content}`).join("\n");
+
+  const response = await client.messages.create({
+    model: BACKSTAGE_MODEL,
+    max_tokens: 400,
+    system: SUMMARY_SYSTEM_PROMPT,
+    messages: [{ role: "user", content: transcript }],
+  });
+
+  const textBlock = response.content.find((b) => b.type === "text");
+  return textBlock && "text" in textBlock ? textBlock.text.trim() : "";
+}
+
+// -----------------------------------------------------------------------
 // Conversa com o lead (Sonnet) — com ferramentas de agenda
 // -----------------------------------------------------------------------
 
