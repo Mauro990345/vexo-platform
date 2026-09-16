@@ -323,7 +323,17 @@ model Message {
   content   String           @db.Text
   mediaUrl  String? // ex: vídeo do médico
 
-  igMessageId String?
+  // @unique protege contra reentrega do webhook do Instagram (a Meta
+  // reentrega "at least once" — se o VEXO demorar demais pra responder 200,
+  // o mesmo evento chega de novo) virar uma segunda chamada real à API da
+  // Anthropic pro mesmo mid — ver a checagem em
+  // src/app/api/webhooks/instagram/route.ts, que consulta por esse campo
+  // ANTES de chamar handleInboundInstagramMessage; esta constraint é a
+  // rede de segurança pra corrida genuína (dois envios processados quase
+  // ao mesmo tempo, antes de qualquer um terminar). NULL continua permitido
+  // livremente (mensagens SYSTEM/follow-up/lembrete nunca têm mid do
+  // Instagram) — unique em Postgres não considera NULL igual a NULL.
+  igMessageId String? @unique
 
   status       MessageStatus @default(SENT)
   scheduledFor DateTime? // usado por mensagens OUTBOUND com delay adaptativo

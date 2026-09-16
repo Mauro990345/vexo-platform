@@ -191,6 +191,33 @@ export async function POST(req: NextRequest) {
       const inbound = fromOwnAccount ? undefined : event.message ?? event.message_edit;
       if (!inbound?.text) continue;
 
+      // A Meta reentrega webhook "at least once" — se o VEXO demorar
+      // demais pra responder 200 (todo o processamento, inclusive a
+      // chamada à API da Anthropic, acontece de forma síncrona aqui dentro,
+      // antes do 200 final), o mesmo evento chega de novo. Sem checar isso,
+      // uma reentrega reprocessava a mensagem do zero — nova chamada à IA
+      // (custo duplicado), possível mensagem duplicada no CRM. Checa pelo
+      // mid ANTES de processar; a constraint @unique em
+      // Message.igMessageId (schema) é a rede de segurança pra uma corrida
+      // genuína (duas entregas quase simultâneas, nenhuma terminou ainda
+      // quando a outra chega aqui).
+      const alreadyProcessed = await prisma.message.findFirst({
+        where: { igMessageId: inbound.mid },
+        select: { id: true },
+      });
+      if (alreadyProcessed) {
+        console.warn(`[vexo] Mensagem ${inbound.mid} já processada — ignorando reentrega do webhook.`);
+        if (webhookLog?.id) {
+          await prisma.webhookLog
+            .update({
+              where: { id: webhookLog.id },
+              data: { matchFailureReason: `Reentrega do webhook ignorada — mid=${inbound.mid} já processado antes (Message.id=${alreadyProcessed.id}).` },
+            })
+            .catch((err) => console.error("[vexo] Falha ao gravar motivo de reentrega ignorada no WebhookLog:", err));
+        }
+        continue;
+      }
+
       try {
         await handleInboundInstagramMessage(
           {
