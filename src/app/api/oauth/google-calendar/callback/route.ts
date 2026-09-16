@@ -35,14 +35,33 @@ export async function GET(req: NextRequest) {
     });
 
     // Veio do link público de auto-conexão (não da tela admin) — invalida o
-    // token (não reutilizável) e manda pra tela pública de sucesso em vez
-    // da tela de Conexões do CRM.
+    // token (não reutilizável) e manda pra tela pública em vez da tela de
+    // Conexões do CRM.
     if (connectToken) {
-      await prisma.connectionLink.updateMany({
+      const appUrl = process.env.APP_URL ?? "";
+      const usedLink = await prisma.connectionLink.findFirst({
         where: { token: connectToken, clinicId, channel: "google-calendar" },
-        data: { usedAt: new Date() },
       });
-      return NextResponse.redirect(`${process.env.APP_URL ?? ""}/conectar/${connectToken}/sucesso`);
+      if (usedLink) {
+        await prisma.connectionLink.update({ where: { id: usedLink.id }, data: { usedAt: new Date() } });
+      }
+
+      // Se este link nasceu de um ConnectionBundle (link combinado
+      // Instagram + Google Calendar — ver createConnectionBundle,
+      // src/app/crm/clinicas/actions.ts), volta pra página do bundle em
+      // vez da tela de sucesso terminal de um canal só — lá o cliente já
+      // vê os dois canais e o que falta conectar.
+      if (usedLink?.bundleId) {
+        const bundle = await prisma.connectionBundle.findUnique({
+          where: { id: usedLink.bundleId },
+          select: { token: true },
+        });
+        if (bundle) {
+          return NextResponse.redirect(`${appUrl}/conectar/${bundle.token}`);
+        }
+      }
+
+      return NextResponse.redirect(`${appUrl}/conectar/${connectToken}/sucesso`);
     }
 
     return NextResponse.redirect(

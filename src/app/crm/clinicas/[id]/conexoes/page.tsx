@@ -7,6 +7,7 @@ import { refreshWhatsappStatus, type WhatsappConnectionState } from "@/lib/whats
 import { ConnectOAuthButton } from "@/components/ConnectOAuthButton";
 import { RefreshOnFocus } from "@/components/RefreshOnFocus";
 import { ConnectionLinkButton } from "@/components/ConnectionLinkButton";
+import { ConnectionBundleButton } from "@/components/ConnectionBundleButton";
 import {
   disconnectGoogleCalendarAction,
   disconnectInstagramAction,
@@ -195,6 +196,18 @@ export default async function ClinicConexoesPage({
         }),
   ]);
 
+  // Link combinado (Instagram + Google Calendar numa página só) — só faz
+  // sentido oferecer enquanto pelo menos um dos dois ainda não está
+  // conectado; com os dois já conectados, não tem mais o que combinar.
+  const bothChannelsConnected = instagramConnected && googleConnected;
+  const pendingBundle = bothChannelsConnected
+    ? null
+    : await prisma.connectionBundle.findFirst({
+        where: { clinicId: clinic.id, expiresAt: { gt: new Date() } },
+        orderBy: { createdAt: "desc" },
+        select: { token: true },
+      });
+
   return (
     <div className="space-y-3">
       <RefreshOnFocus />
@@ -257,6 +270,19 @@ export default async function ClinicConexoesPage({
             <span className="text-vexo-error"> — &quot;messages&quot; não está na lista, por isso nada chega.</span>
           )}
         </p>
+      )}
+
+      {!bothChannelsConnected && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-vexo-border bg-vexo-surface p-3.5">
+          <div>
+            <p className="text-sm font-semibold">Onboarding remoto do cliente</p>
+            <p className="mt-0.5 text-xs text-vexo-muted">
+              Um link só, pro cliente conectar Instagram e Google Calendar na mesma página, sem
+              precisar de acesso ao CRM.
+            </p>
+          </div>
+          <ConnectionBundleButton clinicId={clinic.id} pendingToken={pendingBundle?.token ?? null} />
+        </div>
       )}
 
       <div className="grid grid-cols-3 gap-3">

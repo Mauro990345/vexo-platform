@@ -242,6 +242,55 @@ export async function cancelConnectionLink(clinicId: string, token: string): Pro
   revalidatePath(`/crm/clinicas/${clinicId}/conexoes`);
 }
 
+// Versão combinada de createConnectionLink acima, pro onboarding de
+// cliente real que nunca acessa o CRM: em vez de mandar dois links
+// separados (um por canal), gera UM token de ConnectionBundle que abre
+// numa página só com os dois — Instagram e Google Calendar (ver
+// /conectar/[token]/page.tsx). Por baixo continua sendo dois
+// ConnectionLink normais de sempre (mesmo público-start/callback, sem
+// mudança nenhuma neles), só que amarrados ao bundle via bundleId — o
+// bundle em si nunca participa do fluxo OAuth.
+export async function createConnectionBundle(clinicId: string): Promise<{ token: string; url: string }> {
+  await requireInternalSession();
+
+  const existing = await prisma.connectionBundle.findFirst({
+    where: { clinicId, expiresAt: { gt: new Date() } },
+    orderBy: { createdAt: "desc" },
+  });
+  if (existing) {
+    return { token: existing.token, url: `${process.env.APP_URL ?? ""}/conectar/${existing.token}` };
+  }
+
+  const expiresAt = new Date(Date.now() + CONNECTION_LINK_TTL_MS);
+  const bundle = await prisma.connectionBundle.create({
+    data: {
+      clinicId,
+      token: crypto.randomBytes(24).toString("base64url"),
+      expiresAt,
+      links: {
+        create: [
+          { clinicId, channel: "instagram", token: crypto.randomBytes(24).toString("base64url"), expiresAt },
+          { clinicId, channel: "google-calendar", token: crypto.randomBytes(24).toString("base64url"), expiresAt },
+        ],
+      },
+    },
+  });
+
+  revalidatePath(`/crm/clinicas/${clinicId}/conexoes`);
+  return { token: bundle.token, url: `${process.env.APP_URL ?? ""}/conectar/${bundle.token}` };
+}
+
+// Mesmo espírito de cancelConnectionLink, mas apaga o bundle inteiro — o
+// onDelete: Cascade do schema já derruba os dois ConnectionLink filhos
+// junto, então nenhum dos dois continua utilizável depois disso.
+export async function cancelConnectionBundle(clinicId: string, token: string): Promise<void> {
+  await requireInternalSession();
+
+  await prisma.connectionBundle.deleteMany({ where: { token, clinicId } });
+
+  revalidatePath(`/crm/clinicas/${clinicId}/conexoes`);
+}
+
 export type CreateClientLoginState = { error: string | null };
 
 // Usa useActionState no form (ver CreateClientLoginForm) em vez de deixar

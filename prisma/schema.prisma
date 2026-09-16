@@ -84,6 +84,7 @@ model Clinic {
   instagramAccount      InstagramAccount?
   googleCalendarAccount GoogleCalendarAccount?
   connectionLinks       ConnectionLink[]
+  connectionBundles     ConnectionBundle[]
 
   users           User[]
   leads           Lead[]
@@ -172,7 +173,41 @@ model ConnectionLink {
   expiresAt DateTime
   usedAt    DateTime?
 
+  // Presente quando este link nasceu junto de um ConnectionBundle (link
+  // combinado, um por canal — ver ConnectionBundle abaixo) em vez de ter
+  // sido gerado avulso pelo botão de um card específico em Conexões. Não
+  // muda nada de como este link funciona sozinho (público-start/callback
+  // continuam usando só channel+token, sem olhar bundleId) — só permite ao
+  // callback OAuth achar o token do bundle pra redirecionar de volta pra
+  // ele (ver comentário grande nos callbacks) em vez da tela de sucesso
+  // terminal de um único canal.
+  bundleId String?
+  bundle   ConnectionBundle? @relation(fields: [bundleId], references: [id], onDelete: Cascade)
+
   createdAt DateTime @default(now())
+
+  @@index([clinicId])
+  @@index([bundleId])
+}
+
+// Link público único que cobre os dois canais de uma vez (Instagram +
+// Google Calendar) — pensado pro onboarding de cliente real, que nunca
+// acessa o CRM interno: em vez de mandar dois links separados, o Mauro
+// manda um só, e o cliente conecta as duas contas na mesma página, uma
+// depois da outra, vendo o progresso. Por baixo dos panos continua sendo
+// dois ConnectionLink normais (um por canal, via bundleId acima) — o
+// bundle em si não participa do fluxo OAuth, só agrupa e dá um token
+// próprio pra página combinada (ver /conectar/[token]/page.tsx).
+model ConnectionBundle {
+  id       String @id @default(cuid())
+  clinicId String
+  clinic   Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  token     String    @unique
+  expiresAt DateTime
+  createdAt DateTime  @default(now())
+
+  links ConnectionLink[]
 
   @@index([clinicId])
 }
