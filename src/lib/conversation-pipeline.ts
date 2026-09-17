@@ -46,6 +46,15 @@ export async function handleInboundInstagramMessage(
   // quem já chamava essa função sem esse contexto.
   webhookLogId?: string
 ) {
+  // Diagnóstico TEMPORÁRIO (ver comentário grande mais abaixo, junto do log
+  // de timing do delay artificial) — marca o início do processamento deste
+  // evento pra medir quanto tempo a classificação + geração da resposta da
+  // IA consomem ANTES do delay artificial (computeAdaptiveDelaySeconds)
+  // sequer entrar em jogo — separa "tempo de processamento real" de "delay
+  // configurado", que são coisas diferentes mas se somam no tempo total que
+  // o lead observa.
+  const pipelineStartedAt = Date.now();
+
   let igAccount = await prisma.instagramAccount.findFirst({
     where: { igUserId: event.igUserId },
     include: { clinic: true },
@@ -336,6 +345,7 @@ export async function handleInboundInstagramMessage(
     : chatHistory;
 
   const signal = await classifyConversation(classifierHistory);
+  console.log(`[vexo:timing] classifyConversation levou ${Date.now() - pipelineStartedAt}ms (desde o início do processamento deste evento)`);
 
   if (signal.needsHuman) {
     await prisma.conversation.update({
@@ -575,6 +585,7 @@ export async function handleInboundInstagramMessage(
       },
     },
   });
+  console.log(`[vexo:timing] generateLeadReply levou ${Date.now() - pipelineStartedAt}ms no total (desde o início do processamento deste evento, inclui classifyConversation)`);
 
   const leadResponseTimeSeconds = previousAiMessage?.sentAt
     ? Math.max(0, Math.round((event.timestamp.getTime() - previousAiMessage.sentAt.getTime()) / 1000))
@@ -585,6 +596,28 @@ export async function handleInboundInstagramMessage(
     ? FAST_REPLY_DELAY_SECONDS
     : computeAdaptiveDelaySeconds(leadResponseTimeSeconds, clinic.firstBandDelaySeconds);
   const scheduledFor = new Date(Date.now() + delaySeconds * 1000);
+
+  // Diagnóstico TEMPORÁRIO (remover depois de confirmar o comportamento em
+  // produção) — investigação do relato de que o delay da faixa "até 1h"
+  // (Clinic.firstBandDelaySeconds, ajustável em Agente de IA) não muda o
+  // tempo de resposta observado, mesmo configurando valores bem diferentes,
+  // de forma consistente ao longo de várias semanas/deploys. Mostra, no
+  // exato momento do cálculo: o valor CRU lido do banco agora mesmo
+  // (firstBandDelaySecondsDb — descarta de vez a hipótese de cache/deploy
+  // desatualizado se bater com o configurado) e o valor que
+  // computeAdaptiveDelaySeconds efetivamente devolveu (delaySeconds) — se
+  // os dois baterem com o configurado na tela mas o lead ainda receber a
+  // resposta fora desse intervalo, o problema está em outro lugar (ex:
+  // tempo de geração da IA antes daqui, ou o worker de despacho), não
+  // nesse cálculo.
+  console.log(
+    `[vexo:timing] clinicId=${clinic.id} clinicName=${JSON.stringify(clinic.name)} ` +
+      `adaptiveDelayEnabled=${aiSettings?.adaptiveDelayEnabled ?? true} ` +
+      `leadResponseTimeSeconds=${leadResponseTimeSeconds} ` +
+      `firstBandDelaySecondsDb=${clinic.firstBandDelaySeconds} ` +
+      `delaySeconds(usado)=${delaySeconds} ` +
+      `now=${new Date().toISOString()} scheduledFor=${scheduledFor.toISOString()}`
+  );
 
   await prisma.message.create({
     data: {

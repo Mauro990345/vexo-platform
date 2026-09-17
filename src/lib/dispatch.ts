@@ -115,6 +115,22 @@ export async function dispatchDueMessages(): Promise<{ sent: number; failed: num
       });
 
       const now = new Date();
+
+      // Diagnóstico TEMPORÁRIO (ver comentário grande em conversation-pipeline.ts,
+      // junto do log "[vexo:timing]" do cálculo do delay) — fecha o ciclo:
+      // mostra o horário PRETENDIDO (scheduledFor, calculado lá) contra o
+      // horário REAL de envio aqui, e o atraso do próprio despacho (deveria
+      // ficar sempre bem abaixo de 15s, o intervalo do cron) — separa
+      // "delay calculado errado" de "delay calculado certo, mas o worker
+      // demorou pra despachar".
+      if (message.sender === "AI") {
+        console.log(
+          `[vexo:timing] mensagem ${message.id} enviada — createdAt=${message.createdAt.toISOString()} ` +
+            `scheduledFor=${message.scheduledFor?.toISOString()} sentAt=${now.toISOString()} ` +
+            `atrasoDoDispatch(sentAt-scheduledFor)=${message.scheduledFor ? now.getTime() - message.scheduledFor.getTime() : "n/a"}ms`
+        );
+      }
+
       await prisma.$transaction([
         prisma.message.update({
           where: { id: message.id },
