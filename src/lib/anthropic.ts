@@ -1,30 +1,25 @@
-import Anthropic from "@anthropic-ai/sdk";
+import type { LLMProvider, ToolDefinition } from "@/lib/llm/types";
+import { getLLMProvider } from "@/lib/llm/provider";
 
-// Dois modelos, dois papéis (ver especificação VEXO):
-//  - Sonnet: conversa com o lead — naturalidade importa mais que custo.
-//  - Haiku: tarefas de bastidor (classificação, resumo, gatilho de follow-up) — barato.
-// Os IDs são configuráveis por env var para acompanhar novas versões sem redeploy de código.
+// Camada de NEGÓCIO (prompts, parsing, dispatch de ferramenta) — não sabe
+// nada sobre @anthropic-ai/sdk nem qualquer outro SDK de provedor. A
+// mecânica de "como chamar um LLM de verdade" mora em src/lib/llm/ (ver
+// LLMProvider, src/lib/llm/types.ts); este arquivo só usa a interface,
+// resolvida por getLLMProvider() — trocar de provedor não muda nada aqui.
+//
+// `provider` é opcional em toda função exportada, com getLLMProvider()
+// como default — mesmo padrão de dependency injection já usado em
+// buildConversationContext (conversation-context.ts): deixa os testes
+// injetarem um LLMProvider fake sem mock de módulo, sem mudar nenhum call
+// site de produção (que nunca passa esse argumento).
 
-export const CONVERSATION_MODEL = process.env.ANTHROPIC_CONVERSATION_MODEL ?? "claude-sonnet-5";
-export const BACKSTAGE_MODEL = process.env.ANTHROPIC_BACKSTAGE_MODEL ?? "claude-haiku-4-5-20251001";
-
-let _client: Anthropic | null = null;
-
-export function anthropicClient(): Anthropic {
-  if (!_client) {
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    if (!apiKey) {
-      throw new Error("ANTHROPIC_API_KEY não configurada.");
-    }
-    _client = new Anthropic({ apiKey });
-  }
-  return _client;
-}
-
-export type ChatTurn = {
-  role: "user" | "assistant";
-  content: string;
-};
+// Re-exportado daqui (não movido pra cima) por compatibilidade — todo
+// código que já importava ChatTurn de "@/lib/anthropic" (chat-history.ts,
+// conversation-context.ts) continua funcionando sem mudar import nenhum;
+// a definição em si mora em src/lib/llm/types.ts, junto do resto do
+// contrato neutro de provedor.
+export type { ChatTurn } from "@/lib/llm/types";
+import type { ChatTurn } from "@/lib/llm/types";
 
 // -----------------------------------------------------------------------
 // Bastidor (Haiku) — classificação de estado da conversa
@@ -58,26 +53,24 @@ Responda SOMENTE com um JSON no formato:
   "suggestedFollowUp": boolean  // true se o lead sumiu sem concluir agendamento/recusa explícita
 }`;
 
-export async function classifyConversation(history: ChatTurn[]): Promise<ConversationSignal> {
-  const client = anthropicClient();
-
+export async function classifyConversation(
+  history: ChatTurn[],
+  provider: LLMProvider = getLLMProvider()
+): Promise<ConversationSignal> {
   const transcript = history
     .map((t) => `${t.role === "user" ? "LEAD" : "IA"}: ${t.content}`)
     .join("\n");
 
-  const response = await client.messages.create({
-    model: BACKSTAGE_MODEL,
-    max_tokens: 400,
-    system: CLASSIFIER_SYSTEM_PROMPT,
-    messages: [{ role: "user", content: transcript || "(sem mensagens ainda)" }],
+  const response = await provider.complete({
+    tier: "backstage",
+    maxTokens: 400,
+    systemPrompt: CLASSIFIER_SYSTEM_PROMPT,
+    userMessage: transcript || "(sem mensagens ainda)",
   });
 
-  const text = response.content.find((b) => b.type === "text");
-  const raw = text && "text" in text ? text.text : "{}";
-
   try {
-    const match = raw.match(/\{[\s\S]*\}/);
-    const parsed = JSON.parse(match ? match[0] : raw);
+    const match = response.text.match(/\{[\s\S]*\}/);
+    const parsed = JSON.parse(match ? match[0] : response.text);
     return {
       needsHuman: Boolean(parsed.needsHuman),
       needsHumanReason: parsed.needsHumanReason || undefined,
@@ -118,21 +111,22 @@ confusão — não é resumo literário, é contexto de trabalho. Responda
 SOMENTE com o resumo corrido, sem introdução nem comentário sobre a
 tarefa.`;
 
-export async function summarizeOlderTurns(turns: ChatTurn[]): Promise<string> {
+export async function summarizeOlderTurns(
+  turns: ChatTurn[],
+  provider: LLMProvider = getLLMProvider()
+): Promise<string> {
   if (turns.length === 0) return "";
 
-  const client = anthropicClient();
   const transcript = turns.map((t) => `${t.role === "user" ? "LEAD" : "IA"}: ${t.content}`).join("\n");
 
-  const response = await client.messages.create({
-    model: BACKSTAGE_MODEL,
-    max_tokens: 400,
-    system: SUMMARY_SYSTEM_PROMPT,
-    messages: [{ role: "user", content: transcript }],
+  const response = await provider.complete({
+    tier: "backstage",
+    maxTokens: 400,
+    systemPrompt: SUMMARY_SYSTEM_PROMPT,
+    userMessage: transcript,
   });
 
-  const textBlock = response.content.find((b) => b.type === "text");
-  return textBlock && "text" in textBlock ? textBlock.text.trim() : "";
+  return response.text.trim();
 }
 
 // -----------------------------------------------------------------------
@@ -165,23 +159,19 @@ export type AgentTools = {
   sendResultPhoto: (args: { category: string }) => Promise<{ sent: true } | { error: string }>;
 };
 
-// Anthropic.Beta.* (não Anthropic.Tool/MessageParam) — prompt caching
-// (cache_control) só existe no client `beta.messages` nesta versão do SDK
-// (@anthropic-ai/sdk@0.32.1); no client `messages` estável, TextBlockParam e
-// Tool desta versão nem têm o campo cache_control no tipo. Upgrade de major
-// version do SDK resolveria isso na raiz, mas é mudança maior/arriscada,
-// fora do escopo daqui — ver `sdk-upgrade` na skill claude-api. Nenhum
-// header de beta (`betas: [...]`) é necessário: prompt caching efêmero saiu
-// de beta faz tempo: client.beta.messages.create funciona igual ao client
-// estável, só com os tipos (e portanto o campo cache_control) mais completos.
-const TOOLS: Anthropic.Beta.BetaTool[] = [
+// Definições de ferramenta em JSON Schema puro (ToolDefinition, neutro de
+// provedor — ver src/lib/llm/types.ts) — cada provedor traduz pro formato
+// que sua própria API espera (ex: AnthropicProvider mapeia inputSchema ->
+// input_schema). Isso é lógica de negócio do VEXO (nomes, descrições e
+// parâmetros das ferramentas), por isso mora aqui, não em src/lib/llm/.
+const TOOL_DEFINITIONS: ToolDefinition[] = [
   {
     name: "check_availability",
     description:
       "Consulta horários livres na agenda (Google Calendar) da clínica dentro de um intervalo de datas. Use " +
       "SEMPRE antes de oferecer ou confirmar qualquer horário ao lead — nunca ofereça um horário sem ter " +
       "chamado essa ferramenta antes, mesmo que pareça óbvio que vai estar livre.",
-    input_schema: {
+    inputSchema: {
       type: "object",
       properties: {
         dateFrom: {
@@ -211,7 +201,7 @@ const TOOLS: Anthropic.Beta.BetaTool[] = [
       "realmente livre. NUNCA diga ao lead que o horário está confirmado/reservado (ou remarcado) antes de " +
       "chamar esta ferramenta e ela retornar sucesso — se ela retornar erro, NÃO diga que está confirmado; " +
       "ofereça outro horário.",
-    input_schema: {
+    inputSchema: {
       type: "object",
       properties: {
         startTime: {
@@ -233,7 +223,7 @@ const TOOLS: Anthropic.Beta.BetaTool[] = [
     name: "save_lead_phone",
     description:
       "Salva o número de WhatsApp do lead assim que ele informar na conversa. Chame sempre que o lead enviar um número de telefone/WhatsApp, mesmo que fora do momento em que foi pedido.",
-    input_schema: {
+    inputSchema: {
       type: "object",
       properties: {
         phone: { type: "string", description: "Número de WhatsApp informado pelo lead, no formato que ele mandou." },
@@ -248,13 +238,13 @@ const TOOLS: Anthropic.Beta.BetaTool[] = [
       "nenhum efeito colateral. Use antes de responder perguntas como \"esqueci meu horário\", \"quando é minha " +
       "consulta?\" ou \"posso remarcar?\", e também como primeiro passo antes de uma remarcação (ver " +
       "schedule_appointment) se não tiver certeza do horário atual.",
-    input_schema: { type: "object", properties: {}, required: [] },
+    inputSchema: { type: "object", properties: {}, required: [] },
   },
   {
     name: "send_result_photo",
     description:
       "Envia uma foto de resultado (antes/depois) de um procedimento específico, quando o lead demonstrar interesse claro naquele procedimento durante a conversa. Use a categoria mais próxima do procedimento mencionado (ex: 'botox', 'preenchimento labial', 'harmonização facial'). No máximo uma vez por conversa — não chame de novo se já tiver enviado antes.",
-    input_schema: {
+    inputSchema: {
       type: "object",
       properties: {
         category: { type: "string", description: "Categoria/procedimento mencionado pelo lead (ex: 'botox')." },
@@ -267,98 +257,63 @@ const TOOLS: Anthropic.Beta.BetaTool[] = [
 export async function generateLeadReply(params: {
   // Prompt de conversação da clínica (Clinic.aiSystemPrompt, ou o padrão de
   // fallback) — ESTÁVEL entre mensagens da mesma clínica (só muda se
-  // alguém editar em /crm/clinicas/[id]/agente-ia). Cacheado (cache_control
-  // logo abaixo), junto com TOOLS (idêntico pra toda clínica/conversa,
-  // nunca muda) — a "última posição" cacheável nesse conjunto, então o
-  // breakpoint aqui cobre os dois de uma vez (tools renderiza antes de
-  // system na ordem que a Anthropic processa o prompt).
+  // alguém editar em /crm/clinicas/[id]/agente-ia). Cacheado
+  // (cacheableSystemPrompt no ConverseRequest), junto com as ferramentas
+  // (idênticas pra toda clínica/conversa, nunca mudam) — a "última
+  // posição" cacheável nesse conjunto.
   systemPrompt: string;
   // Bloco de contexto que muda em TODA mensagem (data/hora atual, minuto a
-  // minuto — ver dateTimeContext em conversation-pipeline.ts). Vem DEPOIS
-  // do cache_control, de propósito: colar isso dentro do mesmo texto que
-  // systemPrompt (como era antes) invalidava o cache inteiro a cada
-  // chamada, já que qualquer byte diferente no prefixo derruba tudo que
-  // vem depois — é exatamente o anti-padrão "datetime.now() no system
-  // prompt" que a própria documentação de prompt caching da Anthropic lista
-  // como o jeito mais comum de quebrar cache sem perceber.
+  // minuto — ver dateTimeContext em conversation-pipeline.ts). Vai como
+  // volatileContext (fora do prefixo cacheado), de propósito: colar isso
+  // dentro do mesmo texto que systemPrompt (como era antes do PR de
+  // caching) invalidava o cache inteiro a cada chamada, já que qualquer
+  // byte diferente no prefixo derruba tudo que vem depois — é exatamente
+  // o anti-padrão "datetime.now() no system prompt" que a própria
+  // documentação de prompt caching da Anthropic lista como o jeito mais
+  // comum de quebrar cache sem perceber.
   contextNote: string;
   history: ChatTurn[];
   tools: AgentTools;
-}): Promise<{ text: string; scheduled?: { startTime: string } }> {
-  const client = anthropicClient();
-  const messages: Anthropic.Beta.BetaMessageParam[] = params.history.map((t) => ({
-    role: t.role,
-    content: t.content,
-  }));
-
+}, provider: LLMProvider = getLLMProvider()): Promise<{ text: string; scheduled?: { startTime: string } }> {
   let scheduled: { startTime: string } | undefined;
 
-  // Loop agentic: o modelo pode encadear chamadas de ferramenta antes do
-  // texto final de resposta ao lead.
-  for (let iteration = 0; iteration < 4; iteration++) {
-    const response = await client.beta.messages.create({
-      model: CONVERSATION_MODEL,
-      max_tokens: 1024,
-      system: [
-        // cache_control aqui = tools (renderizados antes) + este bloco
-        // ficam cacheados juntos. TTL padrão de 5min já cobre bem o ritmo
-        // normal de troca de mensagens numa conversa ativa, e — mais
-        // importante — esse prefixo é o MESMO pra qualquer conversa desta
-        // clínica, não só dentro de uma: leads diferentes conversando ao
-        // mesmo tempo (ou em sequência, dentro do TTL) com a mesma clínica
-        // reaproveitam o mesmo cache.
-        { type: "text", text: params.systemPrompt, cache_control: { type: "ephemeral" } },
-        // SEM cache_control — muda a cada chamada, fica de fora do prefixo
-        // cacheado.
-        { type: "text", text: params.contextNote },
-      ],
-      tools: TOOLS,
-      messages,
-    });
-
-    if (response.stop_reason !== "tool_use") {
-      const textBlock = response.content.find((b) => b.type === "text");
-      const text = textBlock && "text" in textBlock ? textBlock.text : "";
-      return { text, scheduled };
+  // Dispatch de ferramenta — lógica de negócio do VEXO (qual nome de
+  // ferramenta chama qual função de params.tools), por isso fica aqui, não
+  // dentro do provedor. O provedor só sabe executar isso como uma caixa
+  // preta a cada tool_use que o modelo pedir (ver converse, LLMProvider).
+  const executeTool = async (name: string, input: unknown): Promise<unknown> => {
+    if (name === "check_availability") {
+      return params.tools.checkAvailability(input as { dateFrom: string; dateTo: string });
     }
-
-    messages.push({ role: "assistant", content: response.content });
-
-    const toolResults: Anthropic.Beta.BetaToolResultBlockParam[] = [];
-    for (const block of response.content) {
-      if (block.type !== "tool_use") continue;
-
-      let result: unknown;
-      if (block.name === "check_availability") {
-        result = await params.tools.checkAvailability(
-          block.input as { dateFrom: string; dateTo: string }
-        );
-      } else if (block.name === "schedule_appointment") {
-        const input = block.input as { startTime: string; leadName?: string; leadConfirmationQuote?: string };
-        const outcome = await params.tools.scheduleAppointment(input);
-        result = outcome;
-        if ("confirmed" in outcome && outcome.confirmed) {
-          scheduled = { startTime: outcome.startTime };
-        }
-      } else if (block.name === "check_current_appointment") {
-        result = await params.tools.checkCurrentAppointment();
-      } else if (block.name === "save_lead_phone") {
-        result = await params.tools.saveLeadPhone(block.input as { phone: string });
-      } else if (block.name === "send_result_photo") {
-        result = await params.tools.sendResultPhoto(block.input as { category: string });
-      } else {
-        result = { error: `Ferramenta desconhecida: ${block.name}` };
+    if (name === "schedule_appointment") {
+      const typedInput = input as { startTime: string; leadName?: string; leadConfirmationQuote?: string };
+      const outcome = await params.tools.scheduleAppointment(typedInput);
+      if ("confirmed" in outcome && outcome.confirmed) {
+        scheduled = { startTime: outcome.startTime };
       }
-
-      toolResults.push({
-        type: "tool_result",
-        tool_use_id: block.id,
-        content: JSON.stringify(result),
-      });
+      return outcome;
     }
+    if (name === "check_current_appointment") {
+      return params.tools.checkCurrentAppointment();
+    }
+    if (name === "save_lead_phone") {
+      return params.tools.saveLeadPhone(input as { phone: string });
+    }
+    if (name === "send_result_photo") {
+      return params.tools.sendResultPhoto(input as { category: string });
+    }
+    return { error: `Ferramenta desconhecida: ${name}` };
+  };
 
-    messages.push({ role: "user", content: toolResults });
-  }
+  const result = await provider.converse({
+    tier: "conversation",
+    cacheableSystemPrompt: params.systemPrompt,
+    volatileContext: params.contextNote,
+    history: params.history,
+    tools: TOOL_DEFINITIONS,
+    executeTool,
+    fallbackText: "Só um momento, já te retorno com os detalhes.",
+  });
 
-  return { text: "Só um momento, já te retorno com os detalhes.", scheduled };
+  return { text: result.text, scheduled };
 }
