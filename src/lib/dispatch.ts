@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { sendInstagramMessage } from "@/lib/instagram";
+import { sendWhatsappMessage } from "@/lib/whatsapp";
 import { toPublicUploadUrl } from "@/lib/uploads";
 
 // Despacha mensagens OUTBOUND com status PENDING cujo horário de envio
@@ -57,6 +58,44 @@ export async function dispatchDueMessages(): Promise<{ sent: number; failed: num
     // processadas normalmente: não é a query que ignora a linha, é uma
     // exceção anterior na mesma leva que trava o resto atrás dela.
     try {
+      // Passo WHATSAPP de follow-up (ver channel em FollowUpStep e
+      // dispatchFollowUpSteps, src/lib/follow-up.ts) — mesma fila/timing
+      // adaptativo, mas via Evolution API pro telefone do lead em vez da API
+      // do Instagram. Confere de novo aqui (telefone e instância podem ter
+      // mudado entre a criação do passo e o envio de fato) em vez de confiar
+      // só na checagem já feita na criação.
+      if (message.channel === "WHATSAPP") {
+        const phone = message.conversation.lead.phone;
+        const instanceName = message.conversation.clinic.whatsappInstanceName;
+        if (!phone || !instanceName) {
+          await prisma.message.update({
+            where: { id: message.id },
+            data: {
+              status: "FAILED",
+              failReason: !phone ? "Lead sem telefone cadastrado." : "Clínica sem WhatsApp conectado.",
+            },
+          });
+          failed++;
+          continue;
+        }
+
+        await sendWhatsappMessage(instanceName, phone, message.content);
+
+        const sentAtWhatsapp = new Date();
+        await prisma.$transaction([
+          prisma.message.update({ where: { id: message.id }, data: { status: "SENT", sentAt: sentAtWhatsapp } }),
+          prisma.conversation.update({
+            where: { id: message.conversationId },
+            data: {
+              lastMessageAt: sentAtWhatsapp,
+              ...(message.sender === "AI" ? { lastAiMessageAt: sentAtWhatsapp } : {}),
+            },
+          }),
+        ]);
+        sent++;
+        continue;
+      }
+
       const igAccount = message.conversation.clinic.instagramAccount;
       if (!igAccount) {
         await prisma.message.update({
