@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireInternalSession } from "@/lib/session";
 import { saveUploadedAttachment, deleteUploadedAttachment } from "@/lib/uploads";
-import type { FollowUpTrigger } from "@prisma/client";
+import type { FollowUpTrigger, MessageChannel } from "@prisma/client";
 
 // Duas sequências independentes (SILENCE / NO_SHOW), cada uma com sua
 // própria lista de passos. Alimenta diretamente o job existente em
@@ -41,6 +41,22 @@ async function readAttachmentFile(formData: FormData): Promise<File | null> {
   return file instanceof File && file.size > 0 ? file : null;
 }
 
+// Canal extra (WHATSAPP) só faz sentido pra sequência NO_SHOW — ver
+// comentário em MessageChannel/FollowUpStep.channel no schema. SILENCE
+// nunca lê o campo "channel" do form (a UI nem mostra o seletor pra essa
+// aba), mas a validação aqui não confia só nisso — reforça no server,
+// não só na visibilidade do campo no client.
+function readChannel(trigger: FollowUpTrigger, formData: FormData): MessageChannel {
+  const raw = String(formData.get("channel") ?? "INSTAGRAM");
+  if (raw !== "INSTAGRAM" && raw !== "WHATSAPP") {
+    throw new Error(`Canal inválido: ${raw}.`);
+  }
+  if (raw === "WHATSAPP" && trigger !== "NO_SHOW") {
+    throw new Error('O canal WhatsApp só está disponível na sequência "não compareceu".');
+  }
+  return raw;
+}
+
 // Liga/desliga o delay artificial de resposta da IA (ver
 // computeAdaptiveDelaySeconds em src/lib/scheduler.ts). Desligado é usado
 // pra testar o sistema sem esperar as faixas de 30s-10min — a IA passa a
@@ -75,12 +91,16 @@ export async function addFollowUpStep(trigger: FollowUpTrigger, formData: FormDa
   const last = await prisma.followUpStep.findFirst({ where: { trigger }, orderBy: { order: "desc" } });
   const isFirstNoShowStep = trigger === "NO_SHOW" && !last;
   const offsetHours = readOffsetHours(formData, isFirstNoShowStep ? 1 : 0);
+  const channel = readChannel(trigger, formData);
 
-  const file = await readAttachmentFile(formData);
+  // Anexo não é suportado no canal WHATSAPP (Evolution API só manda texto
+  // aqui, ver sendWhatsappMessage) — ignora qualquer arquivo enviado nesse
+  // caso em vez de salvar um attachmentUrl que nunca vai ser usado.
+  const file = channel === "WHATSAPP" ? null : await readAttachmentFile(formData);
   const attachmentUrl = file ? await saveUploadedAttachment(file, "follow-up") : null;
 
   await prisma.followUpStep.create({
-    data: { trigger, order: (last?.order ?? -1) + 1, content, attachmentUrl, offsetHours },
+    data: { trigger, order: (last?.order ?? -1) + 1, content, attachmentUrl, offsetHours, channel },
   });
 
   revalidatePath("/crm", "layout");
@@ -95,13 +115,20 @@ export async function updateFollowUpStep(stepId: string, formData: FormData) {
   const existing = await prisma.followUpStep.findUniqueOrThrow({ where: { id: stepId } });
   const isFirstNoShowStep = existing.trigger === "NO_SHOW" && existing.order === 0;
   const offsetHours = readOffsetHours(formData, isFirstNoShowStep ? 1 : 0);
+  const channel = readChannel(existing.trigger, formData);
 
   const currentAttachmentUrl = String(formData.get("currentAttachmentUrl") ?? "").trim() || null;
   const removeAttachment = formData.get("removeAttachment") === "on";
-  const file = await readAttachmentFile(formData);
+  const file = channel === "WHATSAPP" ? null : await readAttachmentFile(formData);
 
   let attachmentUrl = currentAttachmentUrl;
-  if (file) {
+  if (channel === "WHATSAPP") {
+    // Trocar pra WHATSAPP num passo que já tinha anexo (ver comentário
+    // acima) descarta o anexo antigo em vez de deixar uma URL órfã salva
+    // sem nunca ser enviada.
+    await deleteUploadedAttachment(currentAttachmentUrl);
+    attachmentUrl = null;
+  } else if (file) {
     attachmentUrl = await saveUploadedAttachment(file, "follow-up");
     await deleteUploadedAttachment(currentAttachmentUrl);
   } else if (removeAttachment) {
@@ -109,7 +136,7 @@ export async function updateFollowUpStep(stepId: string, formData: FormData) {
     attachmentUrl = null;
   }
 
-  await prisma.followUpStep.update({ where: { id: stepId }, data: { content, attachmentUrl, offsetHours } });
+  await prisma.followUpStep.update({ where: { id: stepId }, data: { content, attachmentUrl, offsetHours, channel } });
   revalidatePath("/crm", "layout");
 }
 

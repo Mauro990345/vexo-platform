@@ -173,7 +173,7 @@ async function dispatchFollowUpSteps(): Promise<number> {
       conversation: {
         select: {
           lastLeadMessageAt: true,
-          lead: { select: { name: true, igUsername: true } },
+          lead: { select: { name: true, igUsername: true, phone: true } },
           appointments: {
             where: { status: { in: ["SCHEDULED", "CONFIRMED"] } },
             select: { id: true },
@@ -226,29 +226,54 @@ async function dispatchFollowUpSteps(): Promise<number> {
     const stepContent = nextStep.content ? applyTemplateVariables(nextStep.content, log.conversation.lead) : "";
 
     const messagesToCreate = [];
-    if (stepContent) {
-      messagesToCreate.push({
-        conversationId: log.conversationId,
-        direction: "OUTBOUND" as const,
-        sender: "AI" as const,
-        content: stepContent,
-        status: "PENDING" as const,
-        scheduledFor: sendAt,
-      });
-    }
-    if (nextStep.attachmentUrl) {
-      messagesToCreate.push({
-        conversationId: log.conversationId,
-        direction: "OUTBOUND" as const,
-        sender: "AI" as const,
-        content: stepContent ? "[anexo]" : "",
-        mediaUrl: nextStep.attachmentUrl,
-        status: "PENDING" as const,
-        // Se já existe uma mensagem de texto no mesmo passo, o anexo chega
-        // logo em seguida, como duas mensagens separadas (limite da API do
-        // Instagram: não dá pra combinar texto + anexo numa única mensagem).
-        scheduledFor: stepContent ? new Date(sendAt.getTime() + 5_000) : sendAt,
-      });
+
+    // Passo WHATSAPP: canal extra de reengajamento (hoje só usado no fim da
+    // sequência NO_SHOW, ver channel em FollowUpStep) — complementar às
+    // mensagens por Instagram, nunca substituindo elas. Só existe se o lead
+    // tiver telefone (capturado no agendamento, ver saveLeadPhone em
+    // conversation-pipeline.ts); sem telefone, pula esse passo específico
+    // (avança lastStepIndex normalmente) em vez de ficar reoferecendo pra
+    // sempre — texto só, sem anexo (Evolution API só manda texto, ver
+    // sendWhatsappMessage em src/lib/whatsapp.ts). O envio de fato acontece
+    // em dispatchDueMessages (src/lib/dispatch.ts), que confere de novo se a
+    // clínica tem WhatsApp conectado antes de mandar.
+    if (nextStep.channel === "WHATSAPP") {
+      if (stepContent && log.conversation.lead.phone) {
+        messagesToCreate.push({
+          conversationId: log.conversationId,
+          direction: "OUTBOUND" as const,
+          sender: "AI" as const,
+          content: stepContent,
+          status: "PENDING" as const,
+          scheduledFor: sendAt,
+          channel: "WHATSAPP" as const,
+        });
+      }
+    } else {
+      if (stepContent) {
+        messagesToCreate.push({
+          conversationId: log.conversationId,
+          direction: "OUTBOUND" as const,
+          sender: "AI" as const,
+          content: stepContent,
+          status: "PENDING" as const,
+          scheduledFor: sendAt,
+        });
+      }
+      if (nextStep.attachmentUrl) {
+        messagesToCreate.push({
+          conversationId: log.conversationId,
+          direction: "OUTBOUND" as const,
+          sender: "AI" as const,
+          content: stepContent ? "[anexo]" : "",
+          mediaUrl: nextStep.attachmentUrl,
+          status: "PENDING" as const,
+          // Se já existe uma mensagem de texto no mesmo passo, o anexo chega
+          // logo em seguida, como duas mensagens separadas (limite da API do
+          // Instagram: não dá pra combinar texto + anexo numa única mensagem).
+          scheduledFor: stepContent ? new Date(sendAt.getTime() + 5_000) : sendAt,
+        });
+      }
     }
 
     await prisma.$transaction([

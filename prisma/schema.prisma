@@ -348,6 +348,17 @@ enum MessageStatus {
   FAILED
 }
 
+// Canal de saída de uma mensagem OUTBOUND. Quase tudo é INSTAGRAM (a
+// conversa em si); WHATSAPP existe só pro passo extra de reengajamento da
+// sequência "não compareceu" (ver FollowUpStep.channel e
+// dispatchFollowUpSteps, src/lib/follow-up.ts) — mesma tabela/timeline pra
+// aparecer junto do resto do histórico da conversa na tela, mas despachado
+// via Evolution API (sendWhatsappMessage) em vez da API do Instagram.
+enum MessageChannel {
+  INSTAGRAM
+  WHATSAPP
+}
+
 model Message {
   id             String       @id @default(cuid())
   conversationId String
@@ -357,6 +368,7 @@ model Message {
   sender    MessageSender
   content   String           @db.Text
   mediaUrl  String? // ex: vídeo do médico
+  channel   MessageChannel   @default(INSTAGRAM)
 
   // @unique protege contra reentrega do webhook do Instagram (a Meta
   // reentrega "at least once" — se o VEXO demorar demais pra responder 200,
@@ -510,6 +522,15 @@ model FollowUpStep {
 
   content       String  @db.Text
   attachmentUrl String?
+
+  // Só WHATSAPP faz sentido fora da sequência SILENCE — reengajamento
+  // extra da sequência NO_SHOW, pro telefone capturado no agendamento
+  // (Lead.phone), complementar às mensagens por Instagram, não um
+  // substituto delas (ver dispatchFollowUpSteps, src/lib/follow-up.ts).
+  // Sem suporte a anexo por esse canal (Evolution API só manda texto aqui,
+  // ver sendWhatsappMessage em src/lib/whatsapp.ts) — attachmentUrl é
+  // ignorado quando channel = WHATSAPP.
+  channel MessageChannel @default(INSTAGRAM)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

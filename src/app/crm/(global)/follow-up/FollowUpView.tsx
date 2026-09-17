@@ -37,6 +37,11 @@ function StepList({
                 <span className="shrink-0 rounded-full border border-vexo-border px-1.5 py-0.5 text-card text-vexo-muted">
                   Passo {i + 1}
                 </span>
+                {step.channel === "WHATSAPP" && (
+                  <span className="shrink-0 rounded-full border border-vexo-success/40 bg-vexo-success/10 px-1.5 py-0.5 text-card text-vexo-success">
+                    WhatsApp
+                  </span>
+                )}
                 <span className="shrink-0 text-card text-vexo-muted">
                   {i === 0 ? `${step.offsetHours}h` : `+${step.offsetHours}h`}
                 </span>
@@ -102,32 +107,53 @@ function StepList({
 
                 <TemplateMessageField defaultValue={step.content} />
 
-                <div>
-                  <label className="mb-1 block text-xs text-vexo-muted">Anexo (opcional — imagem ou vídeo)</label>
-                  {step.attachmentUrl && (
-                    <div className="mb-1.5 flex items-center justify-between gap-2 rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5">
-                      <a
-                        href={step.attachmentUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="min-w-0 truncate text-xs text-vexo-accent hover:underline"
-                      >
-                        Ver anexo atual
-                      </a>
-                      <label className="flex shrink-0 items-center gap-1 text-card text-vexo-muted">
-                        <input type="checkbox" name="removeAttachment" className="rounded border-vexo-border" />
-                        Remover
-                      </label>
-                    </div>
-                  )}
-                  <input type="hidden" name="currentAttachmentUrl" value={step.attachmentUrl ?? ""} />
-                  <AttachmentField
-                    key={step.attachmentUrl ?? "none"}
-                    helpText={
-                      step.attachmentUrl ? "Escolher um novo arquivo substitui o atual." : "JPG, PNG, WEBP, GIF, MP4, MOV ou WEBM — até 25MB."
-                    }
-                  />
-                </div>
+                {trigger === "NO_SHOW" && (
+                  <div>
+                    <label className="mb-1 block text-xs text-vexo-muted">Canal</label>
+                    <select
+                      name="channel"
+                      defaultValue={step.channel}
+                      className="w-full rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5 text-xs outline-none focus:border-vexo-accent"
+                    >
+                      <option value="INSTAGRAM">Instagram (Direct)</option>
+                      <option value="WHATSAPP">WhatsApp — reengajamento extra, só se o lead tiver telefone</option>
+                    </select>
+                  </div>
+                )}
+
+                {step.channel === "WHATSAPP" ? (
+                  <p className="text-card text-vexo-muted">
+                    Passo por WhatsApp: sem anexo (só texto) e sem a janela de 24h do Instagram — pode
+                    ficar mais espaçado no tempo. Enviado só se o lead tiver telefone cadastrado.
+                  </p>
+                ) : (
+                  <div>
+                    <label className="mb-1 block text-xs text-vexo-muted">Anexo (opcional — imagem ou vídeo)</label>
+                    {step.attachmentUrl && (
+                      <div className="mb-1.5 flex items-center justify-between gap-2 rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5">
+                        <a
+                          href={step.attachmentUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="min-w-0 truncate text-xs text-vexo-accent hover:underline"
+                        >
+                          Ver anexo atual
+                        </a>
+                        <label className="flex shrink-0 items-center gap-1 text-card text-vexo-muted">
+                          <input type="checkbox" name="removeAttachment" className="rounded border-vexo-border" />
+                          Remover
+                        </label>
+                      </div>
+                    )}
+                    <input type="hidden" name="currentAttachmentUrl" value={step.attachmentUrl ?? ""} />
+                    <AttachmentField
+                      key={step.attachmentUrl ?? "none"}
+                      helpText={
+                        step.attachmentUrl ? "Escolher um novo arquivo substitui o atual." : "JPG, PNG, WEBP, GIF, MP4, MOV ou WEBM — até 25MB."
+                      }
+                    />
+                  </div>
+                )}
 
                 <button
                   type="submit"
@@ -159,6 +185,24 @@ function StepList({
         </div>
 
         <TemplateMessageField placeholder="Ex: Oi! Ainda tem interesse em agendar sua avaliação?" />
+
+        {trigger === "NO_SHOW" && (
+          <div>
+            <label className="mb-1 block text-xs text-vexo-muted">Canal</label>
+            <select
+              name="channel"
+              defaultValue="INSTAGRAM"
+              className="w-full rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5 text-xs outline-none focus:border-vexo-accent"
+            >
+              <option value="INSTAGRAM">Instagram (Direct)</option>
+              <option value="WHATSAPP">WhatsApp — reengajamento extra, só se o lead tiver telefone</option>
+            </select>
+            <p className="mt-1 text-card text-vexo-muted">
+              WhatsApp é complementar às mensagens do Instagram (não substitui), sem anexo e sem a
+              janela de 24h — o anexo abaixo é ignorado se escolher esse canal.
+            </p>
+          </div>
+        )}
 
         <div>
           <label className="mb-1 block text-xs text-vexo-muted">Anexo (opcional — imagem ou vídeo)</label>
