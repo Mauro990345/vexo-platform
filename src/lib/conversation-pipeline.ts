@@ -471,7 +471,11 @@ export async function handleInboundInstagramMessage(
     `ou pedir pra remarcar, chame check_current_appointment antes de responder — não confie só no ` +
     `histórico da conversa. Remarcação usa a MESMA schedule_appointment, com o horário novo (as ` +
     `mesmas regras de confirmação valem); o sistema identifica sozinho que já existe um ` +
-    `agendamento e move ele em vez de criar outro.]`;
+    `agendamento e move ele em vez de criar outro. Quando o lead pedir pra agendar sem dizer ` +
+    `qual dia, SEMPRE confirme o DIA específico primeiro (ex.: "quinta-feira", "dia 20", ` +
+    `"amanhã") antes de perguntar ou oferecer período do dia (manhã/tarde) — nunca pergunte só ` +
+    `"manhã ou tarde?" sem já saber (ou ter perguntado) em qual dia; sem o dia definido, ` +
+    `check_availability não tem como saber que intervalo consultar.]`;
 
   const reply = await generateLeadReply({
     // Separados (não mais concatenados numa string só) pra permitir prompt
@@ -633,6 +637,13 @@ export async function handleInboundInstagramMessage(
 
   if (capturedLeadPhone) {
     await prisma.lead.update({ where: { id: lead.id }, data: { phone: capturedLeadPhone } });
+    // O WhatsApp pode ter sido pedido numa mensagem ANTERIOR à que
+    // agendou (ex: a própria mensagem de confirmação do horário já pede
+    // o WhatsApp, e o lead só responde com o número no turno seguinte) —
+    // se já existe um agendamento esperando o vídeo, manda agora que o
+    // número acabou de chegar. Ver maybeSendConfirmationVideo pro bug que
+    // isso corrige (vídeo saindo antes do WhatsApp confirmado).
+    await maybeSendConfirmationVideo({ clinicId: clinic.id, conversationId: conversation.id, afterScheduledFor: scheduledFor });
   }
 
   if (capturedResultPhoto) {
@@ -705,15 +716,9 @@ async function confirmAppointment(params: {
   });
 
   const newScheduledAt = new Date(params.startTimeIso);
-  let appointment: { id: string; confirmationVideoSentAt: Date | null };
 
   if (existing) {
-    if (existing.scheduledAt.getTime() === newScheduledAt.getTime()) {
-      // Mesmo horário já confirmado antes nesta conversa (reenvio da
-      // mesma chamada, ou o modelo confirmando de novo o que já estava
-      // certo) — reaproveita sem mexer no Google Calendar nem duplicar.
-      appointment = existing;
-    } else {
+    if (existing.scheduledAt.getTime() !== newScheduledAt.getTime()) {
       // Horário diferente do já agendado nesta conversa = remarcação:
       // move o evento EXISTENTE em vez de criar outro.
       if (existing.googleEventId) {
@@ -723,12 +728,14 @@ async function confirmAppointment(params: {
           console.error("[vexo] Falha ao mover evento no Google Calendar:", err);
         }
       }
-      appointment = await prisma.appointment.update({
+      await prisma.appointment.update({
         where: { id: existing.id },
         data: { scheduledAt: newScheduledAt },
-        select: { id: true, confirmationVideoSentAt: true },
       });
     }
+    // Senão: mesmo horário já confirmado antes nesta conversa (reenvio da
+    // mesma chamada, ou o modelo confirmando de novo o que já estava
+    // certo) — reaproveita sem mexer no Google Calendar nem duplicar.
   } else {
     let googleEventId: string | undefined;
     try {
@@ -742,7 +749,7 @@ async function confirmAppointment(params: {
       console.error("[vexo] Falha ao criar evento no Google Calendar:", err);
     }
 
-    appointment = await prisma.appointment.create({
+    await prisma.appointment.create({
       data: {
         clinicId: params.clinicId,
         conversationId: params.conversationId,
@@ -751,7 +758,6 @@ async function confirmAppointment(params: {
         googleEventId,
         status: "SCHEDULED",
       },
-      select: { id: true, confirmationVideoSentAt: true },
     });
   }
 
@@ -760,17 +766,59 @@ async function confirmAppointment(params: {
     data: { status: "SCHEDULED" },
   });
 
-  // Bug real reportado em produção: o vídeo saía IMEDIATAMENTE
-  // (scheduledFor: agora), enquanto a própria mensagem de texto que
-  // confirma o agendamento pro lead (reply.text, criada em
-  // handleInboundInstagramMessage com um delay adaptativo de alguns
-  // segundos a poucos minutos — ver computeAdaptiveDelaySeconds) ainda
-  // estava PENDING, esperando esse delay passar. Resultado: o vídeo
-  // chegava pro lead antes da própria confirmação em texto (e antes de
-  // qualquer pedido de WhatsApp feito na mesma resposta) — sem contexto
-  // nenhum, "do nada". Corrigido ancorando o vídeo alguns segundos DEPOIS
-  // de params.afterScheduledFor (o scheduledFor da mensagem de
-  // confirmação), nunca antes dela.
+  await maybeSendConfirmationVideo({
+    clinicId: params.clinicId,
+    conversationId: params.conversationId,
+    afterScheduledFor: params.afterScheduledFor,
+  });
+}
+
+// Bug real reportado em produção: o vídeo saía IMEDIATAMENTE ao agendar,
+// mesmo quando a PRÓPRIA mensagem que confirmou o horário também pedia o
+// WhatsApp do lead pela primeira vez — ou seja, o vídeo chegava antes do
+// número sequer ter sido informado, "do nada", sem ter sido pedido ainda
+// numa resposta anterior. Por isso essa checagem não vive só dentro de
+// confirmAppointment (chamada uma vez, no momento de agendar): é chamada
+// de novo sempre que um telefone novo é capturado (ver capturedLeadPhone
+// em handleInboundInstagramMessage), pra cobrir o caso comum de agendar
+// primeiro e o lead só responder com o WhatsApp num turno seguinte — sem
+// isso, o vídeo nunca seria enviado nesse caso (nada mais dispara
+// confirmAppointment de novo só porque o telefone chegou).
+//
+// Idempotente (por Appointment.confirmationVideoSentAt) e silenciosa
+// quando ainda não há o que mandar (sem agendamento ativo, sem vídeo
+// configurado pela clínica, ou sem telefone ainda) — cada chamada só
+// efetivamente envia quando as três condições finalmente se encontram.
+async function maybeSendConfirmationVideo(params: {
+  clinicId: string;
+  conversationId: string;
+  afterScheduledFor: Date;
+}) {
+  const appointment = await prisma.appointment.findFirst({
+    where: { conversationId: params.conversationId, status: { in: ["SCHEDULED", "CONFIRMED"] } },
+    orderBy: { createdAt: "desc" },
+  });
+  if (!appointment || appointment.confirmationVideoSentAt) return;
+
+  const [clinic, conversation] = await Promise.all([
+    prisma.clinic.findUnique({ where: { id: params.clinicId } }),
+    prisma.conversation.findUnique({ where: { id: params.conversationId }, include: { lead: true } }),
+  ]);
+  if (!clinic?.confirmationVideoUrl) return;
+  // Ainda sem WhatsApp — não é erro, só significa "ainda não é a hora";
+  // a próxima chamada (quando o telefone chegar) tenta de novo.
+  if (!conversation?.lead.phone) return;
+
+  // Bug real reportado em produção (parte 1, resolvida antes desta): o
+  // vídeo saía IMEDIATAMENTE (scheduledFor: agora), enquanto a própria
+  // mensagem de texto que confirma o agendamento pro lead (reply.text,
+  // criada em handleInboundInstagramMessage com um delay adaptativo de
+  // alguns segundos a poucos minutos — ver computeAdaptiveDelaySeconds)
+  // ainda estava PENDING, esperando esse delay passar. Corrigido
+  // ancorando o vídeo alguns segundos DEPOIS de params.afterScheduledFor
+  // (o scheduledFor da mensagem que disparou esta checagem — a de
+  // confirmação do agendamento, ou a que reconhece o WhatsApp recebido),
+  // nunca antes dela.
   //
   // Também manda uma frase curta explicando o vídeo ANTES dele — a API do
   // Instagram não permite combinar texto + mídia numa única mensagem (por
@@ -778,41 +826,34 @@ async function confirmAppointment(params: {
   // follow-up com anexo em follow-up.ts), e sem isso o vídeo chegava sem
   // nenhuma legenda/contexto (dispatchDueMessages descarta message.content
   // quando mediaUrl está preenchido — só a mídia é enviada nesse caso).
-  //
-  // Trava contra reenvio: numa remarcação (bloco acima reaproveita o
-  // MESMO Appointment em vez de criar outro), appointment.confirmationVideoSentAt
-  // já reflete corretamente se o vídeo foi mandado antes — sem essa
-  // checagem, ele seria disparado de novo a cada remarcação.
-  if (clinic?.confirmationVideoUrl && !appointment.confirmationVideoSentAt) {
-    const introAt = new Date(params.afterScheduledFor.getTime() + 5_000);
-    const videoAt = new Date(params.afterScheduledFor.getTime() + 8_000);
-    const introText = clinic.confirmationVideoCaption?.trim() || DEFAULT_CONFIRMATION_VIDEO_CAPTION;
-    await prisma.$transaction([
-      prisma.message.create({
-        data: {
-          conversationId: params.conversationId,
-          direction: "OUTBOUND",
-          sender: "SYSTEM",
-          content: introText,
-          status: "PENDING",
-          scheduledFor: introAt,
-        },
-      }),
-      prisma.message.create({
-        data: {
-          conversationId: params.conversationId,
-          direction: "OUTBOUND",
-          sender: "SYSTEM",
-          content: "[vídeo de confirmação de agendamento]",
-          mediaUrl: clinic.confirmationVideoUrl,
-          status: "PENDING",
-          scheduledFor: videoAt,
-        },
-      }),
-      prisma.appointment.update({
-        where: { id: appointment.id },
-        data: { confirmationVideoSentAt: new Date() },
-      }),
-    ]);
-  }
+  const introAt = new Date(params.afterScheduledFor.getTime() + 5_000);
+  const videoAt = new Date(params.afterScheduledFor.getTime() + 8_000);
+  const introText = clinic.confirmationVideoCaption?.trim() || DEFAULT_CONFIRMATION_VIDEO_CAPTION;
+  await prisma.$transaction([
+    prisma.message.create({
+      data: {
+        conversationId: params.conversationId,
+        direction: "OUTBOUND",
+        sender: "SYSTEM",
+        content: introText,
+        status: "PENDING",
+        scheduledFor: introAt,
+      },
+    }),
+    prisma.message.create({
+      data: {
+        conversationId: params.conversationId,
+        direction: "OUTBOUND",
+        sender: "SYSTEM",
+        content: "[vídeo de confirmação de agendamento]",
+        mediaUrl: clinic.confirmationVideoUrl,
+        status: "PENDING",
+        scheduledFor: videoAt,
+      },
+    }),
+    prisma.appointment.update({
+      where: { id: appointment.id },
+      data: { confirmationVideoSentAt: new Date() },
+    }),
+  ]);
 }
