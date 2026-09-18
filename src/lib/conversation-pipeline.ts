@@ -9,6 +9,7 @@ import { DEFAULT_CONVERSATION_SYSTEM_PROMPT } from "@/lib/default-prompt";
 import { sendWhatsappMessage, formatEscalationAlert } from "@/lib/whatsapp";
 import { cancelPendingFollowUp, getSilenceHours, applyTemplateVariables } from "@/lib/follow-up";
 import { toChatHistory } from "@/lib/chat-history";
+import { buildResultPhotoMessages, type ResultPhotoInput } from "@/lib/result-photo-message";
 
 export { toChatHistory } from "@/lib/chat-history";
 
@@ -419,7 +420,7 @@ export async function handleInboundInstagramMessage(
 
   let scheduledStartTime: string | undefined;
   let capturedLeadPhone: string | undefined;
-  let capturedResultPhotoUrl: string | undefined;
+  let capturedResultPhoto: ResultPhotoInput | undefined;
   let resultPhotoAlreadySent = reengaged ? false : Boolean(conversation.resultPhotoSentAt);
 
   // Mesma variável {{primeiro_nome}} já suportada nos templates de
@@ -579,7 +580,7 @@ export async function handleInboundInstagramMessage(
         if (!photo) {
           return { error: `Nenhuma foto de resultado cadastrada para a categoria "${category}".` };
         }
-        capturedResultPhotoUrl = photo.imageUrl;
+        capturedResultPhoto = { imageUrl: photo.imageUrl, caption: photo.caption };
         resultPhotoAlreadySent = true;
         return { sent: true };
       },
@@ -634,20 +635,27 @@ export async function handleInboundInstagramMessage(
     await prisma.lead.update({ where: { id: lead.id }, data: { phone: capturedLeadPhone } });
   }
 
-  if (capturedResultPhotoUrl) {
-    // +5s pra chegar logo depois da resposta em texto, não junto/antes dela.
+  if (capturedResultPhoto) {
+    // +5s pra chegar logo depois da resposta em texto, não junto/antes dela
+    // — a legenda cadastrada (ResultPhoto.caption), quando existe, sai
+    // ainda mais alguns segundos antes da própria foto (ver
+    // buildResultPhotoMessages, src/lib/result-photo-message.ts); sem
+    // legenda, comportamento idêntico ao de antes desse campo existir.
+    const photoMessages = buildResultPhotoMessages(capturedResultPhoto, new Date(scheduledFor.getTime() + 5_000));
     await prisma.$transaction([
-      prisma.message.create({
-        data: {
-          conversationId: conversation.id,
-          direction: "OUTBOUND",
-          sender: "AI",
-          content: "[foto de resultado]",
-          mediaUrl: capturedResultPhotoUrl,
-          status: "PENDING",
-          scheduledFor: new Date(scheduledFor.getTime() + 5_000),
-        },
-      }),
+      ...photoMessages.map((draft) =>
+        prisma.message.create({
+          data: {
+            conversationId: conversation.id,
+            direction: "OUTBOUND",
+            sender: "AI",
+            content: draft.content,
+            mediaUrl: draft.mediaUrl,
+            status: "PENDING",
+            scheduledFor: draft.scheduledFor,
+          },
+        })
+      ),
       prisma.conversation.update({
         where: { id: conversation.id },
         data: { resultPhotoSentAt: new Date() },

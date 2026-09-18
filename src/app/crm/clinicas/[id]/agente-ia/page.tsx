@@ -1,7 +1,13 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireInternalSession } from "@/lib/session";
-import { updateAiAgentSettings, updateAiAgentTiming, addResultPhoto, deleteResultPhoto } from "../../actions";
+import {
+  updateAiAgentSettings,
+  updateAiAgentTiming,
+  addResultPhoto,
+  updateResultPhotoCaption,
+  deleteResultPhoto,
+} from "../../actions";
 import { updateAiSettings, updateFollowUpWindow } from "@/app/crm/(global)/follow-up/actions";
 import { PromptTextarea } from "@/components/PromptTextarea";
 import { ConfirmSubmitButton } from "@/components/ConfirmSubmitButton";
@@ -180,6 +186,18 @@ export default async function ClinicAiAgentPage({ params }: { params: { id: stri
               className="block text-xs text-vexo-muted file:mr-2 file:rounded-lg file:border file:border-vexo-border file:bg-vexo-bg file:px-2.5 file:py-1.5 file:text-xs file:text-vexo-fg hover:file:border-vexo-accent"
             />
           </div>
+          <div className="min-w-0 flex-1 basis-full">
+            <label className="mb-1 block text-xs text-vexo-muted" htmlFor="caption">
+              Mensagem/legenda (opcional — a IA manda esse texto antes da foto)
+            </label>
+            <textarea
+              id="caption"
+              name="caption"
+              rows={2}
+              placeholder='ex: "Separei um resultado real de um procedimento parecido com o que você quer"'
+              className="w-full rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5 text-xs outline-none focus:border-vexo-accent"
+            />
+          </div>
           <button
             type="submit"
             className="rounded-lg border border-vexo-accent px-2.5 py-1.5 text-xs font-medium text-vexo-accent hover:bg-vexo-accent/10"
@@ -196,15 +214,41 @@ export default async function ClinicAiAgentPage({ params }: { params: { id: stri
               <div key={photo.id} className="overflow-hidden rounded-xl border border-vexo-border bg-vexo-surface">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={photo.imageUrl} alt={photo.category} className="h-32 w-full object-cover" />
-                <div className="flex items-center justify-between gap-2 p-2">
-                  <span className="min-w-0 truncate text-xs font-medium">{photo.category}</span>
-                  <form action={deleteResultPhoto.bind(null, clinic.id, photo.id)}>
-                    <ConfirmSubmitButton
-                      confirmMessage="Remover esta foto? Essa ação não pode ser desfeita."
-                      className="shrink-0 text-caption text-vexo-muted hover:text-red-500"
-                    >
-                      Remover
-                    </ConfirmSubmitButton>
+                <div className="space-y-1.5 p-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="min-w-0 truncate text-xs font-medium">{photo.category}</span>
+                    <form action={deleteResultPhoto.bind(null, clinic.id, photo.id)}>
+                      <ConfirmSubmitButton
+                        confirmMessage="Remover esta foto? Essa ação não pode ser desfeita."
+                        className="shrink-0 text-caption text-vexo-muted hover:text-red-500"
+                      >
+                        Remover
+                      </ConfirmSubmitButton>
+                    </form>
+                  </div>
+
+                  <form
+                    action={updateResultPhotoCaption.bind(null, clinic.id, photo.id)}
+                    className="space-y-1"
+                  >
+                    <textarea
+                      name="caption"
+                      rows={2}
+                      defaultValue={photo.caption ?? ""}
+                      placeholder='Sem legenda — a IA manda só a foto. Ex: "Olha esse resultado real!"'
+                      className="w-full rounded-lg border border-vexo-border bg-vexo-bg px-2 py-1 text-card outline-none focus:border-vexo-accent"
+                    />
+                    <div className="flex items-center justify-between gap-2">
+                      {!photo.caption && (
+                        <span className="text-card text-vexo-warning">Sem legenda</span>
+                      )}
+                      <button
+                        type="submit"
+                        className="ml-auto rounded-md border border-vexo-border px-1.5 py-0.5 text-card text-vexo-muted hover:border-vexo-accent hover:text-vexo-accent"
+                      >
+                        Salvar legenda
+                      </button>
+                    </div>
                   </form>
                 </div>
               </div>
