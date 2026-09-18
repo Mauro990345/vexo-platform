@@ -608,13 +608,39 @@ export async function addResultPhoto(clinicId: string, formData: FormData) {
     throw new Error("Selecione uma foto.");
   }
 
+  // Opcional de propósito (ver comentário em ResultPhoto.caption, schema)
+  // — sem legenda, a foto continua saindo sozinha, exatamente como sempre
+  // funcionou.
+  const caption = String(formData.get("caption") ?? "").trim() || null;
+
   const imageUrl = await saveUploadedAttachment(file, "result-photos");
 
   await prisma.resultPhoto.create({
-    data: { clinicId, category, imageUrl },
+    data: { clinicId, category, imageUrl, caption },
   });
 
-  revalidatePath(`/crm/clinicas/${clinicId}/fotos`);
+  // A tela de fotos de resultado vive dentro de Agente de IA (não existe
+  // rota própria "/fotos") — revalidar o path certo é o que faz a foto
+  // nova (e a legenda) aparecer na tela sem precisar de um refresh manual.
+  revalidatePath(`/crm/clinicas/${clinicId}/agente-ia`);
+}
+
+// Formulário separado de addResultPhoto — editar só a legenda de uma foto
+// já cadastrada (a foto e a categoria continuam trocáveis só via
+// remover + adicionar de novo). Existe principalmente pra dar como
+// preencher a legenda de fotos que já foram cadastradas antes desse campo
+// existir, sem precisar reenviar a imagem.
+export async function updateResultPhotoCaption(clinicId: string, photoId: string, formData: FormData) {
+  await requireInternalSession();
+
+  const photo = await prisma.resultPhoto.findUnique({ where: { id: photoId } });
+  if (!photo || photo.clinicId !== clinicId) return;
+
+  const caption = String(formData.get("caption") ?? "").trim() || null;
+
+  await prisma.resultPhoto.update({ where: { id: photoId }, data: { caption } });
+
+  revalidatePath(`/crm/clinicas/${clinicId}/agente-ia`);
 }
 
 export async function deleteResultPhoto(clinicId: string, photoId: string) {
@@ -626,7 +652,7 @@ export async function deleteResultPhoto(clinicId: string, photoId: string) {
   await prisma.resultPhoto.delete({ where: { id: photoId } });
   await deleteUploadedAttachment(photo.imageUrl);
 
-  revalidatePath(`/crm/clinicas/${clinicId}/fotos`);
+  revalidatePath(`/crm/clinicas/${clinicId}/agente-ia`);
 }
 
 export async function sendHumanReply(conversationId: string, formData: FormData) {

@@ -645,6 +645,15 @@ model ResultPhoto {
   category String
   imageUrl String
 
+  // Mensagem que a IA manda ANTES da foto (ex: "Separei um resultado real
+  // de um procedimento parecido com o que você quer") — sem isso, a foto
+  // saía sozinha (só o anexo, sem nenhum texto de acompanhamento — ver
+  // buildResultPhotoMessages, src/lib/result-photo-message.ts), quebrando
+  // o fluxo natural da conversa. Opcional de propósito: fotos já
+  // cadastradas antes desse campo existir continuam funcionando exatamente
+  // como antes (só a foto, sem legenda) até alguém preencher.
+  caption String? @db.Text
+
   createdAt DateTime @default(now())
 
   @@index([clinicId, category])
