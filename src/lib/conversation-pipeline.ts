@@ -282,8 +282,22 @@ export async function handleInboundInstagramMessage(
   // e escalona pra humano revisar (@setConversationStatus é o único jeito
   // de devolver a conversa pra IA depois), em vez de continuar
   // respondendo automaticamente sem fim.
-  const LOOP_GUARD_WINDOW_MINUTES = 10;
-  const LOOP_GUARD_MAX_AI_MESSAGES = 8;
+  //
+  // Limiar calibrado pra pegar um loop de bot de verdade, não "muitas
+  // mensagens" — bug real em produção: uma conversa de vendas normal, bem
+  // engajada (8 mensagens da IA em 10 minutos, ~25s de latência média por
+  // resposta — nada anormalmente rápido) disparava o escalonamento à toa
+  // com o limiar antigo (8 msgs / 10 min). Um loop de bot genuíno não tem
+  // pausa natural nenhuma entre rodadas (o outro lado também responde na
+  // hora) — o único limitador é o próprio delay artificial da IA
+  // (Clinic.firstBandDelaySeconds, mínimo configurável de 5s), e mesmo
+  // assim as "dezenas de rodadas" observadas acima mostram que um loop
+  // real ultrapassa de sobra qualquer limiar razoável. 20 mensagens em 15
+  // minutos (cadência de disparo: 1 a cada 45s sustentado) dá folga
+  // confortável pra uma conversa rápida e engajada como essa, mantendo a
+  // proteção contra um loop sustentado.
+  const LOOP_GUARD_WINDOW_MINUTES = 15;
+  const LOOP_GUARD_MAX_AI_MESSAGES = 20;
   const recentAiMessageCount = await prisma.message.count({
     where: {
       conversationId: conversation.id,
