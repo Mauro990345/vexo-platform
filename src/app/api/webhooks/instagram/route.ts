@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyWebhookSignature, requestThreadControl } from "@/lib/instagram";
 import { handleInboundInstagramMessage } from "@/lib/conversation-pipeline";
+import { withConversationLock } from "@/lib/conversation-lock";
 import { decryptToken } from "@/lib/crypto";
 import { prisma } from "@/lib/prisma";
 
@@ -190,6 +191,12 @@ export async function POST(req: NextRequest) {
       const fromOwnAccount = event.sender.id === entry.id || Boolean(event.message?.is_echo);
       const inbound = fromOwnAccount ? undefined : event.message ?? event.message_edit;
       if (!inbound?.text) continue;
+      // Guarda numa const própria (não só `inbound.text`) — o TypeScript
+      // não carrega a checagem de narrowing acima pra dentro da closure
+      // passada a withConversationLock logo abaixo, já que ela pode em
+      // teoria rodar mais tarde; capturar o valor aqui, já sabidamente
+      // uma string, resolve isso sem precisar de non-null assertion.
+      const leadText = inbound.text;
 
       // A Meta reentrega webhook "at least once" — se o VEXO demorar
       // demais pra responder 200 (todo o processamento, inclusive a
@@ -219,15 +226,22 @@ export async function POST(req: NextRequest) {
       }
 
       try {
-        await handleInboundInstagramMessage(
-          {
-            igUserId: event.recipient.id,
-            leadIgScopedId: event.sender.id,
-            leadText: inbound.text,
-            timestamp: new Date(event.timestamp),
-            igMessageId: inbound.mid,
-          },
-          webhookLog?.id
+        // Serializa por clínica+lead — ver comentário grande em
+        // src/lib/conversation-lock.ts pro bug real que isso corrige
+        // (agendamento confirmado seguido de "não está mais disponível",
+        // e vídeo de confirmação em dobro — as duas causadas pela mesma
+        // corrida entre duas mensagens do lead processadas ao mesmo tempo).
+        await withConversationLock(`${event.recipient.id}:${event.sender.id}`, () =>
+          handleInboundInstagramMessage(
+            {
+              igUserId: event.recipient.id,
+              leadIgScopedId: event.sender.id,
+              leadText,
+              timestamp: new Date(event.timestamp),
+              igMessageId: inbound.mid,
+            },
+            webhookLog?.id
+          )
         );
       } catch (err) {
         console.error("[vexo] Erro ao processar mensagem do Instagram:", err);
