@@ -136,11 +136,11 @@ describe("generateLeadReply", () => {
   });
 
   it("despacha check_availability pra AgentTools.checkAvailability via executeTool", async () => {
-    const checkAvailability = vi.fn(async () => ({ slots: ["2026-09-18T14:00:00Z"] }));
+    const checkAvailability = vi.fn(async () => ({ slots: ["2026-09-18T09:00"] }));
     const provider = fakeProvider({
       converse: vi.fn(async (request: ConverseRequest) => {
-        const result = await request.executeTool("check_availability", { dateFrom: "a", dateTo: "b" });
-        expect(result).toEqual({ slots: ["2026-09-18T14:00:00Z"] });
+        const result = await request.executeTool("check_availability", { dateFromLocal: "a", dateToLocal: "b" });
+        expect(result).toEqual({ slots: ["2026-09-18T09:00"] });
         return { text: "ok" };
       }),
     });
@@ -155,15 +155,15 @@ describe("generateLeadReply", () => {
       provider
     );
 
-    expect(checkAvailability).toHaveBeenCalledWith({ dateFrom: "a", dateTo: "b" });
+    expect(checkAvailability).toHaveBeenCalledWith({ dateFromLocal: "a", dateToLocal: "b" });
   });
 
   it("captura `scheduled` quando schedule_appointment confirma, via o mesmo executeTool", async () => {
-    const scheduleAppointment = vi.fn(async () => ({ confirmed: true as const, startTime: "2026-09-18T14:00:00Z" }));
+    const scheduleAppointment = vi.fn(async () => ({ confirmed: true as const, startTimeLocal: "2026-09-18T09:00" }));
     const provider = fakeProvider({
       converse: vi.fn(async (request: ConverseRequest) => {
         await request.executeTool("schedule_appointment", {
-          startTime: "2026-09-18T14:00:00Z",
+          startTimeLocal: "2026-09-18T09:00",
           leadConfirmationQuote: "pode ser esse horário",
         });
         return { text: "Agendado!" };
@@ -180,14 +180,14 @@ describe("generateLeadReply", () => {
       provider
     );
 
-    expect(reply.scheduled).toEqual({ startTime: "2026-09-18T14:00:00Z" });
+    expect(reply.scheduled).toEqual({ startTimeLocal: "2026-09-18T09:00" });
   });
 
   it("não captura `scheduled` se schedule_appointment retornar erro", async () => {
     const scheduleAppointment = vi.fn(async () => ({ error: "horário não está mais livre" }));
     const provider = fakeProvider({
       converse: vi.fn(async (request: ConverseRequest) => {
-        await request.executeTool("schedule_appointment", { startTime: "x", leadConfirmationQuote: "y" });
+        await request.executeTool("schedule_appointment", { startTimeLocal: "x", leadConfirmationQuote: "y" });
         return { text: "esse horário não está mais disponível" };
       }),
     });

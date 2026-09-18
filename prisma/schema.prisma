@@ -344,6 +344,21 @@ enum MessageSender {
 
 enum MessageStatus {
   PENDING // aguardando horário de envio (timing adaptativo)
+  // "Reivindicada" por uma execução de dispatchDueMessages (src/lib/dispatch.ts)
+  // que já está enviando de fato — nunca fica assim por muito tempo (só
+  // durante a própria chamada de sendInstagramMessage/sendWhatsappMessage).
+  // Existe pra resolver um bug real em produção: o vídeo de confirmação (e,
+  // em tese, qualquer mensagem) sendo enviado em dobro sem nenhuma mensagem
+  // duplicada do lead envolvida — a causa era o cron de despacho
+  // (*/15 * * * * *, ver src/worker/index.ts) rodando de novo ANTES da
+  // execução anterior terminar de processar seu próprio lote de até 50
+  // mensagens (cada uma com uma chamada de API externa, fácil passar de
+  // 15s no total): as duas execuções liam a MESMA leva de mensagens
+  // PENDING (nenhuma tinha sido "reivindicada" ainda) e mandavam a mesma
+  // mensagem duas vezes. PENDING -> SENDING é uma transição exclusiva (um
+  // UPDATE condicionado em WHERE status='PENDING' só afeta a linha pra UMA
+  // das execuções concorrentes) — ver claimMessage em dispatch.ts.
+  SENDING
   SENT
   FAILED
 }
@@ -388,6 +403,11 @@ model Message {
   failReason   String?
 
   createdAt DateTime @default(now())
+  // Usado só pra detectar uma mensagem presa em SENDING (processo do
+  // worker derrubado no meio do envio, antes de conseguir marcar SENT ou
+  // FAILED) — ver claimMessage/reclaimStaleSendingMessages em
+  // src/lib/dispatch.ts. Prisma atualiza sozinho a cada write.
+  updatedAt DateTime @updatedAt
 
   @@index([conversationId, createdAt])
   @@index([status, scheduledFor])
