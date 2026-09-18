@@ -5,8 +5,61 @@ import { toPublicUploadUrl } from "@/lib/uploads";
 
 // Despacha mensagens OUTBOUND com status PENDING cujo horário de envio
 // (timing adaptativo) já chegou. Chamado periodicamente pelo worker.
+//
+// Bug real em produção: o vídeo de confirmação de agendamento (e, em tese,
+// qualquer mensagem) saindo em DOBRO sem nenhuma mensagem duplicada do
+// lead envolvida — nada a ver com a corrida que o conversation-lock
+// (PR #30) resolve, essa é do lado do DESPACHO, não do recebimento. Causa
+// raiz: o cron que chama esta função roda a cada 15s (ver
+// src/worker/index.ts) SEM esperar a execução anterior terminar — um lote
+// de até 50 mensagens, cada uma com uma chamada de API externa
+// (Instagram/WhatsApp), facilmente passa de 15s no total. Antes desta
+// correção, a query abaixo só LIA mensagens PENDING e só marcava SENT
+// DEPOIS de mandar — sem nenhuma "reserva" no meio, duas execuções
+// sobrepostas liam a MESMA leva (nenhuma tinha status diferente de PENDING
+// ainda) e mandavam a mesma mensagem duas vezes, cada uma sem saber da
+// outra.
+//
+// Corrigido com um "claim" atômico antes de processar: PENDING -> SENDING
+// via um UPDATE condicionado em WHERE status='PENDING' só afeta a linha
+// pra UMA das execuções concorrentes (a outra, rodando o mesmo UPDATE
+// depois que a primeira já commitou, encontra a linha já fora de PENDING e
+// afeta zero linhas) — o mesmo padrão de "fila pobre sobre banco
+// relacional" que já existia pro Appointment (idempotência por
+// confirmationVideoSentAt, ver conversation-pipeline.ts), só que aqui
+// precisa de um estado intermediário porque o "trabalho" (a chamada de
+// envio) é o que demora, não uma escrita só.
+const STALE_SENDING_THRESHOLD_MS = 2 * 60 * 1000;
+
+// Reserva mensagens presas em SENDING que passaram do threshold — só
+// acontece se o processo do worker foi derrubado (deploy, crash, OOM) no
+// meio de um envio, antes de conseguir marcar SENT/FAILED. Sem isso, uma
+// mensagem nessas condições ficaria travada em SENDING pra sempre, nunca
+// mais tentada. Um "reset" simples pra PENDING (não um claim direto) —
+// deixa o claim exclusivo de verdade (abaixo) cuidar de pegá-la de volta
+// no ciclo seguinte, em vez de arriscar a MESMA corrida que este código
+// inteiro existe pra evitar.
+async function reclaimStaleSendingMessages(): Promise<void> {
+  await prisma.message.updateMany({
+    where: { status: "SENDING", updatedAt: { lte: new Date(Date.now() - STALE_SENDING_THRESHOLD_MS) } },
+    data: { status: "PENDING" },
+  });
+}
+
+// Claim atômico e exclusivo de UMA mensagem — ver comentário grande acima.
+// count === 0 significa que outra execução concorrente já reivindicou (ou
+// já processou) essa mensagem; o caller deve pular sem reenviar.
+async function claimMessage(messageId: string): Promise<boolean> {
+  const claim = await prisma.message.updateMany({
+    where: { id: messageId, status: "PENDING" },
+    data: { status: "SENDING" },
+  });
+  return claim.count === 1;
+}
 
 export async function dispatchDueMessages(): Promise<{ sent: number; failed: number }> {
+  await reclaimStaleSendingMessages();
+
   const due = await prisma.message.findMany({
     where: { status: "PENDING", scheduledFor: { lte: new Date() } },
     include: {
@@ -58,6 +111,11 @@ export async function dispatchDueMessages(): Promise<{ sent: number; failed: num
     // processadas normalmente: não é a query que ignora a linha, é uma
     // exceção anterior na mesma leva que trava o resto atrás dela.
     try {
+      // Reivindica ANTES de mandar qualquer coisa — se outra execução
+      // concorrente (cron sobreposto) já pegou esta mensagem, pula sem
+      // reenviar. Ver comentário grande no topo do arquivo.
+      if (!(await claimMessage(message.id))) continue;
+
       // Passo WHATSAPP de follow-up (ver channel em FollowUpStep e
       // dispatchFollowUpSteps, src/lib/follow-up.ts) — mesma fila/timing
       // adaptativo, mas via Evolution API pro telefone do lead em vez da API

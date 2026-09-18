@@ -1,6 +1,19 @@
 import { google } from "googleapis";
 import { decryptToken, encryptToken } from "@/lib/crypto";
 import { prisma } from "@/lib/prisma";
+import { SAO_PAULO_UTC_OFFSET_HOURS } from "@/lib/timezone";
+
+// Janela de funcionamento em horário de Brasília — usada só pra filtrar
+// quais slots de 1h checkAvailability oferece (ver loop abaixo). Derivada
+// do mesmo offset fixo usado em src/lib/timezone.ts (Brasília não tem mais
+// horário de verão desde 2019), em vez de números mágicos soltos — mais
+// fácil de auditar contra o bug real que motivou essa checagem existir
+// (agendamentos genuinamente livres rejeitados por conta de erro de
+// conversão de fuso horário, ver comentário grande em timezone.ts).
+const BUSINESS_HOURS_START_LOCAL = 9; // 9h de Brasília
+const BUSINESS_HOURS_END_LOCAL = 18; // 18h de Brasília
+const BUSINESS_HOURS_START_UTC = BUSINESS_HOURS_START_LOCAL + SAO_PAULO_UTC_OFFSET_HOURS;
+const BUSINESS_HOURS_END_UTC = BUSINESS_HOURS_END_LOCAL + SAO_PAULO_UTC_OFFSET_HOURS;
 
 // Integração com Google Calendar via OAuth oficial, por clínica.
 // Nunca armazenamos senha — apenas access/refresh token, criptografados.
@@ -164,7 +177,7 @@ export async function checkAvailability(
     cursor = new Date(cursor.getTime() + 60 * 60 * 1000)
   ) {
     const hour = cursor.getUTCHours();
-    if (hour < 12 || hour > 21) continue; // aprox. 09h-18h America/Sao_Paulo (UTC-3)
+    if (hour < BUSINESS_HOURS_START_UTC || hour > BUSINESS_HOURS_END_UTC) continue;
 
     const slotEnd = new Date(cursor.getTime() + 60 * 60 * 1000);
     const overlaps = busy.some((b) => {

@@ -134,18 +134,27 @@ export async function summarizeOlderTurns(
 // -----------------------------------------------------------------------
 
 export type AgentTools = {
-  checkAvailability: (args: { dateFrom: string; dateTo: string }) => Promise<
+  // dateFromLocal/dateToLocal e startTimeLocal, em todas as ferramentas de
+  // agenda abaixo, são SEMPRE horário de Brasília, no formato
+  // "AAAA-MM-DDTHH:mm" — NUNCA UTC, nunca com sufixo de fuso. De propósito:
+  // ver src/lib/timezone.ts pro bug real que essa escolha resolve
+  // (agendamentos genuinamente livres sendo rejeitados porque o modelo
+  // precisava converter pra UTC de cabeça a cada turno, sem nenhum jeito
+  // confiável de recuperar a conversão exata de um turno anterior). A
+  // conversão pra UTC (exigida pela API do Google Calendar) acontece
+  // inteiramente do lado do servidor, nunca no modelo.
+  checkAvailability: (args: { dateFromLocal: string; dateToLocal: string }) => Promise<
     { slots: string[] } | { error: string }
   >;
-  scheduleAppointment: (args: { startTime: string; leadName?: string; leadConfirmationQuote?: string }) => Promise<
-    { confirmed: true; startTime: string } | { error: string }
+  scheduleAppointment: (args: { startTimeLocal: string; leadName?: string; leadConfirmationQuote?: string }) => Promise<
+    { confirmed: true; startTimeLocal: string } | { error: string }
   >;
   // Leitura pura, sem side effect — consulta o agendamento ativo do lead
   // NESTA conversa (o sistema já sabe quem está conversando, não precisa
   // perguntar). Usada tanto pra responder "esqueci meu horário"/"quando é
   // minha consulta" quanto como primeiro passo antes de uma remarcação
   // (ver schedule_appointment).
-  checkCurrentAppointment: () => Promise<{ scheduledAt: string } | { none: true }>;
+  checkCurrentAppointment: () => Promise<{ scheduledAtLocal: string } | { none: true }>;
   // Chamada quando o lead informa o WhatsApp na conversa — normalmente logo
   // depois de confirmar o agendamento, se o prompt da clínica pedir esse
   // dado nesse momento (ver Clinic.aiSystemPrompt). Sem isso o número fica
@@ -174,16 +183,20 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
     inputSchema: {
       type: "object",
       properties: {
-        dateFrom: {
+        dateFromLocal: {
           type: "string",
-          description: "Data/hora inicial em ISO 8601 UTC, com sufixo \"Z\" (ex.: \"2026-09-14T12:00:00Z\").",
+          description:
+            "Data/hora inicial no horário de Brasília, SEM conversão pra UTC e SEM sufixo de fuso — formato " +
+            "\"AAAA-MM-DDTHH:mm\" (ex.: \"2026-09-14T09:00\" pras 9h de Brasília). Nunca escreva \"Z\" nem faça " +
+            "nenhuma conta de fuso horário — o sistema converte por conta própria.",
         },
-        dateTo: {
+        dateToLocal: {
           type: "string",
-          description: "Data/hora final em ISO 8601 UTC, com sufixo \"Z\" (ex.: \"2026-09-14T21:00:00Z\").",
+          description:
+            "Data/hora final no horário de Brasília, mesmo formato de dateFromLocal (ex.: \"2026-09-14T18:00\").",
         },
       },
-      required: ["dateFrom", "dateTo"],
+      required: ["dateFromLocal", "dateToLocal"],
     },
   },
   {
@@ -204,9 +217,12 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
     inputSchema: {
       type: "object",
       properties: {
-        startTime: {
+        startTimeLocal: {
           type: "string",
-          description: "Data/hora de início em ISO 8601 UTC, com sufixo \"Z\" (ex.: \"2026-09-14T17:00:00Z\").",
+          description:
+            "Data/hora de início no horário de Brasília, SEM conversão pra UTC e SEM sufixo de fuso — mesmo " +
+            "formato de check_availability (\"AAAA-MM-DDTHH:mm\", ex.: \"2026-09-14T14:00\" pras 14h de " +
+            "Brasília). Nunca escreva \"Z\" nem faça nenhuma conta de fuso horário.",
         },
         leadName: { type: "string", description: "Nome do lead, se conhecido." },
         leadConfirmationQuote: {
@@ -216,7 +232,7 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
             "— se não houver uma confirmação clara e específica pra citar, não chame esta ferramenta ainda.",
         },
       },
-      required: ["startTime", "leadConfirmationQuote"],
+      required: ["startTimeLocal", "leadConfirmationQuote"],
     },
   },
   {
@@ -274,8 +290,8 @@ export async function generateLeadReply(params: {
   contextNote: string;
   history: ChatTurn[];
   tools: AgentTools;
-}, provider: LLMProvider = getLLMProvider()): Promise<{ text: string; scheduled?: { startTime: string } }> {
-  let scheduled: { startTime: string } | undefined;
+}, provider: LLMProvider = getLLMProvider()): Promise<{ text: string; scheduled?: { startTimeLocal: string } }> {
+  let scheduled: { startTimeLocal: string } | undefined;
 
   // Dispatch de ferramenta — lógica de negócio do VEXO (qual nome de
   // ferramenta chama qual função de params.tools), por isso fica aqui, não
@@ -283,13 +299,13 @@ export async function generateLeadReply(params: {
   // preta a cada tool_use que o modelo pedir (ver converse, LLMProvider).
   const executeTool = async (name: string, input: unknown): Promise<unknown> => {
     if (name === "check_availability") {
-      return params.tools.checkAvailability(input as { dateFrom: string; dateTo: string });
+      return params.tools.checkAvailability(input as { dateFromLocal: string; dateToLocal: string });
     }
     if (name === "schedule_appointment") {
-      const typedInput = input as { startTime: string; leadName?: string; leadConfirmationQuote?: string };
+      const typedInput = input as { startTimeLocal: string; leadName?: string; leadConfirmationQuote?: string };
       const outcome = await params.tools.scheduleAppointment(typedInput);
       if ("confirmed" in outcome && outcome.confirmed) {
-        scheduled = { startTime: outcome.startTime };
+        scheduled = { startTimeLocal: outcome.startTimeLocal };
       }
       return outcome;
     }

@@ -11,6 +11,7 @@ import { cancelPendingFollowUp, getSilenceHours, applyTemplateVariables } from "
 import { toChatHistory } from "@/lib/chat-history";
 import { buildResultPhotoMessages, type ResultPhotoInput } from "@/lib/result-photo-message";
 import { detectStagnation, STAGNATION_SIMILARITY_THRESHOLD, STAGNATION_WINDOW_SIZE } from "@/lib/loop-guard";
+import { parseBrazilLocalDateTime, formatAsBrazilLocalDateTime } from "@/lib/timezone";
 
 export { toChatHistory } from "@/lib/chat-history";
 
@@ -27,11 +28,17 @@ export type InboundInstagramEvent = {
   igMessageId?: string;
 };
 
+// Fronteira entre a IA (que só fala em horário de Brasília, sem nenhuma
+// conversão — ver src/lib/timezone.ts) e checkAvailability (que trabalha
+// inteiramente em UTC, formato exigido pela API do Google Calendar). Toda
+// a matemática de fuso fica aqui, nunca do lado do modelo.
 function buildAvailabilityCheck(clinicId: string): AgentTools["checkAvailability"] {
-  return async ({ dateFrom, dateTo }) => {
+  return async ({ dateFromLocal, dateToLocal }) => {
     try {
+      const dateFrom = parseBrazilLocalDateTime(dateFromLocal).toISOString();
+      const dateTo = parseBrazilLocalDateTime(dateToLocal).toISOString();
       const slots = await checkAvailability(clinicId, dateFrom, dateTo);
-      return { slots };
+      return { slots: slots.map((iso) => formatAsBrazilLocalDateTime(new Date(iso))) };
     } catch (err) {
       return { error: err instanceof Error ? err.message : "Erro ao consultar agenda." };
     }
@@ -524,12 +531,26 @@ export async function handleInboundInstagramMessage(
   // Esse bloco é gerado a cada mensagem (nunca fica desatualizado, ao
   // contrário de um valor fixo no prompt customizado) e é sempre anexado,
   // independente do que a clínica escreveu — nenhum prompt customizado
-  // deveria precisar se preocupar com isso por conta própria. Também
-  // reforça o formato exigido nas chamadas de ferramenta (UTC explícito
-  // com "Z"): sem isso, um ISO sem timezone escrito pelo modelo (ex.
-  // "2026-09-14T14:00:00", sem sufixo) seria interpretado pelo
-  // `new Date(...)` do servidor como horário LOCAL DO SERVIDOR (UTC no
-  // Railway) — silenciosamente 3h adiantado/atrasado do que o lead ouviu.
+  // deveria precisar se preocupar com isso por conta própria.
+  //
+  // Outro bug real, mais sério, encontrado depois: agendamentos em
+  // horários GENUINAMENTE livres (confirmado direto no Google Calendar)
+  // sendo rejeitados por schedule_appointment como "não disponível". Causa
+  // raiz: até aqui, o prompt exigia que o modelo convertesse o horário pra
+  // UTC de cabeça ("14h de Brasília = 17:00 UTC") EM TODO turno que
+  // confirmava um agendamento — e essa conta tinha que ser refeita do zero
+  // a cada turno, porque o histórico persistido (Message.content) guarda
+  // só o texto final mandado ao lead ("temos 9h, 10h ou 11h"), nunca o ISO
+  // exato que a ferramenta devolveu. Uma conta errada (ex.: esquecer de
+  // somar 3h, tratando "9h" como se já fosse "09:00Z") derruba
+  // schedule_appointment silenciosamente — e a IA lê esse erro genérico
+  // como "alguém pegou esse horário", quando na verdade foi o PRÓPRIO
+  // sistema que mandou um horário errado pra checar. Ver src/lib/timezone.ts.
+  // Correção: check_availability e schedule_appointment agora falam
+  // SEMPRE em horário de Brasília, sem NENHUMA conversão — a IA só ecoa o
+  // que o lead disse e o que a ferramenta devolveu, sem fazer conta de
+  // fuso nenhuma; a conversão pra UTC (exigida pela API do Google
+  // Calendar) acontece inteiramente do lado do servidor.
   const now = new Date();
   const dateTimeContext =
     `[Contexto automático — data/hora atual: ${now.toLocaleString("pt-BR", {
@@ -542,9 +563,13 @@ export async function handleInboundInstagramMessage(
       timeZone: "America/Sao_Paulo",
     })} (horário de Brasília, America/Sao_Paulo, UTC-3). Use isso como referência real ` +
     `pra "hoje", "amanhã", "essa semana" etc. — nunca assuma outra data. Em toda chamada de ` +
-    `check_availability ou schedule_appointment, o horário DEVE ser ISO 8601 em UTC, com o ` +
-    `sufixo "Z" (ex.: 14h de Brasília = 17:00 UTC = "...T17:00:00Z") — nunca mande um horário ` +
-    `sem timezone explícito. NUNCA diga ao lead que um horário está reservado/confirmado antes ` +
+    `check_availability ou schedule_appointment, o horário é SEMPRE no horário de Brasília, no formato ` +
+    `"AAAA-MM-DDTHH:mm" (ex.: 14h de hoje = "${formatAsBrazilLocalDateTime(now).slice(0, 10)}T14:00") ` +
+    `— NUNCA converta pra UTC, NUNCA escreva sufixo "Z" nem faça qualquer conta de fuso horário; o sistema faz ` +
+    `essa conversão sozinho. Pra confirmar um horário que o lead escolheu, use EXATAMENTE o mesmo valor que ` +
+    `check_availability te devolveu pra aquele horário (ex.: se devolveu "2026-09-19T09:00" e o lead confirmou ` +
+    `"9h", chame schedule_appointment com startTimeLocal="2026-09-19T09:00" — não recalcule, não arredonde, não ` +
+    `troque de formato). NUNCA diga ao lead que um horário está reservado/confirmado antes ` +
     `de check_availability confirmar que está livre E schedule_appointment ter sido chamado com ` +
     `sucesso, nessa ordem — não confirme adiantado, mesmo que pareça óbvio que vai dar certo. Se ` +
     `depois de oferecer um horário você descobrir que ele não está mais livre, deixe claro pro ` +
@@ -581,7 +606,7 @@ export async function handleInboundInstagramMessage(
           orderBy: { createdAt: "desc" },
         });
         if (!active) return { none: true as const };
-        return { scheduledAt: active.scheduledAt.toISOString() };
+        return { scheduledAtLocal: formatAsBrazilLocalDateTime(active.scheduledAt) };
       },
       // Nunca confia no que a conversa "disse" ter confirmado — bug real em
       // produção: a IA ofereceu um horário sem checar disponibilidade de
@@ -595,9 +620,11 @@ export async function handleInboundInstagramMessage(
       // Rejeita (força o modelo a chamar check_availability de novo e
       // reoferecer) se o horário não estiver genuinamente livre.
       async scheduleAppointment(args) {
-        const start = new Date(args.startTime);
-        if (Number.isNaN(start.getTime())) {
-          return { error: "startTime inválido — precisa ser um ISO 8601 UTC válido (com sufixo \"Z\")." };
+        let start: Date;
+        try {
+          start = parseBrazilLocalDateTime(args.startTimeLocal);
+        } catch (err) {
+          return { error: err instanceof Error ? err.message : "startTimeLocal inválido." };
         }
         // Consentimento explícito do lead pra ESSE horário específico não dá
         // pra verificar por código sozinho (entender linguagem natural) —
@@ -633,7 +660,8 @@ export async function handleInboundInstagramMessage(
                   where: { id: webhookLogId },
                   data: {
                     processingError:
-                      `schedule_appointment rejeitou ${args.startTime} (não está em freeSlots). ` +
+                      `schedule_appointment rejeitou ${args.startTimeLocal} horário de Brasília ` +
+                      `(${start.toISOString()} UTC — não está em freeSlots). ` +
                       `Conta Google: ${raw.googleAccountEmail} (calendarId=${raw.calendarId}). ` +
                       `Períodos ocupados crus do dia (UTC): ${JSON.stringify(raw.busy)}`.slice(0, 4000),
                   },
@@ -643,12 +671,12 @@ export async function handleInboundInstagramMessage(
           }
           return {
             error:
-              `O horário ${args.startTime} não está livre (ou está fora do horário de funcionamento). ` +
-              `Chame check_availability de novo e ofereça outro horário — não confirme este ao lead.`,
+              `O horário ${args.startTimeLocal} (Brasília) não está livre (ou está fora do horário de ` +
+              `funcionamento). Chame check_availability de novo e ofereça outro horário — não confirme este ao lead.`,
           };
         }
-        scheduledStartTime = args.startTime;
-        return { confirmed: true, startTime: args.startTime };
+        scheduledStartTime = start.toISOString();
+        return { confirmed: true, startTimeLocal: args.startTimeLocal };
       },
       async saveLeadPhone(args) {
         const phone = args.phone.trim();
