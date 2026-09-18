@@ -10,6 +10,7 @@ import { sendWhatsappMessage, formatEscalationAlert } from "@/lib/whatsapp";
 import { cancelPendingFollowUp, getSilenceHours, applyTemplateVariables } from "@/lib/follow-up";
 import { toChatHistory } from "@/lib/chat-history";
 import { buildResultPhotoMessages, type ResultPhotoInput } from "@/lib/result-photo-message";
+import { detectStagnation, STAGNATION_SIMILARITY_THRESHOLD, STAGNATION_WINDOW_SIZE } from "@/lib/loop-guard";
 
 export { toChatHistory } from "@/lib/chat-history";
 
@@ -287,33 +288,34 @@ export async function handleInboundInstagramMessage(
   // mensagens" — bug real em produção: uma conversa de vendas normal, bem
   // engajada (8 mensagens da IA em 10 minutos, ~25s de latência média por
   // resposta — nada anormalmente rápido) disparava o escalonamento à toa
-  // com o limiar antigo (8 msgs / 10 min). Um loop de bot genuíno não tem
-  // pausa natural nenhuma entre rodadas (o outro lado também responde na
-  // hora) — o único limitador é o próprio delay artificial da IA
-  // (Clinic.firstBandDelaySeconds, mínimo configurável de 5s), e mesmo
-  // assim as "dezenas de rodadas" observadas acima mostram que um loop
-  // real ultrapassa de sobra qualquer limiar razoável. 20 mensagens em 15
-  // minutos (cadência de disparo: 1 a cada 45s sustentado) dá folga
-  // confortável pra uma conversa rápida e engajada como essa, mantendo a
-  // proteção contra um loop sustentado.
-  const LOOP_GUARD_WINDOW_MINUTES = 15;
-  const LOOP_GUARD_MAX_AI_MESSAGES = 20;
-  const recentAiMessageCount = await prisma.message.count({
-    where: {
-      conversationId: conversation.id,
-      sender: "AI",
-      direction: "OUTBOUND",
-      createdAt: { gte: new Date(event.timestamp.getTime() - LOOP_GUARD_WINDOW_MINUTES * 60 * 1000) },
-    },
-  });
+  // com o limiar antigo (8 msgs / 10 min). A partir da migração pro Luna
+  // (via OpenRouter, bem mais barato que Sonnet/Haiku), o custo de uma
+  // conversa longa deixou de ser uma preocupação real — o que passou a
+  // importar de verdade é NUNCA interromper um lead engajado avançando
+  // rumo ao agendamento, porque esse é um lead perdido silenciosamente
+  // (ele só para de receber resposta, sem nenhum alerta de que algo deu
+  // errado). Por isso este contador virou só a REDE DE SEGURANÇA FINAL —
+  // a proteção principal contra loop de bot de verdade agora é o detector
+  // de estagnação/repetição logo abaixo, que não depende de nenhum número
+  // fixo de mensagens. 50 mensagens em 30 minutos (cadência de disparo: 1
+  // a cada 36s sustentado) é generoso o bastante pra nunca incomodar
+  // mesmo um lead humano bem falante — mas ainda existe caso o detector de
+  // estagnação tenha algum furo.
+  const LOOP_GUARD_WINDOW_MINUTES = 30;
+  const LOOP_GUARD_MAX_AI_MESSAGES = 50;
 
-  if (recentAiMessageCount >= LOOP_GUARD_MAX_AI_MESSAGES) {
-    const reason =
-      `Possível loop automático: a IA já enviou ${recentAiMessageCount} mensagens nesta conversa nos ` +
-      `últimos ${LOOP_GUARD_WINDOW_MINUTES} minutos — pausada para revisão humana em vez de continuar ` +
-      `respondendo automaticamente (proteção contra loop com outro bot/conta conectada).`;
+  // Escalonamento compartilhado pelas duas proteções de loop abaixo (contagem
+  // e estagnação) — mesmo efeito nos dois casos: pausa a conversa pra revisão
+  // humana e avisa a clínica por WhatsApp, só muda o texto do motivo.
+  //
+  // Recebe conversationId em vez de fechar sobre `conversation` (que é `let`
+  // e pode ser `null` antes do bloco acima) — dentro de uma closure como
+  // esta o TypeScript não carrega a checagem de nulo já feita, então captura
+  // o id já validado numa const logo abaixo em vez disso.
+  const conversationId = conversation.id;
+  async function escalateToHuman(reason: string): Promise<void> {
     await prisma.conversation.update({
-      where: { id: conversation.id },
+      where: { id: conversationId },
       data: { status: "NEEDS_HUMAN", needsHumanReason: reason },
     });
     if (clinic.notifyWhatsappNumber && clinic.whatsappInstanceName) {
@@ -327,14 +329,83 @@ export async function handleInboundInstagramMessage(
             leadPhone: lead.phone,
             leadIgUsername: lead.igUsername,
             reason,
-            conversationUrl: `${process.env.APP_URL ?? ""}/crm/conversas/${conversation.id}`,
+            conversationUrl: `${process.env.APP_URL ?? ""}/crm/conversas/${conversationId}`,
           })
         );
       } catch (err) {
         console.error("[vexo] Falha ao notificar escalonamento (loop guard) via WhatsApp:", err);
       }
     }
+  }
+
+  const recentAiMessageCount = await prisma.message.count({
+    where: {
+      conversationId: conversation.id,
+      sender: "AI",
+      direction: "OUTBOUND",
+      createdAt: { gte: new Date(event.timestamp.getTime() - LOOP_GUARD_WINDOW_MINUTES * 60 * 1000) },
+    },
+  });
+
+  if (recentAiMessageCount >= LOOP_GUARD_MAX_AI_MESSAGES) {
+    await escalateToHuman(
+      `Possível loop automático: a IA já enviou ${recentAiMessageCount} mensagens nesta conversa nos ` +
+        `últimos ${LOOP_GUARD_WINDOW_MINUTES} minutos — pausada para revisão humana em vez de continuar ` +
+        `respondendo automaticamente (proteção contra loop com outro bot/conta conectada).`
+    );
     return;
+  }
+
+  // Detector de estagnação/repetição — proteção PRINCIPAL contra loop de
+  // bot de verdade (ver src/lib/loop-guard.ts pra a lógica de similaridade
+  // por trás disso). Só avalia enquanto a conversa está ativamente em
+  // atendimento pela IA (NEW/IN_CONVERSATION) — durante FOLLOW_UP as
+  // mensagens são templates propositalmente parecidos entre si (não é
+  // sinal de loop), e SCHEDULED/NEEDS_HUMAN nem chegam aqui de novo com a
+  // IA respondendo automaticamente.
+  //
+  // MODO SOMBRA (combinado com o usuário): por enquanto só calcula e loga
+  // a similaridade — NÃO pausa a conversa por esse motivo ainda. Roda
+  // assim por alguns dias pra confirmar com dados reais se
+  // STAGNATION_SIMILARITY_THRESHOLD/STAGNATION_WINDOW_SIZE (src/lib/loop-guard.ts)
+  // são os valores certos antes de virar STAGNATION_GUARD_SHADOW_MODE pra
+  // false e ativar de verdade.
+  const STAGNATION_GUARD_SHADOW_MODE = true;
+  const conversationActivelyInAi = conversation.status === "NEW" || conversation.status === "IN_CONVERSATION";
+  if (conversationActivelyInAi) {
+    const recentAiTexts = await prisma.message.findMany({
+      where: {
+        conversationId: conversation.id,
+        sender: "AI",
+        direction: "OUTBOUND",
+        channel: "INSTAGRAM",
+        mediaUrl: null,
+      },
+      orderBy: { createdAt: "desc" },
+      take: STAGNATION_WINDOW_SIZE,
+      select: { content: true },
+    });
+
+    if (recentAiTexts.length >= STAGNATION_WINDOW_SIZE) {
+      const texts = recentAiTexts.map((m) => m.content).reverse();
+      const { stuck, avgSimilarity, pairSimilarities } = detectStagnation(texts, {
+        threshold: STAGNATION_SIMILARITY_THRESHOLD,
+      });
+      console.log(
+        `[vexo:loop-guard-shadow] conversationId=${conversation.id} avgSimilarity=${avgSimilarity.toFixed(3)} ` +
+          `threshold=${STAGNATION_SIMILARITY_THRESHOLD} stuck=${stuck} ` +
+          `pairSimilarities=${pairSimilarities.map((s) => s.toFixed(2)).join(",")} textos=${JSON.stringify(texts)}`
+      );
+
+      if (stuck && !STAGNATION_GUARD_SHADOW_MODE) {
+        await escalateToHuman(
+          `Possível loop automático: as últimas ${STAGNATION_WINDOW_SIZE} respostas da IA nesta conversa estão ` +
+            `muito parecidas entre si (similaridade média ${(avgSimilarity * 100).toFixed(0)}%, limiar ` +
+            `${(STAGNATION_SIMILARITY_THRESHOLD * 100).toFixed(0)}%) — sem progressão real, pausada para revisão humana.`
+        );
+        return;
+      }
+    }
   }
 
   const history = await prisma.message.findMany({
