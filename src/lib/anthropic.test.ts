@@ -96,6 +96,7 @@ describe("generateLeadReply", () => {
     return {
       checkAvailability: vi.fn(async () => ({ slots: [] })),
       scheduleAppointment: vi.fn(async () => ({ error: "não implementado no fake" })),
+      confirmAttendance: vi.fn(async () => ({ confirmed: true as const })),
       checkCurrentAppointment: vi.fn(async () => ({ none: true as const })),
       saveLeadPhone: vi.fn(async () => ({ saved: true as const })),
       saveLeadName: vi.fn(async () => ({ saved: true as const })),
@@ -125,11 +126,12 @@ describe("generateLeadReply", () => {
     expect(request.tier).toBe("conversation");
     expect(request.cacheableSystemPrompt).toBe("Você é a IA da Clínica X.");
     expect(request.volatileContext).toBe("[Data/hora atual: 2026-09-17T12:00:00Z]");
-    // As 6 ferramentas de negócio do VEXO, sempre as mesmas — não muda por
+    // As 7 ferramentas de negócio do VEXO, sempre as mesmas — não muda por
     // conta de tools passado (que são as implementações, não a lista).
     expect(request.tools.map((t) => t.name)).toEqual([
       "check_availability",
       "schedule_appointment",
+      "confirm_attendance",
       "save_lead_phone",
       "save_lead_name",
       "check_current_appointment",

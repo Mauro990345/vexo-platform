@@ -633,7 +633,12 @@ export async function handleInboundInstagramMessage(
     `Se ainda não souber, pergunte o nome dele em algum momento natural da conversa, antes de confirmar ` +
     `qualquer agendamento — pode ser junto com o pedido do WhatsApp, ou um pouco antes; assim que ele ` +
     `informar, chame save_lead_name imediatamente. schedule_appointment recusa confirmar sem um nome real ` +
-    `salvo — nunca tente agendar sem ter perguntado e salvo o nome primeiro.]`;
+    `salvo — nunca tente agendar sem ter perguntado e salvo o nome primeiro. Depois que schedule_appointment ` +
+    `confirmar o horário e você perguntar "posso contar com sua presença?" (ou equivalente), NÃO chame ` +
+    `confirm_attendance ainda — espere a resposta do lead confirmando presença, mande a mensagem final da ` +
+    `sequência (ex.: instruções de chegada, "chegue uns 15 minutinhos antes...") e SÓ ENTÃO chame ` +
+    `confirm_attendance. Chamar cedo demais faz o vídeo institucional de confirmação interromper a conversa ` +
+    `no meio da própria pergunta de presença.]`;
 
   const reply = await generateLeadReply({
     // Separados (não mais concatenados numa string só) pra permitir prompt
@@ -655,6 +660,28 @@ export async function handleInboundInstagramMessage(
         });
         if (!active) return { none: true as const };
         return { scheduledAtLocal: formatAsBrazilLocalDateTime(active.scheduledAt) };
+      },
+      // Marca Appointment.attendanceConfirmedAt — sinal explícito de que a
+      // sequência de confirmação de presença terminou de verdade (ver
+      // comentário grande em AgentTools, anthropic.ts, e em
+      // maybeSendConfirmationVideo mais abaixo, que passa a exigir isto
+      // antes de mandar o vídeo institucional). Idempotente: chamar de novo
+      // não faz nada além da primeira vez.
+      async confirmAttendance() {
+        const active = await prisma.appointment.findFirst({
+          where: { conversationId: conversation.id, status: { in: ["SCHEDULED", "CONFIRMED"] } },
+          orderBy: { createdAt: "desc" },
+        });
+        if (!active) {
+          return { error: "Nenhum agendamento ativo nesta conversa ainda — confirme o horário antes." };
+        }
+        if (!active.attendanceConfirmedAt) {
+          await prisma.appointment.update({
+            where: { id: active.id },
+            data: { attendanceConfirmedAt: new Date() },
+          });
+        }
+        return { confirmed: true };
       },
       // Nunca confia no que a conversa "disse" ter confirmado — bug real em
       // produção: a IA ofereceu um horário sem checar disponibilidade de
@@ -979,7 +1006,7 @@ async function confirmAppointment(params: {
   });
 }
 
-// Duas gerações de bug real reportadas em produção, ambas resolvidas
+// Três gerações de bug real reportadas em produção, todas resolvidas
 // consolidando a chamada num ÚNICO ponto (ver o fim de
 // handleInboundInstagramMessage, o único caller hoje):
 //
@@ -1002,11 +1029,23 @@ async function confirmAppointment(params: {
 // inteiro já foram todos decididos — ancorada no scheduledFor mais tarde
 // entre todos eles.
 //
+// 3ª: mesmo com as duas correções acima, o vídeo ainda saía cedo demais —
+// logo depois de schedule_appointment confirmar o horário, no meio da
+// própria pergunta "posso contar com sua presença?", ANTES do lead
+// responder. Causa raiz: nada no código sabia identificar o fim de VERDADE
+// da sequência de confirmação (ela é só texto livre gerado pela IA — a
+// mensagem final "chegue uns 15 minutinhos antes..." não tem nenhum evento
+// de código associado). Corrigido com um sinal explícito: a ferramenta
+// confirm_attendance (ver AgentTools, anthropic.ts), que a IA só deve
+// chamar depois que o lead confirma presença E a mensagem final já foi
+// enviada — marca Appointment.attendanceConfirmedAt, agora exigido abaixo
+// como mais uma condição.
+//
 // Idempotente (por Appointment.confirmationVideoSentAt) e silenciosa
-// quando ainda não há o que mandar (sem agendamento ativo, sem vídeo
-// configurado pela clínica, ou sem telefone ainda) — cada chamada só
-// efetivamente envia quando as três condições finalmente se encontram, e
-// nunca reenvia depois disso.
+// quando ainda não há o que mandar (sem agendamento ativo, sem presença
+// confirmada, sem vídeo configurado pela clínica, ou sem telefone ainda)
+// — cada chamada só efetivamente envia quando todas as condições
+// finalmente se encontram, e nunca reenvia depois disso.
 async function maybeSendConfirmationVideo(params: {
   clinicId: string;
   conversationId: string;
@@ -1017,6 +1056,13 @@ async function maybeSendConfirmationVideo(params: {
     orderBy: { createdAt: "desc" },
   });
   if (!appointment || appointment.confirmationVideoSentAt) return;
+  // Ainda sem confirm_attendance (ver AgentTools, anthropic.ts) — não é
+  // erro, só significa "sequência de confirmação de presença ainda não
+  // terminou"; a próxima chamada (quando a IA marcar) tenta de novo. Bug
+  // real em produção que isto corrige: o vídeo saía logo depois do horário
+  // confirmado, no meio da própria pergunta "posso contar com sua
+  // presença?", antes do lead responder.
+  if (!appointment.attendanceConfirmedAt) return;
 
   const [clinic, conversation] = await Promise.all([
     prisma.clinic.findUnique({ where: { id: params.clinicId } }),
