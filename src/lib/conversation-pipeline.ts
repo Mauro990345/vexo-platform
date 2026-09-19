@@ -750,14 +750,14 @@ export async function handleInboundInstagramMessage(
 
   if (capturedLeadPhone) {
     await prisma.lead.update({ where: { id: lead.id }, data: { phone: capturedLeadPhone } });
-    // O WhatsApp pode ter sido pedido numa mensagem ANTERIOR à que
-    // agendou (ex: a própria mensagem de confirmação do horário já pede
-    // o WhatsApp, e o lead só responde com o número no turno seguinte) —
-    // se já existe um agendamento esperando o vídeo, manda agora que o
-    // número acabou de chegar. Ver maybeSendConfirmationVideo pro bug que
-    // isso corrige (vídeo saindo antes do WhatsApp confirmado).
-    await maybeSendConfirmationVideo({ clinicId: clinic.id, conversationId: conversation.id, afterScheduledFor: scheduledFor });
   }
+
+  // Rastreia o scheduledFor MAIS TARDE entre tudo que este turno enfileirou
+  // até aqui — usado só como âncora do vídeo de confirmação, mais abaixo,
+  // pra garantir que ele saia sempre DEPOIS de qualquer outra coisa deste
+  // turno (nunca no meio), mesmo num turno que também manda uma foto de
+  // resultado.
+  let latestScheduledFor = scheduledFor;
 
   if (capturedResultPhoto) {
     // +5s pra chegar logo depois da resposta em texto, não junto/antes dela
@@ -785,6 +785,7 @@ export async function handleInboundInstagramMessage(
         data: { resultPhotoSentAt: new Date() },
       }),
     ]);
+    latestScheduledFor = photoMessages[photoMessages.length - 1]!.scheduledFor;
   }
 
   if (scheduledStartTime) {
@@ -794,12 +795,24 @@ export async function handleInboundInstagramMessage(
       leadId: lead.id,
       leadName: lead.name ?? lead.igUsername ?? undefined,
       startTimeIso: scheduledStartTime,
-      // Vídeo (se houver) só pode sair DEPOIS que a própria mensagem de
-      // confirmação (reply.text, criada acima com este mesmo scheduledFor)
-      // já tiver saído — ver comentário mais abaixo, dentro da função.
-      afterScheduledFor: scheduledFor,
     });
   }
+
+  // Vídeo institucional de confirmação — disparado num ÚNICO ponto, sempre
+  // no final de handleInboundInstagramMessage, depois que TUDO mais deste
+  // turno (resposta em texto, agendamento e foto de resultado, se houver)
+  // já foi decidido. Ver o comentário grande em maybeSendConfirmationVideo
+  // pro bug real que motivou consolidar num único call site em vez de dois
+  // (agendamento + captura de telefone cada um chamando por conta própria).
+  // Chamar incondicionalmente aqui é seguro — a função tem suas próprias
+  // travas internas (precisa existir agendamento ativo, WhatsApp do lead e
+  // vídeo configurado pela clínica, e nunca reenvia) e não faz nada quando
+  // alguma delas ainda não bate.
+  await maybeSendConfirmationVideo({
+    clinicId: clinic.id,
+    conversationId: conversation.id,
+    afterScheduledFor: latestScheduledFor,
+  });
 }
 
 async function confirmAppointment(params: {
@@ -808,7 +821,6 @@ async function confirmAppointment(params: {
   leadId: string;
   leadName?: string;
   startTimeIso: string;
-  afterScheduledFor: Date;
 }) {
   // Buscado logo no início (não só mais abaixo, pra confirmationVideoUrl)
   // porque address também alimenta o evento do Google Calendar criado a
@@ -878,30 +890,36 @@ async function confirmAppointment(params: {
     where: { id: params.conversationId },
     data: { status: "SCHEDULED" },
   });
-
-  await maybeSendConfirmationVideo({
-    clinicId: params.clinicId,
-    conversationId: params.conversationId,
-    afterScheduledFor: params.afterScheduledFor,
-  });
 }
 
-// Bug real reportado em produção: o vídeo saía IMEDIATAMENTE ao agendar,
-// mesmo quando a PRÓPRIA mensagem que confirmou o horário também pedia o
-// WhatsApp do lead pela primeira vez — ou seja, o vídeo chegava antes do
-// número sequer ter sido informado, "do nada", sem ter sido pedido ainda
-// numa resposta anterior. Por isso essa checagem não vive só dentro de
-// confirmAppointment (chamada uma vez, no momento de agendar): é chamada
-// de novo sempre que um telefone novo é capturado (ver capturedLeadPhone
-// em handleInboundInstagramMessage), pra cobrir o caso comum de agendar
-// primeiro e o lead só responder com o WhatsApp num turno seguinte — sem
-// isso, o vídeo nunca seria enviado nesse caso (nada mais dispara
-// confirmAppointment de novo só porque o telefone chegou).
+// Duas gerações de bug real reportadas em produção, ambas resolvidas
+// consolidando a chamada num ÚNICO ponto (ver o fim de
+// handleInboundInstagramMessage, o único caller hoje):
+//
+// 1ª: o vídeo saía IMEDIATAMENTE ao agendar, mesmo quando a PRÓPRIA
+// mensagem que confirmou o horário também pedia o WhatsApp do lead pela
+// primeira vez — chegava antes do número sequer ter sido informado.
+// Corrigido exigindo lead.phone como uma das condições (ver abaixo).
+//
+// 2ª: mesmo com essa trava, o vídeo ainda saía "no meio" da sequência em
+// vez de por último — porque esta função era chamada de DOIS lugares
+// diferentes (daqui, e também direto de dentro do bloco que captura o
+// telefone em handleInboundInstagramMessage), cada um só sabendo do seu
+// próprio pedaço do turno. Um turno que confirmava o agendamento E
+// recebia o WhatsApp ao mesmo tempo podia, dependendo da ordem, disparar
+// o vídeo ancorado num scheduledFor que não era realmente o último da
+// sequência (ex.: antes de uma foto de resultado enviada no mesmo turno).
+// Corrigido removendo os dois call sites "locais" e chamando esta função
+// UMA VEZ, incondicionalmente, só no final de handleInboundInstagramMessage
+// — depois que resposta em texto, foto de resultado e agendamento do turno
+// inteiro já foram todos decididos — ancorada no scheduledFor mais tarde
+// entre todos eles.
 //
 // Idempotente (por Appointment.confirmationVideoSentAt) e silenciosa
 // quando ainda não há o que mandar (sem agendamento ativo, sem vídeo
 // configurado pela clínica, ou sem telefone ainda) — cada chamada só
-// efetivamente envia quando as três condições finalmente se encontram.
+// efetivamente envia quando as três condições finalmente se encontram, e
+// nunca reenvia depois disso.
 async function maybeSendConfirmationVideo(params: {
   clinicId: string;
   conversationId: string;
