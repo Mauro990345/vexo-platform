@@ -32,13 +32,52 @@ export type InboundInstagramEvent = {
 // conversão — ver src/lib/timezone.ts) e checkAvailability (que trabalha
 // inteiramente em UTC, formato exigido pela API do Google Calendar). Toda
 // a matemática de fuso fica aqui, nunca do lado do modelo.
-function buildAvailabilityCheck(clinicId: string): AgentTools["checkAvailability"] {
+//
+// Bug real em produção, investigado a fundo depois de descartar o PR #33
+// como causa: o lead questionou um horário JÁ CONFIRMADO ("tem certeza que
+// às 10h está ocupado?"), a IA rechamou check_availability, viu esse
+// horário como ocupado — CORRETO, o evento existe mesmo, foi a própria IA
+// quem criou — e concluiu, errado, que havia um conflito de verdade,
+// dizendo ao lead que o agendamento não era válido. Não é bug de fuso
+// horário nem de escrita/leitura inconsistente no Google Calendar
+// (confirmado: createCalendarEvent e checkAvailability sempre usam
+// .toISOString() puro, sempre UTC, nunca há um campo timeZone separado
+// pra divergir) — é a ausência de qualquer sinal dizendo à IA "esse
+// horário ocupado é a SUA PRÓPRIA reserva". A ferramenta em si (freebusy
+// do Google) não distingue "ocupado por mim" de "ocupado por outra
+// pessoa" — nunca distinguiu — então essa distinção precisa ser feita
+// aqui, cruzando o horário consultado com o Appointment ativo desta
+// conversa, e devolvida explicitamente pra IA em vez de depender dela
+// adivinhar pela ausência do horário em `slots`.
+function buildAvailabilityCheck(clinicId: string, conversationId: string): AgentTools["checkAvailability"] {
   return async ({ dateFromLocal, dateToLocal }) => {
     try {
       const dateFrom = parseBrazilLocalDateTime(dateFromLocal).toISOString();
       const dateTo = parseBrazilLocalDateTime(dateToLocal).toISOString();
       const slots = await checkAvailability(clinicId, dateFrom, dateTo);
-      return { slots: slots.map((iso) => formatAsBrazilLocalDateTime(new Date(iso))) };
+
+      const ownAppointment = await prisma.appointment.findFirst({
+        where: {
+          conversationId,
+          status: { in: ["SCHEDULED", "CONFIRMED"] },
+          scheduledAt: { gte: new Date(dateFrom), lt: new Date(dateTo) },
+        },
+        orderBy: { createdAt: "desc" },
+      });
+
+      const result = {
+        slots: slots.map((iso) => formatAsBrazilLocalDateTime(new Date(iso))),
+        ...(ownAppointment ? { ownAppointmentLocal: formatAsBrazilLocalDateTime(ownAppointment.scheduledAt) } : {}),
+      };
+
+      console.log(
+        `[vexo:calendar] check_availability conversationId=${conversationId} ` +
+          `dateFromLocal=${dateFromLocal} dateToLocal=${dateToLocal} dateFromUtc=${dateFrom} dateToUtc=${dateTo} ` +
+          `slots=${JSON.stringify(result.slots)} ownAppointmentLocal=${result.ownAppointmentLocal ?? "n/a"} ` +
+          `ownAppointmentUtc=${ownAppointment?.scheduledAt.toISOString() ?? "n/a"}`
+      );
+
+      return result;
     } catch (err) {
       return { error: err instanceof Error ? err.message : "Erro ao consultar agenda." };
     }
@@ -577,9 +616,12 @@ export async function handleInboundInstagramMessage(
     `alternativos ele prefere — só chame schedule_appointment depois que ele responder claramente ` +
     `qual dos horários quer; se a resposta dele ficar ambígua entre mais de um horário oferecido, ` +
     `pergunte de novo pra confirmar qual exatamente, em vez de escolher um sozinho. Se o lead ` +
-    `perguntar sobre o horário marcado (ex.: "esqueci meu horário", "quando é minha consulta?") ` +
-    `ou pedir pra remarcar, chame check_current_appointment antes de responder — não confie só no ` +
-    `histórico da conversa. Remarcação usa a MESMA schedule_appointment, com o horário novo (as ` +
+    `perguntar sobre o horário marcado (ex.: "esqueci meu horário", "quando é minha consulta?"), ` +
+    `questionar ou duvidar de um horário JÁ confirmado (ex.: "tem certeza que está ocupado?", ` +
+    `"mas você não tinha confirmado esse horário pra mim?") ou pedir pra remarcar, chame ` +
+    `check_current_appointment antes de responder — não confie só no histórico da conversa, e nunca ` +
+    `use só o resultado de check_availability pra responder uma dúvida sobre o agendamento do lead ` +
+    `(ver ownAppointmentLocal na descrição de check_availability). Remarcação usa a MESMA schedule_appointment, com o horário novo (as ` +
     `mesmas regras de confirmação valem); o sistema identifica sozinho que já existe um ` +
     `agendamento e move ele em vez de criar outro. Quando o lead pedir pra agendar sem dizer ` +
     `qual dia, SEMPRE confirme o DIA específico primeiro (ex.: "quinta-feira", "dia 20", ` +
@@ -595,7 +637,7 @@ export async function handleInboundInstagramMessage(
     contextNote: dateTimeContext,
     history: windowedHistory,
     tools: {
-      checkAvailability: buildAvailabilityCheck(clinic.id),
+      checkAvailability: buildAvailabilityCheck(clinic.id, conversation.id),
       // Leitura pura (sem side effect) — mesma consulta que confirmAppointment
       // já faz pra decidir criar vs. mover um agendamento, exposta aqui pra
       // IA poder responder "esqueci meu horário"/"quando é minha consulta?"
