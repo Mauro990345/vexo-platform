@@ -143,8 +143,18 @@ export type AgentTools = {
   // confiável de recuperar a conversão exata de um turno anterior). A
   // conversão pra UTC (exigida pela API do Google Calendar) acontece
   // inteiramente do lado do servidor, nunca no modelo.
+  // ownAppointmentLocal vem preenchido quando o agendamento JÁ CONFIRMADO
+  // desta própria conversa cai dentro da janela consultada — sinal
+  // explícito de que, se esse horário não aparecer em `slots`, é porque
+  // ele está "ocupado" pelo PRÓPRIO agendamento do lead, não por um
+  // conflito de outra pessoa. Bug real em produção: o lead questionou um
+  // horário já confirmado ("tem certeza que está ocupado?"), a IA rechamou
+  // check_availability, viu o próprio horário como ocupado (correto — o
+  // evento existe mesmo) e concluiu (errado) que havia um conflito real,
+  // dizendo ao lead que o agendamento dele não era válido. Ver
+  // buildAvailabilityCheck, conversation-pipeline.ts.
   checkAvailability: (args: { dateFromLocal: string; dateToLocal: string }) => Promise<
-    { slots: string[] } | { error: string }
+    { slots: string[]; ownAppointmentLocal?: string } | { error: string }
   >;
   scheduleAppointment: (args: { startTimeLocal: string; leadName?: string; leadConfirmationQuote?: string }) => Promise<
     { confirmed: true; startTimeLocal: string } | { error: string }
@@ -179,7 +189,13 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
     description:
       "Consulta horários livres na agenda (Google Calendar) da clínica dentro de um intervalo de datas. Use " +
       "SEMPRE antes de oferecer ou confirmar qualquer horário ao lead — nunca ofereça um horário sem ter " +
-      "chamado essa ferramenta antes, mesmo que pareça óbvio que vai estar livre.",
+      "chamado essa ferramenta antes, mesmo que pareça óbvio que vai estar livre. Se a resposta incluir " +
+      "ownAppointmentLocal, esse horário específico é o PRÓPRIO agendamento já confirmado desta conversa — é " +
+      "por isso que ele não aparece em slots (a agenda genuinamente tem um evento lá, mas é a reserva do " +
+      "lead, não um conflito de outra pessoa). NUNCA diga ao lead que esse horário está ocupado ou que o " +
+      "agendamento dele não é válido só porque ele não apareceu em slots — confirme que é exatamente a " +
+      "reserva dele. Só trate um horário fora de slots como indisponível de verdade quando ele NÃO bater com " +
+      "ownAppointmentLocal.",
     inputSchema: {
       type: "object",
       properties: {

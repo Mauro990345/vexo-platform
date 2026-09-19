@@ -165,6 +165,18 @@ export async function checkAvailability(
 
   const busy = data.calendars?.[calendarId]?.busy ?? [];
 
+  // Diagnóstico TEMPORÁRIO — investigação de agendamentos confirmados
+  // aparecendo depois como "ocupado por outra pessoa" quando o lead
+  // questiona o horário. Mostra exatamente o que foi pedido ao Google
+  // (sempre UTC, sempre com "Z" — ver comentário grande em
+  // buildAvailabilityCheck, conversation-pipeline.ts, que já descartou
+  // divergência de fuso entre escrita e leitura) e o que ele devolveu de
+  // volta, cru, antes de qualquer filtro de horário de funcionamento.
+  console.log(
+    `[vexo:calendar] freebusy.query clinicId=${clinicId} calendarId=${calendarId} ` +
+      `timeMin=${dateFrom} timeMax=${dateTo} busyCru=${JSON.stringify(busy)}`
+  );
+
   // Gera slots de 1h dentro da janela de trabalho (09h-18h) que não colidem
   // com os períodos ocupados. Janela de trabalho ajustável futuramente por clínica.
   const slots: string[] = [];
@@ -213,6 +225,16 @@ export async function createCalendarEvent(
   });
 
   if (!data.id) throw new Error("Google Calendar não retornou ID do evento criado.");
+
+  // Diagnóstico TEMPORÁRIO — mesmo motivo do log em checkAvailability:
+  // registra exatamente o que foi ESCRITO (sempre UTC, sem campo timeZone
+  // separado) pra comparar lado a lado com o que uma checagem de
+  // disponibilidade posterior LÊ de volta pro mesmo horário.
+  console.log(
+    `[vexo:calendar] events.insert clinicId=${clinicId} calendarId=${calendarId} eventId=${data.id} ` +
+      `startEnviado=${start.toISOString()} endEnviado=${end.toISOString()}`
+  );
+
   return data.id;
 }
 
