@@ -156,7 +156,7 @@ export type AgentTools = {
   checkAvailability: (args: { dateFromLocal: string; dateToLocal: string }) => Promise<
     { slots: string[]; ownAppointmentLocal?: string } | { error: string }
   >;
-  scheduleAppointment: (args: { startTimeLocal: string; leadName?: string; leadConfirmationQuote?: string }) => Promise<
+  scheduleAppointment: (args: { startTimeLocal: string; leadConfirmationQuote?: string }) => Promise<
     { confirmed: true; startTimeLocal: string } | { error: string }
   >;
   // Leitura pura, sem side effect — consulta o agendamento ativo do lead
@@ -171,6 +171,16 @@ export type AgentTools = {
   // só no texto da mensagem, sem ficar disponível pra secretária no CRM
   // nem pros lembretes automáticos por WhatsApp (que dependem de Lead.phone).
   saveLeadPhone: (args: { phone: string }) => Promise<{ saved: true } | { error: string }>;
+  // Chamada quando o lead informa (ou confirma) o próprio nome na conversa
+  // — bug real em produção: não existia NENHUM jeito de persistir um nome
+  // dito em conversa (só uma tentativa best-effort de ler o perfil público
+  // do Instagram, que frequentemente não devolve nada — ver
+  // nameLookupAttempted mais abaixo), então agendamentos confirmados sem o
+  // lead ter se apresentado espontaneamente ficavam pra sempre com "lead"
+  // genérico no evento do Google Calendar. schedule_appointment agora
+  // recusa agendar sem um nome real salvo (ver o handler dela) — esta é a
+  // única forma de satisfazer essa exigência a partir da conversa.
+  saveLeadName: (args: { name: string }) => Promise<{ saved: true } | { error: string }>;
   // Busca uma foto de resultado (antes/depois) cadastrada pra clínica na
   // categoria mais próxima do procedimento que o lead demonstrou interesse.
   // Trava em no máximo 1 envio por conversa — ver resultPhotoSentAt em
@@ -229,7 +239,9 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
       "ferramenta. A ferramenta reverifica a disponibilidade de novo por conta própria e rejeita se não estiver " +
       "realmente livre. NUNCA diga ao lead que o horário está confirmado/reservado (ou remarcado) antes de " +
       "chamar esta ferramenta e ela retornar sucesso — se ela retornar erro, NÃO diga que está confirmado; " +
-      "ofereça outro horário.",
+      "ofereça outro horário. TAMBÉM exige um nome real do lead já salvo (ver save_lead_name) — se ainda não " +
+      "souber o nome dele, pergunte antes de chamar esta ferramenta; ela rejeita com erro se nenhum nome foi " +
+      "salvo ainda, mesmo com tudo mais certo.",
     inputSchema: {
       type: "object",
       properties: {
@@ -240,7 +252,6 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
             "formato de check_availability (\"AAAA-MM-DDTHH:mm\", ex.: \"2026-09-14T14:00\" pras 14h de " +
             "Brasília). Nunca escreva \"Z\" nem faça nenhuma conta de fuso horário.",
         },
-        leadName: { type: "string", description: "Nome do lead, se conhecido." },
         leadConfirmationQuote: {
           type: "string",
           description:
@@ -261,6 +272,21 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
         phone: { type: "string", description: "Número de WhatsApp informado pelo lead, no formato que ele mandou." },
       },
       required: ["phone"],
+    },
+  },
+  {
+    name: "save_lead_name",
+    description:
+      "Salva o nome do lead assim que ele informar na conversa (espontaneamente ou em resposta a você " +
+      "perguntar). Se ainda não souber o nome dele, pergunte em algum momento natural antes de agendar — " +
+      "pode ser junto com o pedido do WhatsApp, ou um pouco antes. schedule_appointment exige um nome salvo " +
+      "por esta ferramenta antes de confirmar qualquer horário.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "Nome (ou nome e sobrenome) informado pelo lead." },
+      },
+      required: ["name"],
     },
   },
   {
@@ -318,7 +344,7 @@ export async function generateLeadReply(params: {
       return params.tools.checkAvailability(input as { dateFromLocal: string; dateToLocal: string });
     }
     if (name === "schedule_appointment") {
-      const typedInput = input as { startTimeLocal: string; leadName?: string; leadConfirmationQuote?: string };
+      const typedInput = input as { startTimeLocal: string; leadConfirmationQuote?: string };
       const outcome = await params.tools.scheduleAppointment(typedInput);
       if ("confirmed" in outcome && outcome.confirmed) {
         scheduled = { startTimeLocal: outcome.startTimeLocal };
@@ -330,6 +356,9 @@ export async function generateLeadReply(params: {
     }
     if (name === "save_lead_phone") {
       return params.tools.saveLeadPhone(input as { phone: string });
+    }
+    if (name === "save_lead_name") {
+      return params.tools.saveLeadName(input as { name: string });
     }
     if (name === "send_result_photo") {
       return params.tools.sendResultPhoto(input as { category: string });
