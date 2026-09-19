@@ -551,6 +551,7 @@ export async function handleInboundInstagramMessage(
 
   let scheduledStartTime: string | undefined;
   let capturedLeadPhone: string | undefined;
+  let capturedLeadName: string | undefined;
   let capturedResultPhoto: ResultPhotoInput | undefined;
   let resultPhotoAlreadySent = reengaged ? false : Boolean(conversation.resultPhotoSentAt);
 
@@ -627,7 +628,12 @@ export async function handleInboundInstagramMessage(
     `qual dia, SEMPRE confirme o DIA específico primeiro (ex.: "quinta-feira", "dia 20", ` +
     `"amanhã") antes de perguntar ou oferecer período do dia (manhã/tarde) — nunca pergunte só ` +
     `"manhã ou tarde?" sem já saber (ou ter perguntado) em qual dia; sem o dia definido, ` +
-    `check_availability não tem como saber que intervalo consultar.]`;
+    `check_availability não tem como saber que intervalo consultar. Nome do lead: ` +
+    `${lead.name ? `já sabido ("${lead.name}") — não precisa perguntar de novo` : "AINDA NÃO informado"}. ` +
+    `Se ainda não souber, pergunte o nome dele em algum momento natural da conversa, antes de confirmar ` +
+    `qualquer agendamento — pode ser junto com o pedido do WhatsApp, ou um pouco antes; assim que ele ` +
+    `informar, chame save_lead_name imediatamente. schedule_appointment recusa confirmar sem um nome real ` +
+    `salvo — nunca tente agendar sem ter perguntado e salvo o nome primeiro.]`;
 
   const reply = await generateLeadReply({
     // Separados (não mais concatenados numa string só) pra permitir prompt
@@ -667,6 +673,24 @@ export async function handleInboundInstagramMessage(
           start = parseBrazilLocalDateTime(args.startTimeLocal);
         } catch (err) {
           return { error: err instanceof Error ? err.message : "startTimeLocal inválido." };
+        }
+        // Exige um nome real do lead ANTES de agendar — bug real em
+        // produção: o evento do Google Calendar saía com "lead" genérico
+        // sempre que o lead nunca se apresentava espontaneamente na
+        // conversa (a IA só perguntava o nome por iniciativa própria,
+        // nunca por exigência do sistema). capturedLeadName cobre o nome
+        // salvo NESTE MESMO turno (save_lead_name chamado antes desta
+        // ferramenta, no mesmo turno em que o lead confirma o horário);
+        // lead.name cobre um nome já salvo em turno anterior (ou vindo do
+        // lookup best-effort do perfil do Instagram). Rejeitar aqui, e não
+        // só orientar por prompt, é o que garante que "lead" genérico
+        // nunca mais vira fallback silencioso no evento criado abaixo.
+        if (!capturedLeadName?.trim() && !lead.name?.trim()) {
+          return {
+            error:
+              "Nome do lead ainda não confirmado. Pergunte o nome dele e chame save_lead_name antes de " +
+              "tentar agendar de novo — nunca confirme um agendamento sem um nome real salvo.",
+          };
         }
         // Consentimento explícito do lead pra ESSE horário específico não dá
         // pra verificar por código sozinho (entender linguagem natural) —
@@ -724,6 +748,12 @@ export async function handleInboundInstagramMessage(
         const phone = args.phone.trim();
         if (!phone) return { error: "Número vazio." };
         capturedLeadPhone = phone;
+        return { saved: true };
+      },
+      async saveLeadName(args) {
+        const name = args.name.trim();
+        if (!name) return { error: "Nome vazio." };
+        capturedLeadName = name;
         return { saved: true };
       },
       async sendResultPhoto(args) {
@@ -794,6 +824,16 @@ export async function handleInboundInstagramMessage(
     await prisma.lead.update({ where: { id: lead.id }, data: { phone: capturedLeadPhone } });
   }
 
+  if (capturedLeadName) {
+    await prisma.lead.update({ where: { id: lead.id }, data: { name: capturedLeadName } });
+    // Mantém o objeto em memória atualizado — confirmAppointment (mais
+    // abaixo, se scheduledStartTime também estiver marcado neste turno) lê
+    // lead.name pro título do evento no Google Calendar; sem isso, um nome
+    // salvo NESTE MESMO turno só apareceria a partir do PRÓXIMO evento
+    // criado, nunca no que está sendo confirmado agora.
+    lead.name = capturedLeadName;
+  }
+
   // Rastreia o scheduledFor MAIS TARDE entre tudo que este turno enfileirou
   // até aqui — usado só como âncora do vídeo de confirmação, mais abaixo,
   // pra garantir que ele saia sempre DEPOIS de qualquer outra coisa deste
@@ -835,7 +875,12 @@ export async function handleInboundInstagramMessage(
       clinicId: clinic.id,
       conversationId: conversation.id,
       leadId: lead.id,
-      leadName: lead.name ?? lead.igUsername ?? undefined,
+      // Non-null: scheduledStartTime só fica marcado se o handler de
+      // scheduleAppointment (acima) passou pela própria trava que exige
+      // capturedLeadName ou lead.name preenchido — e, se foi capturedLeadName,
+      // o bloco logo acima já persistiu em lead.name antes de chegar aqui.
+      // "lead" genérico nunca mais é um fallback alcançável neste ponto.
+      leadName: lead.name!,
       startTimeIso: scheduledStartTime,
     });
   }
@@ -861,7 +906,7 @@ async function confirmAppointment(params: {
   clinicId: string;
   conversationId: string;
   leadId: string;
-  leadName?: string;
+  leadName: string;
   startTimeIso: string;
 }) {
   // Buscado logo no início (não só mais abaixo, pra confirmationVideoUrl)
@@ -909,7 +954,7 @@ async function confirmAppointment(params: {
       googleEventId = await createCalendarEvent(
         params.clinicId,
         params.startTimeIso,
-        `VEXO — Avaliação: ${params.leadName ?? "lead"}`,
+        `VEXO — Avaliação: ${params.leadName}`,
         clinic?.address ?? undefined
       );
     } catch (err) {
