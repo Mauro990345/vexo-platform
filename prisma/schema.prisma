@@ -452,6 +452,18 @@ model Appointment {
 
   status                  AppointmentStatus @default(SCHEDULED)
   confirmationVideoSentAt DateTime?
+  // Marcado pela ferramenta confirm_attendance (ver AgentTools,
+  // src/lib/anthropic.ts) só depois que o lead confirma explicitamente que
+  // vai comparecer E a IA já mandou a mensagem final da sequência (ex.:
+  // "chegue uns 15 minutinhos antes..."). Bug real em produção: o vídeo
+  // institucional saía logo depois de schedule_appointment confirmar o
+  // horário — no meio da própria sequência de confirmação de presença,
+  // antes do lead sequer responder "sim posso ir". Esse campo é o sinal
+  // explícito que faltava (nada no código sabia identificar sozinho o fim
+  // dessa sequência, que só existe como texto livre gerado pela IA) — ver
+  // maybeSendConfirmationVideo, conversation-pipeline.ts, que agora exige
+  // isto preenchido antes de mandar o vídeo.
+  attendanceConfirmedAt DateTime?
 
   reminderLogs ReminderLog[]
 

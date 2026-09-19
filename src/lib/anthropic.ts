@@ -159,6 +159,18 @@ export type AgentTools = {
   scheduleAppointment: (args: { startTimeLocal: string; leadConfirmationQuote?: string }) => Promise<
     { confirmed: true; startTimeLocal: string } | { error: string }
   >;
+  // Chamada só depois que a sequência INTEIRA de confirmação de presença
+  // termina: o lead confirmou explicitamente que vai comparecer E você já
+  // mandou a mensagem final com as instruções de chegada (ver descrição
+  // completa em TOOL_DEFINITIONS). Bug real em produção: o vídeo
+  // institucional saía logo depois de schedule_appointment confirmar o
+  // horário — no meio da própria pergunta "posso contar com sua
+  // presença?", antes do lead sequer responder. Nada no código sabia
+  // identificar sozinho o fim dessa sequência (ela só existe como texto
+  // livre gerado pela IA), então esta chamada é o sinal explícito que
+  // faltava — ver Appointment.attendanceConfirmedAt e
+  // maybeSendConfirmationVideo, conversation-pipeline.ts.
+  confirmAttendance: () => Promise<{ confirmed: true } | { error: string }>;
   // Leitura pura, sem side effect — consulta o agendamento ativo do lead
   // NESTA conversa (o sistema já sabe quem está conversando, não precisa
   // perguntar). Usada tanto pra responder "esqueci meu horário"/"quando é
@@ -263,6 +275,20 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
     },
   },
   {
+    name: "confirm_attendance",
+    description:
+      "Chame esta ferramenta só depois de TER FEITO AS DUAS COISAS, NESSA ORDEM: (1) o lead confirmar " +
+      "explicitamente que vai comparecer ao horário marcado (ex.: \"sim\", \"pode contar comigo\", \"vou " +
+      "sim\") — uma resposta genérica tipo só \"ok\" ou \"👍\" a uma pergunta ANTERIOR não conta; (2) você já " +
+      "ter enviado ao lead a mensagem final da sequência de agendamento, com as instruções de chegada (ex.: " +
+      "\"chegue uns 15 minutinhos antes...\"). NUNCA chame antes das duas terem acontecido de verdade — em " +
+      "especial, NUNCA chame só por schedule_appointment ter confirmado o horário, e NUNCA chame só por ter " +
+      "PERGUNTADO \"posso contar com sua presença?\" — ela precisa da RESPOSTA do lead E da sua mensagem " +
+      "final já enviada. Esta chamada é o que libera o envio do vídeo institucional de confirmação pro lead " +
+      "— chamar cedo demais faz o vídeo interromper a conversa no meio da própria confirmação de presença.",
+    inputSchema: { type: "object", properties: {}, required: [] },
+  },
+  {
     name: "save_lead_phone",
     description:
       "Salva o número de WhatsApp do lead assim que ele informar na conversa. Chame sempre que o lead enviar um número de telefone/WhatsApp, mesmo que fora do momento em que foi pedido.",
@@ -350,6 +376,9 @@ export async function generateLeadReply(params: {
         scheduled = { startTimeLocal: outcome.startTimeLocal };
       }
       return outcome;
+    }
+    if (name === "confirm_attendance") {
+      return params.tools.confirmAttendance();
     }
     if (name === "check_current_appointment") {
       return params.tools.checkCurrentAppointment();
