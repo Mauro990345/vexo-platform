@@ -4,6 +4,7 @@ import { ChevronLeft } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { StatusBadge } from "@/components/StatusBadge";
 import { AppointmentStatusBadge } from "@/components/AppointmentStatusBadge";
+import { normalizeBrazilianWhatsappNumber } from "@/lib/whatsapp";
 import { setConversationStatus, sendHumanReply } from "../../clinicas/actions";
 
 export const dynamic = "force-dynamic";
@@ -145,7 +146,7 @@ export default async function ConversationDetailPage({ params }: { params: { id:
             <p className="mt-1 text-vexo-muted">
               {conversation.lead.phone ? (
                 <a
-                  href={`https://wa.me/${conversation.lead.phone.replace(/\D/g, "")}`}
+                  href={`https://wa.me/${normalizeBrazilianWhatsappNumber(conversation.lead.phone)}`}
                   target="_blank"
                   rel="noreferrer"
                   className="text-vexo-accent hover:underline"

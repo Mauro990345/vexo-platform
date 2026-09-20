@@ -6,7 +6,12 @@ import { getInstagramUserProfile } from "@/lib/instagram";
 import { decryptToken } from "@/lib/crypto";
 import { computeAdaptiveDelaySeconds, FAST_REPLY_DELAY_SECONDS } from "@/lib/scheduler";
 import { DEFAULT_CONVERSATION_SYSTEM_PROMPT } from "@/lib/default-prompt";
-import { sendWhatsappMessage, formatEscalationAlert, formatAppointmentConfirmationMessage } from "@/lib/whatsapp";
+import {
+  sendWhatsappMessage,
+  formatEscalationAlert,
+  formatAppointmentConfirmationMessage,
+  normalizeBrazilianWhatsappNumber,
+} from "@/lib/whatsapp";
 import { cancelPendingFollowUp, getSilenceHours, applyTemplateVariables } from "@/lib/follow-up";
 import { toChatHistory } from "@/lib/chat-history";
 import { buildResultPhotoMessages, type ResultPhotoInput } from "@/lib/result-photo-message";
@@ -803,7 +808,13 @@ export async function handleInboundInstagramMessage(
       async saveLeadPhone(args) {
         const phone = args.phone.trim();
         if (!phone) return { error: "Número vazio." };
-        capturedLeadPhone = phone;
+        // Normaliza JÁ na captura (não só na hora de usar) — bug real: o
+        // lead digita o número sem o código do país (convenção comum no
+        // Brasil, "11987654321" em vez de "5511987654321"), e sem isso
+        // tanto o link de WhatsApp do Painel quanto o envio via Evolution
+        // API tratavam como número internacional inválido. Ver
+        // normalizeBrazilianWhatsappNumber, src/lib/whatsapp.ts.
+        capturedLeadPhone = normalizeBrazilianWhatsappNumber(phone);
         return { saved: true };
       },
       async saveLeadName(args) {

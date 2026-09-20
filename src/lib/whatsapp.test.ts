@@ -1,5 +1,35 @@
 import { describe, it, expect } from "vitest";
-import { formatAppointmentConfirmationMessage } from "./whatsapp";
+import { formatAppointmentConfirmationMessage, normalizeBrazilianWhatsappNumber } from "./whatsapp";
+
+describe("normalizeBrazilianWhatsappNumber", () => {
+  it("adiciona o código do país (55) num número local sem ele — bug real: lead digita sem o 55", () => {
+    expect(normalizeBrazilianWhatsappNumber("11987654321")).toBe("5511987654321");
+  });
+
+  it("adiciona o 55 num número local formatado com parênteses/traço/espaços", () => {
+    expect(normalizeBrazilianWhatsappNumber("(11) 98765-4321")).toBe("5511987654321");
+  });
+
+  it("adiciona o 55 num número local de telefone fixo (10 dígitos)", () => {
+    expect(normalizeBrazilianWhatsappNumber("1132654321")).toBe("551132654321");
+  });
+
+  it("não mexe num número que já vem com o 55 (celular, 13 dígitos)", () => {
+    expect(normalizeBrazilianWhatsappNumber("5511987654321")).toBe("5511987654321");
+  });
+
+  it("não mexe num número que já vem com o 55 (fixo, 12 dígitos)", () => {
+    expect(normalizeBrazilianWhatsappNumber("551132654321")).toBe("551132654321");
+  });
+
+  it("não mexe num número já com 55, mesmo escrito com '+' e formatação", () => {
+    expect(normalizeBrazilianWhatsappNumber("+55 (11) 98765-4321")).toBe("5511987654321");
+  });
+
+  it("devolve como veio (só os dígitos) quando o formato não bate com nenhum caso conhecido", () => {
+    expect(normalizeBrazilianWhatsappNumber("123")).toBe("123");
+  });
+});
 
 describe("formatAppointmentConfirmationMessage", () => {
   it("inclui o primeiro nome e a data/horário formatados", () => {

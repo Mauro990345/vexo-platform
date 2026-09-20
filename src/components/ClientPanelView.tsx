@@ -7,6 +7,7 @@ import { ApproachMetricsToggle } from "@/components/ApproachMetricsToggle";
 import { AppointmentStatusBadge } from "@/components/AppointmentStatusBadge";
 import { NoShowButton } from "@/components/NoShowButton";
 import { ChannelStatusPill } from "@/components/ChannelStatusPill";
+import { normalizeBrazilianWhatsappNumber } from "@/lib/whatsapp";
 
 // Marcar "Não compareceu" só faz sentido pra agendamento ainda em aberto —
 // já compareceu ou já foi cancelado não tem o que alternar aqui.
@@ -199,7 +200,7 @@ export async function ClientPanelView({
                         sem acesso dela). Link wa.me abre a conversa direto. */}
                     {a.lead?.phone && (
                       <a
-                        href={`https://wa.me/${a.lead.phone.replace(/\D/g, "")}`}
+                        href={`https://wa.me/${normalizeBrazilianWhatsappNumber(a.lead.phone)}`}
                         target="_blank"
                         rel="noreferrer"
                         className="mt-1 flex items-center gap-1 text-caption text-vexo-accent hover:underline"
