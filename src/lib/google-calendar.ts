@@ -206,7 +206,8 @@ export async function createCalendarEvent(
   clinicId: string,
   startTimeIso: string,
   summary: string,
-  location?: string
+  location?: string,
+  description?: string
 ): Promise<string> {
   const { client, calendarId } = await clientForClinic(clinicId);
   const calendar = google.calendar({ version: "v3", auth: client });
@@ -219,6 +220,7 @@ export async function createCalendarEvent(
     requestBody: {
       summary,
       location,
+      description,
       start: { dateTime: start.toISOString() },
       end: { dateTime: end.toISOString() },
     },
@@ -259,5 +261,23 @@ export async function updateCalendarEvent(clinicId: string, eventId: string, sta
       start: { dateTime: start.toISOString() },
       end: { dateTime: end.toISOString() },
     },
+  });
+}
+
+// Atualiza só a descrição de um evento JÁ EXISTENTE, sem tocar em
+// horário/summary — usado quando o WhatsApp do lead chega numa conversa
+// DEPOIS que o agendamento já foi confirmado (schedule_appointment não
+// exige telefone, só nome — ver scheduleAppointment/save_lead_name,
+// conversation-pipeline.ts), pra "completar" o evento já criado em vez de
+// deixá-lo pra sempre sem esse dado. Ver maybeSendWhatsappConfirmation,
+// que chama isto no mesmo momento em que a confirmação por WhatsApp sai.
+export async function updateCalendarEventDescription(clinicId: string, eventId: string, description: string): Promise<void> {
+  const { client, calendarId } = await clientForClinic(clinicId);
+  const calendar = google.calendar({ version: "v3", auth: client });
+
+  await calendar.events.patch({
+    calendarId,
+    eventId,
+    requestBody: { description },
   });
 }
