@@ -7,12 +7,28 @@ import type { ChatTurn } from "@/lib/anthropic";
 export function toChatHistory(messages: { sender: string; content: string }[]): ChatTurn[] {
   const turns: ChatTurn[] = [];
   for (const m of messages) {
+    let role: ChatTurn["role"];
     if (m.sender === "LEAD") {
-      turns.push({ role: "user", content: m.content });
+      role = "user";
     } else if (m.sender === "AI" || m.sender === "HUMAN") {
-      turns.push({ role: "assistant", content: m.content });
+      role = "assistant";
+    } else {
+      continue; // SYSTEM (ex: vídeo enviado) não entra no contexto de diálogo do modelo.
     }
-    // SYSTEM (ex: vídeo enviado) não entra no contexto de diálogo do modelo.
+
+    // Mensagens consecutivas do MESMO papel — comum desde que o debounce
+    // de mensagens rápidas (ver src/lib/inbound-debounce.ts) passou a
+    // gravar VÁRIAS mensagens do lead como linhas separadas antes de gerar
+    // uma única resposta — viram UM turno só, concatenadas. A API da
+    // Anthropic (e a maioria dos provedores compatíveis com o formato da
+    // OpenAI) espera papéis alternados; mandar dois turnos "user" seguidos
+    // arrisca erro ou comportamento indefinido do provedor.
+    const lastTurn = turns[turns.length - 1];
+    if (lastTurn && lastTurn.role === role) {
+      lastTurn.content = `${lastTurn.content}\n${m.content}`;
+    } else {
+      turns.push({ role, content: m.content });
+    }
   }
   return turns;
 }
