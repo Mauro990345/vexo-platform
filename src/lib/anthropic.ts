@@ -358,7 +358,11 @@ export async function generateLeadReply(params: {
   contextNote: string;
   history: ChatTurn[];
   tools: AgentTools;
-}, provider: LLMProvider = getLLMProvider()): Promise<{ text: string; scheduled?: { startTimeLocal: string } }> {
+}, provider: LLMProvider = getLLMProvider()): Promise<{
+  text: string;
+  scheduled?: { startTimeLocal: string };
+  truncated?: boolean;
+}> {
   let scheduled: { startTimeLocal: string } | undefined;
 
   // Dispatch de ferramenta — lógica de negócio do VEXO (qual nome de
@@ -402,8 +406,24 @@ export async function generateLeadReply(params: {
     history: params.history,
     tools: TOOL_DEFINITIONS,
     executeTool,
+    // Bug real em produção: com o default de 4 iterações de cada provedor
+    // (ver AnthropicProvider/OpenRouterProvider), um turno que precisasse
+    // de mais de 4 chamadas de ferramenta seguidas antes do texto final
+    // (ex.: schedule_appointment + save_lead_phone + save_lead_name, e só
+    // ENTÃO a resposta de verdade — hoje há 7 ferramentas de negócio, bem
+    // mais que quando esse default de 4 foi escolhido) esgotava o loop
+    // ANTES do modelo conseguir gerar a resposta real, devolvendo só o
+    // fallbackText genérico abaixo — que ia pro lead como se fosse a
+    // resposta final, deixando a conversa "travada" até o lead mandar
+    // outra mensagem (nada tentava de novo sozinho). 12 dá folga
+    // confortável pra sequências de várias ferramentas no mesmo turno,
+    // continuando limitado (nunca vira um loop sem fim) — e generateLeadReply
+    // agora trata truncated=true (ver ConverseResult) como uma falha real
+    // (escalona pra revisão humana em conversation-pipeline.ts), não como
+    // uma resposta válida, caso mesmo essa folga não seja suficiente algum dia.
+    maxToolIterations: 12,
     fallbackText: "Só um momento, já te retorno com os detalhes.",
   });
 
-  return { text: result.text, scheduled };
+  return { text: result.text, scheduled, truncated: result.truncated };
 }

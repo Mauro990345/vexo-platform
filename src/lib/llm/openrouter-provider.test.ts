@@ -217,6 +217,7 @@ describe("OpenRouterProvider.converse", () => {
     });
 
     expect(result.text).toBe("texto de fallback customizado");
+    expect(result.truncated).toBe(true);
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });

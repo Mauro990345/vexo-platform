@@ -137,6 +137,25 @@ export default async function ConversationDetailPage({ params }: { params: { id:
                 timeZone: "America/Sao_Paulo",
               })}
             </p>
+            {/* WhatsApp do lead direto no card — sem isso a secretária
+                precisava procurar em outro lugar (card "Lead" acima) pra
+                conseguir contatar em caso de atraso/imprevisto. Link
+                wa.me abre a conversa direto, sem precisar salvar o
+                contato antes. */}
+            <p className="mt-1 text-vexo-muted">
+              {conversation.lead.phone ? (
+                <a
+                  href={`https://wa.me/${conversation.lead.phone.replace(/\D/g, "")}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-vexo-accent hover:underline"
+                >
+                  {conversation.lead.phone}
+                </a>
+              ) : (
+                "WhatsApp não informado"
+              )}
+            </p>
             <div className="mt-3">
               <AppointmentStatusBadge status={appointment.status} />
             </div>

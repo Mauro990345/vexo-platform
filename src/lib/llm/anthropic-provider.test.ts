@@ -208,6 +208,7 @@ describe("AnthropicProvider.converse", () => {
     });
 
     expect(result.text).toBe("texto de fallback customizado");
+    expect(result.truncated).toBe(true);
     expect(createBetaMessages).toHaveBeenCalledTimes(2);
   });
 

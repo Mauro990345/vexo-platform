@@ -117,6 +117,6 @@ export class AnthropicProvider implements LLMProvider {
       messages.push({ role: "user", content: toolResults });
     }
 
-    return { text: request.fallbackText ?? DEFAULT_FALLBACK_TEXT };
+    return { text: request.fallbackText ?? DEFAULT_FALLBACK_TEXT, truncated: true };
   }
 }
