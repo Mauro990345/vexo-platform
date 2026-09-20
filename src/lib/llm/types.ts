@@ -93,6 +93,17 @@ export type ConverseRequest = {
 
 export type ConverseResult = {
   text: string;
+  // true quando o loop esgotou maxToolIterations sem o modelo terminar de
+  // responder (text acima é só o fallbackText genérico, NÃO uma resposta
+  // real) — bug real em produção: esse texto de espera ("Só um momento,
+  // já te retorno com os detalhes.") saía pro lead como se fosse a
+  // resposta final do turno, e a conversa ficava travada até o lead
+  // mandar outra mensagem (nada disparava automaticamente uma nova
+  // tentativa). Sinal pra quem chama (generateLeadReply,
+  // src/lib/anthropic.ts) saber que precisa tratar isso como uma falha, não
+  // como uma resposta de verdade — ver truncated em
+  // conversation-pipeline.ts, que escalona pra revisão humana nesse caso.
+  truncated?: boolean;
 };
 
 export interface LLMProvider {

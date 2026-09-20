@@ -109,6 +109,28 @@ export function formatReminderMessage(params: {
   return `Oi, ${params.leadFirstName}! Passando para lembrar que seu horário é ${when}, às ${time}. Te esperamos! 💙`;
 }
 
+// Confirmação IMEDIATA do agendamento — diferente de formatReminderMessage
+// (lembrete de véspera, 12h/3h antes, ver ReminderConfig/reminders.ts):
+// esta sai assim que o horário é confirmado E o WhatsApp do lead fica
+// disponível, não numa janela fixa antes da consulta. Bug real reportado:
+// nenhuma mensagem chegava por WhatsApp confirmando o agendamento — só o
+// vídeo institucional (Instagram) e os lembretes de véspera existiam; um
+// lead que nunca mais abrisse o Instagram não tinha nenhuma confirmação
+// por escrito de que o horário foi marcado.
+export function formatAppointmentConfirmationMessage(params: {
+  leadFirstName: string;
+  scheduledAt: Date;
+  clinicAddress?: string | null;
+}): string {
+  const dataHorario = formatDateTimeLabel(params.scheduledAt, new Date());
+  const addressLine = params.clinicAddress?.trim() ? `\n📍 ${params.clinicAddress.trim()}` : "";
+
+  return (
+    `Oi, ${params.leadFirstName}! Seu horário está confirmado para ${dataHorario}.${addressLine}\n` +
+    `Qualquer imprevisto, é só me chamar por aqui. Até lá! 💙`
+  );
+}
+
 // "Hoje"/"amanhã" com base na data civil em America/Sao_Paulo (não em
 // diferença de milissegundos, que erraria perto da virada do dia) — usa a
 // convenção en-CA (YYYY-MM-DD) só como formato estável pra comparar datas,
@@ -126,7 +148,9 @@ function relativeDayLabel(date: Date, now: Date): string {
 // Data + horário legível, tipo "amanhã (05/09) às 15h" — combina o dia
 // relativo, a data numérica (pra não deixar dúvida de qual dia é "amanhã")
 // e a hora (sem minutos quando exatos, ex: "15h" em vez de "15h00").
-function formatDateTimeLabel(date: Date, now: Date): string {
+// Exportada (não só usada aqui dentro) pra formatAppointmentConfirmationMessage
+// reaproveitar a mesma formatação, em vez de duplicar a lógica.
+export function formatDateTimeLabel(date: Date, now: Date): string {
   const dayLabel = relativeDayLabel(date, now);
   const dayMonth = date.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", timeZone: "America/Sao_Paulo" });
   const [hour, minute] = date

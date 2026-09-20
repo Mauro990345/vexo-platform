@@ -223,4 +223,45 @@ describe("generateLeadReply", () => {
       provider
     );
   });
+
+  it("passa um maxToolIterations generoso (não confia no default de cada provedor) — bug real: 4 iterações " +
+    "não bastavam pra sequências com várias ferramentas no mesmo turno", async () => {
+    const converse = vi.fn(async (_request: ConverseRequest) => ({ text: "ok" }));
+    const provider = fakeProvider({ converse });
+
+    await generateLeadReply(
+      { systemPrompt: "prompt", contextNote: "contexto", history: [], tools: noopTools() },
+      provider
+    );
+
+    const request = converse.mock.calls.at(0)?.[0] as unknown as ConverseRequest;
+    expect(request.maxToolIterations).toBeGreaterThanOrEqual(8);
+  });
+
+  it("propaga `truncated: true` do provider — bug real: a mensagem de espera genérica saía pro lead " +
+    "como se fosse a resposta final, travando a conversa até o lead mandar outra mensagem", async () => {
+    const provider = fakeProvider({
+      converse: vi.fn(async () => ({ text: "Só um momento, já te retorno com os detalhes.", truncated: true })),
+    });
+
+    const reply = await generateLeadReply(
+      { systemPrompt: "prompt", contextNote: "contexto", history: [], tools: noopTools() },
+      provider
+    );
+
+    expect(reply.truncated).toBe(true);
+  });
+
+  it("não marca `truncated` numa resposta normal (provider não devolve esse campo)", async () => {
+    const provider = fakeProvider({
+      converse: vi.fn(async () => ({ text: "Resposta normal" })),
+    });
+
+    const reply = await generateLeadReply(
+      { systemPrompt: "prompt", contextNote: "contexto", history: [], tools: noopTools() },
+      provider
+    );
+
+    expect(reply.truncated).toBeUndefined();
+  });
 });

@@ -165,6 +165,6 @@ export class OpenRouterProvider implements LLMProvider {
       }
     }
 
-    return { text: request.fallbackText ?? DEFAULT_FALLBACK_TEXT };
+    return { text: request.fallbackText ?? DEFAULT_FALLBACK_TEXT, truncated: true };
   }
 }

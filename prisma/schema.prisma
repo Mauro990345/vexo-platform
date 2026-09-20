@@ -464,6 +464,16 @@ model Appointment {
   // maybeSendConfirmationVideo, conversation-pipeline.ts, que agora exige
   // isto preenchido antes de mandar o vídeo.
   attendanceConfirmedAt DateTime?
+  // Marcado ao ENFILEIRAR a mensagem de confirmação imediata por WhatsApp
+  // (ver maybeSendWhatsappConfirmation, conversation-pipeline.ts) — mesmo
+  // instante de "enfileirado", não de "efetivamente entregue pelo
+  // WhatsApp", igual a confirmationVideoSentAt acima (o envio real fica a
+  // cargo do worker de despacho, ver dispatchDueMessages). Diferente dos
+  // lembretes de véspera (12h/3h antes, ver ReminderConfig/ReminderLog
+  // abaixo) — esta é a confirmação imediata, disparada assim que o
+  // agendamento existe E Lead.phone está disponível, não uma janela fixa
+  // antes do horário marcado.
+  whatsappConfirmationSentAt DateTime?
 
   reminderLogs ReminderLog[]
 

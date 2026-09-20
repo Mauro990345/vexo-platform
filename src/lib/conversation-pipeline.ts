@@ -6,7 +6,7 @@ import { getInstagramUserProfile } from "@/lib/instagram";
 import { decryptToken } from "@/lib/crypto";
 import { computeAdaptiveDelaySeconds, FAST_REPLY_DELAY_SECONDS } from "@/lib/scheduler";
 import { DEFAULT_CONVERSATION_SYSTEM_PROMPT } from "@/lib/default-prompt";
-import { sendWhatsappMessage, formatEscalationAlert } from "@/lib/whatsapp";
+import { sendWhatsappMessage, formatEscalationAlert, formatAppointmentConfirmationMessage } from "@/lib/whatsapp";
 import { cancelPendingFollowUp, getSilenceHours, applyTemplateVariables } from "@/lib/follow-up";
 import { toChatHistory } from "@/lib/chat-history";
 import { buildResultPhotoMessages, type ResultPhotoInput } from "@/lib/result-photo-message";
@@ -833,6 +833,37 @@ export async function handleInboundInstagramMessage(
   });
   console.log(`[vexo:timing] generateLeadReply levou ${Date.now() - pipelineStartedAt}ms no total (desde o início do processamento deste evento, inclui classifyConversation)`);
 
+  // Bug real em produção: o loop de chamadas de ferramenta esgotou as
+  // iterações disponíveis sem o modelo terminar de responder (ver
+  // maxToolIterations em generateLeadReply, anthropic.ts) — reply.text
+  // aqui é só o fallbackText genérico ("Só um momento, já te retorno com
+  // os detalhes."), NUNCA uma resposta de verdade. Mandar isso como se
+  // fosse a resposta final deixava a conversa "travada": o lead via essa
+  // frase de espera e nunca recebia mais nada, porque nada tentava de
+  // novo sozinho — só voltava a responder quando o LEAD mandava outra
+  // mensagem. Em vez disso, escalona pra revisão humana (mesmo padrão de
+  // toda outra escalonagem) e avisa o lead com uma mensagem curta e
+  // neutra, nunca deixando a conversa parecer "morta".
+  if (reply.truncated) {
+    await escalateToHuman(
+      "A IA não conseguiu concluir a resposta dentro do limite de chamadas de ferramenta neste turno " +
+        "(sequência de ações mais longa que o normal — ex.: agendar horário + salvar telefone + salvar nome " +
+        "no mesmo turno) — pausada para revisão humana em vez de deixar só a mensagem de espera genérica " +
+        "sem nunca responder de verdade."
+    );
+    await prisma.message.create({
+      data: {
+        conversationId: conversation.id,
+        direction: "OUTBOUND",
+        sender: "SYSTEM",
+        content: "Entendi! Vou repassar isso pra nossa equipe te dar mais detalhes por aqui, tá bom? 🙂",
+        status: "PENDING",
+        scheduledFor: new Date(Date.now() + FAST_REPLY_DELAY_SECONDS * 1000),
+      },
+    });
+    return;
+  }
+
   // firstMessage (não lastMessage) de propósito: reflete o tempo real que o
   // lead levou pra reagir à última resposta da IA, sem inflar esse número
   // pelo tempo que o debounce esperou por possíveis mensagens seguintes no
@@ -960,6 +991,14 @@ export async function handleInboundInstagramMessage(
     conversationId: conversation.id,
     afterScheduledFor: latestScheduledFor,
   });
+
+  // Confirmação IMEDIATA do agendamento por WhatsApp — diferente do vídeo
+  // acima (que só sai depois da sequência INTEIRA de confirmação de
+  // presença, ver confirm_attendance): esta é só "agendamento existe E
+  // telefone disponível", sem esperar mais nada. Mesmo padrão de chamada
+  // incondicional, mesma razão: a função tem suas próprias travas (ver
+  // maybeSendWhatsappConfirmation) e não faz nada quando ainda não bate.
+  await maybeSendWhatsappConfirmation({ clinicId: clinic.id, conversationId: conversation.id });
 }
 
 async function confirmAppointment(params: {
@@ -1151,6 +1190,72 @@ async function maybeSendConfirmationVideo(params: {
     prisma.appointment.update({
       where: { id: appointment.id },
       data: { confirmationVideoSentAt: new Date() },
+    }),
+  ]);
+}
+
+// Confirmação IMEDIATA do agendamento por WhatsApp — bug relatado: nenhuma
+// mensagem confirmava o agendamento por WhatsApp, mesmo com o número
+// informado; só existiam o vídeo institucional (Instagram, gate bem mais
+// rígido — ver maybeSendConfirmationVideo acima) e os lembretes de véspera
+// (12h/3h antes, ReminderConfig/reminders.ts). Diferente dos dois: esta
+// dispara assim que o agendamento existe E o telefone está disponível,
+// sem esperar a sequência de confirmação de presença nem uma janela fixa
+// antes da consulta.
+//
+// Mesma arquitetura de despacho de tudo mais no VEXO: NÃO chama
+// sendWhatsappMessage direto — só enfileira um Message (channel
+// WHATSAPP, status PENDING), despachado de fato por dispatchDueMessages
+// (src/lib/dispatch.ts), com o mesmo claim atômico contra envio em dobro
+// (ver PR do bug de mensagem duplicada) e a mesma resiliência a
+// crash/redeploy no meio do envio.
+//
+// Idempotente (Appointment.whatsappConfirmationSentAt) e silenciosa
+// quando ainda não há o que mandar (sem agendamento ativo, sem telefone,
+// ou clínica sem WhatsApp conectado) — mesmo padrão de
+// maybeSendConfirmationVideo, chamada do mesmo único call site.
+async function maybeSendWhatsappConfirmation(params: { clinicId: string; conversationId: string }) {
+  const appointment = await prisma.appointment.findFirst({
+    where: { conversationId: params.conversationId, status: { in: ["SCHEDULED", "CONFIRMED"] } },
+    orderBy: { createdAt: "desc" },
+  });
+  if (!appointment || appointment.whatsappConfirmationSentAt) return;
+
+  const [clinic, conversation] = await Promise.all([
+    prisma.clinic.findUnique({ where: { id: params.clinicId } }),
+    prisma.conversation.findUnique({ where: { id: params.conversationId }, include: { lead: true } }),
+  ]);
+  if (!clinic?.whatsappInstanceName) return;
+  // Ainda sem WhatsApp — não é erro, só significa "ainda não é a hora"; a
+  // próxima chamada (quando o telefone chegar) tenta de novo.
+  if (!conversation?.lead.phone) return;
+
+  // Nome já é garantido pela trava de schedule_appointment (ver
+  // scheduleAppointment mais acima — nunca confirma sem um nome real
+  // salvo), mas o "primeiro nome" em si (split) merece um fallback
+  // defensivo caso o lead tenha informado só um nome de uma palavra
+  // estranha ou algo inesperado.
+  const leadFirstName = conversation.lead.name?.trim().split(/\s+/)[0] || "tudo bem";
+
+  await prisma.$transaction([
+    prisma.message.create({
+      data: {
+        conversationId: params.conversationId,
+        direction: "OUTBOUND",
+        sender: "AI",
+        channel: "WHATSAPP",
+        content: formatAppointmentConfirmationMessage({
+          leadFirstName,
+          scheduledAt: appointment.scheduledAt,
+          clinicAddress: clinic.address,
+        }),
+        status: "PENDING",
+        scheduledFor: new Date(),
+      },
+    }),
+    prisma.appointment.update({
+      where: { id: appointment.id },
+      data: { whatsappConfirmationSentAt: new Date() },
     }),
   ]);
 }
