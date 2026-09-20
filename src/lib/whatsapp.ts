@@ -4,6 +4,35 @@
 // (ver Clinic.whatsappInstanceName e src/lib/whatsapp-connection.ts), então
 // quem envia sempre informa qual instância usar.
 
+// Bug real reportado: link de WhatsApp no Painel abrindo "esse usuário não
+// está no WhatsApp" pra um lead que TEM WhatsApp de verdade. Causa raiz:
+// Lead.phone é gravado exatamente como o lead digitou na conversa (ver
+// saveLeadPhone, conversation-pipeline.ts — nenhuma normalização
+// acontecia ali, só um trim) — e convenção comum no Brasil é digitar SEM
+// o código do país ("11987654321", "(11) 98765-4321"), já que ninguém
+// fala o próprio número assim no dia a dia. Sem o "55" na frente, tanto um
+// link wa.me quanto o envio via Evolution API (sendWhatsappMessage, mais
+// abaixo — MESMO bug, parâmetro nomeado phoneE164 mas nada garantia isso)
+// tratam o número como internacional inválido — WhatsApp não confunde com
+// o número certo, simplesmente rejeita.
+//
+// Só cobre o formato brasileiro (DDD + número, com ou sem o "55" na
+// frente) — é o único país que este produto atende hoje (ver também
+// src/lib/timezone.ts, que assume Brasília pelo mesmo motivo). Números já
+// fora desses formatos esperados (nem 10/11 dígitos locais, nem 12/13 já
+// com 55) voltam como vieram, sem adivinhar — melhor um número que ainda
+// pode falhar do que um que a gente corrompeu tentando "consertar".
+export function normalizeBrazilianWhatsappNumber(rawPhone: string): string {
+  const digits = rawPhone.replace(/\D/g, "");
+  if (digits.startsWith("55") && (digits.length === 12 || digits.length === 13)) {
+    return digits;
+  }
+  if (digits.length === 10 || digits.length === 11) {
+    return `55${digits}`;
+  }
+  return digits;
+}
+
 export function evolutionBaseConfig() {
   const baseUrl = process.env.EVOLUTION_API_URL;
   const apiKey = process.env.EVOLUTION_API_KEY;
@@ -20,7 +49,10 @@ export async function sendWhatsappMessage(instanceName: string | null | undefine
 
   const { baseUrl, apiKey } = evolutionBaseConfig();
 
-  const number = phoneE164.replace(/\D/g, "");
+  // Apesar do nome do parâmetro, nada garantia até aqui que phoneE164
+  // realmente vinha em E.164 — ver normalizeBrazilianWhatsappNumber acima
+  // pro bug real que isso corrige.
+  const number = normalizeBrazilianWhatsappNumber(phoneE164);
 
   const res = await fetch(`${baseUrl}/message/sendText/${instanceName}`, {
     method: "POST",
