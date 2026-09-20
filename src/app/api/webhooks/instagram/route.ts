@@ -2,11 +2,72 @@ import { NextRequest, NextResponse } from "next/server";
 import { verifyWebhookSignature, requestThreadControl } from "@/lib/instagram";
 import { handleInboundInstagramMessage } from "@/lib/conversation-pipeline";
 import { withConversationLock } from "@/lib/conversation-lock";
+import { bufferForDebounce } from "@/lib/inbound-debounce";
 import { decryptToken } from "@/lib/crypto";
 import { prisma } from "@/lib/prisma";
 
 // Webhook do Instagram Messaging (Meta). GET = handshake de verificação;
 // POST = eventos de mensagem recebida.
+
+type BufferedInboundMessage = {
+  text: string;
+  igMessageId?: string;
+  timestamp: Date;
+  // Da requisição que originou ESTA mensagem específica — usado só se o
+  // processamento do lote inteiro (mais abaixo) falhar, pra gravar o erro
+  // em algum WebhookLog visível em /crm/webhook-logs. Quando um lote junta
+  // mensagens de mais de uma requisição (debounce agrupou), usa o
+  // webhookLogId da ÚLTIMA — é o estado mais atual, e escrever em todas
+  // não trazia valor diagnóstico real o bastante pra justificar a
+  // complexidade extra.
+  webhookLogId?: string;
+};
+
+// Processa de fato um lote de mensagens do MESMO lead já agrupado pelo
+// debounce (ver bufferForDebounce/inbound-debounce.ts) — chamado de forma
+// assíncrona, FORA do ciclo de requisição/resposta do webhook que
+// originou a primeira mensagem do lote (por isso não é `await`ado no loop
+// principal abaixo). Isso só funciona porque o serviço "web" do Railway é
+// um processo Node de vida longa (`next start`), não uma função
+// serverless que é suspensa/encerrada assim que a resposta HTTP é
+// enviada — um timer criado aqui continua rodando normalmente depois do
+// 200 já ter voltado pra Meta.
+async function flushInboundBatch(igUserId: string, leadIgScopedId: string, messages: BufferedInboundMessage[]) {
+  const lastWebhookLogId = messages[messages.length - 1]?.webhookLogId;
+  try {
+    // Serializa por clínica+lead — ver comentário grande em
+    // src/lib/conversation-lock.ts pro bug real que isso corrige
+    // (agendamento confirmado seguido de "não está mais disponível",
+    // e vídeo de confirmação em dobro — as duas causadas pela mesma
+    // corrida entre duas mensagens do lead processadas ao mesmo tempo).
+    await withConversationLock(`${igUserId}:${leadIgScopedId}`, () =>
+      handleInboundInstagramMessage(
+        {
+          igUserId,
+          leadIgScopedId,
+          messages: messages.map((m) => ({ text: m.text, igMessageId: m.igMessageId, timestamp: m.timestamp })),
+        },
+        lastWebhookLogId
+      )
+    );
+  } catch (err) {
+    console.error("[vexo] Erro ao processar mensagem do Instagram:", err);
+    // Mesmo espírito do matchFailureReason (conversation-pipeline.ts):
+    // sem isso, uma exceção aqui (conta encontrada, mas algo quebrou
+    // depois — classificação, geração de resposta da IA, criação de
+    // lead/conversa/mensagem) só existia no console do Railway, sem
+    // acesso. Grava na MESMA linha de WebhookLog dessa requisição pra
+    // dar pra ver direto em /crm/webhook-logs.
+    if (lastWebhookLogId) {
+      const detail = err instanceof Error ? `${err.message}\n${err.stack ?? ""}` : String(err);
+      await prisma.webhookLog
+        .update({ where: { id: lastWebhookLogId }, data: { processingError: detail.slice(0, 4000) } })
+        .catch((updateErr) =>
+          console.error("[vexo] Falha ao gravar erro de processamento no WebhookLog:", updateErr)
+        );
+    }
+  }
+}
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
@@ -193,7 +254,7 @@ export async function POST(req: NextRequest) {
       if (!inbound?.text) continue;
       // Guarda numa const própria (não só `inbound.text`) — o TypeScript
       // não carrega a checagem de narrowing acima pra dentro da closure
-      // passada a withConversationLock logo abaixo, já que ela pode em
+      // passada a bufferForDebounce logo abaixo, já que ela pode em
       // teoria rodar mais tarde; capturar o valor aqui, já sabidamente
       // uma string, resolve isso sem precisar de non-null assertion.
       const leadText = inbound.text;
@@ -225,45 +286,35 @@ export async function POST(req: NextRequest) {
         continue;
       }
 
-      try {
-        // Serializa por clínica+lead — ver comentário grande em
-        // src/lib/conversation-lock.ts pro bug real que isso corrige
-        // (agendamento confirmado seguido de "não está mais disponível",
-        // e vídeo de confirmação em dobro — as duas causadas pela mesma
-        // corrida entre duas mensagens do lead processadas ao mesmo tempo).
-        await withConversationLock(`${event.recipient.id}:${event.sender.id}`, () =>
-          handleInboundInstagramMessage(
-            {
-              igUserId: event.recipient.id,
-              leadIgScopedId: event.sender.id,
-              leadText,
-              timestamp: new Date(event.timestamp),
-              igMessageId: inbound.mid,
-            },
-            webhookLog?.id
-          )
+      // Agrupa com qualquer outra mensagem do MESMO lead chegando em
+      // sequência rápida, em vez de processar cada uma na hora — bug real
+      // reportado: o lead mandou "Oi" e, poucos segundos depois, "Ainda
+      // não pensei nisso"; cada mensagem virava sua própria chamada a
+      // handleInboundInstagramMessage, então a IA respondia "Oi" isolado,
+      // como só um cumprimento solto, ANTES de sequer ter visto a segunda
+      // mensagem. Ver src/lib/inbound-debounce.ts pro mecanismo completo.
+      //
+      // Não é `await`ado de propósito: bufferForDebounce só arma um timer
+      // (síncrono, instantâneo) — o processamento de fato só acontece
+      // quando esse timer disparar, bem depois da resposta HTTP deste
+      // webhook já ter voltado pra Meta. Erros do processamento em si são
+      // tratados dentro de flushInboundBatch, nunca aqui.
+      const bufferedMessage: BufferedInboundMessage = {
+        text: leadText,
+        igMessageId: inbound.mid,
+        timestamp: new Date(event.timestamp),
+        webhookLogId: webhookLog?.id,
+      };
+      bufferForDebounce(`${event.recipient.id}:${event.sender.id}`, bufferedMessage, (messages) => {
+        flushInboundBatch(event.recipient.id, event.sender.id, messages).catch((err) =>
+          console.error("[vexo] Falha inesperada ao agendar processamento do lote:", err)
         );
-      } catch (err) {
-        console.error("[vexo] Erro ao processar mensagem do Instagram:", err);
-        // Mesmo espírito do matchFailureReason (conversation-pipeline.ts):
-        // sem isso, uma exceção aqui (conta encontrada, mas algo quebrou
-        // depois — classificação, geração de resposta da IA, criação de
-        // lead/conversa/mensagem) só existia no console do Railway, sem
-        // acesso. Grava na MESMA linha de WebhookLog dessa requisição pra
-        // dar pra ver direto em /crm/webhook-logs.
-        if (webhookLog?.id) {
-          const detail = err instanceof Error ? `${err.message}\n${err.stack ?? ""}` : String(err);
-          await prisma.webhookLog
-            .update({ where: { id: webhookLog.id }, data: { processingError: detail.slice(0, 4000) } })
-            .catch((updateErr) =>
-              console.error("[vexo] Falha ao gravar erro de processamento no WebhookLog:", updateErr)
-            );
-        }
-      }
+      });
     }
   }
 
-  // A Meta espera 200 rápido; processamento pesado já ocorreu acima de forma síncrona,
-  // mas erros individuais não devem derrubar o handshake do webhook.
+  // A Meta espera 200 rápido — o agrupamento acima garante que a resposta
+  // não fica presa esperando a janela de debounce nem o processamento em
+  // si (que agora acontece de forma assíncrona, depois deste retorno).
   return NextResponse.json({ received: true });
 }

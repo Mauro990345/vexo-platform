@@ -22,10 +22,20 @@ const DEFAULT_CONFIRMATION_VIDEO_CAPTION = "Vou te mandar um vídeo rápido most
 export type InboundInstagramEvent = {
   igUserId: string; // ID da conta profissional do Instagram da clínica (destinatária)
   leadIgScopedId: string;
-  leadText: string;
   leadIgUsername?: string;
-  timestamp: Date;
-  igMessageId?: string;
+  // Em ordem cronológica, sempre com pelo menos 1 item. Mais de 1 quando o
+  // debounce (ver src/lib/inbound-debounce.ts) agrupa mensagens do MESMO
+  // lead chegando em sequência rápida — bug real reportado: o lead mandou
+  // "Oi" e, poucos segundos depois, "Ainda não pensei nisso"; como cada
+  // mensagem virava sua PRÓPRIA chamada desta função, a IA respondia "Oi"
+  // isoladamente (um cumprimento solto) antes de sequer ter visto a
+  // segunda mensagem, em vez de responder as duas juntas com o contexto
+  // completo. Cada mensagem do lote ainda vira sua PRÓPRIA linha em
+  // Message (preserva o igMessageId de cada uma pra proteção de
+  // reentrega, e mostra no CRM exatamente o que o lead mandou, como
+  // mandou) — só a geração da resposta da IA que passa a considerar o
+  // lote inteiro de uma vez, não mensagem por mensagem.
+  messages: { text: string; igMessageId?: string; timestamp: Date }[];
 };
 
 // Fronteira entre a IA (que só fala em horário de Brasília, sem nenhuma
@@ -102,6 +112,15 @@ export async function handleInboundInstagramMessage(
   // configurado", que são coisas diferentes mas se somam no tempo total que
   // o lead observa.
   const pipelineStartedAt = Date.now();
+
+  // firstMessage: quando o lead começou a responder — usado só pra medir
+  // tempo de resposta de verdade (leadResponseTimeSeconds, mais abaixo),
+  // sem inflar esse número pelo tempo que o debounce esperou por possíveis
+  // mensagens seguintes. lastMessage: a mais recente do lote — usada em
+  // todo o resto (marcar lastLeadMessageAt, checar silêncio, janela do
+  // loop guard etc.), por ser o timestamp mais próximo de "agora".
+  const firstMessage = event.messages[0]!;
+  const lastMessage = event.messages[event.messages.length - 1]!;
 
   let igAccount = await prisma.instagramAccount.findFirst({
     where: { igUserId: event.igUserId },
@@ -247,15 +266,19 @@ export async function handleInboundInstagramMessage(
 
   // Conversa já escalonada para humano: a IA não retoma sozinha.
   if (conversation.status === "NEEDS_HUMAN") {
-    await prisma.message.create({
-      data: {
-        conversationId: conversation.id,
-        direction: "INBOUND",
-        sender: "LEAD",
-        content: event.leadText,
-        igMessageId: event.igMessageId,
-        sentAt: event.timestamp,
-      },
+    // Captura o id numa const antes do closure do .map() — mesmo motivo de
+    // sempre: `conversation` é `let` (pode ser null antes do bloco acima),
+    // e o TypeScript não carrega o narrowing pra dentro de uma closure.
+    const needsHumanConversationId = conversation.id;
+    await prisma.message.createMany({
+      data: event.messages.map((m) => ({
+        conversationId: needsHumanConversationId,
+        direction: "INBOUND" as const,
+        sender: "LEAD" as const,
+        content: m.text,
+        igMessageId: m.igMessageId,
+        sentAt: m.timestamp,
+      })),
     });
     return;
   }
@@ -274,7 +297,7 @@ export async function handleInboundInstagramMessage(
   const silenceHours = await getSilenceHours();
   const wentSilent =
     Boolean(conversation.lastLeadMessageAt) &&
-    event.timestamp.getTime() - conversation.lastLeadMessageAt!.getTime() > silenceHours * 60 * 60 * 1000;
+    firstMessage.timestamp.getTime() - conversation.lastLeadMessageAt!.getTime() > silenceHours * 60 * 60 * 1000;
   const reengaged = reopeningFromFollowUp || wentSilent;
 
   const previousAiMessage = await prisma.message.findFirst({
@@ -282,22 +305,28 @@ export async function handleInboundInstagramMessage(
     orderBy: { createdAt: "desc" },
   });
 
+  // Mesmo motivo de sempre pra capturar numa const antes dos closures do
+  // .map() abaixo — `conversation` é `let` e o TypeScript não carrega o
+  // narrowing (já non-null aqui) pra dentro de uma função aninhada.
+  const activeConversationId = conversation.id;
   await prisma.$transaction([
-    prisma.message.create({
-      data: {
-        conversationId: conversation.id,
-        direction: "INBOUND",
-        sender: "LEAD",
-        content: event.leadText,
-        igMessageId: event.igMessageId,
-        sentAt: event.timestamp,
-      },
-    }),
+    ...event.messages.map((m) =>
+      prisma.message.create({
+        data: {
+          conversationId: activeConversationId,
+          direction: "INBOUND",
+          sender: "LEAD",
+          content: m.text,
+          igMessageId: m.igMessageId,
+          sentAt: m.timestamp,
+        },
+      })
+    ),
     prisma.conversation.update({
-      where: { id: conversation.id },
+      where: { id: activeConversationId },
       data: {
-        lastLeadMessageAt: event.timestamp,
-        lastMessageAt: event.timestamp,
+        lastLeadMessageAt: lastMessage.timestamp,
+        lastMessageAt: lastMessage.timestamp,
         status: conversation.status === "NEW" || reopeningFromFollowUp ? "IN_CONVERSATION" : conversation.status,
         ...(reengaged ? { resultPhotoSentAt: null } : {}),
       },
@@ -310,7 +339,7 @@ export async function handleInboundInstagramMessage(
   // colocado na fila segundos antes ainda sairia mesmo com o lead já tendo
   // respondido.
   if (reopeningFromFollowUp) {
-    await cancelPendingFollowUp(conversation.id, event.timestamp);
+    await cancelPendingFollowUp(conversation.id, lastMessage.timestamp);
   }
 
   // Proteção contra loop automático: sem isso, se o "lead" do outro lado
@@ -389,7 +418,7 @@ export async function handleInboundInstagramMessage(
       conversationId: conversation.id,
       sender: "AI",
       direction: "OUTBOUND",
-      createdAt: { gte: new Date(event.timestamp.getTime() - LOOP_GUARD_WINDOW_MINUTES * 60 * 1000) },
+      createdAt: { gte: new Date(lastMessage.timestamp.getTime() - LOOP_GUARD_WINDOW_MINUTES * 60 * 1000) },
     },
   });
 
@@ -804,8 +833,12 @@ export async function handleInboundInstagramMessage(
   });
   console.log(`[vexo:timing] generateLeadReply levou ${Date.now() - pipelineStartedAt}ms no total (desde o início do processamento deste evento, inclui classifyConversation)`);
 
+  // firstMessage (não lastMessage) de propósito: reflete o tempo real que o
+  // lead levou pra reagir à última resposta da IA, sem inflar esse número
+  // pelo tempo que o debounce esperou por possíveis mensagens seguintes no
+  // mesmo lote (ver InboundInstagramEvent.messages).
   const leadResponseTimeSeconds = previousAiMessage?.sentAt
-    ? Math.max(0, Math.round((event.timestamp.getTime() - previousAiMessage.sentAt.getTime()) / 1000))
+    ? Math.max(0, Math.round((firstMessage.timestamp.getTime() - previousAiMessage.sentAt.getTime()) / 1000))
     : null;
 
   const aiSettings = await prisma.aiSettings.findUnique({ where: { id: "singleton" } });
