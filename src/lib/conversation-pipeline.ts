@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { classifyConversation, generateLeadReply, summarizeOlderTurns, type AgentTools } from "@/lib/anthropic";
 import { buildConversationContext, withOlderSummary } from "@/lib/conversation-context";
-import { checkAvailability, createCalendarEvent, updateCalendarEvent, getRawBusyPeriods } from "@/lib/google-calendar";
+import { checkAvailability, createCalendarEvent, updateCalendarEvent, updateCalendarEventDescription, getRawBusyPeriods } from "@/lib/google-calendar";
 import { getInstagramUserProfile } from "@/lib/instagram";
 import { decryptToken } from "@/lib/crypto";
 import { computeAdaptiveDelaySeconds, FAST_REPLY_DELAY_SECONDS } from "@/lib/scheduler";
@@ -913,6 +913,13 @@ export async function handleInboundInstagramMessage(
 
   if (capturedLeadPhone) {
     await prisma.lead.update({ where: { id: lead.id }, data: { phone: capturedLeadPhone } });
+    // Mantém o objeto em memória atualizado — mesmo motivo do bloco
+    // análogo de capturedLeadName logo abaixo: confirmAppointment (mais
+    // adiante, se scheduledStartTime também estiver marcado neste turno)
+    // lê lead.phone pra incluir no evento do Google Calendar; sem isso, um
+    // telefone salvo NESTE MESMO turno só apareceria a partir do PRÓXIMO
+    // evento criado, nunca no que está sendo confirmado agora.
+    lead.phone = capturedLeadPhone;
   }
 
   if (capturedLeadName) {
@@ -972,6 +979,7 @@ export async function handleInboundInstagramMessage(
       // o bloco logo acima já persistiu em lead.name antes de chegar aqui.
       // "lead" genérico nunca mais é um fallback alcançável neste ponto.
       leadName: lead.name!,
+      leadPhone: lead.phone,
       startTimeIso: scheduledStartTime,
     });
   }
@@ -1001,11 +1009,25 @@ export async function handleInboundInstagramMessage(
   await maybeSendWhatsappConfirmation({ clinicId: clinic.id, conversationId: conversation.id });
 }
 
+// Descrição do evento do Google Calendar — separada do summary (que já
+// leva o nome, ver "VEXO — Avaliação: ${leadName}" abaixo) pra que o
+// WhatsApp do lead apareça de forma legível assim que a secretária abrir
+// o compromisso, sem precisar abrir o CRM interno (tela que ela não tem
+// acesso) nem o Painel pra achar esse dado. Reaproveitada tanto na
+// criação (confirmAppointment) quanto no "backfill" quando o telefone
+// chega numa conversa DEPOIS do agendamento já confirmado (ver
+// maybeSendWhatsappConfirmation).
+function buildCalendarEventDescription(params: { leadName: string; leadPhone?: string | null }): string {
+  const phoneLine = params.leadPhone ? `WhatsApp: ${params.leadPhone}` : "WhatsApp: ainda não informado.";
+  return `Lead: ${params.leadName}\n${phoneLine}\n\nCriado automaticamente pelo VEXO.`;
+}
+
 async function confirmAppointment(params: {
   clinicId: string;
   conversationId: string;
   leadId: string;
   leadName: string;
+  leadPhone?: string | null;
   startTimeIso: string;
 }) {
   // Buscado logo no início (não só mais abaixo, pra confirmationVideoUrl)
@@ -1054,7 +1076,8 @@ async function confirmAppointment(params: {
         params.clinicId,
         params.startTimeIso,
         `VEXO — Avaliação: ${params.leadName}`,
-        clinic?.address ?? undefined
+        clinic?.address ?? undefined,
+        buildCalendarEventDescription({ leadName: params.leadName, leadPhone: params.leadPhone })
       );
     } catch (err) {
       console.error("[vexo] Falha ao criar evento no Google Calendar:", err);
@@ -1236,6 +1259,26 @@ async function maybeSendWhatsappConfirmation(params: { clinicId: string; convers
   // defensivo caso o lead tenha informado só um nome de uma palavra
   // estranha ou algo inesperado.
   const leadFirstName = conversation.lead.name?.trim().split(/\s+/)[0] || "tudo bem";
+
+  // "Backfill" do evento do Google Calendar — cobre o caso comum de
+  // schedule_appointment ser confirmado ANTES do telefone chegar (a
+  // ferramenta não exige telefone, só nome, ver scheduleAppointment mais
+  // acima): sem isto, um evento criado sem telefone ainda nunca seria
+  // atualizado depois, mesmo com o WhatsApp chegando numa conversa
+  // seguinte. Best-effort (não pode impedir a mensagem de confirmação de
+  // sair só porque o Google Calendar falhou) — roda só uma vez, protegido
+  // pelo mesmo whatsappConfirmationSentAt gravado abaixo.
+  if (appointment.googleEventId && conversation.lead.name) {
+    try {
+      await updateCalendarEventDescription(
+        params.clinicId,
+        appointment.googleEventId,
+        buildCalendarEventDescription({ leadName: conversation.lead.name, leadPhone: conversation.lead.phone })
+      );
+    } catch (err) {
+      console.error("[vexo] Falha ao atualizar descrição do evento no Google Calendar:", err);
+    }
+  }
 
   await prisma.$transaction([
     prisma.message.create({

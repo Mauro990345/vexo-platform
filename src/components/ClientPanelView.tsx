@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { AtSign, Calendar, MessageCircle } from "lucide-react";
+import { AtSign, Calendar, MessageCircle, Phone } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { getClinicMetrics, getDailyApproachCounts, startOfDay, addDays } from "@/lib/metrics";
 import { ApproachChart } from "@/components/ApproachChart";
@@ -192,6 +192,22 @@ export async function ClientPanelView({
                       </span>
                       <AppointmentStatusBadge status={a.status} compact />
                     </div>
+                    {/* WhatsApp do lead — sem isso a secretária não tinha como
+                        contatar em caso de atraso/imprevisto a partir do
+                        Painel (única tela que ela de fato usa; o card
+                        equivalente em /crm/conversas/[id] é do CRM interno,
+                        sem acesso dela). Link wa.me abre a conversa direto. */}
+                    {a.lead?.phone && (
+                      <a
+                        href={`https://wa.me/${a.lead.phone.replace(/\D/g, "")}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="mt-1 flex items-center gap-1 text-caption text-vexo-accent hover:underline"
+                      >
+                        <Phone className="h-3 w-3 shrink-0" strokeWidth={2} />
+                        {a.lead.phone}
+                      </a>
+                    )}
                   </div>
                   {ACTIONABLE_STATUSES.includes(a.status) && (
                     <NoShowButton appointmentId={a.id} status={a.status} action={noShowAction} />
