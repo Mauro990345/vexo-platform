@@ -589,6 +589,16 @@ export async function handleInboundInstagramMessage(
   let capturedResultPhoto: ResultPhotoInput | undefined;
   let resultPhotoAlreadySent = reengaged ? false : Boolean(conversation.resultPhotoSentAt);
 
+  // Captura ANTES do objeto `tools` (mesmo motivo de sempre — `conversation`
+  // é `let`, closures abaixo não carregam narrowing). Ao contrário do nome
+  // do lead (cuja trava em scheduleAppointment aceita `lead.name` de uma
+  // conversa anterior — a pessoa é a mesma, o nome não muda), o telefone
+  // NUNCA pode aceitar Lead.phone bruto: quem está agendando pode ser
+  // outra pessoa usando a mesma conta de Instagram (ex.: filha agendando
+  // com o telefone da mãe). Por isso este flag olha só pra ESTA conversa
+  // (Conversation.leadPhoneConfirmedAt), nunca pro Lead.phone entre contas.
+  const leadPhoneAlreadyConfirmedThisConversation = Boolean(conversation.leadPhoneConfirmedAt);
+
   // Mesma variável {{primeiro_nome}} já suportada nos templates de
   // lembrete/follow-up (ver applyTemplateVariables em follow-up.ts) — sem
   // aplicar aqui também, um prompt customizado escrito com essa convenção
@@ -667,7 +677,14 @@ export async function handleInboundInstagramMessage(
     `Se ainda não souber, pergunte o nome dele em algum momento natural da conversa, antes de confirmar ` +
     `qualquer agendamento — pode ser junto com o pedido do WhatsApp, ou um pouco antes; assim que ele ` +
     `informar, chame save_lead_name imediatamente. schedule_appointment recusa confirmar sem um nome real ` +
-    `salvo — nunca tente agendar sem ter perguntado e salvo o nome primeiro. Depois que schedule_appointment ` +
+    `salvo — nunca tente agendar sem ter perguntado e salvo o nome primeiro. WhatsApp do lead NESTA conversa: ` +
+    `${leadPhoneAlreadyConfirmedThisConversation ? "já confirmado — não precisa perguntar de novo" : "AINDA NÃO confirmado"}. ` +
+    `SEMPRE pergunte o WhatsApp antes de confirmar um agendamento, mesmo que o lead já tenha informado um número ` +
+    `em outra conversa antiga — a pessoa do outro lado pode ser diferente (ex.: filha usando o Instagram da mãe), ` +
+    `então um número de conversa anterior NUNCA dispensa perguntar de novo nesta. Assim que ele informar, chame ` +
+    `save_lead_phone imediatamente. schedule_appointment recusa confirmar sem o WhatsApp confirmado nesta mesma ` +
+    `conversa — nunca tente agendar sem ter perguntado e salvo o WhatsApp primeiro (pode ser na mesma mensagem ` +
+    `em que você pergunta o nome, ou logo antes/depois). Depois que schedule_appointment ` +
     `confirmar o horário e você perguntar "posso contar com sua presença?" (ou equivalente), NÃO chame ` +
     `confirm_attendance ainda — espere a resposta do lead confirmando presença, mande a mensagem final da ` +
     `sequência (ex.: instruções de chegada, "chegue uns 15 minutinhos antes...") e SÓ ENTÃO chame ` +
@@ -751,6 +768,29 @@ export async function handleInboundInstagramMessage(
             error:
               "Nome do lead ainda não confirmado. Pergunte o nome dele e chame save_lead_name antes de " +
               "tentar agendar de novo — nunca confirme um agendamento sem um nome real salvo.",
+          };
+        }
+        // Exige o WhatsApp CONFIRMADO NESTA CONVERSA antes de agendar — bug
+        // real em produção: uma conversa nova, na mesma conta de Instagram
+        // de um teste anterior, pulou a pergunta do WhatsApp inteiramente
+        // (foi direto de "escolher horário" pra "confirmar reserva") porque
+        // Lead.phone já vinha preenchido de uma conversa antiga, e nada
+        // aqui distinguia "telefone confirmado por ESTA pessoa, agora" de
+        // "telefone que sobrou de uma conversa antiga". Ao contrário do
+        // nome (ver acima — lead.name de conversa anterior é aceito, a
+        // pessoa é a mesma), o telefone NUNCA aceita lead.phone bruto:
+        // só capturedLeadPhone (save_lead_phone chamado NESTE turno) ou
+        // leadPhoneAlreadyConfirmedThisConversation (save_lead_phone já
+        // chamado em turno anterior DESTA MESMA conversa) contam — porque
+        // quem está do outro lado da mesma conta de Instagram pode ser
+        // outra pessoa (ex.: filha agendando com o telefone da mãe).
+        if (!capturedLeadPhone && !leadPhoneAlreadyConfirmedThisConversation) {
+          return {
+            error:
+              "WhatsApp do lead ainda não confirmado NESTA conversa. Pergunte o WhatsApp dele e chame " +
+              "save_lead_phone antes de tentar agendar de novo — mesmo que já exista um número salvo de uma " +
+              "conversa anterior desta mesma conta do Instagram, ele pode ser de outra pessoa, então não conta: " +
+              "sempre peça e confirme de novo dentro desta conversa.",
           };
         }
         // Consentimento explícito do lead pra ESSE horário específico não dá
@@ -923,7 +963,19 @@ export async function handleInboundInstagramMessage(
   });
 
   if (capturedLeadPhone) {
-    await prisma.lead.update({ where: { id: lead.id }, data: { phone: capturedLeadPhone } });
+    await prisma.$transaction([
+      prisma.lead.update({ where: { id: lead.id }, data: { phone: capturedLeadPhone } }),
+      // Marca que ESTA conversa já teve o WhatsApp confirmado — é o que
+      // libera schedule_appointment a aceitar "já sabido" num turno
+      // FUTURO desta mesma conversa (ex.: remarcação) sem reperguntar; ver
+      // leadPhoneAlreadyConfirmedThisConversation e o comentário grande no
+      // gate de scheduleAppointment, acima, pro bug real que motivou isso
+      // nunca poder confiar em Lead.phone bruto (entre conversas/contas).
+      prisma.conversation.update({
+        where: { id: activeConversationId },
+        data: { leadPhoneConfirmedAt: new Date() },
+      }),
+    ]);
     // Mantém o objeto em memória atualizado — mesmo motivo do bloco
     // análogo de capturedLeadName logo abaixo: confirmAppointment (mais
     // adiante, se scheduledStartTime também estiver marcado neste turno)

@@ -304,6 +304,22 @@ model Conversation {
   // Appointment.confirmationVideoSentAt.
   resultPhotoSentAt DateTime?
 
+  // Marca que o WhatsApp do lead já foi CONFIRMADO DENTRO DESTA CONVERSA
+  // (ver save_lead_phone/schedule_appointment em conversation-pipeline.ts)
+  // — bug real em produção: schedule_appointment aceitava Lead.phone já
+  // preenchido de uma conversa ANTERIOR (mesma conta de Instagram) como se
+  // bastasse, então a IA podia pular a pergunta do WhatsApp inteiramente
+  // numa conversa nova. Como Lead é único por conta de Instagram e seus
+  // campos persistem entre todas as Conversations que essa conta já teve,
+  // um número informado numa conversa de teste antiga "vazava" pra
+  // qualquer agendamento futuro da mesma conta, mesmo sendo outra pessoa
+  // usando o mesmo Instagram (ex.: filha agendando com o telefone da mãe).
+  // Este campo é o equivalente, em escopo de conversa, ao Lead.phone em
+  // escopo de conta — só ele (nunca Lead.phone bruto) autoriza
+  // schedule_appointment a aceitar um telefone "já sabido" sem exigir
+  // save_lead_phone de novo nesta mesma conversa.
+  leadPhoneConfirmedAt DateTime?
+
   // Preenchido em setConversationStatus quando alguém clica "Devolver para
   // a IA" (única chamada real que leva status pra IN_CONVERSATION — ver
   // clinicas/actions.ts). classifyConversation recebe o histórico INTEIRO
