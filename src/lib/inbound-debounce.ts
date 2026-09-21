@@ -19,7 +19,26 @@
 // atrasar até a próxima mensagem do lead, nunca o texto dele se perder) e
 // não escala pra múltiplas réplicas do serviço web sem virar uma fila
 // distribuída (ex.: Redis) no lugar deste.
-export const DEFAULT_DEBOUNCE_WINDOW_MS = 6_000;
+//
+// Bug real reportado: duas mensagens do lead mandadas com ~4s de
+// intervalo (bem dentro da janela) mesmo assim geraram DUAS respostas
+// separadas da IA, uma pra cada mensagem — como se o debounce não
+// tivesse agrupado nada. A lógica de reset em si (auditada de novo nesta
+// investigação) está correta: não há bypass em código nenhum, o único
+// call site é sempre via este mecanismo (ver route.ts). A explicação
+// mais provável, sem acesso a logs reais pra confirmar com certeza: o
+// intervalo que importa aqui é entre a CHEGADA de cada webhook no
+// servidor (Date.now() no momento do bufferForDebounce), não entre os
+// dois envios do lead no app do Instagram — a entrega de webhook da Meta
+// é "best effort" e pode introduzir alguns segundos de latência/jitter
+// própria, então um gap de ~4s do lado do lead pode facilmente virar >6s
+// entre as duas entregas no nosso servidor, já esgotando a janela antiga
+// antes da segunda mensagem chegar. 6s era pouca margem pra essa
+// variação real; 10s dá uma folga bem mais realista sem deixar uma
+// conversa comum (mensagem única) sensivelmente mais lenta. Ver
+// [vexo:debounce] abaixo — log permanente que deixa confirmar/medir isso
+// de verdade da próxima vez, em vez de só ajustar o número no escuro.
+export const DEFAULT_DEBOUNCE_WINDOW_MS = 10_000;
 
 // Teto pro adiamento TOTAL de um lote, mesmo que cada mensagem nova
 // continue reiniciando a janela de silêncio acima — sem isso, um lead
@@ -30,7 +49,9 @@ export const DEFAULT_DEBOUNCE_WINDOW_MS = 6_000;
 // trava, independente da janela de silêncio: força o flush quando o lote
 // como um todo já espera tempo demais desde a PRIMEIRA mensagem, mesmo
 // que a mais recente ainda esteja "fresca" dentro da janela normal.
-export const MAX_DEBOUNCE_TOTAL_WAIT_MS = 20_000;
+// Escalado junto com DEFAULT_DEBOUNCE_WINDOW_MS (mesma proporção ~3x de
+// antes) pra manter a mesma folga relativa.
+export const MAX_DEBOUNCE_TOTAL_WAIT_MS = 30_000;
 
 type PendingBatch = {
   items: unknown[];
@@ -56,10 +77,15 @@ export function bufferForDebounce<T>(
     // negativo) se o lote já estourou o teto entre uma mensagem e outra.
     const elapsedSinceFirst = Date.now() - existing.firstItemAt;
     const nextDelay = Math.max(0, Math.min(windowMs, MAX_DEBOUNCE_TOTAL_WAIT_MS - elapsedSinceFirst));
+    console.log(
+      `[vexo:debounce] key=${key} item#${existing.items.length} chegou ${elapsedSinceFirst}ms depois do ` +
+        `primeiro do lote — timer reiniciado, próximo flush em ${nextDelay}ms.`
+    );
     existing.timer = setTimeout(() => flush(key, onFlush), nextDelay);
     return;
   }
 
+  console.log(`[vexo:debounce] key=${key} item#0 abre um lote novo — flush em ${windowMs}ms se nada mais chegar.`);
   pendingByKey.set(key, {
     items: [item],
     firstItemAt: Date.now(),
@@ -71,6 +97,7 @@ function flush<T>(key: string, onFlush: (items: T[]) => void): void {
   const batch = pendingByKey.get(key);
   if (!batch) return;
   pendingByKey.delete(key);
+  console.log(`[vexo:debounce] key=${key} flush com ${batch.items.length} item(ns).`);
   onFlush(batch.items as T[]);
 }
 

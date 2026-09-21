@@ -127,6 +127,28 @@ async function processSilentConversations(): Promise<number> {
     if (alreadyPending) continue;
 
     const signal = await classifyConversation(toChatHistory(conv.messages));
+    // Diagnóstico PERMANENTE (não temporário — este é o único ponto de
+    // decisão de todo o gatilho SILENCE, e até agora não deixava nenhum
+    // rastro em lugar nenhum quando decidia NÃO disparar). Bug real
+    // reportado: follow-up configurado pra disparar em 5 minutos (teste),
+    // 2+ horas de silêncio depois, nenhuma mensagem apareceu em
+    // /crm/dispatch-status — nem pendente, nem falha. Causa possível
+    // encontrada aqui: classifyConversation (Haiku) decide se um follow-up
+    // faz sentido (suggestedFollowUp) especificamente pra não reabrir uma
+    // conversa que já chegou a uma conclusão natural (ex: recusa
+    // explícita) — mas essa decisão nunca era registrada em lugar nenhum
+    // quando dava "não". Sem log, "o classificador decidiu que não" e "o
+    // worker nunca chegou a rodar" eram indistinguíveis de fora — e como
+    // NENHUM Message chega a ser criado nesse caminho, /crm/dispatch-status
+    // (que só lista Message PENDING/FAILED) nunca mostraria nada mesmo
+    // que isso aconteça repetidamente, ciclo após ciclo (a cada 30min, ver
+    // worker/index.ts — sem nenhuma memória de "já perguntei e a resposta
+    // foi não", classifyConversation é chamado de novo do zero em cada
+    // ciclo seguinte pra essa mesma conversa).
+    console.log(
+      `[vexo:followup] conversationId=${conv.id} silenceHours=${silenceHours} ` +
+        `suggestedFollowUp=${signal.suggestedFollowUp} summary=${JSON.stringify(signal.summary)}`
+    );
     if (!signal.suggestedFollowUp) continue;
 
     await triggerFollowUp(conv.id, "SILENCE");
