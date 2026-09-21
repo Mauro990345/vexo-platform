@@ -137,6 +137,13 @@ export class OpenRouterProvider implements LLMProvider {
     const tools = request.tools.map(toOpenAiTool);
     const maxIterations = request.maxToolIterations ?? DEFAULT_MAX_TOOL_ITERATIONS;
 
+    // Mesmo mecanismo de recuperação de texto intermediário de
+    // AnthropicProvider.converse (ver comentário grande lá) — o modelo
+    // pode combinar, na mesma resposta, um `content` de texto de verdade
+    // com `tool_calls`; sem isso, esse texto era só empilhado em
+    // `messages` (pro modelo ver depois) e nunca devolvido ao caller.
+    let lastIntermediateText = "";
+
     // Mesmo loop agentic de AnthropicProvider.converse, só que no dialeto
     // da OpenAI: tool_calls no lugar de content blocks tool_use,
     // finish_reason "tool_calls" no lugar de stop_reason "tool_use", e
@@ -162,9 +169,19 @@ export class OpenRouterProvider implements LLMProvider {
         // trata como o mesmo caso de "não deu pra concluir a resposta"
         // que maxToolIterations esgotado já usa.
         if (!text.trim()) {
+          // Ver comentário grande em AnthropicProvider.converse: usa o
+          // último texto intermediário de verdade, quando existe, em vez
+          // de cair direto pro fallback genérico/escalonamento.
+          if (lastIntermediateText.trim()) {
+            return { text: lastIntermediateText };
+          }
           return { text: request.fallbackText ?? DEFAULT_FALLBACK_TEXT, truncated: true };
         }
         return { text };
+      }
+
+      if (message.content?.trim()) {
+        lastIntermediateText = message.content;
       }
 
       messages.push({ role: "assistant", content: message.content, tool_calls: message.tool_calls });
@@ -176,6 +193,12 @@ export class OpenRouterProvider implements LLMProvider {
       }
     }
 
+    // Esgotou maxIterations sem uma resposta final limpa — mesmo assim,
+    // se alguma iteração intermediária produziu texto de verdade, devolve
+    // ele em vez do fallback genérico (ver comentário grande acima).
+    if (lastIntermediateText.trim()) {
+      return { text: lastIntermediateText };
+    }
     return { text: request.fallbackText ?? DEFAULT_FALLBACK_TEXT, truncated: true };
   }
 }

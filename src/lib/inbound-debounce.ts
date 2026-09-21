@@ -21,9 +21,21 @@
 // distribuída (ex.: Redis) no lugar deste.
 export const DEFAULT_DEBOUNCE_WINDOW_MS = 6_000;
 
+// Teto pro adiamento TOTAL de um lote, mesmo que cada mensagem nova
+// continue reiniciando a janela de silêncio acima — sem isso, um lead
+// "verborrágico" que manda várias mensagens curtas, cada uma chegando
+// antes da janela de silêncio da anterior terminar, nunca deixa a janela
+// completar, e o lote NUNCA dispara: a IA fica sem responder
+// indefinidamente, não só um pouco mais devagar. Age como uma segunda
+// trava, independente da janela de silêncio: força o flush quando o lote
+// como um todo já espera tempo demais desde a PRIMEIRA mensagem, mesmo
+// que a mais recente ainda esteja "fresca" dentro da janela normal.
+export const MAX_DEBOUNCE_TOTAL_WAIT_MS = 20_000;
+
 type PendingBatch = {
   items: unknown[];
   timer: ReturnType<typeof setTimeout>;
+  firstItemAt: number;
 };
 
 const pendingByKey = new Map<string, PendingBatch>();
@@ -38,12 +50,19 @@ export function bufferForDebounce<T>(
   if (existing) {
     clearTimeout(existing.timer);
     existing.items.push(item);
-    existing.timer = setTimeout(() => flush(key, onFlush), windowMs);
+    // Nunca deixa o próximo timer ultrapassar o teto total, contado a
+    // partir da PRIMEIRA mensagem do lote — ver MAX_DEBOUNCE_TOTAL_WAIT_MS
+    // acima. Math.max(0, ...) garante um flush praticamente imediato (não
+    // negativo) se o lote já estourou o teto entre uma mensagem e outra.
+    const elapsedSinceFirst = Date.now() - existing.firstItemAt;
+    const nextDelay = Math.max(0, Math.min(windowMs, MAX_DEBOUNCE_TOTAL_WAIT_MS - elapsedSinceFirst));
+    existing.timer = setTimeout(() => flush(key, onFlush), nextDelay);
     return;
   }
 
   pendingByKey.set(key, {
     items: [item],
+    firstItemAt: Date.now(),
     timer: setTimeout(() => flush(key, onFlush), windowMs),
   });
 }
