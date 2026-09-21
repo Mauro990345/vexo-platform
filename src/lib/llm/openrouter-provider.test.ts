@@ -220,4 +220,39 @@ describe("OpenRouterProvider.converse", () => {
     expect(result.truncated).toBe(true);
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
+
+  it("devolve fallbackText com truncated=true quando o modelo para sem tool_calls e sem conteúdo — bug real: Instagram rejeitava o envio com 'Empty text'", async () => {
+    fetchMock.mockResolvedValue(chatResponse({ role: "assistant", content: null }));
+    const provider = new OpenRouterProvider();
+
+    const result = await provider.converse({
+      tier: "conversation",
+      cacheableSystemPrompt: "s",
+      volatileContext: "v",
+      history: [],
+      tools: [],
+      executeTool: noopExecuteTool,
+      fallbackText: "texto de fallback customizado",
+    });
+
+    expect(result.text).toBe("texto de fallback customizado");
+    expect(result.truncated).toBe(true);
+  });
+
+  it("devolve fallbackText com truncated=true quando o conteúdo vem em branco (só espaço)", async () => {
+    fetchMock.mockResolvedValue(chatResponse({ role: "assistant", content: "   " }));
+    const provider = new OpenRouterProvider();
+
+    const result = await provider.converse({
+      tier: "conversation",
+      cacheableSystemPrompt: "s",
+      volatileContext: "v",
+      history: [],
+      tools: [],
+      executeTool: noopExecuteTool,
+    });
+
+    expect(result.truncated).toBe(true);
+    expect(result.text.length).toBeGreaterThan(0);
+  });
 });

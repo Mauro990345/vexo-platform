@@ -153,7 +153,18 @@ export class OpenRouterProvider implements LLMProvider {
       });
 
       if (finishReason !== "tool_calls" || !message.tool_calls?.length) {
-        return { text: message.content ?? "" };
+        const text = message.content ?? "";
+        // Mesmo bug real corrigido em AnthropicProvider.converse (ver
+        // comentário grande lá) — o modelo pode parar sem pedir mais
+        // ferramenta E sem nenhum texto de verdade (ou só espaço em
+        // branco), o que virava Message.content = "" e o Instagram
+        // rejeitava o envio com "Empty text". Nunca manda isso ao lead —
+        // trata como o mesmo caso de "não deu pra concluir a resposta"
+        // que maxToolIterations esgotado já usa.
+        if (!text.trim()) {
+          return { text: request.fallbackText ?? DEFAULT_FALLBACK_TEXT, truncated: true };
+        }
+        return { text };
       }
 
       messages.push({ role: "assistant", content: message.content, tool_calls: message.tool_calls });
