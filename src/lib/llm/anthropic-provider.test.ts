@@ -212,6 +212,44 @@ describe("AnthropicProvider.converse", () => {
     expect(createBetaMessages).toHaveBeenCalledTimes(2);
   });
 
+  it("devolve fallbackText com truncated=true quando o modelo para sem tool_use e sem nenhum bloco de texto — bug real: Instagram rejeitava o envio com 'Empty text'", async () => {
+    createBetaMessages.mockResolvedValue({
+      content: [],
+      stop_reason: "end_turn",
+    });
+    const provider = new AnthropicProvider();
+
+    const result = await provider.converse({
+      tier: "conversation",
+      cacheableSystemPrompt: "s",
+      volatileContext: "v",
+      history: [],
+      tools: noTools,
+      executeTool: noopExecuteTool,
+      fallbackText: "texto de fallback customizado",
+    });
+
+    expect(result.text).toBe("texto de fallback customizado");
+    expect(result.truncated).toBe(true);
+  });
+
+  it("devolve fallbackText com truncated=true quando o bloco de texto vem em branco (só espaço)", async () => {
+    createBetaMessages.mockResolvedValue(textResponse("   "));
+    const provider = new AnthropicProvider();
+
+    const result = await provider.converse({
+      tier: "conversation",
+      cacheableSystemPrompt: "s",
+      volatileContext: "v",
+      history: [],
+      tools: noTools,
+      executeTool: noopExecuteTool,
+    });
+
+    expect(result.truncated).toBe(true);
+    expect(result.text.length).toBeGreaterThan(0);
+  });
+
   it("usa um texto de fallback default quando o call site não passa fallbackText", async () => {
     createBetaMessages.mockResolvedValue({
       content: [{ type: "tool_use", id: "loop", name: "x", input: {} }],

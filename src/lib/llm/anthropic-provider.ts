@@ -102,7 +102,23 @@ export class AnthropicProvider implements LLMProvider {
 
       if (response.stop_reason !== "tool_use") {
         const textBlock = response.content.find((b) => b.type === "text");
-        return { text: textBlock && "text" in textBlock ? textBlock.text : "" };
+        const text = textBlock && "text" in textBlock ? textBlock.text : "";
+        // Bug real em produção: duas falhas de envio no Instagram com
+        // "Empty text" (code 100, subcode 2534052), ambas perto de um
+        // agendamento confirmado — turno com várias chamadas de ferramenta
+        // em sequência (schedule_appointment + save_lead_phone/save_lead_name).
+        // O modelo às vezes para de pedir ferramenta (stop_reason != "tool_use")
+        // sem nenhum bloco de texto de verdade (ou com um em branco) —
+        // sem esta checagem, esse "" virava Message.content, e o dispatch
+        // (dispatch.ts) mandava pro Instagram como texto final da resposta,
+        // que a API rejeita. Trata como o mesmo caso de "não deu pra
+        // concluir a resposta" que já existe pra maxToolIterations
+        // esgotado (ver `truncated` em conversation-pipeline.ts) — nunca
+        // manda um texto vazio pro lead.
+        if (!text.trim()) {
+          return { text: request.fallbackText ?? DEFAULT_FALLBACK_TEXT, truncated: true };
+        }
+        return { text };
       }
 
       messages.push({ role: "assistant", content: response.content });
