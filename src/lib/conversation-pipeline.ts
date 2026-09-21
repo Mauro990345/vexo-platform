@@ -686,10 +686,14 @@ export async function handleInboundInstagramMessage(
     `conversa — nunca tente agendar sem ter perguntado e salvo o WhatsApp primeiro (pode ser na mesma mensagem ` +
     `em que você pergunta o nome, ou logo antes/depois). Depois que schedule_appointment ` +
     `confirmar o horário e você perguntar "posso contar com sua presença?" (ou equivalente), NÃO chame ` +
-    `confirm_attendance ainda — espere a resposta do lead confirmando presença, mande a mensagem final da ` +
-    `sequência (ex.: instruções de chegada, "chegue uns 15 minutinhos antes...") e SÓ ENTÃO chame ` +
-    `confirm_attendance. Chamar cedo demais faz o vídeo institucional de confirmação interromper a conversa ` +
-    `no meio da própria pergunta de presença.]`;
+    `confirm_attendance ainda — espere a resposta do lead confirmando presença. Quando ele confirmar, faça ` +
+    `EM DUAS RESPOSTAS SEPARADAS, nunca as duas coisas na mesma resposta: primeiro chame confirm_attendance ` +
+    `SOZINHA, sem nenhum texto junto nessa chamada; só na resposta SEGUINTE (que não chama nenhuma ` +
+    `ferramenta) mande a mensagem final da sequência em texto puro, com as instruções de chegada (ex.: ` +
+    `"chegue uns 15 minutinhos antes..."). Nunca junte texto pro lead com uma chamada de ferramenta na mesma ` +
+    `resposta — texto mandado junto de uma ferramenta corre risco real de nunca chegar ao lead. Chamar ` +
+    `confirm_attendance cedo demais (antes do lead confirmar presença) faz o vídeo institucional de ` +
+    `confirmação interromper a conversa no meio da própria pergunta de presença.]`;
 
   const reply = await generateLeadReply({
     // Separados (não mais concatenados numa string só) pra permitir prompt
@@ -884,37 +888,6 @@ export async function handleInboundInstagramMessage(
   });
   console.log(`[vexo:timing] generateLeadReply levou ${Date.now() - pipelineStartedAt}ms no total (desde o início do processamento deste evento, inclui classifyConversation)`);
 
-  // Bug real em produção: o loop de chamadas de ferramenta esgotou as
-  // iterações disponíveis sem o modelo terminar de responder (ver
-  // maxToolIterations em generateLeadReply, anthropic.ts) — reply.text
-  // aqui é só o fallbackText genérico ("Só um momento, já te retorno com
-  // os detalhes."), NUNCA uma resposta de verdade. Mandar isso como se
-  // fosse a resposta final deixava a conversa "travada": o lead via essa
-  // frase de espera e nunca recebia mais nada, porque nada tentava de
-  // novo sozinho — só voltava a responder quando o LEAD mandava outra
-  // mensagem. Em vez disso, escalona pra revisão humana (mesmo padrão de
-  // toda outra escalonagem) e avisa o lead com uma mensagem curta e
-  // neutra, nunca deixando a conversa parecer "morta".
-  if (reply.truncated) {
-    await escalateToHuman(
-      "A IA não conseguiu concluir a resposta dentro do limite de chamadas de ferramenta neste turno " +
-        "(sequência de ações mais longa que o normal — ex.: agendar horário + salvar telefone + salvar nome " +
-        "no mesmo turno) — pausada para revisão humana em vez de deixar só a mensagem de espera genérica " +
-        "sem nunca responder de verdade."
-    );
-    await prisma.message.create({
-      data: {
-        conversationId: conversation.id,
-        direction: "OUTBOUND",
-        sender: "SYSTEM",
-        content: "Entendi! Vou repassar isso pra nossa equipe te dar mais detalhes por aqui, tá bom? 🙂",
-        status: "PENDING",
-        scheduledFor: new Date(Date.now() + FAST_REPLY_DELAY_SECONDS * 1000),
-      },
-    });
-    return;
-  }
-
   // firstMessage (não lastMessage) de propósito: reflete o tempo real que o
   // lead levou pra reagir à última resposta da IA, sem inflar esse número
   // pelo tempo que o debounce esperou por possíveis mensagens seguintes no
@@ -927,7 +900,17 @@ export async function handleInboundInstagramMessage(
   const delaySeconds = aiSettings?.adaptiveDelayEnabled === false
     ? FAST_REPLY_DELAY_SECONDS
     : computeAdaptiveDelaySeconds(leadResponseTimeSeconds, clinic.firstBandDelaySeconds);
-  const scheduledFor = new Date(Date.now() + delaySeconds * 1000);
+  // Bug real em produção: o loop de chamadas de ferramenta esgotou as
+  // iterações disponíveis sem o modelo terminar de responder (ver
+  // maxToolIterations em generateLeadReply, anthropic.ts) — reply.text
+  // nesse caso é só o fallbackText genérico ("Só um momento, já te
+  // retorno com os detalhes."), NUNCA uma resposta de verdade (ver
+  // `truncated` abaixo). Nesse caso usa FAST_REPLY_DELAY_SECONDS (sai
+  // rápido) em vez do delay adaptativo normal, que não faz sentido pra
+  // uma mensagem de espera/escalonamento.
+  const scheduledFor = reply.truncated
+    ? new Date(Date.now() + FAST_REPLY_DELAY_SECONDS * 1000)
+    : new Date(Date.now() + delaySeconds * 1000);
 
   // Diagnóstico TEMPORÁRIO (remover depois de confirmar o comportamento em
   // produção) — investigação do relato de que o delay da faixa "até 1h"
@@ -947,7 +930,7 @@ export async function handleInboundInstagramMessage(
       `adaptiveDelayEnabled=${aiSettings?.adaptiveDelayEnabled ?? true} ` +
       `leadResponseTimeSeconds=${leadResponseTimeSeconds} ` +
       `firstBandDelaySecondsDb=${clinic.firstBandDelaySeconds} ` +
-      `delaySeconds(usado)=${delaySeconds} ` +
+      `delaySeconds(usado)=${delaySeconds} truncated=${Boolean(reply.truncated)} ` +
       `now=${new Date().toISOString()} scheduledFor=${scheduledFor.toISOString()}`
   );
 
@@ -955,12 +938,38 @@ export async function handleInboundInstagramMessage(
     data: {
       conversationId: conversation.id,
       direction: "OUTBOUND",
-      sender: "AI",
-      content: reply.text,
+      sender: reply.truncated ? "SYSTEM" : "AI",
+      content: reply.truncated
+        ? "Entendi! Vou repassar isso pra nossa equipe te dar mais detalhes por aqui, tá bom? 🙂"
+        : reply.text,
       status: "PENDING",
       scheduledFor,
     },
   });
+
+  // Mandar a mensagem de espera genérica como se fosse a resposta final
+  // deixava a conversa "travada": o lead via essa frase e nunca recebia
+  // mais nada, porque nada tentava de novo sozinho — só voltava a
+  // responder quando o LEAD mandava outra mensagem. Escalona pra revisão
+  // humana (mesmo padrão de toda outra escalonagem) — mas, ao contrário
+  // da versão anterior desta correção, NÃO retorna aqui: qualquer
+  // agendamento/telefone/nome que a IA já tinha CONFIRMADO via ferramenta
+  // antes de travar (ex.: schedule_appointment ou confirm_attendance bem-
+  // sucedidos numa iteração anterior do mesmo turno) precisa continuar
+  // sendo processado normalmente logo abaixo (persistência de
+  // nome/telefone, confirmAppointment, vídeo institucional, confirmação
+  // por WhatsApp) — um `return` aqui descartava esse progresso real em
+  // silêncio, mesmo quando ele já tinha sido salvo no banco.
+  if (reply.truncated) {
+    await escalateToHuman(
+      "A IA não conseguiu concluir a resposta dentro do limite de chamadas de ferramenta neste turno " +
+        "(sequência de ações mais longa que o normal — ex.: agendar horário + salvar telefone + salvar nome " +
+        "no mesmo turno) — pausada para revisão humana em vez de deixar só a mensagem de espera genérica " +
+        "sem nunca responder de verdade. Qualquer agendamento/telefone/nome que a IA já tinha CONFIRMADO via " +
+        "ferramenta antes de travar foi salvo normalmente — confira o card de agendamento antes de continuar " +
+        "manualmente."
+    );
+  }
 
   if (capturedLeadPhone) {
     await prisma.$transaction([

@@ -251,7 +251,36 @@ export async function POST(req: NextRequest) {
       // funciona mesmo se is_echo vier ausente/false.
       const fromOwnAccount = event.sender.id === entry.id || Boolean(event.message?.is_echo);
       const inbound = fromOwnAccount ? undefined : event.message ?? event.message_edit;
-      if (!inbound?.text) continue;
+      if (!inbound?.text) {
+        // Diagnóstico: uma mensagem SEM campo "text" (ex.: anexo, figurinha,
+        // ou um cartão de contato nativo do Instagram compartilhado — não
+        // digitado como texto) é hoje descartada em silêncio aqui, sem
+        // nenhum rastro em lugar nenhum. Bug real suspeitado: um lead
+        // compartilhou o próprio telefone via cartão de contato nativo do
+        // Instagram, e a IA pareceu "não perceber" — sem confirmação (por
+        // falta de acesso a um payload real desse tipo) de qual formato
+        // exato a Meta usa pra esse compartilhamento nesse produto
+        // (Instagram API with Instagram Login, ainda pouco documentado),
+        // não dá pra tentar extrair o número daqui com segurança sem
+        // adivinhar. Em vez disso, grava o evento CRU (igual ao padrão já
+        // usado pra "reentrega ignorada" logo abaixo) — na próxima vez que
+        // isso acontecer, dá pra confirmar o formato real em
+        // /crm/webhook-logs e implementar a extração certa, em vez de
+        // continuar sem nenhuma pista.
+        if (!fromOwnAccount && (event.message || event.message_edit) && webhookLog?.id) {
+          await prisma.webhookLog
+            .update({
+              where: { id: webhookLog.id },
+              data: {
+                matchFailureReason:
+                  `Mensagem recebida sem campo "text" — descartada sem processar (possível anexo/cartão de ` +
+                  `contato/figurinha). Corpo do evento: ${JSON.stringify(event).slice(0, 2000)}`,
+              },
+            })
+            .catch((err) => console.error("[vexo] Falha ao gravar mensagem sem texto no WebhookLog:", err));
+        }
+        continue;
+      }
       // Guarda numa const própria (não só `inbound.text`) — o TypeScript
       // não carrega a checagem de narrowing acima pra dentro da closure
       // passada a bufferForDebounce logo abaixo, já que ela pode em

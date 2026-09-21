@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { bufferForDebounce, pendingDebounceCount } from "./inbound-debounce";
+import { bufferForDebounce, pendingDebounceCount, MAX_DEBOUNCE_TOTAL_WAIT_MS } from "./inbound-debounce";
 
 describe("bufferForDebounce", () => {
   beforeEach(() => {
@@ -59,6 +59,43 @@ describe("bufferForDebounce", () => {
 
     vi.advanceTimersByTime(6_000);
     expect(pendingDebounceCount()).toBe(0);
+  });
+
+  it("bug real: um lead 'verborrágico' mandando mensagens curtas antes da janela terminar nunca deixava o lote disparar — agora um teto força o flush", () => {
+    const onFlush = vi.fn();
+    bufferForDebounce("lead-a", "msg-1", onFlush, 6_000);
+
+    // Cada nova mensagem chega ANTES da janela de 6s da anterior terminar
+    // (reiniciando o timer sempre) — sem o teto, isso nunca deixaria a
+    // janela completar, e o lote nunca dispararia.
+    for (let i = 2; i <= 5; i++) {
+      vi.advanceTimersByTime(4_000);
+      bufferForDebounce("lead-a", `msg-${i}`, onFlush, 6_000);
+      expect(onFlush).not.toHaveBeenCalled();
+    }
+
+    // 4 mensagens x 4s = 16s desde a primeira — ainda dentro do teto de
+    // 20s, mas o PRÓXIMO reset (mais 6s de janela normal) ultrapassaria.
+    // O teto força o flush aos 20s desde a primeira mensagem, não aos
+    // 6s desde a última.
+    vi.advanceTimersByTime(MAX_DEBOUNCE_TOTAL_WAIT_MS - 16_000);
+    expect(onFlush).toHaveBeenCalledOnce();
+    expect(onFlush).toHaveBeenCalledWith(["msg-1", "msg-2", "msg-3", "msg-4", "msg-5"]);
+  });
+
+  it("dentro do teto total, o comportamento de reiniciar a janela continua idêntico (sem regressão pro caso comum)", () => {
+    const onFlush = vi.fn();
+    bufferForDebounce("lead-a", "oi", onFlush, 6_000);
+
+    vi.advanceTimersByTime(3_000);
+    bufferForDebounce("lead-a", "ainda não pensei nisso", onFlush, 6_000);
+
+    vi.advanceTimersByTime(6_000 - 1);
+    expect(onFlush).not.toHaveBeenCalled();
+
+    vi.advanceTimersByTime(1);
+    expect(onFlush).toHaveBeenCalledOnce();
+    expect(onFlush).toHaveBeenCalledWith(["oi", "ainda não pensei nisso"]);
   });
 
   it("uma terceira mensagem bem depois do flush começa um lote NOVO, não reaproveita o antigo", () => {

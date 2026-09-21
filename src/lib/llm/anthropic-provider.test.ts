@@ -212,6 +212,57 @@ describe("AnthropicProvider.converse", () => {
     expect(createBetaMessages).toHaveBeenCalledTimes(2);
   });
 
+  it("usa o último texto intermediário (mandado junto de um tool_use) quando esgota maxToolIterations, em vez do fallback genérico — bug real: texto mandado junto de confirm_attendance nunca chegava ao lead", async () => {
+    createBetaMessages.mockResolvedValue({
+      content: [
+        { type: "text", text: "Chegue uns 15 minutinhos antes, tá bom?" },
+        { type: "tool_use", id: "confirm-1", name: "confirm_attendance", input: {} },
+      ],
+      stop_reason: "tool_use",
+    });
+    const provider = new AnthropicProvider();
+
+    const result = await provider.converse({
+      tier: "conversation",
+      cacheableSystemPrompt: "s",
+      volatileContext: "v",
+      history: [],
+      tools: [{ name: "confirm_attendance", description: "d", inputSchema: { type: "object", properties: {} } }],
+      executeTool: vi.fn(async () => ({ confirmed: true })),
+      maxToolIterations: 2,
+      fallbackText: "texto de fallback customizado",
+    });
+
+    expect(result.text).toBe("Chegue uns 15 minutinhos antes, tá bom?");
+    expect(result.truncated).toBeUndefined();
+  });
+
+  it("usa o último texto intermediário quando a resposta final vem sem nenhum bloco de texto", async () => {
+    const toolUseWithText = {
+      content: [
+        { type: "text", text: "Só um segundo, vou confirmar isso." },
+        { type: "tool_use", id: "tool-1", name: "check_availability", input: {} },
+      ],
+      stop_reason: "tool_use",
+    };
+    createBetaMessages
+      .mockResolvedValueOnce(toolUseWithText)
+      .mockResolvedValueOnce({ content: [], stop_reason: "end_turn" });
+    const provider = new AnthropicProvider();
+
+    const result = await provider.converse({
+      tier: "conversation",
+      cacheableSystemPrompt: "s",
+      volatileContext: "v",
+      history: [],
+      tools: [{ name: "check_availability", description: "d", inputSchema: { type: "object", properties: {} } }],
+      executeTool: vi.fn(async () => ({})),
+    });
+
+    expect(result.text).toBe("Só um segundo, vou confirmar isso.");
+    expect(result.truncated).toBeUndefined();
+  });
+
   it("devolve fallbackText com truncated=true quando o modelo para sem tool_use e sem nenhum bloco de texto — bug real: Instagram rejeitava o envio com 'Empty text'", async () => {
     createBetaMessages.mockResolvedValue({
       content: [],

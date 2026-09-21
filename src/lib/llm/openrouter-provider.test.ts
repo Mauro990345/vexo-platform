@@ -221,6 +221,62 @@ describe("OpenRouterProvider.converse", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it("usa o último texto intermediário (mandado junto de tool_calls) quando esgota maxToolIterations, em vez do fallback genérico — bug real: texto mandado junto de confirm_attendance nunca chegava ao lead", async () => {
+    fetchMock.mockResolvedValue(
+      chatResponse(
+        {
+          role: "assistant",
+          content: "Chegue uns 15 minutinhos antes, tá bom?",
+          tool_calls: [{ id: "confirm-1", type: "function", function: { name: "confirm_attendance", arguments: "{}" } }],
+        },
+        "tool_calls"
+      )
+    );
+    const provider = new OpenRouterProvider();
+
+    const result = await provider.converse({
+      tier: "conversation",
+      cacheableSystemPrompt: "s",
+      volatileContext: "v",
+      history: [],
+      tools: [{ name: "confirm_attendance", description: "d", inputSchema: { type: "object", properties: {} } }],
+      executeTool: vi.fn(async () => ({ confirmed: true })),
+      maxToolIterations: 2,
+      fallbackText: "texto de fallback customizado",
+    });
+
+    expect(result.text).toBe("Chegue uns 15 minutinhos antes, tá bom?");
+    expect(result.truncated).toBeUndefined();
+  });
+
+  it("usa o último texto intermediário quando a resposta final vem sem conteúdo nenhum", async () => {
+    fetchMock
+      .mockResolvedValueOnce(
+        chatResponse(
+          {
+            role: "assistant",
+            content: "Só um segundo, vou confirmar isso.",
+            tool_calls: [{ id: "tool-1", type: "function", function: { name: "check_availability", arguments: "{}" } }],
+          },
+          "tool_calls"
+        )
+      )
+      .mockResolvedValueOnce(chatResponse({ role: "assistant", content: null }));
+    const provider = new OpenRouterProvider();
+
+    const result = await provider.converse({
+      tier: "conversation",
+      cacheableSystemPrompt: "s",
+      volatileContext: "v",
+      history: [],
+      tools: [{ name: "check_availability", description: "d", inputSchema: { type: "object", properties: {} } }],
+      executeTool: vi.fn(async () => ({})),
+    });
+
+    expect(result.text).toBe("Só um segundo, vou confirmar isso.");
+    expect(result.truncated).toBeUndefined();
+  });
+
   it("devolve fallbackText com truncated=true quando o modelo para sem tool_calls e sem conteúdo — bug real: Instagram rejeitava o envio com 'Empty text'", async () => {
     fetchMock.mockResolvedValue(chatResponse({ role: "assistant", content: null }));
     const provider = new OpenRouterProvider();

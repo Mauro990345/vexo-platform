@@ -77,6 +77,20 @@ export class AnthropicProvider implements LLMProvider {
     const tools = request.tools.map(toAnthropicTool);
     const maxIterations = request.maxToolIterations ?? DEFAULT_MAX_TOOL_ITERATIONS;
 
+    // Texto de uma resposta INTERMEDIÁRIA (stop_reason "tool_use", mas que
+    // também veio com um bloco de texto junto) — guardado como rede de
+    // segurança pro caso do loop esgotar maxIterations sem nunca produzir
+    // uma resposta final "limpa" (só texto, sem tool_use). Bug real: o
+    // modelo às vezes combina, NUMA MESMA resposta, o texto que quer
+    // mandar ao lead (ex.: instruções de chegada, junto da chamada de
+    // confirm_attendance) com uma chamada de ferramenta — antes desta
+    // correção, esse texto era só empilhado em `messages` pro modelo ver
+    // depois e NUNCA devolvido ao caller: o lead nunca recebia aquela
+    // mensagem, e o modelo, sem saber que já tinha "dito" aquilo, muitas
+    // vezes gastava as iterações seguintes tentando se recuperar (dizer de
+    // novo, chamar outra ferramenta) até estourar maxIterations à toa.
+    let lastIntermediateText = "";
+
     // Loop agentic: o modelo pode encadear chamadas de ferramenta antes do
     // texto final de resposta ao lead — mesmo comportamento de antes desta
     // camada existir, só que agora chamando request.executeTool (fornecido
@@ -116,9 +130,21 @@ export class AnthropicProvider implements LLMProvider {
         // esgotado (ver `truncated` em conversation-pipeline.ts) — nunca
         // manda um texto vazio pro lead.
         if (!text.trim()) {
+          // Antes de cair pro fallback genérico/escalonamento, usa o
+          // último texto intermediário de verdade que o modelo produziu
+          // (ver comentário grande acima) — sempre melhor que "" ou o
+          // texto de espera genérico, quando existe.
+          if (lastIntermediateText.trim()) {
+            return { text: lastIntermediateText };
+          }
           return { text: request.fallbackText ?? DEFAULT_FALLBACK_TEXT, truncated: true };
         }
         return { text };
+      }
+
+      const intermediateTextBlock = response.content.find((b) => b.type === "text");
+      if (intermediateTextBlock && "text" in intermediateTextBlock && intermediateTextBlock.text.trim()) {
+        lastIntermediateText = intermediateTextBlock.text;
       }
 
       messages.push({ role: "assistant", content: response.content });
@@ -133,6 +159,14 @@ export class AnthropicProvider implements LLMProvider {
       messages.push({ role: "user", content: toolResults });
     }
 
+    // Esgotou maxIterations sem nunca produzir uma resposta final limpa —
+    // mesmo assim, se alguma iteração intermediária produziu texto de
+    // verdade (ver comentário grande acima), devolve ELE em vez do
+    // fallback genérico: é conteúdo real que o modelo quis mandar ao
+    // lead, nunca pior que a mensagem de espera/escalonamento.
+    if (lastIntermediateText.trim()) {
+      return { text: lastIntermediateText };
+    }
     return { text: request.fallbackText ?? DEFAULT_FALLBACK_TEXT, truncated: true };
   }
 }
