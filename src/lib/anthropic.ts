@@ -253,7 +253,10 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
       "chamar esta ferramenta e ela retornar sucesso — se ela retornar erro, NÃO diga que está confirmado; " +
       "ofereça outro horário. TAMBÉM exige um nome real do lead já salvo (ver save_lead_name) — se ainda não " +
       "souber o nome dele, pergunte antes de chamar esta ferramenta; ela rejeita com erro se nenhum nome foi " +
-      "salvo ainda, mesmo com tudo mais certo.",
+      "salvo ainda, mesmo com tudo mais certo. TAMBÉM exige o WhatsApp confirmado NESTA MESMA conversa (ver " +
+      "save_lead_phone) — mesmo que o lead já tenha um número salvo de uma conversa anterior (mesma conta de " +
+      "Instagram), ela rejeita com erro se save_lead_phone não foi chamado NESTA conversa, porque a pessoa do " +
+      "outro lado pode ser diferente de quem informou o número antes.",
     inputSchema: {
       type: "object",
       properties: {
@@ -291,7 +294,7 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
   {
     name: "save_lead_phone",
     description:
-      "Salva o número de WhatsApp do lead assim que ele informar na conversa. Chame sempre que o lead enviar um número de telefone/WhatsApp, mesmo que fora do momento em que foi pedido.",
+      "Salva o número de WhatsApp do lead assim que ele informar na conversa. Chame sempre que o lead enviar um número de telefone/WhatsApp, mesmo que fora do momento em que foi pedido. Chame mesmo se já existir um número salvo de uma conversa anterior — schedule_appointment exige que o WhatsApp seja confirmado NESTA conversa, nunca reaproveita um número de outra.",
     inputSchema: {
       type: "object",
       properties: {
