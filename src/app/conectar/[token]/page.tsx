@@ -1,5 +1,10 @@
 import type { ReactNode } from "react";
 import { prisma } from "@/lib/prisma";
+import {
+  ensureWhatsappQrForClinic,
+  refreshWhatsappStatus,
+  type WhatsappConnectionState,
+} from "@/lib/whatsapp-connection";
 
 export const dynamic = "force-dynamic";
 
@@ -17,8 +22,18 @@ const CHANNEL_COPY = {
 } as const;
 
 // Ordem fixa de exibição na página combinada — não depende da ordem em que
-// os dois ConnectionLink do bundle foram criados no banco.
+// os dois ConnectionLink do bundle foram criados no banco. WhatsApp NÃO
+// entra aqui — ao contrário de Instagram/Google Calendar (OAuth, sem
+// estado próprio nesta tela: só um botão que redireciona e volta), o
+// WhatsApp pareia por QR code (Evolution API) e precisa ser desenhado e
+// atualizado na própria página — ver o bloco dedicado logo abaixo, que lê
+// o estado direto de bundle.clinicId em vez de um ConnectionLink.
 const BUNDLE_CHANNEL_ORDER = ["instagram", "google-calendar"] as const;
+
+const WHATSAPP_COPY = {
+  title: "WhatsApp",
+  description: "Notifica a secretária quando um lead precisar de atendimento humano.",
+};
 
 function Shell({ children }: { children: ReactNode }) {
   return (
@@ -55,11 +70,13 @@ function InvalidLink() {
 // Dois formatos de token, mesma URL: um ConnectionLink de canal único (o
 // de sempre, ver createConnectionLink em src/app/crm/clinicas/actions.ts)
 // mostra só aquele canal; um ConnectionBundle (createConnectionBundle, pro
-// onboarding remoto de cliente real que nunca acessa o CRM) mostra os DOIS
-// canais na mesma página, cada um com seu próprio status — o cliente
-// conecta um, volta pra cá automaticamente (o callback OAuth redireciona
-// de volta pro bundle, não pra tela de sucesso terminal — ver comentário
-// nos callbacks), e conecta o outro em seguida.
+// onboarding remoto de cliente real que nunca acessa o CRM) mostra os TRÊS
+// canais na mesma página (Instagram, Google Calendar, WhatsApp), cada um
+// com seu próprio status — o cliente conecta um, volta pra cá
+// automaticamente (o callback OAuth redireciona de volta pro bundle, não
+// pra tela de sucesso terminal — ver comentário nos callbacks) ou só
+// escaneia o QR (WhatsApp, sem OAuth/callback nenhum), e conecta os
+// outros em seguida.
 export default async function ConectarPage({
   params,
   searchParams,
@@ -131,7 +148,33 @@ export default async function ConectarPage({
     copy: CHANNEL_COPY[channel],
     link: bundle.links.find((l) => l.channel === channel) ?? null,
   }));
-  const allDone = channelLinks.every((c) => c.link?.usedAt);
+
+  // WhatsApp não usa OAuth (sem callback pra voltar aqui) — pareia por QR
+  // code direto na Evolution API, então o estado (conectado ou não, e o QR
+  // atual) precisa ser lido e desenhado nesta própria página, em vez de só
+  // um botão "Conectar" que redireciona. bundle.clinicId (nunca exposto na
+  // URL — só o token do bundle é público) é o mesmo padrão de segurança já
+  // usado pelas rotas públicas de OAuth acima: o token é o único jeito de
+  // chegar aqui, sem sessão nenhuma do CRM. Mesmas duas chamadas que
+  // /crm/clinicas/[id]/whatsapp (tela interna) já faz.
+  let whatsappStatus: WhatsappConnectionState = "unknown";
+  let whatsappQrBase64: string | null = null;
+  let whatsappError: string | null = null;
+  try {
+    whatsappStatus = await refreshWhatsappStatus(bundle.clinicId);
+  } catch (err) {
+    whatsappError = err instanceof Error ? err.message : "Erro ao consultar status do WhatsApp.";
+  }
+  if (whatsappStatus !== "open") {
+    try {
+      const qr = await ensureWhatsappQrForClinic(bundle.clinicId);
+      whatsappQrBase64 = qr.qrBase64;
+    } catch (err) {
+      whatsappError = whatsappError ?? (err instanceof Error ? err.message : "Erro ao gerar QR code do WhatsApp.");
+    }
+  }
+
+  const allDone = channelLinks.every((c) => c.link?.usedAt) && whatsappStatus === "open";
 
   return (
     <Shell>
@@ -141,11 +184,11 @@ export default async function ConectarPage({
         </p>
       )}
 
-      <h2 className="text-base font-semibold">Conectar Instagram + Google Calendar</h2>
+      <h2 className="text-base font-semibold">Conectar Instagram + Google Calendar + WhatsApp</h2>
       <p className="mt-2 text-sm text-vexo-muted">
         {allDone
           ? "Tudo conectado! Pode fechar esta página."
-          : "Conecte as duas contas abaixo, uma de cada vez — a página atualiza sozinha depois de cada uma."}
+          : "Conecte as contas abaixo, uma de cada vez — a página atualiza sozinha depois de cada uma."}
       </p>
 
       {searchParams.status === "erro" && (
@@ -186,6 +229,51 @@ export default async function ConectarPage({
             </div>
           );
         })}
+
+        <div className="rounded-lg border border-vexo-border px-3 py-2.5 text-left">
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="truncate text-sm font-medium">{WHATSAPP_COPY.title}</p>
+              <p className="mt-0.5 truncate text-xs text-vexo-muted">{WHATSAPP_COPY.description}</p>
+            </div>
+            {whatsappStatus === "open" ? (
+              <span className="flex shrink-0 items-center gap-1 text-xs font-medium text-vexo-success">
+                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-vexo-success/15">✓</span>
+                Conectado
+              </span>
+            ) : (
+              <span className="shrink-0 text-xs text-vexo-muted">Escaneie o QR</span>
+            )}
+          </div>
+
+          {whatsappStatus !== "open" && (
+            <div className="mt-3 space-y-2 border-t border-vexo-border pt-2.5">
+              {whatsappError ? (
+                <p className="text-xs text-vexo-error">{whatsappError}</p>
+              ) : whatsappQrBase64 ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={whatsappQrBase64}
+                  alt="QR code do WhatsApp"
+                  className="mx-auto h-28 w-28 rounded-lg border border-vexo-border bg-white p-1"
+                />
+              ) : (
+                <p className="text-xs text-vexo-muted">Não foi possível gerar o QR code agora.</p>
+              )}
+              <p className="text-center text-[11px] leading-normal text-vexo-muted">
+                No celular que vai enviar as notificações: WhatsApp → Aparelhos conectados → Conectar um
+                aparelho, e escaneie o código acima. Ele expira em segundos — se não der tempo, atualize a
+                página.
+              </p>
+              <a
+                href={`/conectar/${bundle.token}`}
+                className="block w-full rounded-lg border border-vexo-accent px-2.5 py-1.5 text-center text-xs font-medium text-vexo-accent hover:bg-vexo-accent/10"
+              >
+                Atualizar / verificar conexão
+              </a>
+            </div>
+          )}
+        </div>
       </div>
     </Shell>
   );
