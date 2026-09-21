@@ -243,13 +243,16 @@ export async function cancelConnectionLink(clinicId: string, token: string): Pro
 }
 
 // Versão combinada de createConnectionLink acima, pro onboarding de
-// cliente real que nunca acessa o CRM: em vez de mandar dois links
-// separados (um por canal), gera UM token de ConnectionBundle que abre
-// numa página só com os dois — Instagram e Google Calendar (ver
+// cliente real que nunca acessa o CRM: em vez de mandar links separados
+// (um por canal), gera UM token de ConnectionBundle que abre numa página
+// só com os três canais — Instagram, Google Calendar e WhatsApp (ver
 // /conectar/[token]/page.tsx). Por baixo continua sendo dois
-// ConnectionLink normais de sempre (mesmo público-start/callback, sem
-// mudança nenhuma neles), só que amarrados ao bundle via bundleId — o
-// bundle em si nunca participa do fluxo OAuth.
+// ConnectionLink normais de sempre pros dois canais OAuth (mesmo
+// público-start/callback, sem mudança nenhuma neles), só que amarrados ao
+// bundle via bundleId — o bundle em si nunca participa do fluxo OAuth.
+// WhatsApp NÃO ganha um ConnectionLink próprio aqui: ele pareia por QR
+// code (Evolution API), sem OAuth/callback nenhum — a página pública lê o
+// estado direto de bundle.clinicId (ver comentário grande lá).
 export async function createConnectionBundle(clinicId: string): Promise<{ token: string; url: string }> {
   await requireInternalSession();
 
