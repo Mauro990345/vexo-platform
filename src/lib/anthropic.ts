@@ -22,7 +22,9 @@ export type { ChatTurn } from "@/lib/llm/types";
 import type { ChatTurn } from "@/lib/llm/types";
 
 // -----------------------------------------------------------------------
-// Bastidor (Haiku) — classificação de estado da conversa
+// Bastidor (tier "backstage" — Haiku por padrão, ou o que LLM_PROVIDER/
+// OPENROUTER_BACKSTAGE_MODEL apontar; ver getLLMProvider, provider.ts) —
+// classificação de estado da conversa
 // -----------------------------------------------------------------------
 
 export type ConversationSignal = {
@@ -30,6 +32,17 @@ export type ConversationSignal = {
   needsHumanReason?: string;
   summary: string;
   suggestedFollowUp: boolean;
+  // Motivo curto da decisão de suggestedFollowUp (reengajar ou não) —
+  // adicionado depois de um relato real: suggestedFollowUp=false
+  // repetido em conversas de teste simples/neutras (ex: "Oi, tudo bem?"
+  // sem mais contexto), logo após trocar o modelo do tier "backstage" pra
+  // Luna via OpenRouter — sem esse campo, o log [vexo:followup]
+  // (follow-up.ts) só registrava O FATO da recusa, nunca o PORQUÊ,
+  // deixando impossível distinguir "o modelo está sendo excessivamente
+  // conservador" de "o prompt já não pedia reengajamento pra esse tipo de
+  // conversa mesmo antes da troca de modelo" — as duas hipóteses
+  // colocadas nesta investigação.
+  suggestedFollowUpReason: string;
 };
 
 const CLASSIFIER_SYSTEM_PROMPT = `Você analisa uma conversa de social selling (Instagram) entre um lead e uma
@@ -50,7 +63,13 @@ Responda SOMENTE com um JSON no formato:
                                  // pedir explicitamente um humano.
   "needsHumanReason": string,   // curto motivo, vazio se needsHuman=false
   "summary": string,            // resumo de 1-2 frases do estado atual da conversa
-  "suggestedFollowUp": boolean  // true se o lead sumiu sem concluir agendamento/recusa explícita
+  "suggestedFollowUp": boolean, // true se o lead demonstrou algum interesse comercial (perguntou preço,
+                                 // procedimento, horário etc.) e sumiu sem concluir agendamento nem recusar
+                                 // explicitamente — uma troca de saudação sem nenhum sinal de interesse real
+                                 // (ex: só "Oi, tudo bem?" sem resposta do lead) não é uma venda esfriando,
+                                 // então não é motivo de reengajamento por si só.
+  "suggestedFollowUpReason": string // curto motivo da decisão de suggestedFollowUp acima (por que reengajar
+                                 // faz ou não sentido) — SEMPRE preencha, mesmo quando suggestedFollowUp=false
 }`;
 
 export async function classifyConversation(
@@ -76,11 +95,12 @@ export async function classifyConversation(
       needsHumanReason: parsed.needsHumanReason || undefined,
       summary: parsed.summary ?? "",
       suggestedFollowUp: Boolean(parsed.suggestedFollowUp),
+      suggestedFollowUpReason: parsed.suggestedFollowUpReason || "",
     };
   } catch {
     // Falha ao interpretar -> por segurança, não escalona automaticamente,
     // mas também não afirma nada sobre o estado.
-    return { needsHuman: false, summary: "", suggestedFollowUp: false };
+    return { needsHuman: false, summary: "", suggestedFollowUp: false, suggestedFollowUpReason: "" };
   }
 }
 

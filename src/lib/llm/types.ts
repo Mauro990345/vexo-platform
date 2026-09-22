@@ -109,4 +109,11 @@ export type ConverseResult = {
 export interface LLMProvider {
   complete(request: CompleteRequest): Promise<CompleteResult>;
   converse(request: ConverseRequest): Promise<ConverseResult>;
+  // Devolve o ID de modelo real que este provedor usa pra um tier — cada
+  // implementação já resolvia isso internamente pra montar a própria
+  // chamada; exposto aqui só pra permitir LOG de qual modelo de verdade
+  // está servindo uma chamada específica (ver [vexo:followup] em
+  // follow-up.ts) sem quem chama precisar reimplementar essa mesma lógica
+  // de variável de ambiente + default por provedor.
+  modelForTier(tier: ModelTier): string;
 }

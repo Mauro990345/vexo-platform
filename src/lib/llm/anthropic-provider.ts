@@ -46,7 +46,10 @@ export class AnthropicProvider implements LLMProvider {
     return this._client;
   }
 
-  private modelForTier(tier: ModelTier): string {
+  // Público (não mais private) — ver comentário em LLMProvider.modelForTier,
+  // src/lib/llm/types.ts, pro motivo (permitir log de qual modelo real
+  // está servindo uma chamada, sem duplicar esta resolução em quem chama).
+  modelForTier(tier: ModelTier): string {
     return tier === "conversation" ? CONVERSATION_MODEL : BACKSTAGE_MODEL;
   }
 

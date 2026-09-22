@@ -12,6 +12,7 @@ function fakeProvider(overrides: Partial<LLMProvider> = {}): LLMProvider {
   return {
     complete: vi.fn(async (_request: CompleteRequest): Promise<{ text: string }> => ({ text: "" })),
     converse: vi.fn(async (_request: ConverseRequest): Promise<{ text: string }> => ({ text: "" })),
+    modelForTier: vi.fn(() => "modelo-fake"),
     ...overrides,
   };
 }
@@ -20,7 +21,9 @@ describe("classifyConversation", () => {
   it("manda o histórico formatado como transcript e usa o tier backstage", async () => {
     const complete = vi.fn(
       async (_request: CompleteRequest): Promise<{ text: string }> => ({
-        text: '{"needsHuman": false, "summary": "lead perguntando preço", "suggestedFollowUp": true}',
+        text:
+          '{"needsHuman": false, "summary": "lead perguntando preço", "suggestedFollowUp": true, ' +
+          '"suggestedFollowUpReason": "perguntou preço e sumiu sem concluir"}',
       })
     );
     const provider = fakeProvider({ complete });
@@ -38,6 +41,7 @@ describe("classifyConversation", () => {
       needsHumanReason: undefined,
       summary: "lead perguntando preço",
       suggestedFollowUp: true,
+      suggestedFollowUpReason: "perguntou preço e sumiu sem concluir",
     });
 
     expect(complete).toHaveBeenCalledTimes(1);
@@ -59,12 +63,34 @@ describe("classifyConversation", () => {
     expect(signal.needsHumanReason).toBe("pediu humano");
   });
 
+  it("expõe o motivo da recusa de follow-up (suggestedFollowUpReason) — bug real: suggestedFollowUp=false repetido em conversas triviais, sem nenhum log do PORQUÊ até esta correção", async () => {
+    const provider = fakeProvider({
+      complete: vi.fn(async () => ({
+        text:
+          '{"needsHuman": false, "summary": "troca de saudação, sem sinal comercial", "suggestedFollowUp": false, ' +
+          '"suggestedFollowUpReason": "lead só cumprimentou, sem demonstrar interesse comercial nenhum ainda"}',
+      })),
+    });
+
+    const signal = await classifyConversation([{ role: "user", content: "Oi, tudo bem?" }], provider);
+
+    expect(signal.suggestedFollowUp).toBe(false);
+    expect(signal.suggestedFollowUpReason).toBe(
+      "lead só cumprimentou, sem demonstrar interesse comercial nenhum ainda"
+    );
+  });
+
   it("não escalona (needsHuman: false) se a resposta não for JSON válido", async () => {
     const provider = fakeProvider({ complete: vi.fn(async () => ({ text: "não sei o que responder aqui" })) });
 
     const signal = await classifyConversation([{ role: "user", content: "oi" }], provider);
 
-    expect(signal).toEqual({ needsHuman: false, summary: "", suggestedFollowUp: false });
+    expect(signal).toEqual({
+      needsHuman: false,
+      summary: "",
+      suggestedFollowUp: false,
+      suggestedFollowUpReason: "",
+    });
   });
 });
 
