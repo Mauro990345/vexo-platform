@@ -70,6 +70,30 @@ export default async function DispatchStatusPage() {
     }),
   ]);
 
+  // Diagnóstico de deploy: bug real relatado — uma seção nova desta MESMA
+  // página (a de baixo, "conversas silenciosas sem follow-up") não
+  // aparecia em produção mesmo depois de "Deploy latest commit" + migração
+  // rodando + Active confirmados no Railway, e mesmo com Ctrl+Shift+R.
+  // Investigação (nesta sessão, sem acesso ao Railway): o código está
+  // correto no branch main, um build de produção local a partir do MESMO
+  // commit compila sem erro nenhum, e uma falha de verdade na consulta
+  // dessa seção (Promise.all) derrubaria a página INTEIRA — não deixaria
+  // as outras duas seções renderizando normais. Tudo isso aponta pra o
+  // processo web servindo essas requisições não estar rodando o commit
+  // que a tela do Railway mostra como "Active" (serviço errado, ambiente
+  // errado, ou o dashboard mostrando o deploy anterior). Em vez de seguir
+  // adivinhando às cegas, estas variáveis abaixo são injetadas pelo
+  // próprio Railway automaticamente em TODO serviço, sem nenhuma
+  // configuração — mostram exatamente o commit/serviço/ambiente que está
+  // rodando ESTE código agora, então dá pra confirmar (ou descartar) a
+  // hipótese de deploy direto aqui, sem depender do dashboard.
+  const deployFingerprint = {
+    commit: process.env.RAILWAY_GIT_COMMIT_SHA?.slice(0, 7) ?? null,
+    service: process.env.RAILWAY_SERVICE_NAME ?? null,
+    environment: process.env.RAILWAY_ENVIRONMENT_NAME ?? null,
+    deploymentId: process.env.RAILWAY_DEPLOYMENT_ID ?? null,
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex items-start justify-between gap-3">
@@ -84,6 +108,20 @@ export default async function DispatchStatusPage() {
           Logs do webhook (Instagram)
         </Link>
       </div>
+
+      <p className="rounded-lg border border-vexo-border bg-vexo-surface p-2 font-mono text-[11px] text-vexo-muted">
+        deploy: commit=<strong className="text-vexo-fg">{deployFingerprint.commit ?? "?"}</strong> ·{" "}
+        serviço=<strong className="text-vexo-fg">{deployFingerprint.service ?? "?"}</strong> ·{" "}
+        ambiente=<strong className="text-vexo-fg">{deployFingerprint.environment ?? "?"}</strong> ·{" "}
+        deploymentId=<strong className="text-vexo-fg">{deployFingerprint.deploymentId ?? "?"}</strong> ·{" "}
+        servidor em <LocalDateTime iso={now.toISOString()} />
+        {!deployFingerprint.commit && (
+          <span className="block text-vexo-warning">
+            (nenhuma variável RAILWAY_* encontrada — normal em ambiente local; se aparecer assim em produção,
+            confirme que este processo está mesmo rodando no Railway.)
+          </span>
+        )}
+      </p>
 
       <section className="space-y-2">
         <h2 className="text-sm font-semibold">
