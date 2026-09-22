@@ -354,18 +354,47 @@ export async function setConversationStatus(
 ) {
   await requireInternalSession();
 
-  await prisma.conversation.update({
-    where: { id: conversationId },
-    data: {
-      status,
-      // Único ponto que leva status pra IN_CONVERSATION é o botão "Devolver
-      // para a IA" (ver conversas/[id]/page.tsx) — marca aqui o instante
-      // exato pra classifyConversation (conversation-pipeline.ts) parar de
-      // reescalonar com base no motivo antigo, que continua no histórico
-      // pra sempre mas já foi resolvido por um humano.
-      ...(status === "IN_CONVERSATION" ? { needsHumanReason: null, humanReviewedAt: new Date() } : {}),
-    },
-  });
+  await prisma.$transaction([
+    // Bug real encontrado: esta função (usada tanto por "Devolver para a
+    // IA" quanto por "Marcar como perdido", em conversas/[id]/page.tsx) só
+    // atualizava Conversation.status — nunca fechava um FollowUpLog em
+    // andamento (respondedAt: null). Se um humano trocasse o status
+    // manualmente enquanto um follow-up estava ativo (ex.: a conversa
+    // caiu em FOLLOW_UP automaticamente, e alguém clicou "Marcar como
+    // perdido" ou, num cenário de teste, voltou o status por fora), o log
+    // ficava ÓRFÃO pra sempre: nada mais no sistema fecha um log só
+    // porque o status mudou por fora, e processSilentConversations pula
+    // silenciosamente qualquer conversa que já tenha um log aberto — a
+    // conversa nunca mais recebe um follow-up novo, sem nenhum aviso em
+    // lugar nenhum (nem no /crm/dispatch-status, que também trata "já tem
+    // log aberto" como "nada a fazer aqui"). Mesmo padrão de "trava
+    // invisível" já corrigido nesta sessão pro gatilho de silêncio em si
+    // — só que na ponta manual. cancelPendingFollowUp (mesma função
+    // usada pelo lead respondendo ou pela secretária desmarcando "não
+    // compareceu") faria a mesma coisa, mas separada em duas chamadas —
+    // inline aqui, na MESMA transação do update de status, pra nunca
+    // deixar uma corrida com o worker (rodando bem nesse meio-tempo) ver
+    // um estado inconsistente entre as duas escritas.
+    prisma.followUpLog.updateMany({
+      where: { conversationId, respondedAt: null },
+      data: { respondedAt: new Date() },
+    }),
+    prisma.message.deleteMany({
+      where: { conversationId, status: "PENDING", sender: "AI" },
+    }),
+    prisma.conversation.update({
+      where: { id: conversationId },
+      data: {
+        status,
+        // Único ponto que leva status pra IN_CONVERSATION é o botão "Devolver
+        // para a IA" (ver conversas/[id]/page.tsx) — marca aqui o instante
+        // exato pra classifyConversation (conversation-pipeline.ts) parar de
+        // reescalonar com base no motivo antigo, que continua no histórico
+        // pra sempre mas já foi resolvido por um humano.
+        ...(status === "IN_CONVERSATION" ? { needsHumanReason: null, humanReviewedAt: new Date() } : {}),
+      },
+    }),
+  ]);
 
   const conversation = await prisma.conversation.findUniqueOrThrow({
     where: { id: conversationId },
