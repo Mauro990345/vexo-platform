@@ -3,6 +3,7 @@ import type { ConversationStatus } from "@prisma/client";
 import { classifyConversation } from "@/lib/anthropic";
 import { toChatHistory } from "@/lib/chat-history";
 import { nextValidSendTime } from "@/lib/follow-up-window";
+import { getLLMProvider } from "@/lib/llm/provider";
 
 // Duas sequências de follow-up independentes (ver FollowUpTrigger no schema):
 //
@@ -145,9 +146,22 @@ async function processSilentConversations(): Promise<number> {
     // worker/index.ts — sem nenhuma memória de "já perguntei e a resposta
     // foi não", classifyConversation é chamado de novo do zero em cada
     // ciclo seguinte pra essa mesma conversa).
+    //
+    // provider/model incluídos depois de um relato real: recusas
+    // repetidas em conversas de teste triviais, logo após trocar o
+    // modelo do tier "backstage" pra Luna via OpenRouter (LLM_PROVIDER)
+    // — sem isso, não dava pra confirmar QUAL modelo respondeu cada
+    // decisão específica sem depender do valor atual (possivelmente
+    // trocado de novo depois) da variável de ambiente. suggestedFollowUpReason
+    // é o motivo que o próprio classificador deu pra decisão — cobre
+    // exatamente o que faltava: até aqui só o FATO da recusa ficava
+    // registrado, nunca o PORQUÊ.
+    const activeProvider = getLLMProvider();
     console.log(
       `[vexo:followup] conversationId=${conv.id} silenceHours=${silenceHours} ` +
-        `suggestedFollowUp=${signal.suggestedFollowUp} summary=${JSON.stringify(signal.summary)}`
+        `provider=${process.env.LLM_PROVIDER ?? "anthropic"} model=${activeProvider.modelForTier("backstage")} ` +
+        `suggestedFollowUp=${signal.suggestedFollowUp} suggestedFollowUpReason=${JSON.stringify(signal.suggestedFollowUpReason)} ` +
+        `summary=${JSON.stringify(signal.summary)}`
     );
     if (!signal.suggestedFollowUp) continue;
 
