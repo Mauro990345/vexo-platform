@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireInternalSession } from "@/lib/session";
 import { LocalDateTime } from "@/components/LocalDateTime";
 import { getSilenceHours } from "@/lib/follow-up";
+import { closeStuckFollowUpLogAction } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -34,7 +35,8 @@ export default async function DispatchStatusPage() {
   const silenceHours = await getSilenceHours();
   const silenceThreshold = new Date(now.getTime() - silenceHours * 60 * 60 * 1000);
 
-  const [stuckPending, recentFailed, staleWithoutFollowUp] = await Promise.all([
+  const [stuckPending, recentFailed, staleWithoutFollowUp, openFollowUpLogs, silenceStepsCount, noShowStepsCount] =
+    await Promise.all([
     prisma.message.findMany({
       where: { status: "PENDING", scheduledFor: { lt: new Date(now.getTime() - STUCK_THRESHOLD_MS) } },
       include: { conversation: { include: { lead: true, clinic: true } } },
@@ -68,6 +70,32 @@ export default async function DispatchStatusPage() {
       orderBy: { lastLeadMessageAt: "asc" },
       take: 50,
     }),
+    // Bug real encontrado NESTA investigação (confirmado com deploy já
+    // atualizado, então não era mais hipótese de cache/deploy antigo): a
+    // seção acima só pega conversas SEM nenhum FollowUpLog aberto — mas
+    // um log pode ficar aberto (respondedAt: null) mesmo sem nenhum
+    // follow-up de verdade acontecendo, se: (a) a Conversation.status foi
+    // trocada manualmente por fora (setConversationStatus, "Devolver para
+    // a IA" ou "Marcar como perdido" — corrigido nesta mesma correção pra
+    // fechar o log junto, mas isso só previne casos NOVOS, não resolve um
+    // log que já ficou órfão antes dessa correção existir) sem nunca
+    // fechar o log que ficou pra trás — dispatchFollowUpSteps exige
+    // Conversation.status = "FOLLOW_UP" pra processar um log, então um
+    // log "aberto" com a conversa em outro status fica travado pra
+    // sempre, invisível em todo lugar; ou (b) o trigger daquele log não
+    // tem NENHUM FollowUpStep cadastrado ainda em /crm/follow-up —
+    // dispatchFollowUpSteps não tem passo nenhum pra avançar, então nunca
+    // cria mensagem nenhuma, também pra sempre. Esta seção lista TODO
+    // FollowUpLog aberto agora, sem filtro de status, com um botão pra
+    // fechar manualmente os que estiverem travados.
+    prisma.followUpLog.findMany({
+      where: { respondedAt: null },
+      include: { conversation: { include: { lead: true, clinic: true } } },
+      orderBy: { triggeredAt: "asc" },
+      take: 50,
+    }),
+    prisma.followUpStep.count({ where: { trigger: "SILENCE" } }),
+    prisma.followUpStep.count({ where: { trigger: "NO_SHOW" } }),
   ]);
 
   // Diagnóstico de deploy: bug real relatado — uma seção nova desta MESMA
@@ -240,6 +268,68 @@ export default async function DispatchStatusPage() {
                       Elegível há mais tempo que um ciclo do worker (30min) — provavelmente já foi avaliada e
                       recusada pelo classificador, não é só atraso do próximo ciclo.
                     </p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
+      <section className="space-y-2">
+        <h2 className="text-sm font-semibold">FollowUpLogs abertos agora, qualquer status ({openFollowUpLogs.length})</h2>
+        <p className="text-xs text-vexo-muted">
+          Todo follow-up em andamento (respondedAt ainda vazio), sem filtrar por status da conversa — ao
+          contrário da seção acima, que só pega quem NÃO tem log nenhum. Um log aparece "travado" aqui se a
+          conversa não está em "FOLLOW_UP" (ficou órfão de uma troca de status manual antiga) ou se o
+          trigger dele não tem nenhum passo cadastrado em /crm/follow-up.
+        </p>
+        {openFollowUpLogs.length === 0 ? (
+          <p className="rounded-lg border border-vexo-success/30 bg-vexo-success/10 p-2 text-xs text-vexo-success">
+            Nenhum — nenhum follow-up em andamento no momento.
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {openFollowUpLogs.map((log) => {
+              const stepsConfigured = log.trigger === "NO_SHOW" ? noShowStepsCount : silenceStepsCount;
+              const nextIndex = (log.lastStepIndex ?? -1) + 1;
+              const noStepsConfigured = stepsConfigured === 0;
+              const statusMismatch = log.conversation.status !== "FOLLOW_UP";
+              const stuck = statusMismatch || noStepsConfigured;
+              return (
+                <div key={log.id} className="rounded-xl border border-vexo-border bg-vexo-surface p-3 text-xs">
+                  <div className="flex flex-wrap items-center gap-2 text-vexo-muted">
+                    <span className="font-medium text-vexo-fg">{log.conversation.clinic.name}</span>
+                    <span>·</span>
+                    <span>{log.conversation.lead.name ?? log.conversation.lead.igUsername ?? "lead sem nome"}</span>
+                    <span>·</span>
+                    <span>trigger={log.trigger}</span>
+                    <span>·</span>
+                    <span>status da conversa={log.conversation.status}</span>
+                    <span>·</span>
+                    <span>passo {nextIndex + 1} de {stepsConfigured || "0 cadastrados"}</span>
+                    <span>·</span>
+                    <span>
+                      aberto em <LocalDateTime iso={log.triggeredAt.toISOString()} />
+                    </span>
+                    <Link href={`/crm/conversas/${log.conversationId}`} className="ml-auto underline hover:text-vexo-fg">
+                      Ver conversa
+                    </Link>
+                  </div>
+                  {stuck && (
+                    <div className="mt-1.5 space-y-1.5 rounded-lg border border-vexo-warning/30 bg-vexo-warning/10 p-2 text-vexo-warning">
+                      <p>
+                        {statusMismatch &&
+                          `Travado: a conversa não está mais em "FOLLOW_UP" (está em "${log.conversation.status}") — dispatchFollowUpSteps exige esse status pra avançar, então este log nunca mais processa sozinho. `}
+                        {noStepsConfigured &&
+                          `Travado: nenhum passo cadastrado pro trigger ${log.trigger} em /crm/follow-up — sem passo nenhum, nunca cria mensagem.`}
+                      </p>
+                      <form action={closeStuckFollowUpLogAction.bind(null, log.conversationId)}>
+                        <button className="rounded-lg border border-vexo-warning/40 px-2 py-1 font-medium text-vexo-warning hover:bg-vexo-warning/10">
+                          Fechar follow-up preso
+                        </button>
+                      </form>
+                    </div>
                   )}
                 </div>
               );
