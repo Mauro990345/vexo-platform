@@ -35,8 +35,15 @@ export default async function DispatchStatusPage() {
   const silenceHours = await getSilenceHours();
   const silenceThreshold = new Date(now.getTime() - silenceHours * 60 * 60 * 1000);
 
-  const [stuckPending, recentFailed, staleWithoutFollowUp, openFollowUpLogs, silenceStepsCount, noShowStepsCount] =
-    await Promise.all([
+  const [
+    stuckPending,
+    recentFailed,
+    staleWithoutFollowUp,
+    openFollowUpLogs,
+    silenceStepsCount,
+    noShowStepsCount,
+    followUpSettings,
+  ] = await Promise.all([
     prisma.message.findMany({
       where: { status: "PENDING", scheduledFor: { lt: new Date(now.getTime() - STUCK_THRESHOLD_MS) } },
       include: { conversation: { include: { lead: true, clinic: true } } },
@@ -96,6 +103,18 @@ export default async function DispatchStatusPage() {
     }),
     prisma.followUpStep.count({ where: { trigger: "SILENCE" } }),
     prisma.followUpStep.count({ where: { trigger: "NO_SHOW" } }),
+    // Bug real em produção: FollowUpLog SEMPRE vazia, mesmo com conversas
+    // claramente elegíveis (silenceHours ultrapassado há horas, janela de
+    // envio liberada) — o sistema nunca sequer tentava disparar. Causa
+    // raiz encontrada em processSilentConversations (follow-up.ts): uma
+    // exceção em UMA conversa (ex: provider de LLM mal configurado —
+    // candidato concreto, OPENROUTER_API_KEY faltando no serviço WORKER
+    // especificamente, depois da troca de LLM_PROVIDER pra "openrouter")
+    // abortava o ciclo INTEIRO em silêncio, sem nenhum rastro visível fora
+    // do console do worker — um processo separado, sem UI própria. Agora
+    // cada ciclo de processFollowUps grava aqui se deu certo ou qual foi o
+    // erro, visível abaixo sem precisar de acesso a log do Railway.
+    prisma.followUpSettings.findUnique({ where: { id: "singleton" } }),
   ]);
 
   // Diagnóstico de deploy: bug real relatado — uma seção nova desta MESMA
@@ -150,6 +169,39 @@ export default async function DispatchStatusPage() {
           </span>
         )}
       </p>
+
+      {/* Diagnóstico do WORKER, não do processo web que renderiza esta
+          página — os dois são serviços separados no Railway, com env vars
+          independentes (ex.: LLM_PROVIDER/OPENROUTER_API_KEY podem estar
+          configurados num e não no outro). Gravado a cada ciclo de
+          processFollowUps (a cada 30min) direto em FollowUpSettings — ver
+          comentário grande na consulta acima pro bug real que motivou
+          isso: uma falha determinística aqui (ex: variável de ambiente
+          faltando) fazia o gatilho SILENCE nunca disparar, sem nenhum
+          jeito de confirmar isso sem acesso a log do Railway. */}
+      {followUpSettings?.lastSilenceCheckError ? (
+        <div className="space-y-1 rounded-lg border border-vexo-error/30 bg-vexo-error/10 p-2 text-xs text-vexo-error">
+          <p className="font-medium">
+            O último ciclo do worker (processFollowUps) falhou — o gatilho de silêncio (SILENCE) não está
+            funcionando até isso ser corrigido.
+          </p>
+          <p>
+            Último ciclo: <LocalDateTime iso={followUpSettings.lastSilenceCheckAt!.toISOString()} />
+          </p>
+          <p className="font-mono">{followUpSettings.lastSilenceCheckError}</p>
+        </div>
+      ) : followUpSettings?.lastSilenceCheckAt ? (
+        <p className="rounded-lg border border-vexo-success/30 bg-vexo-success/10 p-2 text-xs text-vexo-success">
+          Último ciclo do worker (processFollowUps) rodou sem erro em{" "}
+          <LocalDateTime iso={followUpSettings.lastSilenceCheckAt.toISOString()} />.
+        </p>
+      ) : (
+        <p className="rounded-lg border border-vexo-warning/30 bg-vexo-warning/10 p-2 text-xs text-vexo-warning">
+          O worker ainda não registrou nenhuma execução do gatilho de silêncio — normal logo após um deploy
+          novo (roda a cada 30min); se continuar assim por mais tempo que isso, o worker pode não estar
+          rodando (ver seção &quot;Mensagens presas em pendente&quot; abaixo).
+        </p>
+      )}
 
       <section className="space-y-2">
         <h2 className="text-sm font-semibold">

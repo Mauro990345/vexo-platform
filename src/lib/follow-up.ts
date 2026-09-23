@@ -122,51 +122,58 @@ async function processSilentConversations(): Promise<number> {
 
   let triggered = 0;
   for (const conv of staleConversations) {
-    const alreadyPending = await prisma.followUpLog.findFirst({
-      where: { conversationId: conv.id, respondedAt: null },
-    });
-    if (alreadyPending) continue;
+    // Bug real em produção: FollowUpLog SEMPRE vazia, mesmo com conversas
+    // claramente elegíveis (silenceHours ultrapassado há horas) e a
+    // janela de envio liberada — o sistema nunca sequer TENTAVA disparar.
+    // Causa raiz: nada neste `for` estava protegido por try/catch. Se
+    // classifyConversation lançasse uma exceção pra UMA conversa (ex:
+    // provider.complete() falhando — candidato concreto: OPENROUTER_API_KEY
+    // não configurada no serviço WORKER especificamente, depois da troca
+    // de LLM_PROVIDER pra "openrouter" — ver PR anterior sobre Luna no
+    // classificador), o `for` inteiro abortava ali: nem as conversas
+    // SEGUINTES desta mesma leva eram tentadas, nem dispatchFollowUpSteps()
+    // (chamado depois, em processFollowUps, só DEPOIS deste loop terminar)
+    // chegava a rodar naquele ciclo — derrubando também NO_SHOW e
+    // qualquer log SILENCE já aberto anteriormente, que nem dependem de
+    // classifyConversation. Isso explica "sempre vazia": se a causa for
+    // determinística (uma variável de ambiente faltando, não uma falha
+    // intermitente), TODO ciclo (a cada 30min) falha da mesma forma, pra
+    // sempre, sem nenhum follow-up jamais sendo tentado. Isola por
+    // conversa agora: uma falha aqui nunca mais pode impedir as outras
+    // nem o passo de despacho.
+    try {
+      const alreadyPending = await prisma.followUpLog.findFirst({
+        where: { conversationId: conv.id, respondedAt: null },
+      });
+      if (alreadyPending) continue;
 
-    const signal = await classifyConversation(toChatHistory(conv.messages));
-    // Diagnóstico PERMANENTE (não temporário — este é o único ponto de
-    // decisão de todo o gatilho SILENCE, e até agora não deixava nenhum
-    // rastro em lugar nenhum quando decidia NÃO disparar). Bug real
-    // reportado: follow-up configurado pra disparar em 5 minutos (teste),
-    // 2+ horas de silêncio depois, nenhuma mensagem apareceu em
-    // /crm/dispatch-status — nem pendente, nem falha. Causa possível
-    // encontrada aqui: classifyConversation (Haiku) decide se um follow-up
-    // faz sentido (suggestedFollowUp) especificamente pra não reabrir uma
-    // conversa que já chegou a uma conclusão natural (ex: recusa
-    // explícita) — mas essa decisão nunca era registrada em lugar nenhum
-    // quando dava "não". Sem log, "o classificador decidiu que não" e "o
-    // worker nunca chegou a rodar" eram indistinguíveis de fora — e como
-    // NENHUM Message chega a ser criado nesse caminho, /crm/dispatch-status
-    // (que só lista Message PENDING/FAILED) nunca mostraria nada mesmo
-    // que isso aconteça repetidamente, ciclo após ciclo (a cada 30min, ver
-    // worker/index.ts — sem nenhuma memória de "já perguntei e a resposta
-    // foi não", classifyConversation é chamado de novo do zero em cada
-    // ciclo seguinte pra essa mesma conversa).
-    //
-    // provider/model incluídos depois de um relato real: recusas
-    // repetidas em conversas de teste triviais, logo após trocar o
-    // modelo do tier "backstage" pra Luna via OpenRouter (LLM_PROVIDER)
-    // — sem isso, não dava pra confirmar QUAL modelo respondeu cada
-    // decisão específica sem depender do valor atual (possivelmente
-    // trocado de novo depois) da variável de ambiente. suggestedFollowUpReason
-    // é o motivo que o próprio classificador deu pra decisão — cobre
-    // exatamente o que faltava: até aqui só o FATO da recusa ficava
-    // registrado, nunca o PORQUÊ.
-    const activeProvider = getLLMProvider();
-    console.log(
-      `[vexo:followup] conversationId=${conv.id} silenceHours=${silenceHours} ` +
-        `provider=${process.env.LLM_PROVIDER ?? "anthropic"} model=${activeProvider.modelForTier("backstage")} ` +
-        `suggestedFollowUp=${signal.suggestedFollowUp} suggestedFollowUpReason=${JSON.stringify(signal.suggestedFollowUpReason)} ` +
-        `summary=${JSON.stringify(signal.summary)}`
-    );
-    if (!signal.suggestedFollowUp) continue;
+      const signal = await classifyConversation(toChatHistory(conv.messages));
+      // Diagnóstico PERMANENTE (não temporário — este é o único ponto de
+      // decisão de todo o gatilho SILENCE, e até agora não deixava nenhum
+      // rastro em lugar nenhum quando decidia NÃO disparar). provider/model
+      // incluídos depois de um relato real: recusas repetidas em conversas
+      // de teste triviais, logo após trocar o modelo do tier "backstage"
+      // pra Luna via OpenRouter (LLM_PROVIDER) — sem isso, não dava pra
+      // confirmar QUAL modelo respondeu cada decisão específica sem
+      // depender do valor atual (possivelmente trocado de novo depois) da
+      // variável de ambiente. suggestedFollowUpReason é o motivo que o
+      // próprio classificador deu pra decisão — cobre exatamente o que
+      // faltava: até aqui só o FATO da recusa ficava registrado, nunca o
+      // PORQUÊ.
+      const activeProvider = getLLMProvider();
+      console.log(
+        `[vexo:followup] conversationId=${conv.id} silenceHours=${silenceHours} ` +
+          `provider=${process.env.LLM_PROVIDER ?? "anthropic"} model=${activeProvider.modelForTier("backstage")} ` +
+          `suggestedFollowUp=${signal.suggestedFollowUp} suggestedFollowUpReason=${JSON.stringify(signal.suggestedFollowUpReason)} ` +
+          `summary=${JSON.stringify(signal.summary)}`
+      );
+      if (!signal.suggestedFollowUp) continue;
 
-    await triggerFollowUp(conv.id, "SILENCE");
-    triggered++;
+      await triggerFollowUp(conv.id, "SILENCE");
+      triggered++;
+    } catch (err) {
+      console.error(`[vexo:followup] ERRO ao processar conversationId=${conv.id} — pulando pra próxima:`, err);
+    }
   }
   return triggered;
 }
@@ -330,7 +337,39 @@ async function dispatchFollowUpSteps(): Promise<number> {
 }
 
 export async function processFollowUps(): Promise<{ triggered: number; stepsDispatched: number }> {
-  const triggered = await processSilentConversations();
+  // Mesma proteção do try/catch por conversa dentro de processSilentConversations
+  // (ver comentário grande lá pro bug real que motivou isso), só que num
+  // nível acima: mesmo uma falha ANTES do loop (ex: getSettings() ou a
+  // consulta de staleConversations em si) não pode impedir
+  // dispatchFollowUpSteps() de rodar — ele processa NO_SHOW e qualquer log
+  // SILENCE já aberto em ciclos anteriores, nenhum dos dois depende de
+  // classifyConversation, então não faz sentido ficarem reféns de uma
+  // falha que é específica da detecção de silêncio.
+  let triggered = 0;
+  let silenceCheckError: string | null = null;
+  try {
+    triggered = await processSilentConversations();
+  } catch (err) {
+    silenceCheckError = err instanceof Error ? err.message : String(err);
+    console.error("[vexo:followup] ERRO em processSilentConversations (ciclo inteiro) — dispatchFollowUpSteps roda mesmo assim:", err);
+  }
+
+  // Grava o resultado deste ciclo em FollowUpSettings — sucesso limpa
+  // lastSilenceCheckError (null), falha grava a mensagem — pra ficar
+  // visível em /crm/dispatch-status sem precisar de acesso a log do
+  // Railway (o worker é um processo separado, sem UI própria). Ver
+  // comentário grande no try/catch acima e em processSilentConversations
+  // pro bug real que motivou isso: até aqui, uma falha determinística
+  // (ex: variável de ambiente faltando) fazia TODO ciclo falhar do mesmo
+  // jeito, pra sempre, sem nenhum jeito de confirmar isso de fora.
+  await prisma.followUpSettings
+    .upsert({
+      where: { id: "singleton" },
+      update: { lastSilenceCheckAt: new Date(), lastSilenceCheckError: silenceCheckError },
+      create: { id: "singleton", lastSilenceCheckAt: new Date(), lastSilenceCheckError: silenceCheckError },
+    })
+    .catch((err) => console.error("[vexo:followup] Falha ao gravar diagnóstico de execução:", err));
+
   const stepsDispatched = await dispatchFollowUpSteps();
   return { triggered, stepsDispatched };
 }
