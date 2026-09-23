@@ -611,6 +611,18 @@ model FollowUpSettings {
   windowStartMinute Int   @default(480)
   windowEndMinute   Int   @default(1080)
 
+  // Diagnóstico da execução do worker, sem precisar de acesso a log do
+  // Railway (bug real: FollowUpLog sempre vazia, mesmo com conversas
+  // claramente elegíveis — causa raiz encontrada em processSilentConversations,
+  // follow-up.ts: uma exceção em UMA conversa abortava o ciclo INTEIRO em
+  // silêncio, sem rastro nenhum visível fora do console do worker, um
+  // processo separado sem UI própria). Atualizado em TODA execução de
+  // processFollowUps (a cada 30min, ver worker/index.ts) — sucesso limpa
+  // lastSilenceCheckError (null), falha grava a mensagem do erro. Visível
+  // em /crm/dispatch-status.
+  lastSilenceCheckAt    DateTime?
+  lastSilenceCheckError String?   @db.Text
+
   updatedAt DateTime @updatedAt
 }
 
