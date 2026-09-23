@@ -21,13 +21,6 @@ export const dynamic = "force-dynamic";
 // atraso normal, é o processo não estar rodando).
 const STUCK_THRESHOLD_MS = 2 * 60 * 1000; // 2 minutos de folga sobre o ciclo de 15s do worker
 
-// processFollowUps (que decide se abre um FollowUpLog de SILENCE) roda a
-// cada 30min (ver worker/index.ts) — folga generosa sobre isso pra não
-// marcar como "atrasado" uma conversa que só ainda não teve seu primeiro
-// ciclo desde que ficou silenciosa.
-const FOLLOWUP_CHECK_CYCLE_MS = 30 * 60 * 1000;
-const FOLLOWUP_OVERDUE_THRESHOLD_MS = FOLLOWUP_CHECK_CYCLE_MS + 10 * 60 * 1000;
-
 export default async function DispatchStatusPage() {
   await requireInternalSession();
 
@@ -285,11 +278,9 @@ export default async function DispatchStatusPage() {
         </h2>
         <p className="text-xs text-vexo-muted">
           Já passaram do limiar de silêncio configurado ({silenceHours}h, ver Automações) mas ainda não têm
-          nenhum FollowUpLog aberto. Isso é esperado por até ~40min depois de virar elegível (o worker só
-          confere a cada 30min) — mas se uma conversa continuar aparecendo aqui por muito mais tempo que isso,
-          o classificador (Haiku) provavelmente já avaliou e decidiu NÃO reengajar (ex: parece uma recusa
-          explícita ou conclusão natural) — confira o histórico da conversa pra confirmar se faz sentido, ou
-          use o log <code>[vexo:followup]</code> se tiver acesso aos logs do Railway.
+          nenhum FollowUpLog aberto. Cada card abaixo mostra o resultado REAL da última avaliação do
+          classificador pra essa conversa (lastSilenceCheckAt/Suggested/Reason/Model, gravados direto na
+          conversa a cada ciclo) — não é mais uma estimativa por tempo decorrido.
         </p>
         {staleWithoutFollowUp.length === 0 ? (
           <p className="rounded-lg border border-vexo-success/30 bg-vexo-success/10 p-2 text-xs text-vexo-success">
@@ -299,8 +290,7 @@ export default async function DispatchStatusPage() {
         ) : (
           <div className="space-y-2">
             {staleWithoutFollowUp.map((conv) => {
-              const eligibleSince = new Date(conv.lastLeadMessageAt!.getTime() + silenceHours * 60 * 60 * 1000);
-              const overdue = now.getTime() - eligibleSince.getTime() > FOLLOWUP_OVERDUE_THRESHOLD_MS;
+              const isParseError = conv.lastSilenceCheckReason?.startsWith("[ERRO");
               return (
                 <div key={conv.id} className="rounded-xl border border-vexo-border bg-vexo-surface p-3 text-xs">
                   <div className="flex flex-wrap items-center gap-2 text-vexo-muted">
@@ -315,10 +305,26 @@ export default async function DispatchStatusPage() {
                       Ver conversa
                     </Link>
                   </div>
-                  {overdue && (
-                    <p className="mt-1.5 rounded-lg border border-vexo-warning/30 bg-vexo-warning/10 p-2 text-vexo-warning">
-                      Elegível há mais tempo que um ciclo do worker (30min) — provavelmente já foi avaliada e
-                      recusada pelo classificador, não é só atraso do próximo ciclo.
+                  {conv.lastSilenceCheckAt ? (
+                    <div
+                      className={`mt-1.5 space-y-1 rounded-lg border p-2 ${
+                        isParseError
+                          ? "border-vexo-error/30 bg-vexo-error/10 text-vexo-error"
+                          : "border-vexo-warning/30 bg-vexo-warning/10 text-vexo-warning"
+                      }`}
+                    >
+                      <p>
+                        Avaliada em <LocalDateTime iso={conv.lastSilenceCheckAt.toISOString()} />
+                        {conv.lastSilenceCheckModel && ` por ${conv.lastSilenceCheckModel}`} — decidiu{" "}
+                        <strong>{conv.lastSilenceCheckSuggested ? "reengajar" : "NÃO reengajar"}</strong>.
+                      </p>
+                      {conv.lastSilenceCheckReason && (
+                        <p className="italic">&quot;{conv.lastSilenceCheckReason}&quot;</p>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="mt-1.5 text-vexo-muted">
+                      Ainda não avaliada pelo classificador — aguardando o próximo ciclo do worker (até ~30min).
                     </p>
                   )}
                 </div>

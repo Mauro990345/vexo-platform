@@ -99,8 +99,21 @@ export async function classifyConversation(
     };
   } catch {
     // Falha ao interpretar -> por segurança, não escalona automaticamente,
-    // mas também não afirma nada sobre o estado.
-    return { needsHuman: false, summary: "", suggestedFollowUp: false, suggestedFollowUpReason: "" };
+    // mas também não afirma nada sobre o estado. suggestedFollowUpReason
+    // marca EXPLICITAMENTE que isso foi uma falha de parsing (com um
+    // trecho da resposta crua) — sem essa marcação, "o modelo decidiu
+    // recusar, sem justificativa" e "a resposta nem veio em JSON válido"
+    // ficavam indistinguíveis pra quem só vê suggestedFollowUpReason=""
+    // nos dois casos (bug real investigado: recusas persistentes logo
+    // após trocar o modelo do tier "backstage" pra Luna via OpenRouter —
+    // isso deixa claro se a causa é o modelo sendo conservador demais ou
+    // simplesmente não respeitando o formato JSON pedido).
+    return {
+      needsHuman: false,
+      summary: "",
+      suggestedFollowUp: false,
+      suggestedFollowUpReason: `[ERRO DE PARSING] resposta do modelo não veio em JSON válido: ${response.text.slice(0, 300)}`,
+    };
   }
 }
 

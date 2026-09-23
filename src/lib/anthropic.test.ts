@@ -80,17 +80,16 @@ describe("classifyConversation", () => {
     );
   });
 
-  it("não escalona (needsHuman: false) se a resposta não for JSON válido", async () => {
+  it("não escalona (needsHuman: false) se a resposta não for JSON válido, e marca o motivo como erro de parsing (distinguível de uma recusa genuína do modelo)", async () => {
     const provider = fakeProvider({ complete: vi.fn(async () => ({ text: "não sei o que responder aqui" })) });
 
     const signal = await classifyConversation([{ role: "user", content: "oi" }], provider);
 
-    expect(signal).toEqual({
-      needsHuman: false,
-      summary: "",
-      suggestedFollowUp: false,
-      suggestedFollowUpReason: "",
-    });
+    expect(signal.needsHuman).toBe(false);
+    expect(signal.summary).toBe("");
+    expect(signal.suggestedFollowUp).toBe(false);
+    expect(signal.suggestedFollowUpReason).toContain("[ERRO DE PARSING]");
+    expect(signal.suggestedFollowUpReason).toContain("não sei o que responder aqui");
   });
 });
 

@@ -334,6 +334,28 @@ model Conversation {
   // geração da resposta da IA, que se beneficia do contexto).
   humanReviewedAt DateTime?
 
+  // Diagnóstico POR CONVERSA da última vez que o classificador do gatilho
+  // SILENCE (classifyConversation, chamado por processSilentConversations
+  // em follow-up.ts) avaliou esta conversa — bug real reportado: uma
+  // conversa claramente elegível (silenciosa há muito mais que o limiar
+  // configurado) nunca migrava pra FOLLOW_UP, e não havia NENHUM registro
+  // consultável do motivo — só um console.log (invisível sem acesso a
+  // log do Railway) e, mesmo esse, só um AGREGADO do ciclo inteiro
+  // (FollowUpSettings.lastSilenceCheckError), não por conversa
+  // específica. Atualizado TODA vez que esta conversa é avaliada — aceita,
+  // recusada, ou erro (ex.: resposta do modelo que não veio em JSON
+  // válido, ver o catch em classifyConversation) — nunca limpo depois,
+  // fica como histórico da ÚLTIMA avaliação, mesmo que a conversa
+  // eventualmente dispare ou mude de status.
+  lastSilenceCheckAt        DateTime?
+  lastSilenceCheckSuggested Boolean?
+  lastSilenceCheckReason    String?   @db.Text
+  // provider:model exatos que geraram a decisão acima (ex.:
+  // "openrouter:openai/gpt-5.6-luna") — sem isso, não dava pra confirmar
+  // qual modelo decidiu cada caso específico sem depender do valor ATUAL
+  // (possivelmente trocado de novo depois) de LLM_PROVIDER.
+  lastSilenceCheckModel String?
+
   messages     Message[]
   appointments Appointment[]
   followUps    FollowUpLog[]
