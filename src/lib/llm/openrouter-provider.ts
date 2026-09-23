@@ -9,12 +9,16 @@ import type {
 } from "./types";
 
 // Segunda implementação de LLMProvider — fala com a OpenRouter (API
-// compatível com o formato de chat completions da OpenAI). Usada hoje só
-// pra testar um modelo em paralelo ao par Sonnet/Haiku da Anthropic (ver
-// AnthropicProvider), sem trocar o provedor em produção — só entra em uso
-// se LLM_PROVIDER=openrouter estiver setada no ambiente (ver
-// getLLMProvider, provider.ts); em produção essa variável continua sem
-// valor, então getLLMProvider() continua caindo no default "anthropic".
+// compatível com o formato de chat completions da OpenAI). Começou como
+// experimento (testar um modelo em paralelo ao par Sonnet/Haiku da
+// Anthropic, ver AnthropicProvider) mas hoje é o provedor real em uso
+// neste deployment (modelo "Luna") — entra em uso quando
+// LLM_PROVIDER=openrouter estiver setada no ambiente (ver getLLMProvider,
+// provider.ts). Setar isso é POR SERVIÇO no Railway (web e worker são
+// processos separados, cada um com suas próprias variáveis) — esquecer
+// de setar num dos dois não dá erro aqui, só faz getLLMProvider() cair
+// de volta no default "anthropic" NAQUELE serviço específico (ver o
+// aviso explícito pra esse caso em provider.ts).
 //
 // fetch puro (sem SDK) — mesmo padrão já usado no projeto pra integrações
 // externas (ver sendWhatsappMessage em src/lib/whatsapp.ts,

@@ -9,14 +9,17 @@ import type {
   ToolDefinition,
 } from "./types";
 
-// Única implementação concreta hoje — mesmo comportamento que o VEXO já
-// tinha antes desta camada existir (mesmos modelos default, mesmo cache
-// de prompt, mesmo loop de até 4 iterações de ferramenta). Isolar o SDK
-// da Anthropic aqui dentro (nenhum outro arquivo do projeto importa
-// @anthropic-ai/sdk) é o que torna uma segunda implementação (OpenAI via
-// SDK próprio, ou qualquer provedor via OpenRouter, que fala a mesma API
-// da OpenAI) um arquivo novo do mesmo tamanho, não uma mudança nos call
-// sites de negócio (src/lib/anthropic.ts).
+// Primeira implementação concreta (havia só esta antes da camada
+// LLMProvider existir — mesmos modelos default, mesmo cache de prompt,
+// mesmo loop de até 4 iterações de ferramenta de sempre) — mas NÃO é mais
+// a única nem necessariamente a ativa: este deployment específico usa
+// OpenRouterProvider (LLM_PROVIDER=openrouter) como provedor real, ver
+// getLLMProvider em provider.ts. Isolar o SDK da Anthropic aqui dentro
+// (nenhum outro arquivo do projeto importa @anthropic-ai/sdk) é o que
+// torna uma segunda implementação (OpenAI via SDK próprio, ou qualquer
+// provedor via OpenRouter, que fala a mesma API da OpenAI) um arquivo
+// novo do mesmo tamanho, não uma mudança nos call sites de negócio
+// (src/lib/anthropic.ts).
 
 const CONVERSATION_MODEL = process.env.ANTHROPIC_CONVERSATION_MODEL ?? "claude-sonnet-5";
 const BACKSTAGE_MODEL = process.env.ANTHROPIC_BACKSTAGE_MODEL ?? "claude-haiku-4-5-20251001";
