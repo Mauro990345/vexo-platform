@@ -148,22 +148,30 @@ async function processSilentConversations(): Promise<number> {
       if (alreadyPending) continue;
 
       const signal = await classifyConversation(toChatHistory(conv.messages));
+      const activeProvider = getLLMProvider();
+      const modelLabel = `${process.env.LLM_PROVIDER ?? "anthropic"}:${activeProvider.modelForTier("backstage")}`;
       // Diagnóstico PERMANENTE (não temporário — este é o único ponto de
       // decisão de todo o gatilho SILENCE, e até agora não deixava nenhum
-      // rastro em lugar nenhum quando decidia NÃO disparar). provider/model
-      // incluídos depois de um relato real: recusas repetidas em conversas
-      // de teste triviais, logo após trocar o modelo do tier "backstage"
-      // pra Luna via OpenRouter (LLM_PROVIDER) — sem isso, não dava pra
-      // confirmar QUAL modelo respondeu cada decisão específica sem
-      // depender do valor atual (possivelmente trocado de novo depois) da
-      // variável de ambiente. suggestedFollowUpReason é o motivo que o
-      // próprio classificador deu pra decisão — cobre exatamente o que
-      // faltava: até aqui só o FATO da recusa ficava registrado, nunca o
-      // PORQUÊ.
-      const activeProvider = getLLMProvider();
+      // rastro CONSULTÁVEL em lugar nenhum quando decidia NÃO disparar —
+      // só um console.log, invisível sem acesso a log do Railway. Bug
+      // real reportado: uma conversa claramente elegível, travada há
+      // muito mais que um ciclo, sem NENHUM registro do motivo em
+      // FollowUpLog nem em Conversation (needsHumanReason, previousStatus
+      // — nenhum dos dois é sobre isso). Persiste direto na conversa
+      // agora (lastSilenceCheckAt/Suggested/Reason/Model), visível em
+      // /crm/dispatch-status sem precisar de log nenhum — cobre aceito e
+      // recusado, sempre, não só quando dá erro.
+      await prisma.conversation.update({
+        where: { id: conv.id },
+        data: {
+          lastSilenceCheckAt: new Date(),
+          lastSilenceCheckSuggested: signal.suggestedFollowUp,
+          lastSilenceCheckReason: signal.suggestedFollowUpReason || null,
+          lastSilenceCheckModel: modelLabel,
+        },
+      });
       console.log(
-        `[vexo:followup] conversationId=${conv.id} silenceHours=${silenceHours} ` +
-          `provider=${process.env.LLM_PROVIDER ?? "anthropic"} model=${activeProvider.modelForTier("backstage")} ` +
+        `[vexo:followup] conversationId=${conv.id} silenceHours=${silenceHours} model=${modelLabel} ` +
           `suggestedFollowUp=${signal.suggestedFollowUp} suggestedFollowUpReason=${JSON.stringify(signal.suggestedFollowUpReason)} ` +
           `summary=${JSON.stringify(signal.summary)}`
       );
@@ -172,7 +180,26 @@ async function processSilentConversations(): Promise<number> {
       await triggerFollowUp(conv.id, "SILENCE");
       triggered++;
     } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
       console.error(`[vexo:followup] ERRO ao processar conversationId=${conv.id} — pulando pra próxima:`, err);
+      // Mesmo diagnóstico persistido acima, agora pro caso de ERRO — sem
+      // isso, uma falha específica desta conversa (não um problema
+      // sistêmico do ciclo inteiro, já coberto por
+      // FollowUpSettings.lastSilenceCheckError) ficava só no console,
+      // igual ao caso que motivou esta correção inteira.
+      await prisma.conversation
+        .update({
+          where: { id: conv.id },
+          data: {
+            lastSilenceCheckAt: new Date(),
+            lastSilenceCheckSuggested: null,
+            lastSilenceCheckReason: `[ERRO] ${message}`,
+            lastSilenceCheckModel: null,
+          },
+        })
+        .catch((updateErr) =>
+          console.error(`[vexo:followup] Falha ao gravar diagnóstico de erro pra conversationId=${conv.id}:`, updateErr)
+        );
     }
   }
   return triggered;
