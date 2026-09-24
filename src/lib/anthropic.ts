@@ -63,13 +63,34 @@ Responda SOMENTE com um JSON no formato:
                                  // pedir explicitamente um humano.
   "needsHumanReason": string,   // curto motivo, vazio se needsHuman=false
   "summary": string,            // resumo de 1-2 frases do estado atual da conversa
-  "suggestedFollowUp": boolean, // true se o lead demonstrou algum interesse comercial (perguntou preço,
-                                 // procedimento, horário etc.) e sumiu sem concluir agendamento nem recusar
-                                 // explicitamente — uma troca de saudação sem nenhum sinal de interesse real
-                                 // (ex: só "Oi, tudo bem?" sem resposta do lead) não é uma venda esfriando,
-                                 // então não é motivo de reengajamento por si só.
-  "suggestedFollowUpReason": string // curto motivo da decisão de suggestedFollowUp acima (por que reengajar
-                                 // faz ou não sentido) — SEMPRE preencha, mesmo quando suggestedFollowUp=false
+  "suggestedFollowUp": boolean, // PADRÃO: true. Silêncio do lead — parar de responder, mesmo sem ter
+                                 // demonstrado nenhum interesse comercial explícito ainda (ex: sumir logo
+                                 // após uma saudação, "Oi, tudo bem?" sem resposta) ou deixar a conversa
+                                 // incompleta — NÃO é sinal de desinteresse por si só: a pessoa pode ter
+                                 // sido interrompida, estar ocupada, ter esquecido etc. Silêncio sozinho
+                                 // NUNCA é motivo pra recusar reengajamento.
+                                 //
+                                 // Só marque false quando o PRÓPRIO LEAD deixou, nesta conversa, um sinal
+                                 // negativo EXPLÍCITO e inequívoco. Conta como sinal negativo explícito:
+                                 //   - disse diretamente que não tem interesse ("não quero", "não é pra
+                                 //     mim", "não estou procurando isso", "não preciso");
+                                 //   - pediu pra parar de mandar mensagem ("para de mandar mensagem",
+                                 //     "não me manda mais isso", "me tira dessa lista", "não me chama mais");
+                                 //   - recusou o procedimento/serviço oferecido de forma clara ("não vou
+                                 //     fazer", "não quero agendar", "decidi não fazer", "desisti");
+                                 //   - foi rude, hostil ou deu qualquer sinal de que insistir geraria
+                                 //     bloqueio/denúncia.
+                                 // NÃO conta como sinal negativo explícito (então NÃO justifica false):
+                                 //   - silêncio puro — o lead simplesmente parou de responder, sem
+                                 //     nenhuma mensagem negativa;
+                                 //   - uma saudação sem resposta do lead;
+                                 //   - conversa incompleta/cortada no meio, sem nenhuma recusa;
+                                 //   - o lead ter demonstrado pouco ou nenhum interesse comercial até
+                                 //     agora — isso é só ausência de sinal, não é recusa.
+  "suggestedFollowUpReason": string // curto motivo da decisão de suggestedFollowUp acima — quando false,
+                                 // deve citar a mensagem/trecho específico do lead que conta como sinal
+                                 // negativo explícito (não apenas "lead não demonstrou interesse"); SEMPRE
+                                 // preencha, mesmo quando suggestedFollowUp=false
 }`;
 
 export async function classifyConversation(
