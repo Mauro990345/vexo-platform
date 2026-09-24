@@ -290,13 +290,41 @@ export async function getInstagramConversationParticipantUsername(
 // testada de verdade contra 8 leads reais (deploy da correção #3, log
 // [vexo:profile-picture-backfill]), respondeu HTTP 200 sem erro nenhum,
 // mas SEM "profile_picture_url" no objeto padrão de participante — ao
-// contrário de "username", que vem de graça. Ou seja: a versão simples
-// definitivamente não é suficiente; a pergunta real (sintaxe de expansão
-// funciona pra pedir esse campo explicitamente?) nunca foi respondida de
-// verdade. Voltando pra "participants{id,profile_picture_url}" agora, com
-// a garantia de que só roda contra IGSIDs reais — primeiro teste limpo
-// dessa sintaxe. Se ainda falhar, é sinal de verdade sobre a sintaxe (ou
-// o campo), não mais confundível com o bug dos leads de demo.
+// contrário de "username", que vem de graça.
+//   4. Voltou pra "participants{id,profile_picture_url}" (esta função,
+//      abaixo) — primeiro teste limpo dessa sintaxe, contra os mesmos 3
+//      leads reais (reset manual de profilePictureFetchedAt pra forçar
+//      reentrada no lote sem esperar a janela de 24h). Resultado: mesmo
+//      "sem foto na resposta" da rodada 3, sem erro — a sintaxe de
+//      expansão em si não muda nada.
+//   5. Última avenida cogitada: o payload bruto do webhook (WebhookLog.
+//      rawBody, já capturado pra TODA requisição desde uma correção
+//      anterior) poderia trazer campos extras (nome, foto, seguidores) só
+//      na primeira mensagem de uma conversa nova — um mecanismo diferente
+//      da Conversations API, não uma variação de sintaxe. Inspecionado o
+//      rawBody de uma mensagem de texto real de um lead genuinamente novo
+//      (não um evento "read", que não tem esse conteúdo) — o payload
+//      inteiro é só entry[].messaging[].{sender.id, recipient.id,
+//      timestamp, message.{mid, text}}. Nenhum campo de perfil, nem
+//      aninhado em lugar nenhum, nem na primeira mensagem.
+//
+// CONCLUSÃO DEFINITIVA (não reabrir esta investigação sem uma mudança real
+// do lado da Meta): as três avenidas plausíveis pra obter a foto de perfil
+// de um lead — Conversations API sem expansão, Conversations API com
+// expansão de subcampo, e o payload bruto do webhook — foram testadas de
+// forma limpa (sem a contaminação dos leads de demo das rodadas 1-2) e
+// nenhuma delas expõe esse dado pra este produto ("Instagram API with
+// Instagram Login"). Diferente do username (que vem de graça na
+// Conversations API simples), a foto de perfil não tem, hoje, nenhum
+// caminho automático via API da Meta. Por isso o job periódico
+// (refreshLeadProfilePictures, worker/index.ts) e o lookup por mensagem
+// nova (conversation-pipeline.ts) foram DESATIVADOS — esta função continua
+// existindo e correta (não é bug nela), só não é mais chamada
+// automaticamente, pra não desperdiçar chamada de API numa busca que já
+// sabemos que nunca vai ter resultado. Os cards continuam mostrando o
+// avatar genérico (ver LeadAvatar, src/components/LeadAvatar.tsx) — o @ do
+// Instagram (esse sim confirmado funcionando) continua sendo o dado real
+// de identificação/transparência pra clínica.
 export async function getInstagramConversationParticipantProfilePicture(
   accessToken: string,
   igUserId: string,
