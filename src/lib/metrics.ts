@@ -2,8 +2,21 @@ import { prisma } from "@/lib/prisma";
 
 // Métricas compartilhadas pelo painel do cliente e pelo resumo semanal.
 // "Abordados" vem do contador manual (ApproachLog), já que a primeira
-// mensagem é sempre enviada por Mauro fora da plataforma.
-
+// mensagem é sempre enviada por Mauro fora da plataforma — mas esse
+// contador manual pode ficar desatualizado (esquecer de logar um dia) sem
+// que isso afete conversationCount/appointmentCount, que são automáticos.
+//
+// Bug real reportado: card "Abordados" mostrando 0 num período com 17
+// conversas e 8 agendamentos reais — logicamente impossível, já que toda
+// conversa e todo agendamento SÓ existem depois de uma abordagem. Causa:
+// "approached" vinha só da soma do ApproachLog manual daquele período, sem
+// nenhum piso baseado no que o próprio sistema já sabe ter acontecido.
+// Corrigido com um piso: "Abordados" nunca fica abaixo do maior número já
+// observado no funil automático do mesmo período (conversas iniciadas ou
+// agendamentos criados) — preserva o valor manual quando ele é MAIOR (ele
+// captura abordagens que nunca viraram conversa, que o funil automático não
+// vê), mas nunca deixa a métrica "mais alta do funil" aparecer mais baixa
+// que as de baixo dela.
 export async function getClinicMetrics(clinicId: string, from: Date, to: Date) {
   const [approachLogs, respondedCount, scheduledCount, completedCount, noShowCount] =
     await Promise.all([
@@ -25,7 +38,7 @@ export async function getClinicMetrics(clinicId: string, from: Date, to: Date) {
       }),
     ]);
 
-  const approached = approachLogs._sum.count ?? 0;
+  const approached = Math.max(approachLogs._sum.count ?? 0, respondedCount, scheduledCount);
   const responseRate = approached > 0 ? respondedCount / approached : null;
 
   return {
