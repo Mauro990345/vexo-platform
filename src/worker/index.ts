@@ -5,6 +5,7 @@ import { processFollowUps } from "@/lib/follow-up";
 import { sendWeeklySummaries } from "@/lib/weekly-summary";
 import { syncAllGoogleCalendars } from "@/lib/google-calendar-sync";
 import { backfillLeadInstagramUsernames } from "@/lib/lead-username-backfill";
+import { refreshLeadProfilePictures } from "@/lib/lead-profile-picture-backfill";
 
 // Worker de background do VEXO — processo separado (serviço próprio no
 // Railway) que compartilha o mesmo banco Postgres da aplicação web.
@@ -57,6 +58,11 @@ cron.schedule("*/5 * * * *", () => runSafely("syncGoogleCalendars", syncAllGoogl
 // lead-username-backfill.ts) — a cada 10 minutos, lote pequeno por ciclo,
 // converge sozinho depois de alguns ciclos e vira no-op.
 cron.schedule("*/10 * * * *", () => runSafely("backfillLeadInstagramUsernames", backfillLeadInstagramUsernames));
+
+// Foto de perfil do Instagram (Lead.profilePictureUrl) — mesma cadência,
+// mas é um refresh contínuo por janela de tempo, não um backfill que
+// converge (ver comentário grande em lead-profile-picture-backfill.ts).
+cron.schedule("*/10 * * * *", () => runSafely("refreshLeadProfilePictures", refreshLeadProfilePictures));
 
 // Roda uma primeira vez imediatamente ao subir, para não esperar o primeiro tick.
 runSafely("dispatchDueMessages", dispatchDueMessages);

@@ -281,6 +281,20 @@ model Lead {
   // mensagem nova enquanto não tiver sido tentado.
   usernameLookupAttempted Boolean @default(false)
 
+  // Mesmo racional de usernameLookupAttempted acima, MAS com uma diferença
+  // real de design: ao contrário do @ (um identificador estável, uma vez
+  // obtido nunca muda), a URL de foto de perfil que APIs da Meta devolvem é
+  // tipicamente uma URL ASSINADA/temporária do CDN deles — padrão bem
+  // conhecido em outras APIs da Meta (não confirmado especificamente pra
+  // este campo, sem token de produção pra testar neste ambiente). Por isso
+  // NÃO é um booleano "tentado uma vez" — é um timestamp da última busca, e
+  // o lookup RE-busca periodicamente (ver PROFILE_PICTURE_REFRESH_WINDOW_MS
+  // em lead-profile-picture-backfill.ts), pra se autocurar se a URL salva
+  // expirar, em vez de ficar com uma foto quebrada pra sempre depois da
+  // primeira tentativa.
+  profilePictureUrl       String?
+  profilePictureFetchedAt DateTime?
+
   conversations Conversation[]
   appointments  Appointment[]
 

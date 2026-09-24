@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { MoreHorizontal } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { startOfDay, addDays } from "@/lib/metrics";
+import { LeadAvatar } from "@/components/LeadAvatar";
 
 export const dynamic = "force-dynamic";
 
@@ -224,14 +225,17 @@ export default async function ClinicPipelinePage({ params }: { params: { id: str
                     if (col.status === "SCHEDULED") {
                       return (
                         <div key={conv.id} className={cardClass}>
-                          <Link href={`/crm/conversas/${conv.id}`} className="block transition hover:text-vexo-accent">
-                            <p className="truncate text-sm font-normal">{name}</p>
-                            {appt && (
-                              <p className="mt-1 text-caption text-vexo-muted">{formatDateTime(appt.scheduledAt)}</p>
-                            )}
-                            <span className={`mt-1.5 inline-block rounded-card ${tint.tagBg} px-1.5 py-0.5 text-caption font-medium ${tint.tagText}`}>
-                              {col.label}
-                            </span>
+                          <Link href={`/crm/conversas/${conv.id}`} className="flex items-start gap-2 transition hover:text-vexo-accent">
+                            <LeadAvatar profilePictureUrl={conv.lead.profilePictureUrl} name={name} />
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-sm font-normal">{name}</p>
+                              {appt && (
+                                <p className="mt-1 text-caption text-vexo-muted">{formatDateTime(appt.scheduledAt)}</p>
+                              )}
+                              <span className={`mt-1.5 inline-block rounded-card ${tint.tagBg} px-1.5 py-0.5 text-caption font-medium ${tint.tagText}`}>
+                                {col.label}
+                              </span>
+                            </div>
                           </Link>
                         </div>
                       );
@@ -239,17 +243,20 @@ export default async function ClinicPipelinePage({ params }: { params: { id: str
 
                     return (
                       <div key={conv.id} className={cardClass}>
-                        <Link href={`/crm/conversas/${conv.id}`} className="block transition hover:text-vexo-accent">
-                          <div className="flex items-start justify-between gap-2">
-                            <p className="truncate text-sm font-normal">{name}</p>
-                            <MoreHorizontal className="h-3.5 w-3.5 shrink-0 text-vexo-muted" strokeWidth={2} />
+                        <Link href={`/crm/conversas/${conv.id}`} className="flex items-start gap-2 transition hover:text-vexo-accent">
+                          <LeadAvatar profilePictureUrl={conv.lead.profilePictureUrl} name={name} />
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-start justify-between gap-2">
+                              <p className="truncate text-sm font-normal">{name}</p>
+                              <MoreHorizontal className="h-3.5 w-3.5 shrink-0 text-vexo-muted" strokeWidth={2} />
+                            </div>
+                            <p className="mt-1 text-caption text-vexo-muted">
+                              {conv.lastMessageAt ? formatDateTime(conv.lastMessageAt) : "—"}
+                            </p>
+                            <span className={`mt-1.5 inline-block rounded-card ${tint.tagBg} px-1.5 py-0.5 text-caption font-medium ${tint.tagText}`}>
+                              {col.label}
+                            </span>
                           </div>
-                          <p className="mt-1 text-caption text-vexo-muted">
-                            {conv.lastMessageAt ? formatDateTime(conv.lastMessageAt) : "—"}
-                          </p>
-                          <span className={`mt-1.5 inline-block rounded-card ${tint.tagBg} px-1.5 py-0.5 text-caption font-medium ${tint.tagText}`}>
-                            {col.label}
-                          </span>
                         </Link>
                       </div>
                     );

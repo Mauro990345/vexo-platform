@@ -2,7 +2,12 @@ import { prisma } from "@/lib/prisma";
 import { classifyConversation, generateLeadReply, summarizeOlderTurns, type AgentTools } from "@/lib/anthropic";
 import { buildConversationContext, withOlderSummary } from "@/lib/conversation-context";
 import { checkAvailability, createCalendarEvent, updateCalendarEvent, updateCalendarEventDescription, getRawBusyPeriods } from "@/lib/google-calendar";
-import { getInstagramUserProfile, getInstagramConversationParticipantUsername } from "@/lib/instagram";
+import {
+  getInstagramUserProfile,
+  getInstagramConversationParticipantUsername,
+  getInstagramConversationParticipantProfilePicture,
+} from "@/lib/instagram";
+import { PROFILE_PICTURE_REFRESH_WINDOW_MS } from "@/lib/lead-profile-picture-backfill";
 import { decryptToken } from "@/lib/crypto";
 import { computeAdaptiveDelaySeconds, FAST_REPLY_DELAY_SECONDS } from "@/lib/scheduler";
 import { DEFAULT_CONVERSATION_SYSTEM_PROMPT } from "@/lib/default-prompt";
@@ -296,6 +301,42 @@ export async function handleInboundInstagramMessage(
         await prisma.webhookLog
           .update({ where: { id: webhookLogId }, data: { processingError: `Falha ao buscar username do lead: ${detail}`.slice(0, 4000) } })
           .catch((updateErr) => console.error("[vexo] Falha ao gravar diagnóstico de username do lead:", updateErr));
+      }
+    }
+  }
+
+  // Mesmo padrão do lookup de username acima, MAS por JANELA de tempo (não
+  // um booleano "tentado uma vez") — ver comentário grande em
+  // Lead.profilePictureFetchedAt, schema.prisma, e em
+  // lead-profile-picture-backfill.ts, pro porquê: a URL de foto de perfil
+  // pode expirar, então precisa poder ser buscada de novo, não só na
+  // primeira vez. Uma mensagem nova do lead é uma chance natural de
+  // atualizar, além do refresh periódico do worker (backfillLeadProfilePictures).
+  if (!lead.profilePictureFetchedAt || lead.profilePictureFetchedAt.getTime() < Date.now() - PROFILE_PICTURE_REFRESH_WINDOW_MS) {
+    try {
+      const { profilePictureUrl } = await getInstagramConversationParticipantProfilePicture(
+        decryptToken(igAccount.accessTokenEnc),
+        igAccount.igUserId,
+        lead.igScopedId
+      );
+      await prisma.lead.update({
+        where: { id: lead.id },
+        data: { profilePictureUrl: profilePictureUrl ?? null, profilePictureFetchedAt: new Date() },
+      });
+      lead.profilePictureUrl = profilePictureUrl ?? null;
+      console.log(
+        `[vexo:profile-picture-lookup] lead=${lead.id} igScopedId=${lead.igScopedId} -> ${profilePictureUrl ? "foto atualizada" : "sem foto na resposta"}`
+      );
+    } catch (err) {
+      // NÃO marca profilePictureFetchedAt aqui — erro pode ser transitório,
+      // tenta de novo na próxima mensagem (mesmo racional do lookup de
+      // username/nome acima).
+      console.error("[vexo:profile-picture-lookup] Falha ao buscar foto de perfil do lead:", err);
+      if (webhookLogId) {
+        const detail = err instanceof Error ? `${err.message}\n${err.stack ?? ""}` : String(err);
+        await prisma.webhookLog
+          .update({ where: { id: webhookLogId }, data: { processingError: `Falha ao buscar foto de perfil do lead: ${detail}`.slice(0, 4000) } })
+          .catch((updateErr) => console.error("[vexo] Falha ao gravar diagnóstico de foto de perfil do lead:", updateErr));
       }
     }
   }

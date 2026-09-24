@@ -9,6 +9,7 @@ import { NoShowButton } from "@/components/NoShowButton";
 import { ChannelStatusPill } from "@/components/ChannelStatusPill";
 import { normalizeBrazilianWhatsappNumber } from "@/lib/whatsapp";
 import { leadDisplayLabel } from "@/lib/lead-display";
+import { LeadAvatar } from "@/components/LeadAvatar";
 
 // Marcar "Não compareceu" só faz sentido pra agendamento ainda em aberto —
 // já compareceu ou já foi cancelado não tem o que alternar aqui.
@@ -190,17 +191,20 @@ export async function ClientPanelView({
               {appointments.map((a) => (
                 <div
                   key={a.id}
-                  className="flex items-center justify-between gap-2 rounded-lg border border-vexo-border bg-vexo-surface p-2.5"
+                  className="flex items-center gap-2.5 justify-between rounded-lg border border-vexo-border bg-vexo-surface p-2.5"
                 >
+                  {/* Avatar do Instagram (foto real, quando disponível — ver
+                      LeadAvatar) substitui o antigo ícone genérico de @ como
+                      identificador visual do card: mais informativo (tipo
+                      Kommo/CRMs de social selling), mas o mesmo AtSign
+                      continua no <p> abaixo via leadDisplayLabel quando há
+                      handle. Fora do min-w-0 flex-1 de propósito — não deve
+                      encolher nem truncar junto com o texto. */}
+                  {a.lead && (
+                    <LeadAvatar profilePictureUrl={a.lead.profilePictureUrl} name={leadDisplayLabel(a.lead, null)} />
+                  )}
                   <div className="min-w-0 flex-1">
                     <div className="flex min-w-0 items-center gap-1.5">
-                      {a.lead && (
-                        <AtSign
-                          className="h-3 w-3 shrink-0 text-vexo-muted"
-                          strokeWidth={2}
-                          aria-label="Agendado pela IA (Instagram)"
-                        />
-                      )}
                       <p className="min-w-0 truncate text-sm font-medium">
                         {leadDisplayLabel(a.lead, a.manualTitle)}
                       </p>
