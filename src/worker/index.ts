@@ -27,7 +27,24 @@ function runSafely(name: string, fn: () => Promise<unknown>) {
     });
 }
 
-console.log("[vexo:worker] iniciado.");
+// Fingerprint de deploy no boot — mesmos campos do diagnóstico já usado em
+// /crm/dispatch-status (RAILWAY_GIT_COMMIT_SHA etc.), mas aqui pro serviço
+// WORKER especificamente. Faltava: depois de duas correções seguidas
+// (PR #56, #57) pro lookup de foto de perfil continuarem dando o MESMO
+// erro, com o código das duas chamadas (username, que funciona, e foto de
+// perfil, que falha) comprovadamente idêntico byte a byte na URL montada —
+// a hipótese mais forte que sobra é o worker ainda estar rodando um
+// container com um deploy anterior a essas correções (web e worker são
+// serviços SEPARADOS no Railway, cada um com seu próprio ciclo de deploy;
+// já vimos esse exato tipo de confusão antes, ver histórico do próprio
+// /crm/dispatch-status). Sem esse log, não tinha como confirmar isso a
+// partir daqui — só "reiniciado às X" no dashboard, sem dizer QUAL commit.
+console.log(
+  `[vexo:worker] iniciado — commit=${process.env.RAILWAY_GIT_COMMIT_SHA?.slice(0, 7) ?? "?"} ` +
+    `service=${process.env.RAILWAY_SERVICE_NAME ?? "?"} ` +
+    `environment=${process.env.RAILWAY_ENVIRONMENT_NAME ?? "?"} ` +
+    `deploymentId=${process.env.RAILWAY_DEPLOYMENT_ID ?? "?"}`
+);
 
 // Despacho de mensagens pendentes — a cada 15s, é o que dá a sensação de
 // "timing adaptativo" real (delay curto para a primeira resposta, depois
