@@ -186,6 +186,59 @@ export async function getInstagramUserProfile(
   return { name: data.name || undefined };
 }
 
+// Conversations API — endpoint DIFERENTE do lookup de perfil acima (mesmo
+// produto "Instagram API with Instagram Login", outro edge:
+// /{ig-user-id}/conversations, documentado em developers.facebook.com/docs/
+// instagram-platform/instagram-api-with-instagram-login/conversations-api/).
+// Único jeito encontrado de obter o @ real de um lead: o node de perfil por
+// IGSID acima só expõe "name" (ver comentário lá — Meta não deixa puxar
+// "username" desse jeito, por privacidade), mas o campo "participants" da
+// API de conversas é documentado como retornando "username" junto do "id"
+// de cada participante — é um edge desenhado pra gerenciar a caixa de
+// entrada (onde saber quem é quem faz sentido pro negócio), diferente do
+// lookup de perfil solto por ID (que é a superfície restrita).
+//
+// IMPORTANTE: não deu pra confirmar isso contra uma chamada real — este
+// ambiente de desenvolvimento não tem token de produção nem acesso a
+// developers.facebook.com (bloqueado pelo proxy de rede daqui). A forma da
+// resposta abaixo é best-effort a partir da documentação oficial (mesma URL
+// do produto que o VEXO usa) e de implementações de terceiros que usam esse
+// mesmo endpoint — precisa ser confirmada contra uma conversa real depois do
+// deploy. Ver [vexo:username-lookup] no log do worker/web, e o resultado
+// direto no Painel (/crm/clinicas/[id]/painel) uma vez que algum lead novo
+// (ou o backfill, ver backfillLeadInstagramUsernames em
+// src/lib/lead-username-backfill.ts) rodar de verdade.
+//
+// Filtra a conversa do lead específico via ?user_id= (documentado pra achar
+// a conversa com uma pessoa específica, sem paginar client-side por todas
+// as conversas da conta). Identifica o participante do LEAD comparando
+// id !== igUserId (a própria conta da clínica) em vez de comparar contra o
+// IGSID que já temos salvo — mais resiliente a qualquer diferença de
+// formato entre o "id" retornado aqui e o leadIgScopedId.
+export async function getInstagramConversationParticipantUsername(
+  accessToken: string,
+  igUserId: string,
+  leadIgScopedId: string
+): Promise<{ username?: string }> {
+  const url = new URL(`${IG_GRAPH_BASE}/${igUserId}/conversations`);
+  url.searchParams.set("platform", "instagram");
+  url.searchParams.set("user_id", leadIgScopedId);
+  url.searchParams.set("fields", "participants");
+  url.searchParams.set("access_token", accessToken);
+
+  const res = await fetch(url.toString());
+  if (!res.ok) {
+    throw new Error(`Falha ao buscar conversa do lead pra achar o username (HTTP ${res.status}): ${await res.text()}`);
+  }
+
+  const data = (await res.json()) as {
+    data?: { participants?: { data?: { id: string; username?: string }[] } }[];
+  };
+  const participants = data.data?.[0]?.participants?.data ?? [];
+  const leadParticipant = participants.find((p) => p.id !== igUserId);
+  return { username: leadParticipant?.username || undefined };
+}
+
 // -----------------------------------------------------------------------
 // OAuth (Instagram API with Instagram Login)
 // -----------------------------------------------------------------------

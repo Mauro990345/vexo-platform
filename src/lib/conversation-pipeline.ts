@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { classifyConversation, generateLeadReply, summarizeOlderTurns, type AgentTools } from "@/lib/anthropic";
 import { buildConversationContext, withOlderSummary } from "@/lib/conversation-context";
 import { checkAvailability, createCalendarEvent, updateCalendarEvent, updateCalendarEventDescription, getRawBusyPeriods } from "@/lib/google-calendar";
-import { getInstagramUserProfile } from "@/lib/instagram";
+import { getInstagramUserProfile, getInstagramConversationParticipantUsername } from "@/lib/instagram";
 import { decryptToken } from "@/lib/crypto";
 import { computeAdaptiveDelaySeconds, FAST_REPLY_DELAY_SECONDS } from "@/lib/scheduler";
 import { DEFAULT_CONVERSATION_SYSTEM_PROMPT } from "@/lib/default-prompt";
@@ -251,6 +251,51 @@ export async function handleInboundInstagramMessage(
         await prisma.webhookLog
           .update({ where: { id: webhookLogId }, data: { processingError: `Falha ao buscar nome do lead: ${detail}`.slice(0, 4000) } })
           .catch((updateErr) => console.error("[vexo] Falha ao gravar diagnóstico de perfil do lead:", updateErr));
+      }
+    }
+  }
+
+  // Mesmo padrão do lookup de nome acima, endpoint diferente (Conversations
+  // API, não o lookup de perfil por IGSID — ver comentário grande em
+  // getInstagramConversationParticipantUsername, instagram.ts, pro porquê:
+  // é o único jeito encontrado de obter o @ real do lead, já que o payload
+  // do webhook nunca traz e o lookup de perfil só expõe "name"). Log
+  // [vexo:username-lookup] permanente — sem acesso a log de produção neste
+  // ambiente, é o único jeito de confirmar se esse endpoint está
+  // funcionando de verdade contra uma conta real, e com qual resultado.
+  if (!lead.igUsername && !lead.usernameLookupAttempted) {
+    try {
+      const { username } = await getInstagramConversationParticipantUsername(
+        decryptToken(igAccount.accessTokenEnc),
+        igAccount.igUserId,
+        lead.igScopedId
+      );
+      if (username) {
+        await prisma.lead.update({ where: { id: lead.id }, data: { igUsername: username, usernameLookupAttempted: true } });
+        lead.igUsername = username;
+        console.log(`[vexo:username-lookup] lead=${lead.id} igScopedId=${lead.igScopedId} -> @${username}`);
+      } else {
+        await prisma.lead.update({ where: { id: lead.id }, data: { usernameLookupAttempted: true } });
+        console.log(`[vexo:username-lookup] lead=${lead.id} igScopedId=${lead.igScopedId} -> sem username na resposta`);
+        if (webhookLogId) {
+          await prisma.webhookLog
+            .update({
+              where: { id: webhookLogId },
+              data: { processingError: `getInstagramConversationParticipantUsername não devolveu "username" pra igScopedId=${lead.igScopedId} (resposta sem esse campo, ou sem conversa encontrada).` },
+            })
+            .catch((updateErr) => console.error("[vexo] Falha ao gravar diagnóstico de username do lead:", updateErr));
+        }
+      }
+    } catch (err) {
+      // NÃO marca usernameLookupAttempted aqui — mesmo racional do lookup
+      // de nome: um erro pode ser transitório, diferente de uma resposta
+      // válida sem username (definitivo). Tenta de novo na próxima mensagem.
+      console.error("[vexo:username-lookup] Falha ao buscar username do lead:", err);
+      if (webhookLogId) {
+        const detail = err instanceof Error ? `${err.message}\n${err.stack ?? ""}` : String(err);
+        await prisma.webhookLog
+          .update({ where: { id: webhookLogId }, data: { processingError: `Falha ao buscar username do lead: ${detail}`.slice(0, 4000) } })
+          .catch((updateErr) => console.error("[vexo] Falha ao gravar diagnóstico de username do lead:", updateErr));
       }
     }
   }
