@@ -211,11 +211,39 @@ export async function getInstagramUserProfile(
 // id !== igUserId (a própria conta da clínica) em vez de comparar contra o
 // IGSID que já temos salvo — mais resiliente a qualquer diferença de
 // formato entre o "id" retornado aqui e o leadIgScopedId.
+//
+// isRealIgScopedId (ver abaixo): IGSID de verdade é sempre uma string só de
+// dígitos — bug real encontrado: prisma/seed-demo.ts cria 40 leads de
+// demonstração pra clínica piloto com igScopedId tipo "demo-new-0",
+// "demo-conversa-1" etc. (nunca tiveram conversa real no Instagram), e a
+// Meta rejeita esse valor com "(#100) Param user_id must be a numeric
+// string" — HTTP 400 — um erro CORRETO dessa vez (diferente do que a
+// investigação anterior da sintaxe de expansão {} chegou a suspeitar, que
+// era, esse sim, um erro enganoso). Sem essa checagem, uma chamada que
+// sempre falha é tratada como erro transitório (a mesma lógica que faz
+// sentido pra falha de rede genuína) e NUNCA marca a tentativa como
+// definitiva — pulando essa checagem, cada lead de demo ocuparia pra
+// sempre um lugar no lote do backfill (ver getInstagramConversationParticipantProfilePicture
+// e lead-profile-picture-backfill.ts), bloqueando leads REAIS de sequer
+// serem tentados. Aqui pro username isso hoje não trava nada na prática (o
+// seed já vem com igUsername preenchido, e o backfill de username filtra
+// justamente por igUsername nulo) — mas o guard é o mesmo pelos dois
+// lookups, por consistência e resiliência a qualquer lead futuro sem
+// igUsername pré-setado e com igScopedId inválido.
+export function isRealIgScopedId(igScopedId: string): boolean {
+  return /^\d+$/.test(igScopedId);
+}
+
 export async function getInstagramConversationParticipantUsername(
   accessToken: string,
   igUserId: string,
   leadIgScopedId: string
 ): Promise<{ username?: string }> {
+  if (!isRealIgScopedId(leadIgScopedId)) {
+    console.log(`[vexo:username-lookup] igScopedId=${leadIgScopedId} não é um IGSID numérico real (provável lead de seed/demo) — pulado, sem chamar a API.`);
+    return { username: undefined };
+  }
+
   const url = new URL(`${IG_GRAPH_BASE}/${igUserId}/conversations`);
   url.searchParams.set("platform", "instagram");
   url.searchParams.set("user_id", leadIgScopedId);
@@ -241,32 +269,30 @@ export async function getInstagramConversationParticipantUsername(
 // arrisca quebrar o lookup de username, que já está confirmado funcionando
 // em produção).
 //
-// BUG REAL corrigido: a primeira versão pedia "fields=participants{id,
-// profile_picture_url}" (sintaxe de expansão de subcampo) e toda chamada
-// falhava com "(#100) Param user_id must be a numeric string" — um erro
-// ENGANOSO da Graph API. Confirmado (construindo as duas URLs localmente e
-// comparando byte a byte) que o "user_id" sai IDÊNTICO nas duas chamadas,
-// corretamente formatado nos dois casos — o erro não tem nada a ver com
-// esse parâmetro de verdade. A sintaxe "participants{...}" (que vira
-// "participants%7Bid%2Cprofile_picture_url%7D" na URL) é o que está
-// confundindo o parser da Graph API pra esse edge específico, e ela relata
-// o erro num parâmetro completamente errado em vez do real. Correção:
-// pedir só "fields=participants" simples, exatamente igual à chamada de
-// username (que já devolve "username" por padrão sem precisar de sintaxe
-// de expansão nenhuma) — em vez de pedir "profile_picture_url"
-// explicitamente, lê esse campo da MESMA resposta padrão, se a Meta
-// incluir ele de graça (como já faz com "username").
-//
-// IMPORTANTE: ainda não confirmado contra uma chamada real se
-// "profile_picture_url" realmente vem no objeto padrão de participante —
-// só descartamos a sintaxe de expansão quebrada, que é o que garantidamente
-// causava o erro 400. Precisa ser confirmado depois do próximo deploy. Ver
-// [vexo:profile-picture-lookup]/[vexo:profile-picture-backfill] no log.
+// Histórico da investigação de "(#100) Param user_id must be a numeric
+// string": a PRIMEIRA versão pedia "fields=participants{id,
+// profile_picture_url}" (sintaxe de expansão de subcampo), e uma correção
+// trocou pra "fields=participants" simples (igual ao username) por
+// suspeitar que a sintaxe de expansão confundia o parser da Graph API. O
+// erro continuou IDÊNTICO mesmo depois — a causa real (ver
+// isRealIgScopedId acima) é a clínica piloto ter 40 leads de demonstração
+// (prisma/seed-demo.ts) com igScopedId tipo "demo-new-0", que NUNCA foi um
+// IGSID de verdade. A Meta estava certa o tempo todo em rejeitar esse
+// valor — o erro nunca foi enganoso, nem sobre a sintaxe de expansão; a
+// troca pra "fields=participants" simples era desnecessária pra resolver
+// ESSE erro especificamente (mas não tem motivo pra reverter — é a mesma
+// forma comprovada da chamada de username). Fica registrado aqui pra não
+// reabrir essa mesma investigação errada de novo no futuro.
 export async function getInstagramConversationParticipantProfilePicture(
   accessToken: string,
   igUserId: string,
   leadIgScopedId: string
 ): Promise<{ profilePictureUrl?: string }> {
+  if (!isRealIgScopedId(leadIgScopedId)) {
+    console.log(`[vexo:profile-picture-lookup] igScopedId=${leadIgScopedId} não é um IGSID numérico real (provável lead de seed/demo) — pulado, sem chamar a API.`);
+    return { profilePictureUrl: undefined };
+  }
+
   const url = new URL(`${IG_GRAPH_BASE}/${igUserId}/conversations`);
   url.searchParams.set("platform", "instagram");
   url.searchParams.set("user_id", leadIgScopedId);
