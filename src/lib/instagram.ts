@@ -237,23 +237,31 @@ export async function getInstagramConversationParticipantUsername(
 
 // Mesmo endpoint/edge de getInstagramConversationParticipantUsername acima
 // (Conversations API, /{ig-user-id}/conversations), CHAMADA SEPARADA — de
-// propósito, não junto na mesma requisição. Pedir explicitamente o subcampo
-// "profile_picture_url" (sintaxe de expansão participants{...}, diferente
-// do "fields=participants" simples usado pro username, que já devolve id +
-// username por padrão sem precisar pedir) é um campo cuja existência NÃO
-// foi confirmada contra uma chamada real — ao contrário do username acima,
-// que já rodou em produção com sucesso. Mantendo isso numa função/chamada
-// separada, um "profile_picture_url" inválido (erro 400 da Graph API) nunca
-// arrisca quebrar o lookup de username, que já está confirmado funcionando.
+// propósito, não junto na mesma requisição (assim um problema aqui nunca
+// arrisca quebrar o lookup de username, que já está confirmado funcionando
+// em produção).
 //
-// IMPORTANTE: não deu pra confirmar contra uma chamada real (mesma limitação
-// de sempre — sem token de produção, developers.facebook.com bloqueado pelo
-// proxy de rede daqui). Nome do campo é a melhor suposição a partir do
-// padrão já usado pela própria Meta pro perfil de uma IG Business Account
-// (campos "id,username,profile_picture_url") e de relatos de terceiros
-// sobre esse mesmo edge — precisa ser confirmada contra uma conversa real
-// depois do deploy. Ver [vexo:profile-picture-lookup]/
-// [vexo:profile-picture-backfill] no log, e o resultado direto no Painel.
+// BUG REAL corrigido: a primeira versão pedia "fields=participants{id,
+// profile_picture_url}" (sintaxe de expansão de subcampo) e toda chamada
+// falhava com "(#100) Param user_id must be a numeric string" — um erro
+// ENGANOSO da Graph API. Confirmado (construindo as duas URLs localmente e
+// comparando byte a byte) que o "user_id" sai IDÊNTICO nas duas chamadas,
+// corretamente formatado nos dois casos — o erro não tem nada a ver com
+// esse parâmetro de verdade. A sintaxe "participants{...}" (que vira
+// "participants%7Bid%2Cprofile_picture_url%7D" na URL) é o que está
+// confundindo o parser da Graph API pra esse edge específico, e ela relata
+// o erro num parâmetro completamente errado em vez do real. Correção:
+// pedir só "fields=participants" simples, exatamente igual à chamada de
+// username (que já devolve "username" por padrão sem precisar de sintaxe
+// de expansão nenhuma) — em vez de pedir "profile_picture_url"
+// explicitamente, lê esse campo da MESMA resposta padrão, se a Meta
+// incluir ele de graça (como já faz com "username").
+//
+// IMPORTANTE: ainda não confirmado contra uma chamada real se
+// "profile_picture_url" realmente vem no objeto padrão de participante —
+// só descartamos a sintaxe de expansão quebrada, que é o que garantidamente
+// causava o erro 400. Precisa ser confirmado depois do próximo deploy. Ver
+// [vexo:profile-picture-lookup]/[vexo:profile-picture-backfill] no log.
 export async function getInstagramConversationParticipantProfilePicture(
   accessToken: string,
   igUserId: string,
@@ -262,7 +270,7 @@ export async function getInstagramConversationParticipantProfilePicture(
   const url = new URL(`${IG_GRAPH_BASE}/${igUserId}/conversations`);
   url.searchParams.set("platform", "instagram");
   url.searchParams.set("user_id", leadIgScopedId);
-  url.searchParams.set("fields", "participants{id,profile_picture_url}");
+  url.searchParams.set("fields", "participants");
   url.searchParams.set("access_token", accessToken);
 
   const res = await fetch(url.toString());
