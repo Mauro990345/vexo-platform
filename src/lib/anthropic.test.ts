@@ -63,21 +63,48 @@ describe("classifyConversation", () => {
     expect(signal.needsHumanReason).toBe("pediu humano");
   });
 
-  it("expõe o motivo da recusa de follow-up (suggestedFollowUpReason) — bug real: suggestedFollowUp=false repetido em conversas triviais, sem nenhum log do PORQUÊ até esta correção", async () => {
+  // Critério invertido (relato real: 5 conversas silenciosas travadas — Lucas
+  // Barbosa, Dra. Juliana Neves, Revest Floor, Mauro, Mauro Silva — nenhuma
+  // com recusa explícita do lead, só silêncio ou saudação sem resposta, e
+  // mesmo assim o classificador recusava reengajamento). O padrão agora é
+  // reengajar; só uma mensagem negativa explícita do PRÓPRIO lead justifica
+  // suggestedFollowUp=false (ver CLASSIFIER_SYSTEM_PROMPT). Este teste só
+  // documenta o contrato de parsing com essas respostas — não prova o
+  // comportamento do prompt num modelo real, que exige uma chamada de LLM
+  // de verdade pra validar.
+  it("expõe o motivo do reengajamento (suggestedFollowUpReason) mesmo quando o lead só sumiu após uma saudação, sem recusa explícita", async () => {
     const provider = fakeProvider({
       complete: vi.fn(async () => ({
         text:
-          '{"needsHuman": false, "summary": "troca de saudação, sem sinal comercial", "suggestedFollowUp": false, ' +
-          '"suggestedFollowUpReason": "lead só cumprimentou, sem demonstrar interesse comercial nenhum ainda"}',
+          '{"needsHuman": false, "summary": "troca de saudação, lead sumiu sem responder", "suggestedFollowUp": true, ' +
+          '"suggestedFollowUpReason": "lead só cumprimentou e parou de responder, sem nenhum sinal negativo explícito — silêncio sozinho não é recusa"}',
       })),
     });
 
     const signal = await classifyConversation([{ role: "user", content: "Oi, tudo bem?" }], provider);
 
-    expect(signal.suggestedFollowUp).toBe(false);
+    expect(signal.suggestedFollowUp).toBe(true);
     expect(signal.suggestedFollowUpReason).toBe(
-      "lead só cumprimentou, sem demonstrar interesse comercial nenhum ainda"
+      "lead só cumprimentou e parou de responder, sem nenhum sinal negativo explícito — silêncio sozinho não é recusa"
     );
+  });
+
+  it("não reengaja quando o lead deixou um sinal negativo explícito (pediu pra parar de mandar mensagem)", async () => {
+    const provider = fakeProvider({
+      complete: vi.fn(async () => ({
+        text:
+          '{"needsHuman": false, "summary": "lead pediu pra não receber mais mensagens", "suggestedFollowUp": false, ' +
+          '"suggestedFollowUpReason": "lead disse \\"para de mandar mensagem\\" — sinal negativo explícito"}',
+      })),
+    });
+
+    const signal = await classifyConversation(
+      [{ role: "user", content: "para de mandar mensagem, não tenho interesse" }],
+      provider
+    );
+
+    expect(signal.suggestedFollowUp).toBe(false);
+    expect(signal.suggestedFollowUpReason).toContain("sinal negativo explícito");
   });
 
   it("não escalona (needsHuman: false) se a resposta não for JSON válido, e marca o motivo como erro de parsing (distinguível de uma recusa genuína do modelo)", async () => {
