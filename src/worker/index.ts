@@ -4,6 +4,7 @@ import { processReminders } from "@/lib/reminders";
 import { processFollowUps } from "@/lib/follow-up";
 import { sendWeeklySummaries } from "@/lib/weekly-summary";
 import { syncAllGoogleCalendars } from "@/lib/google-calendar-sync";
+import { backfillLeadInstagramUsernames } from "@/lib/lead-username-backfill";
 
 // Worker de background do VEXO — processo separado (serviço próprio no
 // Railway) que compartilha o mesmo banco Postgres da aplicação web.
@@ -50,6 +51,12 @@ cron.schedule("0 9 * * 5", () => runSafely("sendWeeklySummaries", sendWeeklySumm
 // é tempo real crítico) e bem mais simples que webhook (ver
 // src/lib/google-calendar-sync.ts).
 cron.schedule("*/5 * * * *", () => runSafely("syncGoogleCalendars", syncAllGoogleCalendars));
+
+// Backfill do @ do Instagram (Lead.igUsername) pra leads que já existiam
+// antes desse lookup existir (ver comentário grande em
+// lead-username-backfill.ts) — a cada 10 minutos, lote pequeno por ciclo,
+// converge sozinho depois de alguns ciclos e vira no-op.
+cron.schedule("*/10 * * * *", () => runSafely("backfillLeadInstagramUsernames", backfillLeadInstagramUsernames));
 
 // Roda uma primeira vez imediatamente ao subir, para não esperar o primeiro tick.
 runSafely("dispatchDueMessages", dispatchDueMessages);

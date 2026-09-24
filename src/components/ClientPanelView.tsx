@@ -8,6 +8,7 @@ import { AppointmentStatusBadge } from "@/components/AppointmentStatusBadge";
 import { NoShowButton } from "@/components/NoShowButton";
 import { ChannelStatusPill } from "@/components/ChannelStatusPill";
 import { normalizeBrazilianWhatsappNumber } from "@/lib/whatsapp";
+import { leadDisplayLabel } from "@/lib/lead-display";
 
 // Marcar "Não compareceu" só faz sentido pra agendamento ainda em aberto —
 // já compareceu ou já foi cancelado não tem o que alternar aqui.
@@ -201,18 +202,8 @@ export async function ClientPanelView({
                         />
                       )}
                       <p className="min-w-0 truncate text-sm font-medium">
-                        {a.lead ? a.lead.name ?? a.lead.igUsername ?? "Lead" : a.manualTitle ?? "Agendamento"}
+                        {leadDisplayLabel(a.lead, a.manualTitle)}
                       </p>
-                      {/* @usuário do Instagram, junto do nome — transparência pra
-                          clínica conseguir ver e pesquisar exatamente quais contas
-                          dela estão sendo abordadas. Só quando name existe (senão o
-                          <p> acima já mostra o igUsername sozinho, como fallback,
-                          e repetir aqui seria redundante). Nunca truncado (shrink-0,
-                          sem `truncate`) — é a identificação exata da conta, cortar
-                          no meio anularia o propósito de conferência. */}
-                      {a.lead?.name && a.lead.igUsername && (
-                        <span className="shrink-0 text-caption text-vexo-muted">@{a.lead.igUsername}</span>
-                      )}
                     </div>
                     <div className="mt-1 flex items-center gap-2 text-caption text-vexo-muted">
                       <span>

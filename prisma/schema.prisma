@@ -268,6 +268,19 @@ model Lead {
   // campo — a primeira mensagem seguinte ainda tenta uma vez.
   nameLookupAttempted Boolean @default(false)
 
+  // Mesmo padrão de nameLookupAttempted acima, só que pra
+  // getInstagramConversationParticipantUsername (instagram.ts) — endpoint
+  // DIFERENTE (Conversations API, não o lookup de perfil por IGSID), único
+  // jeito encontrado de obter o @ real do Instagram: o payload do webhook
+  // nunca traz, e o lookup de perfil por IGSID só expõe "name" (restrição
+  // de privacidade da Meta pra esse node específico, ver comentário em
+  // getInstagramUserProfile). @default(false) permite backfill automático
+  // pra leads já existentes sem username — ver backfillLeadInstagramUsernames,
+  // src/lib/lead-username-backfill.ts, e a nova tentativa em
+  // handleInboundInstagramMessage (conversation-pipeline.ts) a cada
+  // mensagem nova enquanto não tiver sido tentado.
+  usernameLookupAttempted Boolean @default(false)
+
   conversations Conversation[]
   appointments  Appointment[]
 
