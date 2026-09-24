@@ -270,19 +270,33 @@ export async function getInstagramConversationParticipantUsername(
 // em produção).
 //
 // Histórico da investigação de "(#100) Param user_id must be a numeric
-// string": a PRIMEIRA versão pedia "fields=participants{id,
-// profile_picture_url}" (sintaxe de expansão de subcampo), e uma correção
-// trocou pra "fields=participants" simples (igual ao username) por
-// suspeitar que a sintaxe de expansão confundia o parser da Graph API. O
-// erro continuou IDÊNTICO mesmo depois — a causa real (ver
-// isRealIgScopedId acima) é a clínica piloto ter 40 leads de demonstração
-// (prisma/seed-demo.ts) com igScopedId tipo "demo-new-0", que NUNCA foi um
-// IGSID de verdade. A Meta estava certa o tempo todo em rejeitar esse
-// valor — o erro nunca foi enganoso, nem sobre a sintaxe de expansão; a
-// troca pra "fields=participants" simples era desnecessária pra resolver
-// ESSE erro especificamente (mas não tem motivo pra reverter — é a mesma
-// forma comprovada da chamada de username). Fica registrado aqui pra não
-// reabrir essa mesma investigação errada de novo no futuro.
+// string" — 3 rodadas até chegar aqui:
+//   1. PR #56: pedia "fields=participants{id,profile_picture_url}"
+//      (sintaxe de expansão de subcampo) — todo lead testado dava esse
+//      erro.
+//   2. PR #57: troquei pra "fields=participants" simples (igual à chamada
+//      de username), suspeitando que a sintaxe de expansão confundia o
+//      parser da Graph API — o erro continuou IDÊNTICO.
+//   3. PR #59: causa raiz real encontrada (ver isRealIgScopedId acima) — a
+//      clínica piloto tem 40 leads de demonstração (prisma/seed-demo.ts)
+//      com igScopedId tipo "demo-new-0", nunca um IGSID de verdade. A Meta
+//      estava certa o tempo todo em rejeitar esse valor.
+// Consequência importante, só percebida DEPOIS da correção #3: a sintaxe
+// de expansão da rodada 1 NUNCA foi testada contra um IGSID real — toda
+// vez que rodou, estava testando contra os leads de demo, então aquele
+// erro nunca provou nada sobre a sintaxe em si. A troca pra "fields=
+// participants" simples na rodada 2 foi um diagnóstico errado (baseado em
+// comparação de URL, não em teste real) — e essa versão simples, agora sim
+// testada de verdade contra 8 leads reais (deploy da correção #3, log
+// [vexo:profile-picture-backfill]), respondeu HTTP 200 sem erro nenhum,
+// mas SEM "profile_picture_url" no objeto padrão de participante — ao
+// contrário de "username", que vem de graça. Ou seja: a versão simples
+// definitivamente não é suficiente; a pergunta real (sintaxe de expansão
+// funciona pra pedir esse campo explicitamente?) nunca foi respondida de
+// verdade. Voltando pra "participants{id,profile_picture_url}" agora, com
+// a garantia de que só roda contra IGSIDs reais — primeiro teste limpo
+// dessa sintaxe. Se ainda falhar, é sinal de verdade sobre a sintaxe (ou
+// o campo), não mais confundível com o bug dos leads de demo.
 export async function getInstagramConversationParticipantProfilePicture(
   accessToken: string,
   igUserId: string,
@@ -296,7 +310,7 @@ export async function getInstagramConversationParticipantProfilePicture(
   const url = new URL(`${IG_GRAPH_BASE}/${igUserId}/conversations`);
   url.searchParams.set("platform", "instagram");
   url.searchParams.set("user_id", leadIgScopedId);
-  url.searchParams.set("fields", "participants");
+  url.searchParams.set("fields", "participants{id,profile_picture_url}");
   url.searchParams.set("access_token", accessToken);
 
   const res = await fetch(url.toString());
