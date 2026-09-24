@@ -22,6 +22,20 @@ function toDateParam(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
+// Períodos do seletor "Abordados / Em conversa / Agendaram" (ver
+// ApproachMetricsToggle) — 21 dias adicionado pra cobrir um piloto de teste
+// rodando por esse período inteiro (revisão do funil completo com a
+// clínica no fim do teste); 14/28 dias junto por serem os mesmos múltiplos
+// de semana que já faziam sentido no meio do caminho. N dias sempre inclui
+// hoje: de addDays(todayStart, -(N-1)) até addDays(todayStart, 1).
+const PANEL_PERIODS: { days: number; label: string }[] = [
+  { days: 1, label: "Hoje" },
+  { days: 7, label: "7 dias" },
+  { days: 14, label: "14 dias" },
+  { days: 21, label: "21 dias" },
+  { days: 28, label: "28 dias" },
+];
+
 // Corpo do Painel do cliente — extraído de /dashboard pra ser reaproveitado
 // por DUAS visões internas do CRM: "Ver painel de [clínica]"
 // (/crm/painel-cliente/[id], sem sidebar nenhuma, aberta em nova aba a
@@ -56,12 +70,11 @@ export async function ClientPanelView({
 }) {
   const now = new Date();
   const todayStart = startOfDay(now);
-  const last7Start = addDays(todayStart, -6);
 
   const parsedRef = week ? new Date(week) : now;
   const weekStart = startOfWeek(Number.isNaN(parsedRef.getTime()) ? now : parsedRef);
 
-  const [clinic, today, last7Days, appointments, dailyApproached] = await Promise.all([
+  const [clinic, periods, appointments, dailyApproached] = await Promise.all([
     prisma.clinic.findUniqueOrThrow({
       where: { id: clinicId },
       select: {
@@ -71,8 +84,17 @@ export async function ClientPanelView({
         googleCalendarAccount: { select: { id: true } },
       },
     }),
-    getClinicMetrics(clinicId, todayStart, addDays(todayStart, 1)),
-    getClinicMetrics(clinicId, last7Start, addDays(todayStart, 1)),
+    // Cada período já sai emparelhado com suas próprias métricas (em vez de
+    // duas listas separadas e um índice pra juntar depois) — o TS não tem
+    // como garantir que duas listas mapeadas do mesmo array na mesma ordem
+    // continuam alinhadas depois de passar por Promise.all, então preferia
+    // marcar periodMetrics[i] como possivelmente undefined.
+    Promise.all(
+      PANEL_PERIODS.map(async (p) => ({
+        ...p,
+        metrics: await getClinicMetrics(clinicId, addDays(todayStart, -(p.days - 1)), addDays(todayStart, 1)),
+      }))
+    ),
     prisma.appointment.findMany({
       where: { clinicId },
       include: { lead: true },
@@ -157,7 +179,7 @@ export async function ClientPanelView({
               </div>
             </div>
 
-            <ApproachMetricsToggle today={today} last7Days={last7Days} />
+            <ApproachMetricsToggle periods={periods} />
           </div>
 
           {/* Coluna direita: agendamentos */}
@@ -170,7 +192,7 @@ export async function ClientPanelView({
                   className="flex items-center justify-between gap-2 rounded-lg border border-vexo-border bg-vexo-surface p-2.5"
                 >
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex min-w-0 items-center gap-1.5">
                       {a.lead && (
                         <AtSign
                           className="h-3 w-3 shrink-0 text-vexo-muted"
@@ -178,9 +200,19 @@ export async function ClientPanelView({
                           aria-label="Agendado pela IA (Instagram)"
                         />
                       )}
-                      <p className="truncate text-sm font-medium">
+                      <p className="min-w-0 truncate text-sm font-medium">
                         {a.lead ? a.lead.name ?? a.lead.igUsername ?? "Lead" : a.manualTitle ?? "Agendamento"}
                       </p>
+                      {/* @usuário do Instagram, junto do nome — transparência pra
+                          clínica conseguir ver e pesquisar exatamente quais contas
+                          dela estão sendo abordadas. Só quando name existe (senão o
+                          <p> acima já mostra o igUsername sozinho, como fallback,
+                          e repetir aqui seria redundante). Nunca truncado (shrink-0,
+                          sem `truncate`) — é a identificação exata da conta, cortar
+                          no meio anularia o propósito de conferência. */}
+                      {a.lead?.name && a.lead.igUsername && (
+                        <span className="shrink-0 text-caption text-vexo-muted">@{a.lead.igUsername}</span>
+                      )}
                     </div>
                     <div className="mt-1 flex items-center gap-2 text-caption text-vexo-muted">
                       <span>
