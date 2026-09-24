@@ -198,16 +198,12 @@ export async function getInstagramUserProfile(
 // entrada (onde saber quem é quem faz sentido pro negócio), diferente do
 // lookup de perfil solto por ID (que é a superfície restrita).
 //
-// IMPORTANTE: não deu pra confirmar isso contra uma chamada real — este
-// ambiente de desenvolvimento não tem token de produção nem acesso a
-// developers.facebook.com (bloqueado pelo proxy de rede daqui). A forma da
-// resposta abaixo é best-effort a partir da documentação oficial (mesma URL
-// do produto que o VEXO usa) e de implementações de terceiros que usam esse
-// mesmo endpoint — precisa ser confirmada contra uma conversa real depois do
-// deploy. Ver [vexo:username-lookup] no log do worker/web, e o resultado
-// direto no Painel (/crm/clinicas/[id]/painel) uma vez que algum lead novo
-// (ou o backfill, ver backfillLeadInstagramUsernames em
-// src/lib/lead-username-backfill.ts) rodar de verdade.
+// CONFIRMADO em produção — o @ aparece certinho nos cards do Painel depois
+// do deploy desta função (bug report original: "o @ apareceu certinho").
+// Fica só como referência a URL da doc oficial e o mecanismo de log
+// ([vexo:username-lookup]/[vexo:username-backfill]), já que foi assim que
+// deu pra confirmar sem acesso a developers.facebook.com nem token de
+// produção neste ambiente de desenvolvimento.
 //
 // Filtra a conversa do lead específico via ?user_id= (documentado pra achar
 // a conversa com uma pessoa específica, sem paginar client-side por todas
@@ -237,6 +233,49 @@ export async function getInstagramConversationParticipantUsername(
   const participants = data.data?.[0]?.participants?.data ?? [];
   const leadParticipant = participants.find((p) => p.id !== igUserId);
   return { username: leadParticipant?.username || undefined };
+}
+
+// Mesmo endpoint/edge de getInstagramConversationParticipantUsername acima
+// (Conversations API, /{ig-user-id}/conversations), CHAMADA SEPARADA — de
+// propósito, não junto na mesma requisição. Pedir explicitamente o subcampo
+// "profile_picture_url" (sintaxe de expansão participants{...}, diferente
+// do "fields=participants" simples usado pro username, que já devolve id +
+// username por padrão sem precisar pedir) é um campo cuja existência NÃO
+// foi confirmada contra uma chamada real — ao contrário do username acima,
+// que já rodou em produção com sucesso. Mantendo isso numa função/chamada
+// separada, um "profile_picture_url" inválido (erro 400 da Graph API) nunca
+// arrisca quebrar o lookup de username, que já está confirmado funcionando.
+//
+// IMPORTANTE: não deu pra confirmar contra uma chamada real (mesma limitação
+// de sempre — sem token de produção, developers.facebook.com bloqueado pelo
+// proxy de rede daqui). Nome do campo é a melhor suposição a partir do
+// padrão já usado pela própria Meta pro perfil de uma IG Business Account
+// (campos "id,username,profile_picture_url") e de relatos de terceiros
+// sobre esse mesmo edge — precisa ser confirmada contra uma conversa real
+// depois do deploy. Ver [vexo:profile-picture-lookup]/
+// [vexo:profile-picture-backfill] no log, e o resultado direto no Painel.
+export async function getInstagramConversationParticipantProfilePicture(
+  accessToken: string,
+  igUserId: string,
+  leadIgScopedId: string
+): Promise<{ profilePictureUrl?: string }> {
+  const url = new URL(`${IG_GRAPH_BASE}/${igUserId}/conversations`);
+  url.searchParams.set("platform", "instagram");
+  url.searchParams.set("user_id", leadIgScopedId);
+  url.searchParams.set("fields", "participants{id,profile_picture_url}");
+  url.searchParams.set("access_token", accessToken);
+
+  const res = await fetch(url.toString());
+  if (!res.ok) {
+    throw new Error(`Falha ao buscar conversa do lead pra achar a foto de perfil (HTTP ${res.status}): ${await res.text()}`);
+  }
+
+  const data = (await res.json()) as {
+    data?: { participants?: { data?: { id: string; profile_picture_url?: string }[] } }[];
+  };
+  const participants = data.data?.[0]?.participants?.data ?? [];
+  const leadParticipant = participants.find((p) => p.id !== igUserId);
+  return { profilePictureUrl: leadParticipant?.profile_picture_url || undefined };
 }
 
 // -----------------------------------------------------------------------
