@@ -150,6 +150,22 @@ model InstagramAccount {
   // mensagem normalmente, o ID salvo já está certo.
   webhookIdVerified Boolean @default(true)
 
+  // Conexão SEGUNDA e OPCIONAL, separada da conexão principal acima —
+  // "Login do Facebook para Empresas" (produto DIFERENTE do "Instagram API
+  // with Instagram Login" usado pra tudo mais neste model), só pra habilitar
+  // a Business Discovery API (fields=business_discovery.username(...)), que
+  // é exclusiva desse produto — não existe pelo Instagram Login (ver
+  // investigação grande em getInstagramConversationParticipantProfilePicture,
+  // instagram.ts, e a decisão de reintroduzir esse fluxo especificamente
+  // pra foto de perfil, já que a Conversations API confirmadamente não
+  // expõe esse dado). Token de PÁGINA do Facebook, não de conta do
+  // Instagram — por isso campos próprios, nunca reaproveita accessTokenEnc
+  // acima. NULL = clínica não conectou (recurso é só um bônus visual, o
+  // resto do VEXO funciona sem isso).
+  businessDiscoveryAccessTokenEnc String?   @db.Text
+  businessDiscoveryPageId         String?
+  businessDiscoveryConnectedAt    DateTime?
+
   connectedAt DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }

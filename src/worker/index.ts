@@ -5,6 +5,7 @@ import { processFollowUps } from "@/lib/follow-up";
 import { sendWeeklySummaries } from "@/lib/weekly-summary";
 import { syncAllGoogleCalendars } from "@/lib/google-calendar-sync";
 import { backfillLeadInstagramUsernames } from "@/lib/lead-username-backfill";
+import { refreshLeadProfilePictures } from "@/lib/lead-profile-picture-backfill";
 
 // Worker de background do VEXO — processo separado (serviço próprio no
 // Railway) que compartilha o mesmo banco Postgres da aplicação web.
@@ -75,17 +76,18 @@ cron.schedule("*/5 * * * *", () => runSafely("syncGoogleCalendars", syncAllGoogl
 // converge sozinho depois de alguns ciclos e vira no-op.
 cron.schedule("*/10 * * * *", () => runSafely("backfillLeadInstagramUsernames", backfillLeadInstagramUsernames));
 
-// Foto de perfil do Instagram (refreshLeadProfilePictures,
-// lead-profile-picture-backfill.ts) — DESATIVADA. Investigação exaustiva
-// (ver o comentário "CONCLUSÃO DEFINITIVA" em
-// getInstagramConversationParticipantProfilePicture, instagram.ts)
-// confirmou que nenhuma das três avenidas plausíveis (Conversations API
-// simples, com expansão de subcampo, ou o payload bruto do webhook) expõe
-// esse dado pra este produto da Meta. Manter esse job rodando só geraria
-// chamada de API desperdiçada a cada 24h por lead, pra um resultado que já
-// sabemos de antemão. O arquivo/função continuam existindo (não removidos)
-// pro caso de a Meta um dia passar a expor esse campo — só a chamada
-// automática que foi desligada.
+// Foto de perfil do Instagram — REATIVADA, agora via Business Discovery
+// (conexão SEPARADA e OPCIONAL, ver comentário grande em instagram.ts e
+// em conexoes/page.tsx) em vez da Conversations API do Instagram Login,
+// que uma investigação exaustiva anterior confirmou não expor esse dado
+// (ver "CONCLUSÃO DEFINITIVA" em
+// getInstagramConversationParticipantProfilePicture, instagram.ts — ainda
+// lá só de referência histórica, essa função não é mais chamada). Mesma
+// cadência de sempre, refresh contínuo por janela de tempo (não converge —
+// ver comentário grande em lead-profile-picture-backfill.ts). Clínica que
+// não conectar a Business Discovery simplesmente não gera custo nenhum
+// (skip rápido, ver refreshLeadProfilePictures).
+cron.schedule("*/10 * * * *", () => runSafely("refreshLeadProfilePictures", refreshLeadProfilePictures));
 
 // Roda uma primeira vez imediatamente ao subir, para não esperar o primeiro tick.
 runSafely("dispatchDueMessages", dispatchDueMessages);

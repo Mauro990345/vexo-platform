@@ -14,6 +14,7 @@ import {
   resubscribeInstagramWebhookAction,
   checkInstagramWebhookSubscriptionAction,
   setInstagramWebhookIdAction,
+  disconnectBusinessDiscoveryAction,
 } from "../../actions";
 
 export const dynamic = "force-dynamic";
@@ -148,6 +149,7 @@ function ConnectionCard({
 const CHANNEL_NAMES: Record<string, string> = {
   instagram: "Instagram",
   "google-calendar": "Google Calendar",
+  "business-discovery": "Business Discovery",
 };
 
 export default async function ClinicConexoesPage({
@@ -174,6 +176,7 @@ export default async function ClinicConexoesPage({
 
   const base = `/crm/clinicas/${clinic.id}`;
   const instagramConnected = Boolean(clinic.instagramAccount);
+  const businessDiscoveryConnected = Boolean(clinic.instagramAccount?.businessDiscoveryAccessTokenEnc);
   const googleConnected = Boolean(clinic.googleCalendarAccount);
 
   // Link pendente (não usado, não expirado) por canal — se existir, o card
@@ -355,6 +358,43 @@ export default async function ClinicConexoesPage({
           }
         />
       </div>
+
+      {instagramConnected && (
+        <div className="rounded-xl border border-vexo-border bg-vexo-surface p-3.5 text-xs">
+          <p className="font-semibold text-vexo-fg">Foto de perfil dos leads (Business Discovery, opcional)</p>
+          <p className="mt-1 text-vexo-muted">
+            Conexão SEPARADA da principal acima, via Login do Facebook (não Instagram) — é o único
+            jeito que a Meta oferece pra buscar a foto de perfil de um lead a partir do @ dele. Nunca
+            afeta o envio/recebimento de mensagem, que continua 100% pela conexão principal. Só
+            funciona pra leads com conta Business/Creator (não perfil pessoal comum) — restrição da
+            própria Meta. Precisa de uma Página do Facebook vinculada a esta conta do Instagram
+            (Meta Business Suite {"> "}Configurações {"> "}Contas vinculadas).
+          </p>
+          {businessDiscoveryConnected ? (
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <span className="flex items-center gap-1.5 text-card text-vexo-muted">
+                <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-vexo-success" />
+                Conectado
+              </span>
+              <form action={disconnectBusinessDiscoveryAction.bind(null, clinic.id)}>
+                <button
+                  type="submit"
+                  className="rounded-lg border border-vexo-error/40 px-2.5 py-1 text-card font-medium text-vexo-error hover:bg-vexo-error/10"
+                >
+                  Desconectar
+                </button>
+              </form>
+            </div>
+          ) : (
+            <div className="mt-2">
+              <ConnectOAuthButton
+                href={`/api/oauth/business-discovery/start?clinicId=${clinic.id}`}
+                label="Conectar Business Discovery"
+              />
+            </div>
+          )}
+        </div>
+      )}
 
       {instagramConnected && (
         <div className="rounded-xl border border-vexo-border bg-vexo-surface p-3.5 text-xs">
