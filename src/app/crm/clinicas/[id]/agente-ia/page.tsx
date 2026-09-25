@@ -11,6 +11,7 @@ import {
 import { updateAiSettings, updateFollowUpWindow } from "@/app/crm/(global)/follow-up/actions";
 import { PromptTextarea } from "@/components/PromptTextarea";
 import { ConfirmSubmitButton } from "@/components/ConfirmSubmitButton";
+import { CollapsibleSection } from "@/components/CollapsibleSection";
 
 export const dynamic = "force-dynamic";
 
@@ -59,212 +60,205 @@ export default async function ClinicAiAgentPage({ params }: { params: { id: stri
   const windowEnd = minutesToTime(followUpSettings?.windowEndMinute ?? 18 * 60);
 
   return (
-    <div className="max-w-3xl space-y-4">
+    <div className="max-w-3xl space-y-3">
       <h1 className="text-base font-semibold tracking-tight">Agente de IA</h1>
 
-      <form
-        action={updateAiAgentSettings.bind(null, clinic.id)}
-        className="space-y-4 rounded-xl border border-vexo-border bg-vexo-surface p-3.5"
+      <CollapsibleSection
+        title="Prompt de conversação da IA"
+        description="Define como a IA conversa com o lead desta clínica, além do vídeo e da frase de confirmação de agendamento."
       >
-        <div>
-          <label className="mb-1 block text-sm font-semibold" htmlFor="aiSystemPrompt">
-            Prompt de conversação da IA
-          </label>
-          <p className="mb-1.5 text-caption text-vexo-muted">
-            O "cérebro" da IA — define como ela conversa com o lead nesta clínica.
-          </p>
-          <PromptTextarea
-            id="aiSystemPrompt"
-            name="aiSystemPrompt"
-            defaultValue={clinic.aiSystemPrompt ?? ""}
-            placeholder="Cole aqui o prompt fornecido pelo Mauro para esta clínica..."
-          />
-        </div>
-
-        <div className="space-y-3 border-t border-vexo-border pt-3.5">
-          <h2 className="text-caption font-medium uppercase tracking-wide text-vexo-muted">
-            Configurações auxiliares
-          </h2>
-
+        <form action={updateAiAgentSettings.bind(null, clinic.id)} className="space-y-4">
           <div>
-            <label className="mb-1 block text-xs text-vexo-muted" htmlFor="confirmationVideoFile">
-              Vídeo de confirmação de agendamento (reforça comparecimento)
+            <label className="mb-1 block text-sm font-semibold" htmlFor="aiSystemPrompt">
+              Prompt de conversação da IA
             </label>
-            {clinic.confirmationVideoUrl && (
-              <div className="mb-1.5 flex items-center justify-between gap-2 rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5">
-                <a
-                  href={clinic.confirmationVideoUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="min-w-0 truncate text-xs text-vexo-accent hover:underline"
-                >
-                  Ver vídeo atual
-                </a>
-                <label className="flex shrink-0 items-center gap-1 text-card text-vexo-muted">
-                  <input type="checkbox" name="removeConfirmationVideo" className="rounded border-vexo-border" />
-                  Remover
-                </label>
-              </div>
-            )}
-            <input type="hidden" name="currentConfirmationVideoUrl" value={clinic.confirmationVideoUrl ?? ""} />
-            <input
-              id="confirmationVideoFile"
-              name="confirmationVideoFile"
-              type="file"
-              accept="video/*"
-              className="block w-full text-xs text-vexo-muted file:mr-2 file:rounded-lg file:border file:border-vexo-border file:bg-vexo-bg file:px-2.5 file:py-1.5 file:text-xs file:text-vexo-fg hover:file:border-vexo-accent"
+            <PromptTextarea
+              id="aiSystemPrompt"
+              name="aiSystemPrompt"
+              defaultValue={clinic.aiSystemPrompt ?? ""}
+              placeholder="Cole aqui o prompt fornecido pelo Mauro para esta clínica..."
             />
-            <p className="mt-1 text-caption text-vexo-muted">
-              {clinic.confirmationVideoUrl ? "Escolher um novo arquivo substitui o atual. " : ""}
-              MP4, MOV ou WEBM — até 25MB. Enviado automaticamente pelo Instagram assim que um
-              agendamento é confirmado na conversa — não é preciso disparar manualmente.
-            </p>
           </div>
 
-          <div>
-            <label className="mb-1 block text-xs text-vexo-muted" htmlFor="confirmationVideoCaption">
-              Frase que acompanha o vídeo de confirmação
-            </label>
-            <input
-              id="confirmationVideoCaption"
-              name="confirmationVideoCaption"
-              defaultValue={clinic.confirmationVideoCaption ?? ""}
-              placeholder="Ex: Vou te mandar um vídeo rápido mostrando como é o nosso atendimento 🙂"
-              className="w-full rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5 text-xs outline-none focus:border-vexo-accent"
-            />
-            <p className="mt-1 text-caption text-vexo-muted">
-              Mandada como mensagem de texto separada, logo antes do vídeo (o Instagram não deixa
-              combinar texto e vídeo numa mensagem só). Vazio usa a frase padrão acima.
-            </p>
-          </div>
-        </div>
+          <div className="space-y-3 border-t border-vexo-border pt-3.5">
+            <h3 className="text-caption font-medium uppercase tracking-wide text-vexo-muted">
+              Configurações auxiliares
+            </h3>
 
-        <button
-          type="submit"
-          className="rounded-lg border border-vexo-accent px-2.5 py-1.5 text-xs font-medium text-vexo-accent hover:bg-vexo-accent/10"
-        >
-          Salvar configuração
-        </button>
-      </form>
+            <div>
+              <label className="mb-1 block text-xs text-vexo-muted" htmlFor="confirmationVideoFile">
+                Vídeo de confirmação de agendamento (reforça comparecimento)
+              </label>
+              {clinic.confirmationVideoUrl && (
+                <div className="mb-1.5 flex items-center justify-between gap-2 rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5">
+                  <a
+                    href={clinic.confirmationVideoUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="min-w-0 truncate text-xs text-vexo-accent hover:underline"
+                  >
+                    Ver vídeo atual
+                  </a>
+                  <label className="flex shrink-0 items-center gap-1 text-card text-vexo-muted">
+                    <input type="checkbox" name="removeConfirmationVideo" className="rounded border-vexo-border" />
+                    Remover
+                  </label>
+                </div>
+              )}
+              <input type="hidden" name="currentConfirmationVideoUrl" value={clinic.confirmationVideoUrl ?? ""} />
+              <input
+                id="confirmationVideoFile"
+                name="confirmationVideoFile"
+                type="file"
+                accept="video/*"
+                className="block w-full text-xs text-vexo-muted file:mr-2 file:rounded-lg file:border file:border-vexo-border file:bg-vexo-bg file:px-2.5 file:py-1.5 file:text-xs file:text-vexo-fg hover:file:border-vexo-accent"
+              />
+              <p className="mt-1 text-caption text-vexo-muted">
+                {clinic.confirmationVideoUrl ? "Escolher um novo arquivo substitui o atual. " : ""}
+                MP4, MOV ou WEBM — até 25MB. Enviado automaticamente pelo Instagram assim que um
+                agendamento é confirmado na conversa — não é preciso disparar manualmente.
+              </p>
+            </div>
 
-      <section className="space-y-2.5 border-t border-vexo-border pt-4">
-        <div>
-          <h2 className="text-sm font-semibold">Fotos de resultado (antes/depois)</h2>
-          <p className="mt-1 text-xs text-vexo-muted">
-            Fotos por procedimento, marcadas por categoria/tag. Durante a conversa, a IA busca a
-            foto da categoria mais próxima do que o lead demonstrou interesse e anexa na resposta
-            — no máximo uma por conversa.
-          </p>
-        </div>
+            <div>
+              <label className="mb-1 block text-xs text-vexo-muted" htmlFor="confirmationVideoCaption">
+                Frase que acompanha o vídeo de confirmação
+              </label>
+              <input
+                id="confirmationVideoCaption"
+                name="confirmationVideoCaption"
+                defaultValue={clinic.confirmationVideoCaption ?? ""}
+                placeholder="Ex: Vou te mandar um vídeo rápido mostrando como é o nosso atendimento 🙂"
+                className="w-full rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5 text-xs outline-none focus:border-vexo-accent"
+              />
+              <p className="mt-1 text-caption text-vexo-muted">
+                Mandada como mensagem de texto separada, logo antes do vídeo (o Instagram não deixa
+                combinar texto e vídeo numa mensagem só). Vazio usa a frase padrão acima.
+              </p>
+            </div>
+          </div>
 
-        <form
-          action={addResultPhoto.bind(null, clinic.id)}
-          className="flex flex-wrap items-end gap-2.5 rounded-xl border border-vexo-border bg-vexo-surface p-3.5"
-        >
-          <div className="min-w-0 flex-1">
-            <label className="mb-1 block text-xs text-vexo-muted" htmlFor="category">
-              Categoria/procedimento
-            </label>
-            <input
-              id="category"
-              name="category"
-              required
-              placeholder="ex: botox, preenchimento labial, harmonização facial"
-              className="w-full rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5 text-xs outline-none focus:border-vexo-accent"
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs text-vexo-muted" htmlFor="photoFile">
-              Foto
-            </label>
-            <input
-              id="photoFile"
-              name="photoFile"
-              type="file"
-              accept="image/*"
-              required
-              className="block text-xs text-vexo-muted file:mr-2 file:rounded-lg file:border file:border-vexo-border file:bg-vexo-bg file:px-2.5 file:py-1.5 file:text-xs file:text-vexo-fg hover:file:border-vexo-accent"
-            />
-          </div>
-          <div className="min-w-0 flex-1 basis-full">
-            <label className="mb-1 block text-xs text-vexo-muted" htmlFor="caption">
-              Mensagem/legenda (opcional — a IA manda esse texto antes da foto)
-            </label>
-            <textarea
-              id="caption"
-              name="caption"
-              rows={2}
-              placeholder='ex: "Separei um resultado real de um procedimento parecido com o que você quer"'
-              className="w-full rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5 text-xs outline-none focus:border-vexo-accent"
-            />
-          </div>
           <button
             type="submit"
             className="rounded-lg border border-vexo-accent px-2.5 py-1.5 text-xs font-medium text-vexo-accent hover:bg-vexo-accent/10"
           >
-            Adicionar foto
+            Salvar configuração
           </button>
         </form>
+      </CollapsibleSection>
 
-        {resultPhotos.length === 0 ? (
-          <p className="text-xs text-vexo-muted">Nenhuma foto cadastrada ainda.</p>
-        ) : (
-          <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
-            {resultPhotos.map((photo) => (
-              <div key={photo.id} className="overflow-hidden rounded-xl border border-vexo-border bg-vexo-surface">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={photo.imageUrl} alt={photo.category} className="h-32 w-full object-cover" />
-                <div className="space-y-1.5 p-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="min-w-0 truncate text-xs font-medium">{photo.category}</span>
-                    <form action={deleteResultPhoto.bind(null, clinic.id, photo.id)}>
-                      <ConfirmSubmitButton
-                        confirmMessage="Remover esta foto? Essa ação não pode ser desfeita."
-                        className="shrink-0 text-caption text-vexo-muted hover:text-red-500"
-                      >
-                        Remover
-                      </ConfirmSubmitButton>
+      <CollapsibleSection
+        title="Fotos de resultado (antes/depois)"
+        description="Fotos por procedimento, marcadas por categoria/tag. A IA busca a foto da categoria mais próxima do que o lead demonstrou interesse e anexa na resposta — no máximo uma por conversa."
+      >
+        <div className="space-y-2.5">
+          <form
+            action={addResultPhoto.bind(null, clinic.id)}
+            className="flex flex-wrap items-end gap-2.5 rounded-xl border border-dashed border-vexo-border p-3.5"
+          >
+            <div className="min-w-0 flex-1">
+              <label className="mb-1 block text-xs text-vexo-muted" htmlFor="category">
+                Categoria/procedimento
+              </label>
+              <input
+                id="category"
+                name="category"
+                required
+                placeholder="ex: botox, preenchimento labial, harmonização facial"
+                className="w-full rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5 text-xs outline-none focus:border-vexo-accent"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-vexo-muted" htmlFor="photoFile">
+                Foto
+              </label>
+              <input
+                id="photoFile"
+                name="photoFile"
+                type="file"
+                accept="image/*"
+                required
+                className="block text-xs text-vexo-muted file:mr-2 file:rounded-lg file:border file:border-vexo-border file:bg-vexo-bg file:px-2.5 file:py-1.5 file:text-xs file:text-vexo-fg hover:file:border-vexo-accent"
+              />
+            </div>
+            <div className="min-w-0 flex-1 basis-full">
+              <label className="mb-1 block text-xs text-vexo-muted" htmlFor="caption">
+                Mensagem/legenda (opcional — a IA manda esse texto antes da foto)
+              </label>
+              <textarea
+                id="caption"
+                name="caption"
+                rows={2}
+                placeholder='ex: "Separei um resultado real de um procedimento parecido com o que você quer"'
+                className="w-full rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5 text-xs outline-none focus:border-vexo-accent"
+              />
+            </div>
+            <button
+              type="submit"
+              className="rounded-lg border border-vexo-accent px-2.5 py-1.5 text-xs font-medium text-vexo-accent hover:bg-vexo-accent/10"
+            >
+              Adicionar foto
+            </button>
+          </form>
+
+          {resultPhotos.length === 0 ? (
+            <p className="text-xs text-vexo-muted">Nenhuma foto cadastrada ainda.</p>
+          ) : (
+            <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
+              {resultPhotos.map((photo) => (
+                <div key={photo.id} className="overflow-hidden rounded-xl border border-vexo-border bg-vexo-bg">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={photo.imageUrl} alt={photo.category} className="h-32 w-full object-cover" />
+                  <div className="space-y-1.5 p-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="min-w-0 truncate text-xs font-medium">{photo.category}</span>
+                      <form action={deleteResultPhoto.bind(null, clinic.id, photo.id)}>
+                        <ConfirmSubmitButton
+                          confirmMessage="Remover esta foto? Essa ação não pode ser desfeita."
+                          className="shrink-0 text-caption text-vexo-muted hover:text-red-500"
+                        >
+                          Remover
+                        </ConfirmSubmitButton>
+                      </form>
+                    </div>
+
+                    <form
+                      action={updateResultPhotoCaption.bind(null, clinic.id, photo.id)}
+                      className="space-y-1"
+                    >
+                      <textarea
+                        name="caption"
+                        rows={2}
+                        defaultValue={photo.caption ?? ""}
+                        placeholder='Sem legenda — a IA manda só a foto. Ex: "Olha esse resultado real!"'
+                        className="w-full rounded-lg border border-vexo-border bg-vexo-surface px-2 py-1 text-card outline-none focus:border-vexo-accent"
+                      />
+                      <div className="flex items-center justify-between gap-2">
+                        {!photo.caption && (
+                          <span className="text-card text-vexo-warning">Sem legenda</span>
+                        )}
+                        <button
+                          type="submit"
+                          className="ml-auto rounded-md border border-vexo-border px-1.5 py-0.5 text-card text-vexo-muted hover:border-vexo-accent hover:text-vexo-accent"
+                        >
+                          Salvar legenda
+                        </button>
+                      </div>
                     </form>
                   </div>
-
-                  <form
-                    action={updateResultPhotoCaption.bind(null, clinic.id, photo.id)}
-                    className="space-y-1"
-                  >
-                    <textarea
-                      name="caption"
-                      rows={2}
-                      defaultValue={photo.caption ?? ""}
-                      placeholder='Sem legenda — a IA manda só a foto. Ex: "Olha esse resultado real!"'
-                      className="w-full rounded-lg border border-vexo-border bg-vexo-bg px-2 py-1 text-card outline-none focus:border-vexo-accent"
-                    />
-                    <div className="flex items-center justify-between gap-2">
-                      {!photo.caption && (
-                        <span className="text-card text-vexo-warning">Sem legenda</span>
-                      )}
-                      <button
-                        type="submit"
-                        className="ml-auto rounded-md border border-vexo-border px-1.5 py-0.5 text-card text-vexo-muted hover:border-vexo-accent hover:text-vexo-accent"
-                      >
-                        Salvar legenda
-                      </button>
-                    </div>
-                  </form>
                 </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
+              ))}
+            </div>
+          )}
+        </div>
+      </CollapsibleSection>
 
-      <section className="space-y-2.5 border-t border-vexo-border pt-4">
-        <div>
-          <h2 className="text-sm font-semibold">Timing de resposta da IA</h2>
-          <p className="mt-1 text-xs text-vexo-muted">
-            Controla quanto tempo a IA espera pra responder, com base em quanto tempo o lead ficou
-            em silêncio.
-          </p>
-          <ul className="mt-1.5 space-y-1 text-xs text-vexo-muted">
+      <CollapsibleSection
+        title="Timing de resposta da IA"
+        description="Controla quanto tempo a IA espera pra responder, com base em quanto tempo o lead ficou em silêncio."
+      >
+        <div className="space-y-3">
+          <ul className="space-y-1 text-xs text-vexo-muted">
             <li>
               <span className="font-medium text-vexo-fg">Até 1 hora sem resposta:</span> 5-60
               segundos (ajustável abaixo, só desta clínica)
@@ -278,71 +272,63 @@ export default async function ClinicAiAgentPage({ params }: { params: { id: stri
               (fixo, vale pra todas as clínicas)
             </li>
           </ul>
-        </div>
 
-        <form
-          action={updateAiAgentTiming.bind(null, clinic.id)}
-          className="flex flex-wrap items-end gap-2.5 rounded-xl border border-vexo-border bg-vexo-surface p-3.5"
-        >
-          <div>
-            <label className="mb-1 block text-xs" htmlFor="firstBandDelaySeconds">
-              Delay "até 1 hora" (segundos, entre 5 e 60)
+          <form
+            action={updateAiAgentTiming.bind(null, clinic.id)}
+            className="flex flex-wrap items-end gap-2.5 border-t border-vexo-border pt-3"
+          >
+            <div>
+              <label className="mb-1 block text-xs" htmlFor="firstBandDelaySeconds">
+                Delay "até 1 hora" (segundos, entre 5 e 60)
+              </label>
+              <input
+                id="firstBandDelaySeconds"
+                name="firstBandDelaySeconds"
+                type="number"
+                min={5}
+                max={60}
+                step={1}
+                required
+                defaultValue={clinic.firstBandDelaySeconds}
+                className="w-24 rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5 text-xs outline-none focus:border-vexo-accent"
+              />
+            </div>
+            <button
+              type="submit"
+              className="rounded-lg border border-vexo-accent px-2.5 py-1.5 text-xs font-medium text-vexo-accent hover:bg-vexo-accent/10"
+            >
+              Salvar
+            </button>
+          </form>
+
+          <form
+            action={updateAiSettings}
+            className="flex items-center justify-between gap-3 border-t border-vexo-border pt-3"
+          >
+            <label className="flex items-center gap-2 text-xs">
+              <input
+                type="checkbox"
+                name="adaptiveDelayEnabled"
+                defaultChecked={adaptiveDelayEnabled}
+                className="h-3.5 w-3.5 shrink-0 rounded border-vexo-border"
+              />
+              Delay adaptativo ativado (vale pra todas as clínicas)
             </label>
-            <input
-              id="firstBandDelaySeconds"
-              name="firstBandDelaySeconds"
-              type="number"
-              min={5}
-              max={60}
-              step={1}
-              required
-              defaultValue={clinic.firstBandDelaySeconds}
-              className="w-24 rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5 text-xs outline-none focus:border-vexo-accent"
-            />
-          </div>
-          <button
-            type="submit"
-            className="rounded-lg border border-vexo-accent px-2.5 py-1.5 text-xs font-medium text-vexo-accent hover:bg-vexo-accent/10"
-          >
-            Salvar
-          </button>
-        </form>
-
-        <form
-          action={updateAiSettings}
-          className="flex items-center justify-between gap-3 rounded-xl border border-vexo-border bg-vexo-surface p-3.5"
-        >
-          <label className="flex items-center gap-2 text-xs">
-            <input
-              type="checkbox"
-              name="adaptiveDelayEnabled"
-              defaultChecked={adaptiveDelayEnabled}
-              className="h-3.5 w-3.5 shrink-0 rounded border-vexo-border"
-            />
-            Delay adaptativo ativado (vale pra todas as clínicas)
-          </label>
-          <button
-            type="submit"
-            className="shrink-0 rounded-lg border border-vexo-accent px-2.5 py-1.5 text-card font-medium text-vexo-accent hover:bg-vexo-accent/10"
-          >
-            Salvar
-          </button>
-        </form>
-      </section>
-
-      <section className="space-y-2.5 border-t border-vexo-border pt-4">
-        <div>
-          <h2 className="text-sm font-semibold">Janela de envio</h2>
-          <p className="mt-1 text-xs text-vexo-muted">
-            Mensagens de follow-up (vale pra todas as clínicas) só saem dentro desses dias e
-            horário; fora, esperam a próxima janela.
-          </p>
+            <button
+              type="submit"
+              className="shrink-0 rounded-lg border border-vexo-accent px-2.5 py-1.5 text-card font-medium text-vexo-accent hover:bg-vexo-accent/10"
+            >
+              Salvar
+            </button>
+          </form>
         </div>
+      </CollapsibleSection>
 
-        <form
-          action={updateFollowUpWindow}
-          className="space-y-2.5 rounded-xl border border-vexo-border bg-vexo-surface p-3.5"
-        >
+      <CollapsibleSection
+        title="Janela de envio"
+        description="Mensagens de follow-up (vale pra todas as clínicas) só saem dentro desses dias e horário; fora, esperam a próxima janela."
+      >
+        <form action={updateFollowUpWindow} className="space-y-2.5">
           <div>
             <label className="mb-1 block text-xs text-vexo-muted">Dias da semana</label>
             <div className="flex flex-wrap gap-1.5">
@@ -400,7 +386,7 @@ export default async function ClinicAiAgentPage({ params }: { params: { id: stri
           </div>
           <p className="text-card text-vexo-muted">Horário de Brasília.</p>
         </form>
-      </section>
+      </CollapsibleSection>
     </div>
   );
 }

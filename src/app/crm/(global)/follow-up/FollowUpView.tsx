@@ -55,8 +55,8 @@ function StepList({
               <span className="shrink-0 text-card text-vexo-muted transition group-open:rotate-180">▾</span>
             </summary>
 
-            <div className="border-t border-vexo-border p-3.5">
-              <div className="mb-2.5 flex items-center justify-end gap-1">
+            <div className="border-t border-vexo-border px-3.5 pb-3.5 pt-2">
+              <div className="mb-1.5 flex items-center justify-end gap-1">
                 <form action={moveFollowUpStep.bind(null, step.id, "up")}>
                   <button
                     disabled={i === 0}

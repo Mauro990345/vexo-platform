@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireInternalSession } from "@/lib/session";
 import { TemplateMessageField } from "@/components/TemplateMessageField";
+import { CollapsibleSection } from "@/components/CollapsibleSection";
 import { updateClinicSettings, logApproach } from "../../actions";
 
 const REMINDER_VARIABLES = [
@@ -21,16 +22,14 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
   if (!clinic) notFound();
 
   return (
-    <div className="max-w-4xl space-y-2.5">
+    <div className="max-w-3xl space-y-3">
       <h1 className="text-base font-semibold tracking-tight">Automações</h1>
 
-      <div className="grid gap-3 lg:grid-cols-[3fr_2fr]">
-        <form
-          action={updateClinicSettings.bind(null, clinic.id)}
-          className="space-y-3 rounded-xl border border-vexo-border bg-vexo-surface p-3.5"
-        >
-          <h2 className="text-sm font-medium text-vexo-muted">Configuração</h2>
-
+      <CollapsibleSection
+        title="Configuração"
+        description="Endereço, contatos de WhatsApp, lembretes de agendamento e status da clínica."
+      >
+        <form action={updateClinicSettings.bind(null, clinic.id)} className="space-y-3">
           <div>
             <label className="mb-1 block text-xs" htmlFor="address">
               Endereço da clínica
@@ -162,19 +161,17 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
             Salvar configuração
           </button>
         </form>
+      </CollapsibleSection>
 
-        <form
-          action={logApproach.bind(null, clinic.id)}
-          className="flex h-fit flex-col gap-2 rounded-xl border border-vexo-border bg-vexo-surface p-3.5"
-        >
+      <CollapsibleSection
+        title="Registrar abordagens de hoje"
+        description="Registre manualmente quantas pessoas você abordou hoje, caso o sistema ainda não capture isso automaticamente pelo Instagram."
+      >
+        <form action={logApproach.bind(null, clinic.id)} className="flex flex-col gap-2">
           <div>
-            <label className="mb-1 block text-xs" htmlFor="count">
-              Registrar abordagens de hoje
+            <label className="mb-1 block text-xs text-vexo-muted" htmlFor="count">
+              Quantidade abordada hoje
             </label>
-            <p className="mb-1.5 text-caption text-vexo-muted">
-              Registre manualmente quantas pessoas você abordou hoje, caso o sistema ainda não
-              capture isso automaticamente pelo Instagram.
-            </p>
             <input
               id="count"
               name="count"
@@ -189,7 +186,7 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
             Registrar
           </button>
         </form>
-      </div>
+      </CollapsibleSection>
     </div>
   );
 }
