@@ -31,7 +31,11 @@ function StepList({
     <div className="space-y-3">
       <div className="space-y-2">
         {steps.map((step, i) => (
-          <details key={step.id} className="group rounded-xl border border-vexo-border bg-vexo-surface">
+          <details
+            key={step.id}
+            name={`followup-steps-${trigger}`}
+            className="group rounded-xl border border-vexo-border bg-vexo-surface"
+          >
             <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5">
               <div className="flex min-w-0 items-center gap-2.5">
                 <span className="shrink-0 rounded-full border border-vexo-border px-1.5 py-0.5 text-card text-vexo-muted">
@@ -55,12 +59,12 @@ function StepList({
               <span className="shrink-0 text-card text-vexo-muted transition group-open:rotate-180">▾</span>
             </summary>
 
-            <div className="border-t border-vexo-border px-3.5 pb-3.5 pt-2">
-              <div className="mb-1.5 flex items-center justify-end gap-1">
+            <div className="border-t border-vexo-border px-3.5 pb-3.5 pt-1.5">
+              <div className="mb-1 flex items-center justify-end gap-1">
                 <form action={moveFollowUpStep.bind(null, step.id, "up")}>
                   <button
                     disabled={i === 0}
-                    className="rounded-md border border-vexo-accent px-1.5 py-1 text-card text-vexo-accent hover:bg-vexo-accent/10 disabled:opacity-30"
+                    className="rounded-md border border-vexo-accent px-1.5 py-0.5 text-card text-vexo-accent hover:bg-vexo-accent/10 disabled:opacity-30"
                   >
                     ↑
                   </button>
@@ -68,13 +72,13 @@ function StepList({
                 <form action={moveFollowUpStep.bind(null, step.id, "down")}>
                   <button
                     disabled={i === steps.length - 1}
-                    className="rounded-md border border-vexo-accent px-1.5 py-1 text-card text-vexo-accent hover:bg-vexo-accent/10 disabled:opacity-30"
+                    className="rounded-md border border-vexo-accent px-1.5 py-0.5 text-card text-vexo-accent hover:bg-vexo-accent/10 disabled:opacity-30"
                   >
                     ↓
                   </button>
                 </form>
                 <form action={deleteFollowUpStep.bind(null, step.id)}>
-                  <button className="rounded-md border border-vexo-border px-1.5 py-1 text-card text-vexo-error hover:border-vexo-error/40">
+                  <button className="rounded-md border border-vexo-border px-1.5 py-0.5 text-card text-vexo-error hover:border-vexo-error/40">
                     Remover
                   </button>
                 </form>

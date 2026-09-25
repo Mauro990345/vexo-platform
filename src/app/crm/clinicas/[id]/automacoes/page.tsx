@@ -26,6 +26,7 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
       <h1 className="text-base font-semibold tracking-tight">Automações</h1>
 
       <CollapsibleSection
+        name="automacoes"
         title="Configuração"
         description="Endereço, contatos de WhatsApp, lembretes de agendamento e status da clínica."
       >
@@ -164,6 +165,7 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
       </CollapsibleSection>
 
       <CollapsibleSection
+        name="automacoes"
         title="Registrar abordagens de hoje"
         description="Registre manualmente quantas pessoas você abordou hoje, caso o sistema ainda não capture isso automaticamente pelo Instagram."
       >

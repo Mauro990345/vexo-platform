@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { MoreHorizontal } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { startOfDay, addDays } from "@/lib/metrics";
 import { leadDisplayParts } from "@/lib/lead-display";
@@ -235,6 +234,10 @@ export default async function ClinicPipelinePage({ params }: { params: { id: str
                     // A coluna Agendado troca a data mostrada (do
                     // agendamento, não da última mensagem) — resto do
                     // card (nome, @, etiqueta de status) é igual às outras.
+                    // Removido também o ícone "⋮" (MoreHorizontal) que só
+                    // existia no formato padrão — não tinha nenhuma função
+                    // (sem onClick, sem menu nenhum atrás), só ocupava
+                    // espaço; agora os dois formatos ficam consistentes.
                     if (col.status === "SCHEDULED") {
                       return (
                         <div key={conv.id} className={cardClass}>
@@ -259,12 +262,9 @@ export default async function ClinicPipelinePage({ params }: { params: { id: str
                         <Link href={`/crm/conversas/${conv.id}`} className="block transition hover:text-vexo-accent">
                           <div className="flex items-start justify-between gap-2">
                             <p className="min-w-0 flex-1 truncate text-xs font-normal">{primary}</p>
-                            <div className="flex shrink-0 items-center gap-1">
-                              <span className="text-caption text-vexo-muted">
-                                {conv.lastMessageAt ? formatDateTime(conv.lastMessageAt) : "—"}
-                              </span>
-                              <MoreHorizontal className="h-3.5 w-3.5 shrink-0 text-vexo-muted" strokeWidth={2} />
-                            </div>
+                            <span className="shrink-0 text-caption text-vexo-muted">
+                              {conv.lastMessageAt ? formatDateTime(conv.lastMessageAt) : "—"}
+                            </span>
                           </div>
                           {handle && <p className="mt-0.5 truncate text-caption text-vexo-muted">@{handle}</p>}
                           <span className={`mt-1.5 inline-block rounded-card ${tint.tagBg} px-1.5 py-0.5 text-caption font-medium ${tint.tagText}`}>

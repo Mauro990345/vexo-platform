@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { startOfBrazilDay } from "@/lib/timezone";
 
 // Métricas compartilhadas pelo painel do cliente e pelo resumo semanal.
 // "Abordados" vem do contador manual (ApproachLog), já que a primeira
@@ -51,10 +52,12 @@ export async function getClinicMetrics(clinicId: string, from: Date, to: Date) {
   };
 }
 
+// Corte de "hoje"/"início do dia" em horário de BRASÍLIA, não no fuso
+// local do processo (Railway roda em UTC) — ver startOfBrazilDay em
+// timezone.ts pro bug real que isso corrige (contadores do Painel
+// mostrando 0 pra atividade genuinamente de hoje, testando à noite).
 export function startOfDay(d: Date): Date {
-  const copy = new Date(d);
-  copy.setHours(0, 0, 0, 0);
-  return copy;
+  return startOfBrazilDay(d);
 }
 
 export function startOfMonth(d: Date): Date {

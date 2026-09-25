@@ -87,3 +87,25 @@ export function formatAsBrazilLocalDateTime(date: Date): string {
     `${pad(shifted.getUTCHours())}:${pad(shifted.getUTCMinutes())}`
   );
 }
+
+// Início do dia em Brasília (00:00 BRT), devolvido como o instante UTC
+// correspondente — mesmo deslocamento fixo de formatAsBrazilLocalDateTime,
+// só que devolvendo o Date "cortado" em vez de uma string.
+//
+// Bug real reportado: cards "Abordados"/"Em conversa" do Painel mostrando 0
+// no período "Hoje" pra uma conversa genuinamente criada hoje (confirmada
+// no Pipeline, com última mensagem de hoje). Causa: o corte de "hoje" em
+// getClinicMetrics (ver metrics.ts) vinha de startOfDay usando
+// Date.setHours(0,0,0,0) — isso corta à meia-noite do fuso LOCAL DO
+// PROCESSO NODE, não de Brasília. Railway roda em UTC por padrão, e UTC
+// vira o dia 3h ANTES da meia-noite de Brasília: testando o Painel à noite
+// (depois das ~21h de Brasília, quando o relógio já virou o dia em UTC),
+// uma conversa criada mais cedo NAQUELE MESMO dia em Brasília já caía no
+// dia UTC anterior — fora da janela "hoje" calculada pelo servidor, mesmo
+// sendo inequivocamente "hoje" pra quem está em Brasília.
+export function startOfBrazilDay(d: Date): Date {
+  const shifted = new Date(d.getTime() - SAO_PAULO_UTC_OFFSET_HOURS * 60 * 60 * 1000);
+  return new Date(
+    Date.UTC(shifted.getUTCFullYear(), shifted.getUTCMonth(), shifted.getUTCDate(), SAO_PAULO_UTC_OFFSET_HOURS, 0, 0, 0)
+  );
+}

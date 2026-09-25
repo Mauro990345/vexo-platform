@@ -18,11 +18,11 @@ export function PromptTextarea({ id, name, defaultValue, placeholder }: {
       <textarea
         id={id}
         name={name}
-        rows={10}
+        rows={28}
         value={value}
         onChange={(e) => setValue(e.target.value)}
         placeholder={placeholder}
-        className="w-full rounded-lg border-2 border-vexo-accent/40 bg-vexo-bg px-3 py-2 font-mono text-card outline-none focus:border-vexo-accent"
+        className="w-full resize-y rounded-lg border-2 border-vexo-accent/40 bg-vexo-bg px-3 py-2 font-mono text-card outline-none focus:border-vexo-accent"
       />
       <p className="mt-1 text-right text-caption text-vexo-muted">{value.length.toLocaleString("pt-BR")} caracteres</p>
     </div>

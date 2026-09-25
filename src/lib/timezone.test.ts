@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { parseBrazilLocalDateTime, formatAsBrazilLocalDateTime, SAO_PAULO_UTC_OFFSET_HOURS } from "./timezone";
+import {
+  parseBrazilLocalDateTime,
+  formatAsBrazilLocalDateTime,
+  startOfBrazilDay,
+  SAO_PAULO_UTC_OFFSET_HOURS,
+} from "./timezone";
 
 describe("parseBrazilLocalDateTime", () => {
   it("converte 9h de Brasília pra 12:00 UTC (offset fixo de +3h)", () => {
@@ -62,5 +67,34 @@ describe("formatAsBrazilLocalDateTime", () => {
 
   it("formata um instante UTC conhecido pro horário de Brasília esperado", () => {
     expect(formatAsBrazilLocalDateTime(new Date("2026-09-19T12:00:00.000Z"))).toBe("2026-09-19T09:00");
+  });
+});
+
+describe("startOfBrazilDay", () => {
+  it("corta pra meia-noite de Brasília (03:00 UTC), não meia-noite UTC", () => {
+    // 14h de Brasília (17h UTC) no meio do dia 19/09.
+    const date = startOfBrazilDay(new Date("2026-09-19T17:00:00.000Z"));
+    expect(date.toISOString()).toBe("2026-09-19T03:00:00.000Z");
+  });
+
+  it("bug real: instante logo depois da meia-noite UTC mas ainda 'ontem' em Brasília continua no dia de ontem", () => {
+    // 21h30 de Brasília do dia 19/09 = 00h30 UTC do dia 20/09 — a virada de
+    // dia em UTC já aconteceu, mas em Brasília ainda é 19/09. Um corte
+    // ingênuo (Date.setHours em processo UTC) devolveria 20/09 aqui; o
+    // certo é continuar reportando 19/09.
+    const date = startOfBrazilDay(new Date("2026-09-20T00:30:00.000Z"));
+    expect(date.toISOString()).toBe("2026-09-19T03:00:00.000Z");
+  });
+
+  it("instante logo depois da meia-noite de Brasília já pertence ao novo dia", () => {
+    // 00h30 de Brasília do dia 20/09 = 03h30 UTC do dia 20/09.
+    const date = startOfBrazilDay(new Date("2026-09-20T03:30:00.000Z"));
+    expect(date.toISOString()).toBe("2026-09-20T03:00:00.000Z");
+  });
+
+  it("é idempotente: aplicar de novo no resultado devolve o mesmo instante", () => {
+    const once = startOfBrazilDay(new Date("2026-09-19T17:00:00.000Z"));
+    const twice = startOfBrazilDay(once);
+    expect(twice.toISOString()).toBe(once.toISOString());
   });
 });
