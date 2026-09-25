@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { MoreHorizontal } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { startOfDay, addDays } from "@/lib/metrics";
-import { LeadAvatar } from "@/components/LeadAvatar";
+import { leadDisplayParts } from "@/lib/lead-display";
 
 export const dynamic = "force-dynamic";
 
@@ -216,8 +216,18 @@ export default async function ClinicPipelinePage({ params }: { params: { id: str
                 <div className="space-y-2">
                   {items.map((conv) => {
                     const appt = conv.appointments[0];
-                    const name = conv.lead.name ?? conv.lead.igUsername ?? "Lead";
+                    const { primary, handle } = leadDisplayParts(conv.lead, null);
                     const cardClass = `rounded-card border border-vexo-border/20 ${tint.bg} px-3.5 py-2.5`;
+
+                    // Nome em destaque + @ do Instagram discreto ao lado —
+                    // mesmo formato do Painel (ver lead-display.ts). Sem
+                    // avatar aqui: removido junto com o do Painel (a
+                    // automação de foto foi descartada por ora, ver
+                    // instagram.ts, seção "Business Discovery") — o Link
+                    // volta a ser "block" (era "flex items-start gap-2" só
+                    // por causa do avatar ao lado), o que também devolve o
+                    // conteúdo pra margem esquerda original do card, sem o
+                    // recuo que o avatar deixava.
 
                     // A coluna Agendado troca a segunda linha (data do
                     // agendamento em vez de última mensagem) — resto do
@@ -225,17 +235,17 @@ export default async function ClinicPipelinePage({ params }: { params: { id: str
                     if (col.status === "SCHEDULED") {
                       return (
                         <div key={conv.id} className={cardClass}>
-                          <Link href={`/crm/conversas/${conv.id}`} className="flex items-start gap-2 transition hover:text-vexo-accent">
-                            <LeadAvatar profilePictureUrl={conv.lead.profilePictureUrl} name={name} />
-                            <div className="min-w-0 flex-1">
-                              <p className="truncate text-sm font-normal">{name}</p>
-                              {appt && (
-                                <p className="mt-1 text-caption text-vexo-muted">{formatDateTime(appt.scheduledAt)}</p>
-                              )}
-                              <span className={`mt-1.5 inline-block rounded-card ${tint.tagBg} px-1.5 py-0.5 text-caption font-medium ${tint.tagText}`}>
-                                {col.label}
-                              </span>
+                          <Link href={`/crm/conversas/${conv.id}`} className="block transition hover:text-vexo-accent">
+                            <div className="flex min-w-0 items-baseline gap-1">
+                              <p className="min-w-0 shrink truncate text-sm font-normal">{primary}</p>
+                              {handle && <span className="shrink-0 truncate text-caption text-vexo-muted">@{handle}</span>}
                             </div>
+                            {appt && (
+                              <p className="mt-1 text-caption text-vexo-muted">{formatDateTime(appt.scheduledAt)}</p>
+                            )}
+                            <span className={`mt-1.5 inline-block rounded-card ${tint.tagBg} px-1.5 py-0.5 text-caption font-medium ${tint.tagText}`}>
+                              {col.label}
+                            </span>
                           </Link>
                         </div>
                       );
@@ -243,20 +253,20 @@ export default async function ClinicPipelinePage({ params }: { params: { id: str
 
                     return (
                       <div key={conv.id} className={cardClass}>
-                        <Link href={`/crm/conversas/${conv.id}`} className="flex items-start gap-2 transition hover:text-vexo-accent">
-                          <LeadAvatar profilePictureUrl={conv.lead.profilePictureUrl} name={name} />
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-start justify-between gap-2">
-                              <p className="truncate text-sm font-normal">{name}</p>
-                              <MoreHorizontal className="h-3.5 w-3.5 shrink-0 text-vexo-muted" strokeWidth={2} />
+                        <Link href={`/crm/conversas/${conv.id}`} className="block transition hover:text-vexo-accent">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex min-w-0 items-baseline gap-1">
+                              <p className="min-w-0 shrink truncate text-sm font-normal">{primary}</p>
+                              {handle && <span className="shrink-0 truncate text-caption text-vexo-muted">@{handle}</span>}
                             </div>
-                            <p className="mt-1 text-caption text-vexo-muted">
-                              {conv.lastMessageAt ? formatDateTime(conv.lastMessageAt) : "—"}
-                            </p>
-                            <span className={`mt-1.5 inline-block rounded-card ${tint.tagBg} px-1.5 py-0.5 text-caption font-medium ${tint.tagText}`}>
-                              {col.label}
-                            </span>
+                            <MoreHorizontal className="h-3.5 w-3.5 shrink-0 text-vexo-muted" strokeWidth={2} />
                           </div>
+                          <p className="mt-1 text-caption text-vexo-muted">
+                            {conv.lastMessageAt ? formatDateTime(conv.lastMessageAt) : "—"}
+                          </p>
+                          <span className={`mt-1.5 inline-block rounded-card ${tint.tagBg} px-1.5 py-0.5 text-caption font-medium ${tint.tagText}`}>
+                            {col.label}
+                          </span>
                         </Link>
                       </div>
                     );
