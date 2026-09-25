@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { MessageCircle, AtSign, Calendar } from "lucide-react";
+import { Calendar } from "lucide-react";
+import { InstagramGlyphIcon, WhatsAppGlyphIcon } from "@/components/BrandIcons";
 import { prisma } from "@/lib/prisma";
 import { requireInternalSession } from "@/lib/session";
 import { refreshWhatsappStatus, type WhatsappConnectionState } from "@/lib/whatsapp-connection";
@@ -290,7 +291,7 @@ export default async function ClinicConexoesPage({
 
       <div className="grid grid-cols-3 gap-3">
         <ConnectionCard
-          icon={<MessageCircle className="h-3.5 w-3.5" strokeWidth={2} />}
+          icon={<WhatsAppGlyphIcon className="h-4 w-4" />}
           iconBg="bg-emerald-500"
           name="WhatsApp"
           description="Notifica a secretária quando um lead precisa de atendimento humano."
@@ -300,8 +301,8 @@ export default async function ClinicConexoesPage({
           href={`${base}/whatsapp`}
         />
         <ConnectionCard
-          icon={<AtSign className="h-3.5 w-3.5" strokeWidth={2} />}
-          iconBg="bg-pink-500"
+          icon={<InstagramGlyphIcon className="h-7 w-7" />}
+          iconBg=""
           name="Instagram"
           description="Captura no Direct e leva a conversa pra IA."
           connected={instagramConnected}
