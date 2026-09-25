@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { AtSign, Calendar, MessageCircle, Phone } from "lucide-react";
+import { Calendar, Phone } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { getClinicMetrics, getDailyApproachCounts, startOfDay, addDays } from "@/lib/metrics";
 import { ApproachChart } from "@/components/ApproachChart";
@@ -10,6 +10,7 @@ import { ChannelStatusPill } from "@/components/ChannelStatusPill";
 import { normalizeBrazilianWhatsappNumber } from "@/lib/whatsapp";
 import { leadDisplayParts } from "@/lib/lead-display";
 import { LeadAvatar } from "@/components/LeadAvatar";
+import { InstagramGlyphIcon, WhatsAppGlyphIcon } from "@/components/BrandIcons";
 
 // Marcar "Não compareceu" só faz sentido pra agendamento ainda em aberto —
 // já compareceu ou já foi cancelado não tem o que alternar aqui.
@@ -134,8 +135,8 @@ export async function ClientPanelView({
                   <ChannelStatusPill
                     connected={Boolean(clinic.instagramAccount)}
                     label="Instagram"
-                    icon={<AtSign className="h-3 w-3" strokeWidth={2.5} />}
-                    iconBg="bg-pink-500"
+                    icon={<InstagramGlyphIcon className="h-6 w-6" />}
+                    iconBg=""
                   />
                   <ChannelStatusPill
                     connected={Boolean(clinic.googleCalendarAccount)}
@@ -146,8 +147,8 @@ export async function ClientPanelView({
                   <ChannelStatusPill
                     connected={clinic.whatsappStatus === "open"}
                     label="WhatsApp"
-                    icon={<MessageCircle className="h-3 w-3" strokeWidth={2.5} />}
-                    iconBg="bg-emerald-500"
+                    icon={<WhatsAppGlyphIcon className="h-6 w-6" />}
+                    iconBg=""
                   />
                 </div>
               </div>
