@@ -2,7 +2,12 @@ import { prisma } from "@/lib/prisma";
 import { classifyConversation, generateLeadReply, summarizeOlderTurns, type AgentTools } from "@/lib/anthropic";
 import { buildConversationContext, withOlderSummary } from "@/lib/conversation-context";
 import { checkAvailability, createCalendarEvent, updateCalendarEvent, updateCalendarEventDescription, getRawBusyPeriods } from "@/lib/google-calendar";
-import { getInstagramUserProfile, getInstagramConversationParticipantUsername } from "@/lib/instagram";
+import {
+  getInstagramUserProfile,
+  getInstagramConversationParticipantUsername,
+  getBusinessDiscoveryProfilePicture,
+} from "@/lib/instagram";
+import { PROFILE_PICTURE_REFRESH_WINDOW_MS } from "@/lib/lead-profile-picture-backfill";
 import { decryptToken } from "@/lib/crypto";
 import { computeAdaptiveDelaySeconds, FAST_REPLY_DELAY_SECONDS } from "@/lib/scheduler";
 import { DEFAULT_CONVERSATION_SYSTEM_PROMPT } from "@/lib/default-prompt";
@@ -300,17 +305,54 @@ export async function handleInboundInstagramMessage(
     }
   }
 
-  // Lookup automático da foto de perfil (por mensagem nova) foi
-  // DESATIVADO — investigação exaustiva confirmou que nenhuma avenida
-  // disponível (Conversations API simples ou com expansão de subcampo,
-  // payload bruto do webhook) expõe esse dado pra este produto da Meta.
-  // Ver o comentário "CONCLUSÃO DEFINITIVA" em
-  // getInstagramConversationParticipantProfilePicture, instagram.ts.
-  // Lead.profilePictureUrl/profilePictureFetchedAt continuam no schema
-  // (nunca mais escritos automaticamente, mas nada os lê de forma que
-  // quebre com null) — LeadAvatar mostra o ícone genérico, e o @ do
-  // Instagram (esse sim confirmado funcionando) é o dado real de
-  // identificação/transparência pra clínica.
+  // Lookup automático da foto de perfil (por mensagem nova), via Business
+  // Discovery — ver o comentário grande "Business Discovery" em
+  // instagram.ts pro porquê desse endpoint específico (a Conversations API
+  // do Instagram Login, tentada antes, comprovadamente não expõe esse
+  // dado — ver "CONCLUSÃO DEFINITIVA" em
+  // getInstagramConversationParticipantProfilePicture, ainda ali só de
+  // referência histórica). Precisa de DOIS pré-requisitos, os dois
+  // opcionais: a clínica ter conectado a Business Discovery (conexão
+  // SEPARADA da principal, ver conexoes/page.tsx), E o lead já ter
+  // igUsername salvo (Business Discovery busca por @, não por igScopedId —
+  // ver getInstagramConversationParticipantUsername logo acima, que às
+  // vezes só resolve numa mensagem POSTERIOR à primeira). Sem qualquer um
+  // dos dois, pula sem erro — o backfill periódico do worker
+  // (refreshLeadProfilePictures) pega assim que os pré-requisitos
+  // existirem, sem depender de mais uma mensagem nova.
+  if (
+    igAccount.businessDiscoveryAccessTokenEnc &&
+    lead.igUsername &&
+    (!lead.profilePictureFetchedAt || lead.profilePictureFetchedAt.getTime() < Date.now() - PROFILE_PICTURE_REFRESH_WINDOW_MS)
+  ) {
+    try {
+      const { profilePictureUrl } = await getBusinessDiscoveryProfilePicture(
+        decryptToken(igAccount.businessDiscoveryAccessTokenEnc),
+        igAccount.igUserId,
+        lead.igUsername
+      );
+      await prisma.lead.update({
+        where: { id: lead.id },
+        data: { profilePictureUrl: profilePictureUrl ?? null, profilePictureFetchedAt: new Date() },
+      });
+      lead.profilePictureUrl = profilePictureUrl ?? null;
+      console.log(
+        `[vexo:profile-picture-lookup] lead=${lead.id} igUsername=${lead.igUsername} -> ${profilePictureUrl ? "foto atualizada" : "sem foto (provável conta pessoal, não Business/Creator)"}`
+      );
+    } catch (err) {
+      // NÃO marca profilePictureFetchedAt aqui — erro pode ser transitório
+      // (rede, token de Página expirado), tenta de novo na próxima
+      // mensagem. "Conta não é Business/Creator" não cai aqui — tratado
+      // como resultado normal dentro de getBusinessDiscoveryProfilePicture.
+      console.error("[vexo:profile-picture-lookup] Falha ao buscar foto de perfil do lead:", err);
+      if (webhookLogId) {
+        const detail = err instanceof Error ? `${err.message}\n${err.stack ?? ""}` : String(err);
+        await prisma.webhookLog
+          .update({ where: { id: webhookLogId }, data: { processingError: `Falha ao buscar foto de perfil do lead: ${detail}`.slice(0, 4000) } })
+          .catch((updateErr) => console.error("[vexo] Falha ao gravar diagnóstico de foto de perfil do lead:", updateErr));
+      }
+    }
+  }
 
   let conversation = await prisma.conversation.findFirst({
     where: {

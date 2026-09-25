@@ -16,6 +16,7 @@ import {
   verifyInstagramTokenAndId,
   tokenFingerprint,
   getSubscribedFields,
+  disconnectBusinessDiscovery,
 } from "@/lib/instagram";
 import { decryptToken } from "@/lib/crypto";
 import { saveUploadedAttachment, deleteUploadedAttachment } from "@/lib/uploads";
@@ -458,6 +459,15 @@ export async function disconnectInstagramAction(clinicId: string) {
   revalidatePath(`/crm/clinicas/${clinicId}/conexoes`);
   revalidatePath(`/crm/clinicas/${clinicId}`);
   revalidatePath("/crm/painel");
+}
+
+// Desconecta só a Business Discovery (foto de perfil) — conexão opcional,
+// separada da principal do Instagram (ver disconnectInstagram acima e o
+// comentário grande em disconnectBusinessDiscovery, instagram.ts).
+export async function disconnectBusinessDiscoveryAction(clinicId: string) {
+  await requireInternalSession();
+  await disconnectBusinessDiscovery(clinicId);
+  revalidatePath(`/crm/clinicas/${clinicId}/conexoes`);
 }
 
 // Corrige contas já conectadas ANTES da inscrição no webhook por conta

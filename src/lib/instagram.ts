@@ -308,23 +308,25 @@ export async function getInstagramConversationParticipantUsername(
 //      timestamp, message.{mid, text}}. Nenhum campo de perfil, nem
 //      aninhado em lugar nenhum, nem na primeira mensagem.
 //
-// CONCLUSÃO DEFINITIVA (não reabrir esta investigação sem uma mudança real
-// do lado da Meta): as três avenidas plausíveis pra obter a foto de perfil
-// de um lead — Conversations API sem expansão, Conversations API com
-// expansão de subcampo, e o payload bruto do webhook — foram testadas de
-// forma limpa (sem a contaminação dos leads de demo das rodadas 1-2) e
-// nenhuma delas expõe esse dado pra este produto ("Instagram API with
-// Instagram Login"). Diferente do username (que vem de graça na
-// Conversations API simples), a foto de perfil não tem, hoje, nenhum
-// caminho automático via API da Meta. Por isso o job periódico
-// (refreshLeadProfilePictures, worker/index.ts) e o lookup por mensagem
-// nova (conversation-pipeline.ts) foram DESATIVADOS — esta função continua
-// existindo e correta (não é bug nela), só não é mais chamada
-// automaticamente, pra não desperdiçar chamada de API numa busca que já
-// sabemos que nunca vai ter resultado. Os cards continuam mostrando o
-// avatar genérico (ver LeadAvatar, src/components/LeadAvatar.tsx) — o @ do
-// Instagram (esse sim confirmado funcionando) continua sendo o dado real
-// de identificação/transparência pra clínica.
+// CONCLUSÃO (sobre ESTA função especificamente — não reabrir esta
+// investigação exata sem uma mudança real do lado da Meta): as duas
+// avenidas plausíveis dentro do Instagram Login — Conversations API sem
+// expansão e com expansão de subcampo — e o payload bruto do webhook foram
+// testadas de forma limpa (sem a contaminação dos leads de demo das
+// rodadas 1-2) e nenhuma expõe foto de perfil pra este produto ("Instagram
+// API with Instagram Login"). Diferente do username (que vem de graça na
+// Conversations API simples), a foto de perfil não tem, via Instagram
+// Login, nenhum caminho automático.
+//
+// ATUALIZAÇÃO: isso NÃO significa mais "sem caminho nenhum" — existe uma
+// quarta avenida, de um produto DIFERENTE da Meta (Business Discovery API,
+// via Login do Facebook para Empresas — ver a seção "Business Discovery"
+// mais abaixo neste arquivo), que FUNCIONA pra esse propósito. O job
+// periódico (refreshLeadProfilePictures) e o lookup por mensagem nova
+// (conversation-pipeline.ts) estão ATIVOS de novo, mas chamando
+// getBusinessDiscoveryProfilePicture, não mais esta função — esta aqui
+// continua existindo, correta, só não é mais chamada por lugar nenhum
+// (histórico da investigação, não dead code por engano).
 export async function getInstagramConversationParticipantProfilePicture(
   accessToken: string,
   igUserId: string,
@@ -614,4 +616,198 @@ export function tokenFingerprint(token: string): string {
 // próprio Meta Business Suite do lado do cliente.
 export async function disconnectInstagram(clinicId: string): Promise<void> {
   await prisma.instagramAccount.deleteMany({ where: { clinicId } });
+}
+
+// -----------------------------------------------------------------------
+// Business Discovery (Login do Facebook para Empresas) — conexão SEGUNDA e
+// OPCIONAL, só pra foto de perfil
+// -----------------------------------------------------------------------
+
+// Produto DIFERENTE de tudo mais neste arquivo — "Login do Facebook para
+// Empresas" (Facebook Login), não "Instagram API with Instagram Login". A
+// Business Discovery API (fields=business_discovery.username(...){...}) é
+// EXCLUSIVA desse produto — não existe via Instagram Login. Confirmado
+// isso depois de testar, de forma limpa contra leads reais, as duas únicas
+// avenidas que o Instagram Login oferecia (Conversations API simples e com
+// sintaxe de expansão de subcampo — ver o comentário "CONCLUSÃO
+// DEFINITIVA" em getInstagramConversationParticipantProfilePicture mais
+// acima) e o payload bruto do webhook — nenhuma expõe foto de perfil.
+//
+// Reintroduzir esse fluxo foi decisão deliberada, tomada em fase de teste
+// (sem clínica real conectada ainda) — não é engano nem regressão da
+// migração anterior pra Instagram Login (comentário no topo do arquivo):
+// aquela migração continua sendo o fluxo PRINCIPAL, usado pra TUDO
+// relacionado a mensagem (envio, recebimento, webhook). Esta é uma conexão
+// SEPARADA e OPCIONAL, só pra esse bônus visual — uma clínica que nunca
+// conectar isso continua funcionando normalmente, só sem foto nos cards
+// (mesmo comportamento de antes desta seção existir).
+//
+// Autorização em facebook.com (não instagram.com); troca de token contra
+// graph.facebook.com (não api.instagram.com/graph.instagram.com);
+// client_id usa META_APP_ID (o App ID GERAL mostrado na tela principal do
+// app — não META_INSTAGRAM_APP_ID, que é específico do outro produto,
+// nem o mesmo client_id usado em buildInstagramOAuthUrl acima).
+//
+// IMPORTANTE sobre App Review: os scopes abaixo (instagram_basic,
+// pages_show_list, business_management) são de Acesso Avançado — funcionam
+// sem revisão da Meta só pra contas com algum papel no App (admin/
+// desenvolvedor/testador no Meta for Developers), suficiente pra fase de
+// teste com a clínica piloto. Conectar uma clínica real sem esse papel
+// exigiria passar pelo App Review da Meta primeiro — não implementado
+// aqui, fora de escopo enquanto o VEXO está só em teste.
+const FB_GRAPH_BASE = `https://graph.facebook.com/${GRAPH_API_VERSION}`;
+
+export function buildBusinessDiscoveryOAuthUrl(state: string): string {
+  const clientId = process.env.META_APP_ID;
+  const redirectUri = process.env.META_BUSINESS_DISCOVERY_REDIRECT_URI;
+  if (!clientId || !redirectUri) {
+    throw new Error("META_APP_ID / META_BUSINESS_DISCOVERY_REDIRECT_URI não configurados.");
+  }
+
+  const scopes = ["instagram_basic", "pages_show_list", "business_management"].join(",");
+
+  const url = new URL(`https://www.facebook.com/${GRAPH_API_VERSION}/dialog/oauth`);
+  url.searchParams.set("client_id", clientId);
+  url.searchParams.set("redirect_uri", redirectUri);
+  url.searchParams.set("scope", scopes);
+  url.searchParams.set("state", state);
+  url.searchParams.set("response_type", "code");
+  return url.toString();
+}
+
+// Troca o code pelo token de PÁGINA (não de usuário, não de conta do
+// Instagram) já vinculada à conta do Instagram desta clínica —
+// expectedIgUserId é o id JÁ VERIFICADO contra webhook real (ver
+// InstagramAccount.webhookIdVerified) da conexão principal, não um valor
+// qualquer de /me: nunca salva um token que aponta pra Página errada só
+// porque era a primeira da lista de quem administra várias.
+export async function exchangeBusinessDiscoveryCode(
+  code: string,
+  expectedIgUserId: string
+): Promise<{ pageAccessToken: string; pageId: string }> {
+  const clientId = process.env.META_APP_ID;
+  const clientSecret = process.env.META_APP_SECRET;
+  const redirectUri = process.env.META_BUSINESS_DISCOVERY_REDIRECT_URI;
+  if (!clientId || !clientSecret || !redirectUri) {
+    throw new Error("Credenciais do Facebook Login não configuradas.");
+  }
+
+  // 1. Code -> token de usuário de curta duração.
+  const tokenUrl = new URL(`${FB_GRAPH_BASE}/oauth/access_token`);
+  tokenUrl.searchParams.set("client_id", clientId);
+  tokenUrl.searchParams.set("client_secret", clientSecret);
+  tokenUrl.searchParams.set("redirect_uri", redirectUri);
+  tokenUrl.searchParams.set("code", code);
+  const tokenRes = await fetch(tokenUrl.toString());
+  const tokenBodyText = await tokenRes.text();
+  if (!tokenRes.ok) {
+    throw new Error(`Falha ao trocar code por token do Facebook (HTTP ${tokenRes.status}): ${tokenBodyText}`);
+  }
+  const { access_token: shortLivedUserToken } = JSON.parse(tokenBodyText) as { access_token: string };
+
+  // 2. Long-lived (grant_type diferente do Instagram Login —
+  // fb_exchange_token, não ig_exchange_token).
+  const llUrl = new URL(`${FB_GRAPH_BASE}/oauth/access_token`);
+  llUrl.searchParams.set("grant_type", "fb_exchange_token");
+  llUrl.searchParams.set("client_id", clientId);
+  llUrl.searchParams.set("client_secret", clientSecret);
+  llUrl.searchParams.set("fb_exchange_token", shortLivedUserToken);
+  const llRes = await fetch(llUrl.toString());
+  if (!llRes.ok) {
+    throw new Error(`Falha ao obter token de longa duração do Facebook (HTTP ${llRes.status}): ${await llRes.text()}`);
+  }
+  const { access_token: longLivedUserToken } = (await llRes.json()) as { access_token: string };
+
+  // 3. Páginas que essa pessoa administra, com o token de PÁGINA de cada
+  // uma já embutido na resposta — é esse token (não o de usuário) que a
+  // Business Discovery API espera.
+  const pagesUrl = new URL(`${FB_GRAPH_BASE}/me/accounts`);
+  pagesUrl.searchParams.set("access_token", longLivedUserToken);
+  const pagesRes = await fetch(pagesUrl.toString());
+  if (!pagesRes.ok) {
+    throw new Error(`Falha ao listar Páginas do Facebook (HTTP ${pagesRes.status}): ${await pagesRes.text()}`);
+  }
+  const pagesData = (await pagesRes.json()) as { data?: { id: string; access_token: string; name?: string }[] };
+  const pages = pagesData.data ?? [];
+  if (pages.length === 0) {
+    throw new Error(
+      "Nenhuma Página do Facebook encontrada pra essa conta — a Business Discovery precisa de uma Página vinculada à conta do Instagram desta clínica."
+    );
+  }
+
+  // 4. Acha a Página vinculada ao MESMO IG Business Account já verificado
+  // pela conexão principal (Instagram Login).
+  for (const page of pages) {
+    const pageDetailUrl = new URL(`${FB_GRAPH_BASE}/${page.id}`);
+    pageDetailUrl.searchParams.set("fields", "instagram_business_account");
+    pageDetailUrl.searchParams.set("access_token", page.access_token);
+    const pageDetailRes = await fetch(pageDetailUrl.toString());
+    if (!pageDetailRes.ok) continue; // Página sem esse campo acessível — tenta a próxima.
+    const pageDetail = (await pageDetailRes.json()) as { instagram_business_account?: { id: string } };
+    if (pageDetail.instagram_business_account?.id === expectedIgUserId) {
+      return { pageAccessToken: page.access_token, pageId: page.id };
+    }
+  }
+
+  throw new Error(
+    `Nenhuma das ${pages.length} Página(s) do Facebook encontrada(s) está vinculada à conta do Instagram já conectada desta clínica (id=${expectedIgUserId}). Confirme que a Página certa foi selecionada na tela de permissões do Facebook, e que ela está mesmo vinculada a essa conta do Instagram (Meta Business Suite > Configurações > Contas vinculadas).`
+  );
+}
+
+// Business Discovery — busca dados públicos de OUTRA conta (o lead) a
+// partir do @ dela, autenticado com o token de PÁGINA salvo acima (não o
+// token de Instagram Login da conexão principal). ownIgUserId aqui é a
+// conta DESTA clínica (quem está "descobrindo"), não o lead.
+//
+// IMPORTANTE: não confirmado ainda contra uma chamada real (mesma
+// limitação de sempre — sem token de produção neste ambiente de
+// desenvolvimento). Diferente das investigações anteriores, porém, esta
+// não é mais uma dúvida sobre SE o dado existe (a documentação da Meta é
+// clara: Business Discovery é feito exatamente pra isso, e
+// "profile_picture_url" é um dos campos documentados) — o que resta
+// validar é só a integração de ponta a ponta (OAuth, token de Página,
+// formato exato da resposta) contra uma conta real.
+export async function getBusinessDiscoveryProfilePicture(
+  pageAccessToken: string,
+  ownIgUserId: string,
+  targetUsername: string
+): Promise<{ profilePictureUrl?: string }> {
+  const url = new URL(`${FB_GRAPH_BASE}/${ownIgUserId}`);
+  url.searchParams.set("fields", `business_discovery.username(${targetUsername}){profile_picture_url}`);
+  url.searchParams.set("access_token", pageAccessToken);
+
+  const res = await fetch(url.toString());
+  if (!res.ok) {
+    // NÃO lança — ao contrário da maioria das outras funções deste
+    // arquivo. Aqui, um erro da Meta na esmagadora maioria dos casos reais
+    // significa "essa conta-alvo não é Business/Creator" (o caso comum:
+    // consumidor final com conta pessoal comum) — restrição documentada e
+    // PERMANENTE pra essa conta específica, não transitória. Tratar como
+    // exceção faria o caller retentar pra sempre algo que nunca vai
+    // funcionar — mesma classe de bug já corrigida pros leads de seed/demo
+    // (ver isRealIgScopedId). O texto cru fica só no log, pra eventualmente
+    // distinguir isso de um problema real de token/permissão se os logs
+    // mostrarem um padrão suspeito (ex: TODO lead falhando, não só os com
+    // conta pessoal).
+    console.log(
+      `[vexo:business-discovery] username=${targetUsername} -> sem foto (HTTP ${res.status}): ${(await res.text()).slice(0, 300)}`
+    );
+    return { profilePictureUrl: undefined };
+  }
+
+  const data = (await res.json()) as { business_discovery?: { profile_picture_url?: string } };
+  return { profilePictureUrl: data.business_discovery?.profile_picture_url };
+}
+
+// Remove só a conexão OPCIONAL de Business Discovery — a conexão
+// principal do Instagram (mensagens) continua intacta.
+export async function disconnectBusinessDiscovery(clinicId: string): Promise<void> {
+  await prisma.instagramAccount.update({
+    where: { clinicId },
+    data: {
+      businessDiscoveryAccessTokenEnc: null,
+      businessDiscoveryPageId: null,
+      businessDiscoveryConnectedAt: null,
+    },
+  });
 }
