@@ -196,55 +196,58 @@ export async function ClientPanelView({
                   className="flex items-center gap-2.5 justify-between rounded-lg border border-vexo-border bg-vexo-surface p-2.5"
                 >
                   {/* Avatar de volta (automação de foto formalizada — ver
-                      instagram.ts, getInstagramProfilePicture) — mesmo
-                      componente/fallback de sempre (LeadAvatar), só que
-                      fora do bloco de texto: fica alinhado com a linha
-                      inteira do card (items-center no container pai), não
-                      só com a primeira linha de texto. */}
-                  <LeadAvatar profilePictureUrl={a.lead?.profilePictureUrl} name={primary} size="lg" />
-                  <div className="min-w-0 flex-1">
-                    {/* Nome como elemento principal, @ do Instagram como
-                        secundário ao lado (cor discreta, fonte menor, sem
-                        parênteses) — ver histórico do formato em
-                        lead-display.ts. */}
-                    <div className="flex min-w-0 items-baseline gap-1">
-                      <p className="min-w-0 shrink truncate text-sm font-medium">{primary}</p>
-                      {handle && <span className="shrink-0 truncate text-caption text-vexo-muted">@{handle}</span>}
+                      instagram.ts, getInstagramProfilePicture) — alinhado no
+                      TOPO do bloco de texto (items-start neste wrapper
+                      interno), não centralizado com o card inteiro: o
+                      container externo continua items-center (só afeta o
+                      NoShowButton à direita, que fica centralizado com a
+                      altura toda do card normalmente). */}
+                  <div className="flex min-w-0 flex-1 items-start gap-2.5">
+                    <LeadAvatar profilePictureUrl={a.lead?.profilePictureUrl} name={primary} size="lg" />
+                    <div className="min-w-0 flex-1">
+                      {/* Nome como elemento principal, @ do Instagram como
+                          secundário ao lado (cor discreta, fonte menor, sem
+                          parênteses) — ver histórico do formato em
+                          lead-display.ts. */}
+                      <div className="flex min-w-0 items-baseline gap-1">
+                        <p className="min-w-0 shrink truncate text-sm font-medium">{primary}</p>
+                        {handle && <span className="shrink-0 truncate text-caption text-vexo-muted">@{handle}</span>}
+                      </div>
+                      <div className="mt-1 flex items-center gap-2 text-caption text-vexo-muted">
+                        <span>
+                          {a.scheduledAt.toLocaleString("pt-BR", {
+                            day: "2-digit",
+                            month: "2-digit",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </span>
+                        <AppointmentStatusBadge status={a.status} compact />
+                      </div>
+                      {/* WhatsApp do lead — sem isso a secretária não tinha como
+                          contatar em caso de atraso/imprevisto a partir do
+                          Painel (única tela que ela de fato usa; o card
+                          equivalente em /crm/conversas/[id] é do CRM interno,
+                          sem acesso dela). Link wa.me abre a conversa direto.
+                          BUG REAL corrigido: "flex" (não "inline-flex") faz um
+                          elemento de bloco esticar pra largura TOTAL do pai
+                          (min-w-0 flex-1, quase a largura inteira do card) —
+                          mesmo com o conteúdo visual (ícone + telefone)
+                          concentrado à esquerda, a área clicável/hover do
+                          link ficava do tamanho da linha inteira. "inline-flex"
+                          limita a área ao tamanho do próprio conteúdo. */}
+                      {a.lead?.phone && (
+                        <a
+                          href={`https://wa.me/${normalizeBrazilianWhatsappNumber(a.lead.phone)}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="mt-1 inline-flex items-center gap-1 text-caption text-vexo-accent hover:underline"
+                        >
+                          <Phone className="h-3 w-3 shrink-0" strokeWidth={2} />
+                          {a.lead.phone}
+                        </a>
+                      )}
                     </div>
-                    <div className="mt-1 flex items-center gap-2 text-caption text-vexo-muted">
-                      <span>
-                        {a.scheduledAt.toLocaleString("pt-BR", {
-                          day: "2-digit",
-                          month: "2-digit",
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
-                      </span>
-                      <AppointmentStatusBadge status={a.status} compact />
-                    </div>
-                    {/* WhatsApp do lead — sem isso a secretária não tinha como
-                        contatar em caso de atraso/imprevisto a partir do
-                        Painel (única tela que ela de fato usa; o card
-                        equivalente em /crm/conversas/[id] é do CRM interno,
-                        sem acesso dela). Link wa.me abre a conversa direto.
-                        BUG REAL corrigido: "flex" (não "inline-flex") faz um
-                        elemento de bloco esticar pra largura TOTAL do pai
-                        (min-w-0 flex-1, quase a largura inteira do card) —
-                        mesmo com o conteúdo visual (ícone + telefone)
-                        concentrado à esquerda, a área clicável/hover do
-                        link ficava do tamanho da linha inteira. "inline-flex"
-                        limita a área ao tamanho do próprio conteúdo. */}
-                    {a.lead?.phone && (
-                      <a
-                        href={`https://wa.me/${normalizeBrazilianWhatsappNumber(a.lead.phone)}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="mt-1 inline-flex items-center gap-1 text-caption text-vexo-accent hover:underline"
-                      >
-                        <Phone className="h-3 w-3 shrink-0" strokeWidth={2} />
-                        {a.lead.phone}
-                      </a>
-                    )}
                   </div>
                   {ACTIONABLE_STATUSES.includes(a.status) && (
                     <NoShowButton appointmentId={a.id} status={a.status} action={noShowAction} />
