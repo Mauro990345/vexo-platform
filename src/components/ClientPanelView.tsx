@@ -201,7 +201,7 @@ export async function ClientPanelView({
                       fora do bloco de texto: fica alinhado com a linha
                       inteira do card (items-center no container pai), não
                       só com a primeira linha de texto. */}
-                  <LeadAvatar profilePictureUrl={a.lead?.profilePictureUrl} name={primary} />
+                  <LeadAvatar profilePictureUrl={a.lead?.profilePictureUrl} name={primary} size="lg" />
                   <div className="min-w-0 flex-1">
                     {/* Nome como elemento principal, @ do Instagram como
                         secundário ao lado (cor discreta, fonte menor, sem
