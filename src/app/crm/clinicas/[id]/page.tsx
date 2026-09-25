@@ -217,7 +217,7 @@ export default async function ClinicPipelinePage({ params }: { params: { id: str
                   {items.map((conv) => {
                     const appt = conv.appointments[0];
                     const { primary, handle } = leadDisplayParts(conv.lead, null);
-                    const cardClass = `rounded-card border border-vexo-border/20 ${tint.bg} px-3.5 py-2.5`;
+                    const cardClass = `rounded-card border border-vexo-border/20 ${tint.bg} p-2.5`;
 
                     // Cabeçalho do card: avatar de volta à esquerda
                     // (automação de foto formalizada — ver instagram.ts,
