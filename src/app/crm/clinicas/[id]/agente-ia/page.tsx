@@ -64,6 +64,7 @@ export default async function ClinicAiAgentPage({ params }: { params: { id: stri
       <h1 className="text-base font-semibold tracking-tight">Agente de IA</h1>
 
       <CollapsibleSection
+        name="agente-ia"
         title="Prompt de conversação da IA"
         description="Define como a IA conversa com o lead desta clínica, além do vídeo e da frase de confirmação de agendamento."
       >
@@ -148,6 +149,7 @@ export default async function ClinicAiAgentPage({ params }: { params: { id: stri
       </CollapsibleSection>
 
       <CollapsibleSection
+        name="agente-ia"
         title="Fotos de resultado (antes/depois)"
         description="Fotos por procedimento, marcadas por categoria/tag. A IA busca a foto da categoria mais próxima do que o lead demonstrou interesse e anexa na resposta — no máximo uma por conversa."
       >
@@ -254,6 +256,7 @@ export default async function ClinicAiAgentPage({ params }: { params: { id: stri
       </CollapsibleSection>
 
       <CollapsibleSection
+        name="agente-ia"
         title="Timing de resposta da IA"
         description="Controla quanto tempo a IA espera pra responder, com base em quanto tempo o lead ficou em silêncio."
       >
@@ -325,6 +328,7 @@ export default async function ClinicAiAgentPage({ params }: { params: { id: stri
       </CollapsibleSection>
 
       <CollapsibleSection
+        name="agente-ia"
         title="Janela de envio"
         description="Mensagens de follow-up (vale pra todas as clínicas) só saem dentro desses dias e horário; fora, esperam a próxima janela."
       >
