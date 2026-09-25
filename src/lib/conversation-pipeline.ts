@@ -5,7 +5,7 @@ import { checkAvailability, createCalendarEvent, updateCalendarEvent, updateCale
 import {
   getInstagramUserProfile,
   getInstagramConversationParticipantUsername,
-  getBusinessDiscoveryProfilePicture,
+  getInstagramProfilePicture,
 } from "@/lib/instagram";
 import { PROFILE_PICTURE_REFRESH_WINDOW_MS } from "@/lib/lead-profile-picture-backfill";
 import { decryptToken } from "@/lib/crypto";
@@ -305,45 +305,31 @@ export async function handleInboundInstagramMessage(
     }
   }
 
-  // Lookup automático da foto de perfil (por mensagem nova), via Business
-  // Discovery — ver o comentário grande "Business Discovery" em
-  // instagram.ts pro porquê desse endpoint específico (a Conversations API
-  // do Instagram Login, tentada antes, comprovadamente não expõe esse
-  // dado — ver "CONCLUSÃO DEFINITIVA" em
-  // getInstagramConversationParticipantProfilePicture, ainda ali só de
-  // referência histórica). Precisa de DOIS pré-requisitos, os dois
-  // opcionais: a clínica ter conectado a Business Discovery (conexão
-  // SEPARADA da principal, ver conexoes/page.tsx), E o lead já ter
-  // igUsername salvo (Business Discovery busca por @, não por igScopedId —
-  // ver getInstagramConversationParticipantUsername logo acima, que às
-  // vezes só resolve numa mensagem POSTERIOR à primeira). Sem qualquer um
-  // dos dois, pula sem erro — o backfill periódico do worker
-  // (refreshLeadProfilePictures) pega assim que os pré-requisitos
-  // existirem, sem depender de mais uma mensagem nova.
-  if (
-    igAccount.businessDiscoveryAccessTokenEnc &&
-    lead.igUsername &&
-    (!lead.profilePictureFetchedAt || lead.profilePictureFetchedAt.getTime() < Date.now() - PROFILE_PICTURE_REFRESH_WINDOW_MS)
-  ) {
+  // Lookup automático da foto de perfil (por mensagem nova) — direto no
+  // node do usuário por IGSID, MESMO produto/token já conectado (Instagram
+  // Login), campo "profile_pic" (CONFIRMADO por teste real — ver
+  // comentário grande em getInstagramProfilePicture, instagram.ts).
+  // Substituiu o lookup via Business Discovery (produto SEPARADO, exigia
+  // conexão própria E o lead ter conta Business/Creator E já ter @
+  // descoberto) — esse aqui só precisa de um igScopedId real (guard
+  // isRealIgScopedId, dentro de getInstagramProfilePicture), sem nenhum
+  // dos outros pré-requisitos. Só a janela de refresh continua (ver
+  // PROFILE_PICTURE_REFRESH_WINDOW_MS): URL de foto de perfil da Meta
+  // costuma ser assinada/temporária.
+  if (!lead.profilePictureFetchedAt || lead.profilePictureFetchedAt.getTime() < Date.now() - PROFILE_PICTURE_REFRESH_WINDOW_MS) {
     try {
-      const { profilePictureUrl } = await getBusinessDiscoveryProfilePicture(
-        decryptToken(igAccount.businessDiscoveryAccessTokenEnc),
-        igAccount.igUserId,
-        lead.igUsername
-      );
+      const { profilePictureUrl } = await getInstagramProfilePicture(decryptToken(igAccount.accessTokenEnc), lead.igScopedId);
       await prisma.lead.update({
         where: { id: lead.id },
         data: { profilePictureUrl: profilePictureUrl ?? null, profilePictureFetchedAt: new Date() },
       });
       lead.profilePictureUrl = profilePictureUrl ?? null;
       console.log(
-        `[vexo:profile-picture-lookup] lead=${lead.id} igUsername=${lead.igUsername} -> ${profilePictureUrl ? "foto atualizada" : "sem foto (provável conta pessoal, não Business/Creator)"}`
+        `[vexo:profile-picture-lookup] lead=${lead.id} igScopedId=${lead.igScopedId} -> ${profilePictureUrl ? "foto atualizada" : "sem foto na resposta"}`
       );
     } catch (err) {
       // NÃO marca profilePictureFetchedAt aqui — erro pode ser transitório
-      // (rede, token de Página expirado), tenta de novo na próxima
-      // mensagem. "Conta não é Business/Creator" não cai aqui — tratado
-      // como resultado normal dentro de getBusinessDiscoveryProfilePicture.
+      // (rede, token expirado), tenta de novo na próxima mensagem.
       console.error("[vexo:profile-picture-lookup] Falha ao buscar foto de perfil do lead:", err);
       if (webhookLogId) {
         const detail = err instanceof Error ? `${err.message}\n${err.stack ?? ""}` : String(err);

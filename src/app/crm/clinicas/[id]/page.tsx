@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { startOfDay, addDays } from "@/lib/metrics";
 import { leadDisplayParts } from "@/lib/lead-display";
+import { LeadAvatar } from "@/components/LeadAvatar";
 
 export const dynamic = "force-dynamic";
 
@@ -218,40 +219,42 @@ export default async function ClinicPipelinePage({ params }: { params: { id: str
                     const { primary, handle } = leadDisplayParts(conv.lead, null);
                     const cardClass = `rounded-card border border-vexo-border/20 ${tint.bg} px-3.5 py-2.5`;
 
-                    // Cabeçalho do card: nome (esquerda, ligeiramente menor
+                    // Cabeçalho do card: avatar de volta à esquerda
+                    // (automação de foto formalizada — ver instagram.ts,
+                    // getInstagramProfilePicture), nome (ligeiramente menor
                     // que antes) com o @ do Instagram discreto ABAIXO dele
                     // (não mais do lado — mesma ideia do Painel, só que
                     // empilhado em vez de na mesma linha, porque aqui a
                     // data/horário ocupa a direita dessa mesma linha do
-                    // nome). Sem avatar aqui: removido junto com o do
-                    // Painel (a automação de foto foi descartada por ora,
-                    // ver instagram.ts, seção "Business Discovery") — o
-                    // Link é "block" (não mais "flex items-start gap-2",
-                    // que só existia por causa do avatar ao lado), o que
-                    // devolve o conteúdo pra margem esquerda original do
-                    // card, sem o recuo que o avatar deixava.
+                    // nome). Link volta a ser "flex items-start gap-2" (era
+                    // "block" enquanto não tinha avatar) — o conteúdo de
+                    // texto fica num <div> próprio ao lado do avatar, não
+                    // mais filho direto do Link.
 
                     // A coluna Agendado troca a data mostrada (do
                     // agendamento, não da última mensagem) — resto do
                     // card (nome, @, etiqueta de status) é igual às outras.
-                    // Removido também o ícone "⋮" (MoreHorizontal) que só
-                    // existia no formato padrão — não tinha nenhuma função
-                    // (sem onClick, sem menu nenhum atrás), só ocupava
-                    // espaço; agora os dois formatos ficam consistentes.
+                    // Sem o ícone "⋮" (MoreHorizontal) que só existia no
+                    // formato padrão — não tinha nenhuma função (sem
+                    // onClick, sem menu nenhum atrás), só ocupava espaço;
+                    // os dois formatos ficam consistentes nisso.
                     if (col.status === "SCHEDULED") {
                       return (
                         <div key={conv.id} className={cardClass}>
-                          <Link href={`/crm/conversas/${conv.id}`} className="block transition hover:text-vexo-accent">
-                            <div className="flex items-start justify-between gap-2">
-                              <p className="min-w-0 flex-1 truncate text-xs font-normal">{primary}</p>
-                              {appt && (
-                                <span className="shrink-0 text-caption text-vexo-muted">{formatDateTime(appt.scheduledAt)}</span>
-                              )}
+                          <Link href={`/crm/conversas/${conv.id}`} className="flex items-start gap-2 transition hover:text-vexo-accent">
+                            <LeadAvatar profilePictureUrl={conv.lead.profilePictureUrl} name={primary} />
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-start justify-between gap-2">
+                                <p className="min-w-0 flex-1 truncate text-xs font-normal">{primary}</p>
+                                {appt && (
+                                  <span className="shrink-0 text-caption text-vexo-muted">{formatDateTime(appt.scheduledAt)}</span>
+                                )}
+                              </div>
+                              {handle && <p className="mt-0.5 truncate text-caption text-vexo-muted">@{handle}</p>}
+                              <span className={`mt-1.5 inline-block rounded-card ${tint.tagBg} px-1.5 py-0.5 text-caption font-medium ${tint.tagText}`}>
+                                {col.label}
+                              </span>
                             </div>
-                            {handle && <p className="mt-0.5 truncate text-caption text-vexo-muted">@{handle}</p>}
-                            <span className={`mt-1.5 inline-block rounded-card ${tint.tagBg} px-1.5 py-0.5 text-caption font-medium ${tint.tagText}`}>
-                              {col.label}
-                            </span>
                           </Link>
                         </div>
                       );
@@ -259,17 +262,20 @@ export default async function ClinicPipelinePage({ params }: { params: { id: str
 
                     return (
                       <div key={conv.id} className={cardClass}>
-                        <Link href={`/crm/conversas/${conv.id}`} className="block transition hover:text-vexo-accent">
-                          <div className="flex items-start justify-between gap-2">
-                            <p className="min-w-0 flex-1 truncate text-xs font-normal">{primary}</p>
-                            <span className="shrink-0 text-caption text-vexo-muted">
-                              {conv.lastMessageAt ? formatDateTime(conv.lastMessageAt) : "—"}
+                        <Link href={`/crm/conversas/${conv.id}`} className="flex items-start gap-2 transition hover:text-vexo-accent">
+                          <LeadAvatar profilePictureUrl={conv.lead.profilePictureUrl} name={primary} />
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-start justify-between gap-2">
+                              <p className="min-w-0 flex-1 truncate text-xs font-normal">{primary}</p>
+                              <span className="shrink-0 text-caption text-vexo-muted">
+                                {conv.lastMessageAt ? formatDateTime(conv.lastMessageAt) : "—"}
+                              </span>
+                            </div>
+                            {handle && <p className="mt-0.5 truncate text-caption text-vexo-muted">@{handle}</p>}
+                            <span className={`mt-1.5 inline-block rounded-card ${tint.tagBg} px-1.5 py-0.5 text-caption font-medium ${tint.tagText}`}>
+                              {col.label}
                             </span>
                           </div>
-                          {handle && <p className="mt-0.5 truncate text-caption text-vexo-muted">@{handle}</p>}
-                          <span className={`mt-1.5 inline-block rounded-card ${tint.tagBg} px-1.5 py-0.5 text-caption font-medium ${tint.tagText}`}>
-                            {col.label}
-                          </span>
                         </Link>
                       </div>
                     );

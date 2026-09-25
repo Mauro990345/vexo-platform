@@ -9,6 +9,7 @@ import { NoShowButton } from "@/components/NoShowButton";
 import { ChannelStatusPill } from "@/components/ChannelStatusPill";
 import { normalizeBrazilianWhatsappNumber } from "@/lib/whatsapp";
 import { leadDisplayParts } from "@/lib/lead-display";
+import { LeadAvatar } from "@/components/LeadAvatar";
 
 // Marcar "Não compareceu" só faz sentido pra agendamento ainda em aberto —
 // já compareceu ou já foi cancelado não tem o que alternar aqui.
@@ -194,14 +195,18 @@ export async function ClientPanelView({
                   key={a.id}
                   className="flex items-center gap-2.5 justify-between rounded-lg border border-vexo-border bg-vexo-surface p-2.5"
                 >
+                  {/* Avatar de volta (automação de foto formalizada — ver
+                      instagram.ts, getInstagramProfilePicture) — mesmo
+                      componente/fallback de sempre (LeadAvatar), só que
+                      fora do bloco de texto: fica alinhado com a linha
+                      inteira do card (items-center no container pai), não
+                      só com a primeira linha de texto. */}
+                  <LeadAvatar profilePictureUrl={a.lead?.profilePictureUrl} name={primary} />
                   <div className="min-w-0 flex-1">
                     {/* Nome como elemento principal, @ do Instagram como
                         secundário ao lado (cor discreta, fonte menor, sem
                         parênteses) — ver histórico do formato em
-                        lead-display.ts. Sem avatar/foto de perfil aqui: a
-                        automação de foto foi descartada por ora (ver
-                        instagram.ts, seção "Business Discovery"), então um
-                        círculo com ícone genérico não agregava nada visual. */}
+                        lead-display.ts. */}
                     <div className="flex min-w-0 items-baseline gap-1">
                       <p className="min-w-0 shrink truncate text-sm font-medium">{primary}</p>
                       {handle && <span className="shrink-0 truncate text-caption text-vexo-muted">@{handle}</span>}
