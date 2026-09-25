@@ -172,24 +172,20 @@ export async function sendInstagramMessage(params: {
 // continua sendo o comportamento certo, não um bug.
 //
 // CONFIRMADO (teste único, rota de diagnóstico temporária removida depois
-// de usar — ver histórico do PR): ESTE MESMO node aceita também o campo
+// de usar) e FORMALIZADO: ESTE MESMO node aceita também o campo
 // "profile_pic" (nome diferente de "profile_picture_url", o campo já
 // testado e descartado na Conversations API — ver CONCLUSÃO em
 // getInstagramConversationParticipantProfilePicture, mais abaixo). Chamada
 // de teste — GET /{igScopedId}?fields=name,username,profile_pic — contra
 // um IGSID real (lead com conversa de verdade) devolveu HTTP 200 com
 // "profile_pic" preenchido, uma URL real da CDN do Instagram
-// (scontent-*.cdninstagram.com). Achado o caminho oficial que faltava.
-//
-// PROPOSITALMENTE NÃO implementado ainda — decisão de adiar pra depois do
-// App Review (não mexer em mais nada antes da submissão). Se/quando
-// formalizar: o candidato natural é trocar getBusinessDiscoveryProfileUrl
-// (produto Business Discovery, só funciona se o LEAD tiver conta
-// Business/Creator — ver seção "Business Discovery" mais abaixo) por esse
-// lookup direto (fields=name,username,profile_pic), que não tem essa
-// restrição de tipo de conta do lead — mas isso ainda precisa ser
-// confirmado contra um lead com conta PESSOAL (o teste único usou um lead
-// já conhecido, sem checar o tipo de conta dele).
+// (scontent-*.cdninstagram.com). Ver getInstagramProfilePicture logo
+// abaixo — chamada SEPARADA desta (mesmo motivo de sempre: um problema
+// ali nunca arrisca quebrar o lookup de nome), já ativa no pipeline
+// automático (conversation-pipeline.ts) e no backfill periódico
+// (lead-profile-picture-backfill.ts), substituindo getBusinessDiscoveryProfilePicture
+// (que exigia o lead ter conta Business/Creator — esse aqui não tem essa
+// restrição).
 export async function getInstagramUserProfile(
   accessToken: string,
   igScopedId: string
@@ -204,6 +200,47 @@ export async function getInstagramUserProfile(
   }
   const data = (await res.json()) as { name?: string };
   return { name: data.name || undefined };
+}
+
+// Foto de perfil — MESMO node de getInstagramUserProfile acima
+// (GET /{igScopedId}?fields=...), CHAMADA SEPARADA de propósito (mesmo
+// motivo de sempre: um problema aqui nunca arrisca quebrar o lookup de
+// nome, que já está confirmado funcionando). Campo "profile_pic", não
+// "profile_picture_url" (esse último é o nome tentado e descartado na
+// Conversations API — ver CONCLUSÃO em
+// getInstagramConversationParticipantProfilePicture, mais abaixo).
+//
+// CONFIRMADO por teste real contra um IGSID real: HTTP 200, "profile_pic"
+// preenchido com uma URL real da CDN do Instagram
+// (scontent-*.cdninstagram.com).
+//
+// Diferente de getBusinessDiscoveryProfilePicture (produto SEPARADO,
+// Login do Facebook pra Empresas, só funciona se o LEAD tiver conta
+// Business/Creator, busca por username): esta função usa o MESMO
+// produto/token já conectado (Instagram Login) e busca direto por
+// igScopedId — funciona pra qualquer tipo de conta do lead, sem depender
+// do username já ter sido descoberto antes. isRealIgScopedId (mesmo guard
+// de sempre) evita chamar a API pra leads de demo/seed com igScopedId
+// não-numérico.
+export async function getInstagramProfilePicture(
+  accessToken: string,
+  igScopedId: string
+): Promise<{ profilePictureUrl?: string }> {
+  if (!isRealIgScopedId(igScopedId)) {
+    console.log(`[vexo:profile-picture-lookup] igScopedId=${igScopedId} não é um IGSID numérico real (provável lead de seed/demo) — pulado, sem chamar a API.`);
+    return { profilePictureUrl: undefined };
+  }
+
+  const url = new URL(`${IG_GRAPH_BASE}/${igScopedId}`);
+  url.searchParams.set("fields", "profile_pic");
+  url.searchParams.set("access_token", accessToken);
+
+  const res = await fetch(url.toString());
+  if (!res.ok) {
+    throw new Error(`Falha ao buscar foto de perfil do lead (HTTP ${res.status}): ${await res.text()}`);
+  }
+  const data = (await res.json()) as { profile_pic?: string };
+  return { profilePictureUrl: data.profile_pic || undefined };
 }
 
 // Conversations API — endpoint DIFERENTE do lookup de perfil acima (mesmo
@@ -338,24 +375,25 @@ export async function getInstagramConversationParticipantUsername(
 // Conversations API simples), a foto de perfil não tem, via Instagram
 // Login, nenhum caminho automático.
 //
-// ATUALIZAÇÃO: isso NÃO significa mais "sem caminho nenhum" — existe uma
+// ATUALIZAÇÃO: isso NÃO significa mais "sem caminho nenhum" — existiu uma
 // quarta avenida, de um produto DIFERENTE da Meta (Business Discovery API,
 // via Login do Facebook para Empresas — ver a seção "Business Discovery"
-// mais abaixo neste arquivo), que FUNCIONA pra esse propósito. O job
-// periódico (refreshLeadProfilePictures) e o lookup por mensagem nova
-// (conversation-pipeline.ts) estão ATIVOS de novo, mas chamando
-// getBusinessDiscoveryProfilePicture, não mais esta função — esta aqui
-// continua existindo, correta, só não é mais chamada por lugar nenhum
-// (histórico da investigação, não dead code por engano).
+// mais abaixo neste arquivo), que FUNCIONA pra esse propósito, mas exige
+// que o LEAD tenha conta Business/Creator (a maioria não tem). Foi a
+// única avenida usada por um tempo (getBusinessDiscoveryProfilePicture),
+// até a quinta avenida abaixo substituir de vez.
 //
-// SEGUNDA ATUALIZAÇÃO: existe ainda uma QUINTA avenida, dentro do MESMO
-// produto Instagram Login desta função (nenhum produto/OAuth novo) — ver
-// o comentário CONFIRMADO em getInstagramUserProfile, logo acima. O campo
-// certo pra foto neste node não é "profile_picture_url" (o nome tentado
-// aqui, na Conversations API), é "profile_pic" — e ele vem preenchido no
-// lookup direto por IGSID (GET /{igScopedId}?fields=...), fora da
-// Conversations API. Achado por teste único, ainda não formalizado no
-// pipeline automático (decisão adiada pra depois do App Review).
+// SEGUNDA ATUALIZAÇÃO (esta é a avenida FORMALIZADA, ativa hoje): existe
+// uma quinta avenida, dentro do MESMO produto Instagram Login desta
+// função (nenhum produto/OAuth novo) — ver getInstagramProfilePicture,
+// logo acima de getInstagramUserProfile. O campo certo pra foto neste
+// node não é "profile_picture_url" (o nome tentado aqui, na Conversations
+// API), é "profile_pic" — e ele vem preenchido no lookup direto por IGSID
+// (GET /{igScopedId}?fields=...), fora da Conversations API, SEM exigir
+// que o lead tenha conta Business/Creator. Confirmado por teste real e
+// formalizado no pipeline automático (conversation-pipeline.ts) e no
+// backfill periódico (lead-profile-picture-backfill.ts), substituindo
+// getBusinessDiscoveryProfilePicture como mecanismo ativo.
 export async function getInstagramConversationParticipantProfilePicture(
   accessToken: string,
   igUserId: string,
@@ -670,6 +708,15 @@ export async function disconnectInstagram(clinicId: string): Promise<void> {
 // SEPARADA e OPCIONAL, só pra esse bônus visual — uma clínica que nunca
 // conectar isso continua funcionando normalmente, só sem foto nos cards
 // (mesmo comportamento de antes desta seção existir).
+//
+// NÃO É MAIS O MECANISMO ATIVO de foto de perfil — substituída por
+// getInstagramProfilePicture (mesmo produto Instagram Login já conectado,
+// sem exigir Business/Creator do lead — ver comentário lá, e a "SEGUNDA
+// ATUALIZAÇÃO" em getInstagramConversationParticipantProfilePicture, mais
+// acima). getBusinessDiscoveryProfilePicture continua existindo e
+// funcional (a conexão/OAuth abaixo não foi removida), só não é mais
+// chamada automaticamente por nenhum lugar — histórico, não dead code por
+// engano.
 //
 // Autorização em facebook.com (não instagram.com); troca de token contra
 // graph.facebook.com (não api.instagram.com/graph.instagram.com);
