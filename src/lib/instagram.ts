@@ -170,6 +170,26 @@ export async function sendInstagramMessage(params: {
 // "name" não é garantido (depende das configurações de privacidade da
 // pessoa) — nesse caso o fallback de perguntar o nome na conversa
 // continua sendo o comportamento certo, não um bug.
+//
+// CONFIRMADO (teste único, rota de diagnóstico temporária removida depois
+// de usar — ver histórico do PR): ESTE MESMO node aceita também o campo
+// "profile_pic" (nome diferente de "profile_picture_url", o campo já
+// testado e descartado na Conversations API — ver CONCLUSÃO em
+// getInstagramConversationParticipantProfilePicture, mais abaixo). Chamada
+// de teste — GET /{igScopedId}?fields=name,username,profile_pic — contra
+// um IGSID real (lead com conversa de verdade) devolveu HTTP 200 com
+// "profile_pic" preenchido, uma URL real da CDN do Instagram
+// (scontent-*.cdninstagram.com). Achado o caminho oficial que faltava.
+//
+// PROPOSITALMENTE NÃO implementado ainda — decisão de adiar pra depois do
+// App Review (não mexer em mais nada antes da submissão). Se/quando
+// formalizar: o candidato natural é trocar getBusinessDiscoveryProfileUrl
+// (produto Business Discovery, só funciona se o LEAD tiver conta
+// Business/Creator — ver seção "Business Discovery" mais abaixo) por esse
+// lookup direto (fields=name,username,profile_pic), que não tem essa
+// restrição de tipo de conta do lead — mas isso ainda precisa ser
+// confirmado contra um lead com conta PESSOAL (o teste único usou um lead
+// já conhecido, sem checar o tipo de conta dele).
 export async function getInstagramUserProfile(
   accessToken: string,
   igScopedId: string
@@ -327,6 +347,15 @@ export async function getInstagramConversationParticipantUsername(
 // getBusinessDiscoveryProfilePicture, não mais esta função — esta aqui
 // continua existindo, correta, só não é mais chamada por lugar nenhum
 // (histórico da investigação, não dead code por engano).
+//
+// SEGUNDA ATUALIZAÇÃO: existe ainda uma QUINTA avenida, dentro do MESMO
+// produto Instagram Login desta função (nenhum produto/OAuth novo) — ver
+// o comentário CONFIRMADO em getInstagramUserProfile, logo acima. O campo
+// certo pra foto neste node não é "profile_picture_url" (o nome tentado
+// aqui, na Conversations API), é "profile_pic" — e ele vem preenchido no
+// lookup direto por IGSID (GET /{igScopedId}?fields=...), fora da
+// Conversations API. Achado por teste único, ainda não formalizado no
+// pipeline automático (decisão adiada pra depois do App Review).
 export async function getInstagramConversationParticipantProfilePicture(
   accessToken: string,
   igUserId: string,
