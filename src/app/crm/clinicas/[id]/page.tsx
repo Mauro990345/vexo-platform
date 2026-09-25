@@ -242,7 +242,7 @@ export default async function ClinicPipelinePage({ params }: { params: { id: str
                       return (
                         <div key={conv.id} className={cardClass}>
                           <Link href={`/crm/conversas/${conv.id}`} className="flex items-start gap-2 transition hover:text-vexo-accent">
-                            <LeadAvatar profilePictureUrl={conv.lead.profilePictureUrl} name={primary} />
+                            <LeadAvatar profilePictureUrl={conv.lead.profilePictureUrl} name={primary} size="md" />
                             <div className="min-w-0 flex-1">
                               <div className="flex items-start justify-between gap-2">
                                 <p className="min-w-0 flex-1 truncate text-xs font-normal">{primary}</p>
@@ -250,7 +250,7 @@ export default async function ClinicPipelinePage({ params }: { params: { id: str
                                   <span className="shrink-0 text-caption text-vexo-muted">{formatDateTime(appt.scheduledAt)}</span>
                                 )}
                               </div>
-                              {handle && <p className="mt-0.5 truncate text-caption text-vexo-muted">@{handle}</p>}
+                              {handle && <p className="truncate text-caption text-vexo-muted">@{handle}</p>}
                               <span className={`mt-1.5 inline-block rounded-card ${tint.tagBg} px-1.5 py-0.5 text-caption font-medium ${tint.tagText}`}>
                                 {col.label}
                               </span>
@@ -263,7 +263,7 @@ export default async function ClinicPipelinePage({ params }: { params: { id: str
                     return (
                       <div key={conv.id} className={cardClass}>
                         <Link href={`/crm/conversas/${conv.id}`} className="flex items-start gap-2 transition hover:text-vexo-accent">
-                          <LeadAvatar profilePictureUrl={conv.lead.profilePictureUrl} name={primary} />
+                          <LeadAvatar profilePictureUrl={conv.lead.profilePictureUrl} name={primary} size="md" />
                           <div className="min-w-0 flex-1">
                             <div className="flex items-start justify-between gap-2">
                               <p className="min-w-0 flex-1 truncate text-xs font-normal">{primary}</p>
@@ -271,7 +271,7 @@ export default async function ClinicPipelinePage({ params }: { params: { id: str
                                 {conv.lastMessageAt ? formatDateTime(conv.lastMessageAt) : "—"}
                               </span>
                             </div>
-                            {handle && <p className="mt-0.5 truncate text-caption text-vexo-muted">@{handle}</p>}
+                            {handle && <p className="truncate text-caption text-vexo-muted">@{handle}</p>}
                             <span className={`mt-1.5 inline-block rounded-card ${tint.tagBg} px-1.5 py-0.5 text-caption font-medium ${tint.tagText}`}>
                               {col.label}
                             </span>
