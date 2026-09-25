@@ -326,6 +326,29 @@ export async function createClientLogin(
     });
   } catch (err) {
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+      // User.email é @unique GLOBALMENTE (todo o sistema, não só nesta
+      // clínica) — então esse e-mail pode já pertencer a outra clínica, ou
+      // até a uma conta interna da equipe. Nos dois casos, o dono real não
+      // aparece na lista "Acesso do cliente ao painel dele" desta página
+      // (ela só lista os usuários DESTA clinicId), então sem essa consulta
+      // a mensagem genérica deixa a pessoa caçando um botão "Remover
+      // acesso" que nunca vai aparecer aqui — bug real reportado depois da
+      // PR #76: o acesso existia, só que em outra clínica.
+      const existing = await prisma.user.findUnique({
+        where: { email },
+        select: { role: true, clinicId: true, clinic: { select: { name: true } } },
+      });
+      if (existing?.role === "CLIENT" && existing.clinic) {
+        return {
+          error:
+            existing.clinicId === clinicId
+              ? `Esse e-mail já tem um acesso cadastrado nesta clínica — deve estar na lista abaixo. Se não aparecer, feche e reabra este modal pra atualizar a lista.`
+              : `Esse e-mail já tem acesso cadastrado na clínica "${existing.clinic.name}". Remova o acesso por lá (aba Painel dessa clínica) ou use outro e-mail.`,
+        };
+      }
+      if (existing?.role && existing.role !== "CLIENT") {
+        return { error: "Esse e-mail já é usado por uma conta interna da equipe. Use outro e-mail para o acesso do cliente." };
+      }
       return { error: "Já existe um acesso cadastrado com esse e-mail." };
     }
     throw err;
