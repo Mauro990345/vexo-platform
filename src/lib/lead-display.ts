@@ -2,27 +2,31 @@
 // mas extraído pra um arquivo próprio testável — o resto do projeto segue
 // esse padrão de manter lógica pura fora de arquivos .tsx, ver follow-up.ts).
 //
-// Ajuste sobre a primeira versão (PR #54): aquela mostrava o @ só quando
-// name E igUsername existiam os dois — mas contra dados reais, a maioria
-// dos leads ainda não tinha igUsername salvo (a captura automática do
-// handle real via Conversations API, ver
-// getInstagramConversationParticipantUsername em instagram.ts, é recente;
-// leads mais antigos dependem do backfill, ver lead-username-backfill.ts, e
-// leads sem handle disponível continuam sem @ mesmo depois disso, já que a
-// Meta não garante esse dado em toda conversa). Resultado: o card caía
-// sempre no fallback de só nome, exatamente o bug reportado.
-//
-// Formato exato pedido: "@handle (Nome)" — @ primeiro (é o que a
-// secretária usa pra achar o perfil de verdade no Instagram, por isso vem
-// antes e sobrevive ao truncamento do card, que corta do fim pro início),
-// nome entre parênteses depois, só quando os dois existem. Sem igUsername,
-// cai pro nome sozinho — não dá pra inventar um @ que a Meta não devolveu.
-export function leadDisplayLabel(
+// Histórico do formato — 2 versões antes desta:
+//   1. Só nome (com igUsername como fallback quando não havia nome).
+//   2. PR #54/#55: "@handle (Nome)", tudo numa string só, @ primeiro — pra
+//      sobreviver ao truncamento do card (que corta do fim) e priorizar o
+//      dado que a secretária usa pra achar o perfil de verdade no
+//      Instagram.
+// Voltou pro nome como elemento PRINCIPAL — pedido explícito depois de ver
+// a v2 em produção: "Nome @handle", nome em destaque normal, @ como
+// informação secundária (cor mais discreta, fonte menor), sem parênteses.
+// Como os dois pedaços precisam de estilo DIFERENTE (não dá mais pra
+// devolver uma string só), a função devolve as duas partes separadas — o
+// caller (ClientPanelView.tsx) decide como estilizar cada uma.
+export type LeadDisplayParts = {
+  primary: string;
+  // Só preenchido quando name E igUsername existem os dois — sem name, o
+  // "primary" já cai pro igUsername sozinho (ver abaixo), e repetir o
+  // mesmo @ como secundário seria redundante.
+  handle: string | null;
+};
+
+export function leadDisplayParts(
   lead: { name: string | null; igUsername: string | null } | null,
   manualTitle: string | null
-): string {
-  if (!lead) return manualTitle ?? "Agendamento";
-  if (lead.igUsername && lead.name) return `@${lead.igUsername} (${lead.name})`;
-  if (lead.igUsername) return `@${lead.igUsername}`;
-  return lead.name ?? "Lead";
+): LeadDisplayParts {
+  if (!lead) return { primary: manualTitle ?? "Agendamento", handle: null };
+  if (lead.name && lead.igUsername) return { primary: lead.name, handle: lead.igUsername };
+  return { primary: lead.name ?? lead.igUsername ?? "Lead", handle: null };
 }
