@@ -219,30 +219,33 @@ export default async function ClinicPipelinePage({ params }: { params: { id: str
                     const { primary, handle } = leadDisplayParts(conv.lead, null);
                     const cardClass = `rounded-card border border-vexo-border/20 ${tint.bg} px-3.5 py-2.5`;
 
-                    // Nome em destaque + @ do Instagram discreto ao lado —
-                    // mesmo formato do Painel (ver lead-display.ts). Sem
-                    // avatar aqui: removido junto com o do Painel (a
-                    // automação de foto foi descartada por ora, ver
-                    // instagram.ts, seção "Business Discovery") — o Link
-                    // volta a ser "block" (era "flex items-start gap-2" só
-                    // por causa do avatar ao lado), o que também devolve o
-                    // conteúdo pra margem esquerda original do card, sem o
-                    // recuo que o avatar deixava.
+                    // Cabeçalho do card: nome (esquerda, ligeiramente menor
+                    // que antes) com o @ do Instagram discreto ABAIXO dele
+                    // (não mais do lado — mesma ideia do Painel, só que
+                    // empilhado em vez de na mesma linha, porque aqui a
+                    // data/horário ocupa a direita dessa mesma linha do
+                    // nome). Sem avatar aqui: removido junto com o do
+                    // Painel (a automação de foto foi descartada por ora,
+                    // ver instagram.ts, seção "Business Discovery") — o
+                    // Link é "block" (não mais "flex items-start gap-2",
+                    // que só existia por causa do avatar ao lado), o que
+                    // devolve o conteúdo pra margem esquerda original do
+                    // card, sem o recuo que o avatar deixava.
 
-                    // A coluna Agendado troca a segunda linha (data do
-                    // agendamento em vez de última mensagem) — resto do
-                    // card (nome, etiqueta de status) é igual às outras.
+                    // A coluna Agendado troca a data mostrada (do
+                    // agendamento, não da última mensagem) — resto do
+                    // card (nome, @, etiqueta de status) é igual às outras.
                     if (col.status === "SCHEDULED") {
                       return (
                         <div key={conv.id} className={cardClass}>
                           <Link href={`/crm/conversas/${conv.id}`} className="block transition hover:text-vexo-accent">
-                            <div className="flex min-w-0 items-baseline gap-1">
-                              <p className="min-w-0 shrink truncate text-sm font-normal">{primary}</p>
-                              {handle && <span className="shrink-0 truncate text-caption text-vexo-muted">@{handle}</span>}
+                            <div className="flex items-start justify-between gap-2">
+                              <p className="min-w-0 flex-1 truncate text-xs font-normal">{primary}</p>
+                              {appt && (
+                                <span className="shrink-0 text-caption text-vexo-muted">{formatDateTime(appt.scheduledAt)}</span>
+                              )}
                             </div>
-                            {appt && (
-                              <p className="mt-1 text-caption text-vexo-muted">{formatDateTime(appt.scheduledAt)}</p>
-                            )}
+                            {handle && <p className="mt-0.5 truncate text-caption text-vexo-muted">@{handle}</p>}
                             <span className={`mt-1.5 inline-block rounded-card ${tint.tagBg} px-1.5 py-0.5 text-caption font-medium ${tint.tagText}`}>
                               {col.label}
                             </span>
@@ -255,15 +258,15 @@ export default async function ClinicPipelinePage({ params }: { params: { id: str
                       <div key={conv.id} className={cardClass}>
                         <Link href={`/crm/conversas/${conv.id}`} className="block transition hover:text-vexo-accent">
                           <div className="flex items-start justify-between gap-2">
-                            <div className="flex min-w-0 items-baseline gap-1">
-                              <p className="min-w-0 shrink truncate text-sm font-normal">{primary}</p>
-                              {handle && <span className="shrink-0 truncate text-caption text-vexo-muted">@{handle}</span>}
+                            <p className="min-w-0 flex-1 truncate text-xs font-normal">{primary}</p>
+                            <div className="flex shrink-0 items-center gap-1">
+                              <span className="text-caption text-vexo-muted">
+                                {conv.lastMessageAt ? formatDateTime(conv.lastMessageAt) : "—"}
+                              </span>
+                              <MoreHorizontal className="h-3.5 w-3.5 shrink-0 text-vexo-muted" strokeWidth={2} />
                             </div>
-                            <MoreHorizontal className="h-3.5 w-3.5 shrink-0 text-vexo-muted" strokeWidth={2} />
                           </div>
-                          <p className="mt-1 text-caption text-vexo-muted">
-                            {conv.lastMessageAt ? formatDateTime(conv.lastMessageAt) : "—"}
-                          </p>
+                          {handle && <p className="mt-0.5 truncate text-caption text-vexo-muted">@{handle}</p>}
                           <span className={`mt-1.5 inline-block rounded-card ${tint.tagBg} px-1.5 py-0.5 text-caption font-medium ${tint.tagText}`}>
                             {col.label}
                           </span>
