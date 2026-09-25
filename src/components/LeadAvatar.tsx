@@ -3,8 +3,8 @@
 import { useState } from "react";
 import { User } from "lucide-react";
 
-const SIZE_CLASSES = { sm: "h-6 w-6", md: "h-8 w-8" } as const;
-const ICON_SIZE_CLASSES = { sm: "h-3 w-3", md: "h-4 w-4" } as const;
+const SIZE_CLASSES = { sm: "h-6 w-6", md: "h-8 w-8", lg: "h-10 w-10" } as const;
+const ICON_SIZE_CLASSES = { sm: "h-3 w-3", md: "h-4 w-4", lg: "h-5 w-5" } as const;
 
 // Avatar do lead (Painel e Pipeline) — <img> puro, não next/image: as URLs
 // vêm do CDN do Instagram, em subdomínios que mudam (scontent-*), então não
@@ -27,7 +27,7 @@ export function LeadAvatar({
 }: {
   profilePictureUrl?: string | null;
   name?: string | null;
-  size?: "sm" | "md";
+  size?: "sm" | "md" | "lg";
 }) {
   const [failed, setFailed] = useState(false);
   const dimension = SIZE_CLASSES[size];

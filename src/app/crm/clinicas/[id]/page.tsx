@@ -242,7 +242,7 @@ export default async function ClinicPipelinePage({ params }: { params: { id: str
                       return (
                         <div key={conv.id} className={cardClass}>
                           <Link href={`/crm/conversas/${conv.id}`} className="flex items-start gap-2 transition hover:text-vexo-accent">
-                            <LeadAvatar profilePictureUrl={conv.lead.profilePictureUrl} name={primary} size="md" />
+                            <LeadAvatar profilePictureUrl={conv.lead.profilePictureUrl} name={primary} size="lg" />
                             <div className="min-w-0 flex-1">
                               <div className="flex items-start justify-between gap-2">
                                 <p className="min-w-0 flex-1 truncate text-xs font-normal">{primary}</p>
@@ -263,7 +263,7 @@ export default async function ClinicPipelinePage({ params }: { params: { id: str
                     return (
                       <div key={conv.id} className={cardClass}>
                         <Link href={`/crm/conversas/${conv.id}`} className="flex items-start gap-2 transition hover:text-vexo-accent">
-                          <LeadAvatar profilePictureUrl={conv.lead.profilePictureUrl} name={primary} size="md" />
+                          <LeadAvatar profilePictureUrl={conv.lead.profilePictureUrl} name={primary} size="lg" />
                           <div className="min-w-0 flex-1">
                             <div className="flex items-start justify-between gap-2">
                               <p className="min-w-0 flex-1 truncate text-xs font-normal">{primary}</p>
