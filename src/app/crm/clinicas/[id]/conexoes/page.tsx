@@ -291,8 +291,8 @@ export default async function ClinicConexoesPage({
 
       <div className="grid grid-cols-3 gap-3">
         <ConnectionCard
-          icon={<WhatsAppGlyphIcon className="h-4 w-4" />}
-          iconBg="bg-emerald-500"
+          icon={<WhatsAppGlyphIcon className="h-7 w-7" />}
+          iconBg=""
           name="WhatsApp"
           description="Notifica a secretária quando um lead precisa de atendimento humano."
           connected={whatsappStatus === "open"}

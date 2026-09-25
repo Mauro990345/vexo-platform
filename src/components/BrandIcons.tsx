@@ -2,16 +2,31 @@
 
 import { useId } from "react";
 
-// Glifo simplificado da câmera do Instagram (quadrado arredondado + lente +
-// "flash") com o gradiente de marca (amarelo → laranja → rosa → roxo) — não
-// é o SVG oficial pixel-a-pixel da Meta, mas reproduz o desenho e as cores
-// reais o bastante pra ser reconhecível em qualquer tamanho: do badge
-// pequeno sobreposto no avatar (LeadAvatar.tsx) ao ícone maior da aba
-// Conexões. useId() em vez de um id fixo pro gradiente: o mesmo componente
+// Os dois glifos abaixo são autocontidos: já incluem o próprio fundo
+// (squircle + gradiente da marca) dentro do SVG. Por isso, em todo lugar
+// que os usa, o ícone deve preencher o container inteiro (ex.: h-7 w-7
+// dentro de um wrapper h-7 w-7) e o wrapper NÃO deve ter iconBg/bg-* — um
+// fundo do Tailwind atrás do SVG ficaria como uma segunda camada de cor
+// atrás do squircle já desenhado, sem nenhum propósito.
+//
+// Proporções calibradas pra bater com os logos oficiais (não são os SVGs
+// oficiais pixel-a-pixel da Meta/WhatsApp Inc., mas reproduzem desenho,
+// cores E proporção real) — ajuste feito depois de um primeiro rascunho
+// com os elementos internos pequenos/centralizados demais: nos logos reais,
+// o elemento interno (círculo do WhatsApp, quadrado da câmera do
+// Instagram) é GRANDE, quase tocando as bordas do squircle, não um ícone
+// pequeno com bastante margem ao redor.
+
+// Glifo do Instagram: squircle com gradiente diagonal (amarelo → laranja →
+// rosa → roxo, canto inferior-esquerdo pro superior-direito), quadrado
+// branco vazado GRANDE (~73% da largura do ícone) representando o corpo da
+// câmera, círculo branco vazado centralizado dentro dele (a lente), e um
+// pontinho branco preenchido no canto superior direito (o flash/câmera
+// frontal). useId() em vez de um id fixo pro gradiente: o mesmo componente
 // aparece várias vezes na mesma página (um badge por card do Pipeline/
-// Painel) — um id fixo duplicaria no DOM (HTML exige id único por
-// documento; sem isso, todas as instâncias menos a primeira perderiam o
-// gradiente em alguns navegadores).
+// Painel, por exemplo) — um id fixo duplicaria no DOM (HTML exige id único
+// por documento; sem isso, todas as instâncias menos a primeira perderiam
+// o gradiente em alguns navegadores).
 export function InstagramGlyphIcon({ className }: { className?: string }) {
   const gradientId = useId();
   return (
@@ -25,22 +40,41 @@ export function InstagramGlyphIcon({ className }: { className?: string }) {
         </linearGradient>
       </defs>
       <rect x="0" y="0" width="24" height="24" rx="6" fill={`url(#${gradientId})`} />
-      <rect x="6.5" y="6.5" width="11" height="11" rx="3.5" fill="none" stroke="white" strokeWidth="1.6" />
-      <circle cx="12" cy="12" r="3.2" fill="none" stroke="white" strokeWidth="1.6" />
-      <circle cx="16.2" cy="7.8" r="1" fill="white" />
+      <rect x="3.2" y="3.2" width="17.6" height="17.6" rx="5" fill="none" stroke="white" strokeWidth="1.8" />
+      <circle cx="12" cy="12" r="4.6" fill="none" stroke="white" strokeWidth="1.8" />
+      <circle cx="16.3" cy="7.7" r="1.15" fill="white" />
     </svg>
   );
 }
 
-// Silhueta do fone-no-balão do WhatsApp, em currentColor (branco quando
-// usada dentro do quadrado verde de ConnectionCard, iconBg="bg-emerald-500")
-// — substitui o MessageCircle genérico (balão de chat qualquer) que estava
-// lá antes, sem identidade visual nenhuma da marca.
+// Glifo do WhatsApp: squircle com gradiente verde (mais claro em cima, mais
+// escuro embaixo), círculo branco vazado GRANDE (quase tocando as bordas)
+// com um "rabinho" de balão de conversa saindo do canto inferior esquerdo
+// (desenhado como parte do mesmo contorno, não um elemento separado), e um
+// fone de telefone branco preenchido centralizado dentro do círculo.
 export function WhatsAppGlyphIcon({ className }: { className?: string }) {
+  const gradientId = useId();
   return (
-    <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden="true">
-      <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.472-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347Z" />
-      <path d="M12.001 2C6.478 2 2 6.477 2 12c0 1.886.523 3.652 1.432 5.159L2 22l4.995-1.409A9.955 9.955 0 0 0 12.001 22C17.523 22 22 17.523 22 12S17.523 2 12.001 2Zm0 18.166a8.14 8.14 0 0 1-4.152-1.14l-.298-.177-3.093.873.826-3.02-.195-.31a8.14 8.14 0 0 1-1.253-4.392c0-4.501 3.664-8.166 8.167-8.166 4.502 0 8.166 3.665 8.166 8.166 0 4.502-3.664 8.166-8.168 8.166Z" />
+    <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
+      <defs>
+        <linearGradient id={gradientId} x1="50%" y1="0%" x2="50%" y2="100%">
+          <stop offset="0%" stopColor="#5BD066" />
+          <stop offset="100%" stopColor="#27B43E" />
+        </linearGradient>
+      </defs>
+      <rect x="0" y="0" width="24" height="24" rx="6" fill={`url(#${gradientId})`} />
+      <path
+        d="M12 3.6a8.4 8.4 0 0 0-7.15 12.8L3.6 20.4l4.15-1.2A8.4 8.4 0 1 0 12 3.6Z"
+        fill="none"
+        stroke="white"
+        strokeWidth="1.7"
+        strokeLinejoin="round"
+        strokeLinecap="round"
+      />
+      <path
+        d="M9.1 7.9c-.22-.5-.38-.5-.58-.5-.15 0-.32 0-.5.02-.17.02-.45.08-.68.36-.24.28-.9.9-.9 2.2 0 1.3.93 2.56 1.06 2.74.13.18 1.84 2.94 4.53 4.03 2.24.9 2.7.72 3.19.68.5-.04 1.6-.65 1.83-1.29.22-.63.22-1.17.15-1.29-.06-.11-.24-.18-.5-.32-.27-.13-1.58-.78-1.82-.87-.25-.09-.43-.14-.61.13-.18.27-.7.87-.85 1.05-.16.18-.32.2-.59.07-.27-.13-1.13-.42-2.16-1.33-.8-.71-1.34-1.6-1.5-1.87-.15-.27-.01-.42.12-.55.12-.12.27-.32.4-.48.13-.16.18-.27.26-.45.09-.18.04-.35-.02-.48-.07-.14-.6-1.5-.83-2.06Z"
+        fill="white"
+      />
     </svg>
   );
 }
