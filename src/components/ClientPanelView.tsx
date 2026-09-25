@@ -8,8 +8,7 @@ import { AppointmentStatusBadge } from "@/components/AppointmentStatusBadge";
 import { NoShowButton } from "@/components/NoShowButton";
 import { ChannelStatusPill } from "@/components/ChannelStatusPill";
 import { normalizeBrazilianWhatsappNumber } from "@/lib/whatsapp";
-import { leadDisplayLabel } from "@/lib/lead-display";
-import { LeadAvatar } from "@/components/LeadAvatar";
+import { leadDisplayParts } from "@/lib/lead-display";
 
 // Marcar "Não compareceu" só faz sentido pra agendamento ainda em aberto —
 // já compareceu ou já foi cancelado não tem o que alternar aqui.
@@ -188,26 +187,24 @@ export async function ClientPanelView({
           <div className="space-y-3">
             <h2 className="text-caption font-medium uppercase tracking-wide text-vexo-muted">Agendamentos</h2>
             <div className="space-y-2">
-              {appointments.map((a) => (
+              {appointments.map((a) => {
+                const { primary, handle } = leadDisplayParts(a.lead, a.manualTitle);
+                return (
                 <div
                   key={a.id}
                   className="flex items-center gap-2.5 justify-between rounded-lg border border-vexo-border bg-vexo-surface p-2.5"
                 >
-                  {/* Avatar do Instagram (foto real, quando disponível — ver
-                      LeadAvatar) substitui o antigo ícone genérico de @ como
-                      identificador visual do card: mais informativo (tipo
-                      Kommo/CRMs de social selling), mas o mesmo AtSign
-                      continua no <p> abaixo via leadDisplayLabel quando há
-                      handle. Fora do min-w-0 flex-1 de propósito — não deve
-                      encolher nem truncar junto com o texto. */}
-                  {a.lead && (
-                    <LeadAvatar profilePictureUrl={a.lead.profilePictureUrl} name={leadDisplayLabel(a.lead, null)} />
-                  )}
                   <div className="min-w-0 flex-1">
-                    <div className="flex min-w-0 items-center gap-1.5">
-                      <p className="min-w-0 truncate text-sm font-medium">
-                        {leadDisplayLabel(a.lead, a.manualTitle)}
-                      </p>
+                    {/* Nome como elemento principal, @ do Instagram como
+                        secundário ao lado (cor discreta, fonte menor, sem
+                        parênteses) — ver histórico do formato em
+                        lead-display.ts. Sem avatar/foto de perfil aqui: a
+                        automação de foto foi descartada por ora (ver
+                        instagram.ts, seção "Business Discovery"), então um
+                        círculo com ícone genérico não agregava nada visual. */}
+                    <div className="flex min-w-0 items-baseline gap-1">
+                      <p className="min-w-0 shrink truncate text-sm font-medium">{primary}</p>
+                      {handle && <span className="shrink-0 truncate text-caption text-vexo-muted">@{handle}</span>}
                     </div>
                     <div className="mt-1 flex items-center gap-2 text-caption text-vexo-muted">
                       <span>
@@ -224,13 +221,20 @@ export async function ClientPanelView({
                         contatar em caso de atraso/imprevisto a partir do
                         Painel (única tela que ela de fato usa; o card
                         equivalente em /crm/conversas/[id] é do CRM interno,
-                        sem acesso dela). Link wa.me abre a conversa direto. */}
+                        sem acesso dela). Link wa.me abre a conversa direto.
+                        BUG REAL corrigido: "flex" (não "inline-flex") faz um
+                        elemento de bloco esticar pra largura TOTAL do pai
+                        (min-w-0 flex-1, quase a largura inteira do card) —
+                        mesmo com o conteúdo visual (ícone + telefone)
+                        concentrado à esquerda, a área clicável/hover do
+                        link ficava do tamanho da linha inteira. "inline-flex"
+                        limita a área ao tamanho do próprio conteúdo. */}
                     {a.lead?.phone && (
                       <a
                         href={`https://wa.me/${normalizeBrazilianWhatsappNumber(a.lead.phone)}`}
                         target="_blank"
                         rel="noreferrer"
-                        className="mt-1 flex items-center gap-1 text-caption text-vexo-accent hover:underline"
+                        className="mt-1 inline-flex items-center gap-1 text-caption text-vexo-accent hover:underline"
                       >
                         <Phone className="h-3 w-3 shrink-0" strokeWidth={2} />
                         {a.lead.phone}
@@ -241,7 +245,8 @@ export async function ClientPanelView({
                     <NoShowButton appointmentId={a.id} status={a.status} action={noShowAction} />
                   )}
                 </div>
-              ))}
+                );
+              })}
 
               {appointments.length === 0 && (
                 <p className="rounded-lg border border-vexo-border bg-vexo-surface p-4 text-center text-sm text-vexo-muted">
