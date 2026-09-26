@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 function Shell({ children }: { children: ReactNode }) {
   return (
     <main className="flex min-h-screen items-center justify-center px-4 py-10">
-      <div className="w-full max-w-lg">
+      <div className="w-full max-w-2xl">
         <div className="mb-8 text-center">
           <div className="mx-auto mb-3 h-10 w-10 rounded-xl bg-vexo-accent" />
           <h1 className="text-2xl font-semibold tracking-tight">VEXO</h1>
@@ -79,7 +79,8 @@ export default async function BriefingPage({ params }: { params: { token: string
         </p>
         <h2 className="mt-1 text-base font-semibold">Briefing de onboarding — {link.clinicDisplayName}</h2>
         <p className="mt-2 text-sm text-vexo-muted">
-          Só essas perguntas rápidas pra configurarmos tudo certo. Leva menos de 5 minutos.
+          Estas informações nos ajudam a configurar o atendimento da sua clínica com precisão. Leva
+          cerca de 2 minutos.
         </p>
       </div>
 
