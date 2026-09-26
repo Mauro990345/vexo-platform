@@ -5,6 +5,7 @@ import { withConversationLock } from "@/lib/conversation-lock";
 import { bufferForDebounce } from "@/lib/inbound-debounce";
 import { decryptToken } from "@/lib/crypto";
 import { prisma } from "@/lib/prisma";
+import { transcribeAudioFromUrl } from "@/lib/speech-to-text";
 
 // Webhook do Instagram Messaging (Meta). GET = handshake de verificação;
 // POST = eventos de mensagem recebida.
@@ -114,11 +115,29 @@ function quoteNumericIds(rawJson: string): string {
   return rawJson.replace(/"id"\s*:\s*(\d+)(?=[,}\s])/g, '"id":"$1"');
 }
 
+// Formato análogo ao documentado pro Messenger Platform (infra
+// compartilhada com o Instagram Messaging — mesma razão dos dois
+// namespaces de ID documentada em exchangeInstagramCode):
+// message.attachments: [{ type: "audio"|"image"|"video"|..., payload: {
+// url } }]. NÃO CONFIRMADO ainda contra um payload real de ÁUDIO do
+// Instagram especificamente — este produto já se mostrou mais de uma vez
+// nesta integração diferente do documentado pro Messenger clássico (ver
+// is_echo/standby/thread_owner). Se o formato real vier diferente, o
+// primeiro áudio recebido em produção vai cair no mesmo tratamento de
+// "sem texto" (ver o bloco de descarte mais abaixo) e o corpo CRU do
+// evento fica registrado em WebhookLog.matchFailureReason — dá pra
+// confirmar (ou corrigir) esta definição a partir de lá, sem precisar
+// adivinhar de novo.
+type MetaMessageAttachment = {
+  type: string;
+  payload?: { url?: string };
+};
+
 type MetaMessagingEvent = {
   sender: { id: string };
   recipient: { id: string };
   timestamp: number;
-  message?: { mid: string; text?: string; is_echo?: boolean };
+  message?: { mid: string; text?: string; is_echo?: boolean; attachments?: MetaMessageAttachment[] };
   // Estrutura análoga à do Messenger Platform (infra compartilhada com
   // o Instagram Messaging — mesma razão dos dois namespaces de ID
   // documentada em exchangeInstagramCode) pra notificação de mensagem
@@ -127,7 +146,7 @@ type MetaMessagingEvent = {
   // payload real do Instagram ainda — ver /crm/webhook-logs pra pegar o
   // corpo bruto de um evento "message_edit" de verdade e confirmar (ou
   // corrigir) os nomes dos campos aqui.
-  message_edit?: { mid: string; text?: string };
+  message_edit?: { mid: string; text?: string; attachments?: MetaMessageAttachment[] };
 };
 
 type MetaMessagingEntry = {
@@ -251,42 +270,11 @@ export async function POST(req: NextRequest) {
       // funciona mesmo se is_echo vier ausente/false.
       const fromOwnAccount = event.sender.id === entry.id || Boolean(event.message?.is_echo);
       const inbound = fromOwnAccount ? undefined : event.message ?? event.message_edit;
-      if (!inbound?.text) {
-        // Diagnóstico: uma mensagem SEM campo "text" (ex.: anexo, figurinha,
-        // ou um cartão de contato nativo do Instagram compartilhado — não
-        // digitado como texto) é hoje descartada em silêncio aqui, sem
-        // nenhum rastro em lugar nenhum. Bug real suspeitado: um lead
-        // compartilhou o próprio telefone via cartão de contato nativo do
-        // Instagram, e a IA pareceu "não perceber" — sem confirmação (por
-        // falta de acesso a um payload real desse tipo) de qual formato
-        // exato a Meta usa pra esse compartilhamento nesse produto
-        // (Instagram API with Instagram Login, ainda pouco documentado),
-        // não dá pra tentar extrair o número daqui com segurança sem
-        // adivinhar. Em vez disso, grava o evento CRU (igual ao padrão já
-        // usado pra "reentrega ignorada" logo abaixo) — na próxima vez que
-        // isso acontecer, dá pra confirmar o formato real em
-        // /crm/webhook-logs e implementar a extração certa, em vez de
-        // continuar sem nenhuma pista.
-        if (!fromOwnAccount && (event.message || event.message_edit) && webhookLog?.id) {
-          await prisma.webhookLog
-            .update({
-              where: { id: webhookLog.id },
-              data: {
-                matchFailureReason:
-                  `Mensagem recebida sem campo "text" — descartada sem processar (possível anexo/cartão de ` +
-                  `contato/figurinha). Corpo do evento: ${JSON.stringify(event).slice(0, 2000)}`,
-              },
-            })
-            .catch((err) => console.error("[vexo] Falha ao gravar mensagem sem texto no WebhookLog:", err));
-        }
-        continue;
-      }
-      // Guarda numa const própria (não só `inbound.text`) — o TypeScript
-      // não carrega a checagem de narrowing acima pra dentro da closure
-      // passada a bufferForDebounce logo abaixo, já que ela pode em
-      // teoria rodar mais tarde; capturar o valor aqui, já sabidamente
-      // uma string, resolve isso sem precisar de non-null assertion.
-      const leadText = inbound.text;
+      // undefined aqui cobre tanto eco da própria conta quanto eventos sem
+      // message/message_edit nenhum (ex: confirmação de leitura/entrega) —
+      // nenhum dos dois é uma mensagem de lead perdida, então sem
+      // diagnóstico nenhum, só ignora.
+      if (!inbound) continue;
 
       // A Meta reentrega webhook "at least once" — se o VEXO demorar
       // demais pra responder 200 (todo o processamento, inclusive a
@@ -294,10 +282,11 @@ export async function POST(req: NextRequest) {
       // antes do 200 final), o mesmo evento chega de novo. Sem checar isso,
       // uma reentrega reprocessava a mensagem do zero — nova chamada à IA
       // (custo duplicado), possível mensagem duplicada no CRM. Checa pelo
-      // mid ANTES de processar; a constraint @unique em
-      // Message.igMessageId (schema) é a rede de segurança pra uma corrida
-      // genuína (duas entregas quase simultâneas, nenhuma terminou ainda
-      // quando a outra chega aqui).
+      // mid ANTES de decidir texto vs áudio (transcrever de novo por uma
+      // reentrega também seria custo duplicado, não só a chamada à IA) —
+      // a constraint @unique em Message.igMessageId (schema) é a rede de
+      // segurança pra uma corrida genuína (duas entregas quase
+      // simultâneas, nenhuma terminou ainda quando a outra chega aqui).
       const alreadyProcessed = await prisma.message.findFirst({
         where: { igMessageId: inbound.mid },
         select: { id: true },
@@ -314,6 +303,81 @@ export async function POST(req: NextRequest) {
         }
         continue;
       }
+
+      let resolvedText = inbound.text;
+
+      // Mensagem de ÁUDIO (nota de voz) — sem campo "text", mas com um
+      // attachment type="audio" (ver MetaMessageAttachment acima). Baixa e
+      // transcreve via OpenRouter (src/lib/speech-to-text.ts) e trata o
+      // texto transcrito exatamente como se o lead tivesse digitado —
+      // entra no mesmo buffer de debounce, mesmo histórico pra IA, nada
+      // muda no resto do pipeline a partir daqui. Prefixo "🎤 " salvo
+      // junto do texto (não um campo separado) — pra quem revisar a
+      // conversa depois no Painel/Pipeline saber que aquela mensagem veio
+      // de áudio, não foi digitada.
+      if (!resolvedText) {
+        const audioUrl = inbound.attachments?.find((a) => a.type === "audio")?.payload?.url;
+        if (audioUrl) {
+          try {
+            const transcript = await transcribeAudioFromUrl(audioUrl);
+            if (transcript.trim()) {
+              resolvedText = `🎤 ${transcript.trim()}`;
+            }
+          } catch (err) {
+            console.error(`[vexo] Falha ao transcrever mensagem de áudio (mid=${inbound.mid}):`, err);
+            if (webhookLog?.id) {
+              await prisma.webhookLog
+                .update({
+                  where: { id: webhookLog.id },
+                  data: {
+                    matchFailureReason: `Falha ao transcrever mensagem de áudio (mid=${inbound.mid}, url=${audioUrl}): ${err instanceof Error ? err.message : String(err)}`,
+                  },
+                })
+                .catch((updateErr) =>
+                  console.error("[vexo] Falha ao gravar motivo de falha de transcrição no WebhookLog:", updateErr)
+                );
+            }
+          }
+        }
+      }
+
+      if (!resolvedText) {
+        // Diagnóstico: uma mensagem SEM campo "text" e sem attachment de
+        // áudio reconhecido (ex.: imagem, figurinha, ou um cartão de
+        // contato nativo do Instagram compartilhado — não digitado como
+        // texto, nem áudio) é descartada aqui, sem nenhum rastro em lugar
+        // nenhum além deste log. Bug real suspeitado: um lead compartilhou
+        // o próprio telefone via cartão de contato nativo do Instagram, e
+        // a IA pareceu "não perceber" — sem confirmação (por falta de
+        // acesso a um payload real desse tipo) de qual formato exato a
+        // Meta usa pra esse compartilhamento nesse produto (Instagram API
+        // with Instagram Login, ainda pouco documentado), não dá pra
+        // tentar extrair o número daqui com segurança sem adivinhar. Em
+        // vez disso, grava o evento CRU — na próxima vez que isso
+        // acontecer, dá pra confirmar o formato real em /crm/webhook-logs
+        // e implementar a extração certa, em vez de continuar sem
+        // nenhuma pista.
+        if (webhookLog?.id) {
+          await prisma.webhookLog
+            .update({
+              where: { id: webhookLog.id },
+              data: {
+                matchFailureReason:
+                  `Mensagem recebida sem campo "text" e sem áudio reconhecido — descartada sem processar ` +
+                  `(possível anexo/cartão de contato/figurinha). Corpo do evento: ${JSON.stringify(event).slice(0, 2000)}`,
+              },
+            })
+            .catch((err) => console.error("[vexo] Falha ao gravar mensagem sem texto no WebhookLog:", err));
+        }
+        continue;
+      }
+
+      // Guarda numa const própria (não só `resolvedText`) — o TypeScript
+      // não carrega a checagem de narrowing acima pra dentro da closure
+      // passada a bufferForDebounce logo abaixo, já que ela pode em
+      // teoria rodar mais tarde; capturar o valor aqui, já sabidamente
+      // uma string, resolve isso sem precisar de non-null assertion.
+      const leadText = resolvedText;
 
       // Agrupa com qualquer outra mensagem do MESMO lead chegando em
       // sequência rápida, em vez de processar cada uma na hora — bug real
