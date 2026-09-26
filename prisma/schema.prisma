@@ -85,6 +85,7 @@ model Clinic {
   googleCalendarAccount GoogleCalendarAccount?
   connectionLinks       ConnectionLink[]
   connectionBundles     ConnectionBundle[]
+  clientPanelLink       ClientPanelLink?
 
   users           User[]
   leads           Lead[]
@@ -226,6 +227,27 @@ model ConnectionBundle {
   links ConnectionLink[]
 
   @@index([clinicId])
+}
+
+// Link permanente de login automático do cliente no painel dele (ver
+// /acesso/[token]/route.ts) — substitui o fluxo de e-mail+senha
+// (CreateClientLoginForm/createClientLogin): um clínica → um link, sem
+// expiração e sem uso único (diferente de ConnectionLink/ConnectionBundle
+// acima, que são de uso pontual/OAuth) — o cliente salva e reabre esse
+// mesmo link sempre. "Gerar novo link" (ver regenerateClientPanelLink)
+// sobrescreve o token nesta mesma linha, invalidando o link antigo na
+// hora — não cria uma segunda linha, porque só existe UM link válido por
+// clínica de cada vez. clinicId @unique (não só @@index) garante isso no
+// banco, não só na lógica do action.
+model ClientPanelLink {
+  id       String @id @default(cuid())
+  clinicId String @unique
+  clinic   Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  token String @unique
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model GoogleCalendarAccount {
