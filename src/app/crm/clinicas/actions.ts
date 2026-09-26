@@ -334,6 +334,63 @@ export async function revokeClientPanelLink(clinicId: string): Promise<void> {
   revalidatePath("/crm/painel");
 }
 
+// Mesmo padrão do ClientPanelLink acima, pra outra finalidade: link
+// público de briefing de onboarding (ver BriefingLink no schema). Única
+// diferença real — aqui a criação exige dois textos digitados pelo Mauro
+// (nome do cliente e nome da clínica, exibidos no cabeçalho da página
+// pública) em vez de nascer sem nenhum input, como o ClientPanelLink.
+// Chamado de novo com o link já existente (ex: o formulário reaparecer
+// por engano) simplesmente devolve o link atual, sem sobrescrever os
+// nomes já salvos — só revokeBriefingLink + gerar de novo troca os nomes.
+export async function getOrCreateBriefingLink(
+  clinicId: string,
+  clientDisplayName: string,
+  clinicDisplayName: string
+): Promise<{ token: string; url: string; clientDisplayName: string; clinicDisplayName: string }> {
+  await requireInternalSession();
+
+  const existing = await prisma.briefingLink.findUnique({ where: { clinicId } });
+  if (existing) {
+    return {
+      token: existing.token,
+      url: `${process.env.APP_URL ?? ""}/briefing/${existing.token}`,
+      clientDisplayName: existing.clientDisplayName,
+      clinicDisplayName: existing.clinicDisplayName,
+    };
+  }
+
+  const trimmedClientName = clientDisplayName.trim();
+  const trimmedClinicName = clinicDisplayName.trim();
+  if (!trimmedClientName || !trimmedClinicName) {
+    throw new Error("Informe o nome do cliente e o nome da clínica.");
+  }
+
+  const token = crypto.randomBytes(24).toString("base64url");
+  await prisma.briefingLink.create({
+    data: { clinicId, token, clientDisplayName: trimmedClientName, clinicDisplayName: trimmedClinicName },
+  });
+
+  revalidatePath(`/crm/clinicas/${clinicId}/briefing`);
+  return {
+    token,
+    url: `${process.env.APP_URL ?? ""}/briefing/${token}`,
+    clientDisplayName: trimmedClientName,
+    clinicDisplayName: trimmedClinicName,
+  };
+}
+
+// Apaga só o BriefingLink — as respostas já enviadas (Briefing, se
+// existirem) continuam associadas à clínica, sem depender do link (ver
+// comentário no schema). Gerar um link novo depois não recria/reseta as
+// respostas anteriores, elas continuam visíveis na aba Briefing.
+export async function revokeBriefingLink(clinicId: string): Promise<void> {
+  await requireInternalSession();
+
+  await prisma.briefingLink.deleteMany({ where: { clinicId } });
+
+  revalidatePath(`/crm/clinicas/${clinicId}/briefing`);
+}
+
 export async function setConversationStatus(
   conversationId: string,
   status: "IN_CONVERSATION" | "LOST" | "FOLLOW_UP"

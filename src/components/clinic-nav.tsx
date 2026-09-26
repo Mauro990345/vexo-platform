@@ -1,4 +1,4 @@
-import { Columns3, Repeat, Link2, Settings, Bot, Zap, LayoutDashboard } from "lucide-react";
+import { Columns3, Repeat, Link2, Settings, Bot, Zap, LayoutDashboard, ClipboardList } from "lucide-react";
 import type { NavGroup } from "@/components/AppShell";
 
 // Grupos de navegação de UMA clínica específica — usados tanto pelo layout
@@ -55,6 +55,7 @@ export function buildClinicNavGroups(clinicId: string): NavGroup[] {
         },
         { href: `${base}/painel`, label: "Painel", icon: <LayoutDashboard className="h-3.5 w-3.5 shrink-0" strokeWidth={2} /> },
         { href: base, label: "Pipeline", icon: <Columns3 className="h-3.5 w-3.5 shrink-0" strokeWidth={2} /> },
+        { href: `${base}/briefing`, label: "Briefing", icon: <ClipboardList className="h-3.5 w-3.5 shrink-0" strokeWidth={2} /> },
         { href: `${base}/agente-ia`, label: "Agente de IA", icon: <Bot className="h-3.5 w-3.5 shrink-0" strokeWidth={2} /> },
         { href: `${base}/automacoes`, label: "Automações", icon: <Zap className="h-3.5 w-3.5 shrink-0" strokeWidth={2} /> },
         { href: `${base}/follow-up`, label: "Follow-up", icon: <Repeat className="h-3.5 w-3.5 shrink-0" strokeWidth={2} /> },
