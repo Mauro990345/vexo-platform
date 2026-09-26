@@ -318,10 +318,37 @@ export async function POST(req: NextRequest) {
       if (!resolvedText) {
         const audioUrl = inbound.attachments?.find((a) => a.type === "audio")?.payload?.url;
         if (audioUrl) {
+          // Bug real reportado em produção: um áudio com attachment
+          // corretamente detectado (payload confirmado em
+          // /crm/webhook-logs) mesmo assim caía no descarte genérico
+          // "sem campo text e sem áudio reconhecido" — mensagem
+          // logicamente incorreta, já que o áudio TINHA sido reconhecido.
+          // Causa raiz: nem o catch abaixo nem o caso de transcrição
+          // vazia continuavam com `continue` — a execução caía direto no
+          // bloco de descarte genérico mais abaixo, que SOBRESCREVIA o
+          // matchFailureReason específico (com o erro real da
+          // transcrição) pela mensagem genérica, escondendo a causa de
+          // verdade. Cada desfecho agora grava sua própria mensagem E
+          // sai do loop imediatamente — nunca mais deixa o bloco
+          // genérico rodar por cima de um áudio que foi, de fato,
+          // reconhecido e tentado.
           try {
             const transcript = await transcribeAudioFromUrl(audioUrl);
             if (transcript.trim()) {
               resolvedText = `🎤 ${transcript.trim()}`;
+            } else {
+              console.warn(`[vexo] Áudio transcrito, mas sem texto reconhecível (mid=${inbound.mid}).`);
+              if (webhookLog?.id) {
+                await prisma.webhookLog
+                  .update({
+                    where: { id: webhookLog.id },
+                    data: {
+                      matchFailureReason: `Áudio transcrito, mas a transcrição veio vazia (mid=${inbound.mid}, url=${audioUrl}) — provavelmente silêncio ou áudio muito curto/inaudível.`,
+                    },
+                  })
+                  .catch((err) => console.error("[vexo] Falha ao gravar motivo de transcrição vazia no WebhookLog:", err));
+              }
+              continue;
             }
           } catch (err) {
             console.error(`[vexo] Falha ao transcrever mensagem de áudio (mid=${inbound.mid}):`, err);
@@ -337,6 +364,7 @@ export async function POST(req: NextRequest) {
                   console.error("[vexo] Falha ao gravar motivo de falha de transcrição no WebhookLog:", updateErr)
                 );
             }
+            continue;
           }
         }
       }
