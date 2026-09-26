@@ -113,12 +113,23 @@ export function BriefingForm({ token, initial }: { token: string; initial: Initi
 
   return (
     <form onSubmit={handleSubmit} className="space-y-5 text-left">
-      <Field label="Qual o carro-chefe (procedimento/serviço principal) da clínica?">
-        <textarea
+      <Field label="Qual o principal procedimento/serviço oferecido pela clínica?">
+        <input
+          type="text"
           value={flagshipService}
           onChange={(e) => setFlagshipService(e.target.value)}
           required
-          rows={2}
+          className={inputClass}
+        />
+      </Field>
+
+      <Field label="Qual o ticket médio dos procedimentos?">
+        <input
+          type="text"
+          value={averageTicket}
+          onChange={(e) => setAverageTicket(e.target.value)}
+          placeholder="Valor aproximado"
+          required
           className={inputClass}
         />
       </Field>
@@ -151,11 +162,11 @@ export function BriefingForm({ token, initial }: { token: string; initial: Initi
       </Field>
 
       <Field label="O que você já tentou pra atrair clientes que não deu certo?">
-        <textarea
+        <input
+          type="text"
           value={whatTried}
           onChange={(e) => setWhatTried(e.target.value)}
           required
-          rows={3}
           className={inputClass}
         />
       </Field>
@@ -214,17 +225,6 @@ export function BriefingForm({ token, initial }: { token: string; initial: Initi
             className={`${inputClass} mt-2`}
           />
         )}
-      </Field>
-
-      <Field label="Qual o ticket médio dos procedimentos?">
-        <input
-          type="text"
-          value={averageTicket}
-          onChange={(e) => setAverageTicket(e.target.value)}
-          placeholder="Valor aproximado"
-          required
-          className={inputClass}
-        />
       </Field>
 
       {error && (
