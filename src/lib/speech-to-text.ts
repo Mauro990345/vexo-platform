@@ -44,6 +44,53 @@ const CONTENT_TYPE_TO_FORMAT: Record<string, string> = {
 const SUPPORTED_FORMATS = new Set(Object.values(CONTENT_TYPE_TO_FORMAT));
 const FALLBACK_FORMAT = "aac";
 
+// Diagnóstico rico do erro da OpenRouter — reduz a incerteza de "é saldo
+// da OpenRouter ou é outra coisa (BYOK, formato de áudio, etc.)" sem
+// precisar abrir o painel da OpenRouter manualmente. `error.metadata.
+// limit_source` é o campo que a própria doc oficial da OpenRouter usa pra
+// distinguir a causa de um 402 (ver
+// openrouter.ai/docs/api_reference/limits, seção "Handling 402 errors"):
+// "openrouter_credits"/"openrouter_key_limit"/"openrouter_in_flight_budget"
+// = saldo/limite do LADO DA OPENROUTER; ausência desse campo (ou um
+// provider_code presente) tende a indicar erro do LADO DO PROVEDOR (BYOK,
+// formato rejeitado, etc.) — a distinção exata que motivou toda essa
+// investigação de tier/saldo. Sempre inclui o corpo cru completo por
+// último, pra nunca perder informação mesmo se a Meta/OpenRouter mudar o
+// formato do erro sem avisar.
+async function buildOpenRouterErrorDetail(res: Response): Promise<string> {
+  const rawBody = await res.text();
+  const parts = [`HTTP ${res.status}`];
+
+  let parsed: { error?: { code?: number; message?: string; metadata?: Record<string, unknown> } } | undefined;
+  try {
+    parsed = JSON.parse(rawBody);
+  } catch {
+    // Corpo não é JSON — segue só com o texto cru no final.
+  }
+
+  if (parsed?.error) {
+    if (parsed.error.message) parts.push(`message=${parsed.error.message}`);
+    const metadata = parsed.error.metadata;
+    if (metadata) {
+      if (metadata.limit_source) parts.push(`limit_source=${metadata.limit_source}`);
+      if (metadata.reason) parts.push(`reason=${metadata.reason}`);
+      if (metadata.remedy_hint) parts.push(`remedy_hint=${metadata.remedy_hint}`);
+      if (metadata.provider_code) parts.push(`provider_code=${metadata.provider_code}`);
+      if (metadata.error_type) parts.push(`error_type=${metadata.error_type}`);
+    }
+  }
+
+  // Só presentes em erro de rate limit (ver doc), mas custo zero incluir
+  // quando existirem — sem eles, silenciosamente omitidos.
+  const retryAfter = res.headers.get("retry-after");
+  if (retryAfter) parts.push(`retry-after=${retryAfter}s`);
+  const rateLimitRemaining = res.headers.get("x-ratelimit-remaining");
+  if (rateLimitRemaining) parts.push(`x-ratelimit-remaining=${rateLimitRemaining}`);
+
+  parts.push(`corpo_completo=${rawBody}`);
+  return parts.join(" | ");
+}
+
 function guessAudioFormat(contentType: string | null, url: string): string {
   const normalized = contentType?.split(";")[0]?.trim().toLowerCase();
   if (normalized && CONTENT_TYPE_TO_FORMAT[normalized]) return CONTENT_TYPE_TO_FORMAT[normalized];
@@ -98,8 +145,8 @@ export async function transcribeAudioFromUrl(audioUrl: string): Promise<string> 
       });
 
       if (!res.ok) {
-        const detail = await res.text();
-        const message = `Falha ao transcrever áudio via OpenRouter (${res.status}): ${detail}`;
+        const detail = await buildOpenRouterErrorDetail(res);
+        const message = `Falha ao transcrever áudio via OpenRouter: ${detail}`;
         if (res.status === 429 || res.status >= 500) throw new RetryableError(message);
         throw new Error(message);
       }
