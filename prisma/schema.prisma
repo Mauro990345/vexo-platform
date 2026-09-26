@@ -86,6 +86,8 @@ model Clinic {
   connectionLinks       ConnectionLink[]
   connectionBundles     ConnectionBundle[]
   clientPanelLink       ClientPanelLink?
+  briefingLink          BriefingLink?
+  briefing              Briefing?
 
   users           User[]
   leads           Lead[]
@@ -248,6 +250,95 @@ model ClientPanelLink {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+// Link público de briefing de onboarding (ex: /briefing/{token}) — mesmo
+// padrão do ClientPanelLink acima (token não-adivinhável, sem login), mas
+// pra outra finalidade: uma página pública, SEM login, que o Mauro manda
+// pro cliente novo preencher com informações de onboarding (carro-chefe,
+// investimento em publicidade, faturamento etc. — ver Briefing abaixo).
+// clientDisplayName/clinicDisplayName são digitados pelo Mauro na hora de
+// criar o link (podem ser diferentes de Clinic.name, ex. nome da doutora
+// em vez do nome fantasia da clínica) — usados só no cabeçalho da página
+// pública, nunca em lugar de Clinic.name no resto do sistema. Mesmas duas
+// operações do ClientPanelLink: criar (getOrCreateBriefingLink) e cancelar
+// (revokeBriefingLink, apaga só esta linha — as respostas já enviadas, se
+// existirem, ficam em Briefing, associadas à clínica, não a este link).
+model BriefingLink {
+  id       String @id @default(cuid())
+  clinicId String @unique
+  clinic   Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  token String @unique
+
+  clientDisplayName String
+  clinicDisplayName String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum BriefingRevenueRange {
+  UNDER_20K
+  FROM_20K_TO_50K
+  FROM_50K_TO_100K
+  OVER_100K
+}
+
+enum BriefingVexoGoal {
+  SCHEDULE_MORE_EVALUATIONS
+  REDUCE_NO_SHOW
+  STOP_DEPENDING_ON_PAID_ADS
+  OTHER
+}
+
+// Respostas do formulário de briefing de onboarding — uma por clínica
+// (clinicId @unique, mesmo padrão do ClientPanelLink). Sem histórico/
+// versionamento de propósito (mesma filosofia do resto do projeto): o
+// cliente pode reabrir o mesmo link e reenviar, e o envio novo SOBRESCREVE
+// o anterior (ver upsert em submitBriefing, app/briefing/[token]/actions.ts)
+// — só a última resposta importa. Nenhuma pergunta sobre Instagram/Google
+// Calendar aqui de propósito (pedido explícito): a conexão desses canais
+// já é resolvida pelo link de /conectar/{token} separado.
+model Briefing {
+  id       String @id @default(cuid())
+  clinicId String @unique
+  clinic   Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  // Carro-chefe (procedimento/serviço principal da clínica).
+  flagshipService String @db.Text
+
+  // Investe em publicidade? Se sim, quanto/mês — valor livre (não
+  // estruturado), só preenchido de fato quando currentlyAdvertises=true.
+  currentlyAdvertises     Boolean
+  advertisingMonthlySpend String?
+
+  // Faixa de faturamento (múltipla escolha, não valor exato).
+  revenueRange BriefingRevenueRange
+
+  // O que já tentou pra atrair clientes que não deu certo.
+  whatTried String @db.Text
+
+  hasSecretary Boolean
+
+  // Nome que o cliente quer que a IA use ao falar com os seguidores.
+  aiPersonaName String
+
+  // @ do Instagram de até dois concorrentes — ambos opcionais.
+  competitorInstagram1 String?
+  competitorInstagram2 String?
+
+  // Objetivo principal com a VEXO — múltipla escolha + "outro" (texto
+  // livre, só preenchido de fato quando vexoGoal=OTHER).
+  vexoGoal      BriefingVexoGoal
+  vexoGoalOther String?
+
+  // Ticket médio dos procedimentos — valor aproximado, texto livre (não
+  // estruturado, mesmo espírito de advertisingMonthlySpend acima).
+  averageTicket String
+
+  submittedAt DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
 
 model GoogleCalendarAccount {
