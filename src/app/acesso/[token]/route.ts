@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
 import { encode } from "next-auth/jwt";
+import { authOptions } from "@/lib/auth";
+import { isInternal } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -38,6 +41,28 @@ export async function GET(req: NextRequest, { params }: { params: { token: strin
 
   if (!link || !link.clinic.active) {
     return NextResponse.redirect(new URL("/login", req.url));
+  }
+
+  // Bug real reportado no primeiro teste deste link: alguém da equipe
+  // interna (M8 Growth) clicou nele NO MESMO NAVEGADOR onde já estava
+  // logado no CRM — e o cookie de sessão abaixo, ao ser sobrescrito sem
+  // aviso, trocou o login dela (INTERNAL_ADMIN/STAFF) pelo do cliente
+  // (CLIENT). Resultado: a sidebar do CRM "sumiu" e a navegação ficou
+  // presa em /dashboard — não por bug de layout (/dashboard nunca teve
+  // sidebar, ver comentário em src/app/dashboard/page.tsx), mas porque a
+  // sessão de staff genuinamente deixou de existir depois do clique, sem
+  // nenhuma tela avisando disso.
+  //
+  // Pra quem já está logado como equipe interna, não sobrescreve a sessão
+  // dela — manda pra visão de preview que já existe pra esse exato caso
+  // (Ver painel de clínica, /crm/painel-cliente/[id]: mesmo conteúdo do
+  // /dashboard do cliente, mas sob a própria sessão interna, sem tocar no
+  // cookie). Um cliente real nunca tem sessão prévia nesse navegador, então
+  // esse desvio não afeta o fluxo principal — só protege quem está testando
+  // logado.
+  const existingSession = await getServerSession(authOptions);
+  if (existingSession?.user && isInternal(existingSession.user.role)) {
+    return NextResponse.redirect(new URL(`/crm/painel-cliente/${link.clinic.id}`, req.url));
   }
 
   const secureCookie = process.env.NEXTAUTH_URL?.startsWith("https://") ?? !!process.env.VERCEL;
