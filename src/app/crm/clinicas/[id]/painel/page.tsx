@@ -17,11 +17,12 @@ export const dynamic = "force-dynamic";
 // Sem link "Ver painel de todas as clínicas" no topo — era redundante com
 // "Contas" no menu lateral, que já leva pra lista de todas as clínicas.
 //
-// "Acesso do cliente ao painel dele" (criar/remover login) não fica mais
-// fixo no topo da página (ocupava espaço e desalinhava a primeira dobra) —
-// agora abre por baixo do botão "Criar painel" (ver ClientAccessModal,
-// mesmo padrão visual do "Criar conta" em Contas), passado como
-// headerAction pra ClientPanelView renderizar ao lado do título "Painel".
+// "Acesso do cliente ao painel dele" (link permanente, único mecanismo —
+// ver ClientAccessModal) não fica mais fixo no topo da página (ocupava
+// espaço e desalinhava a primeira dobra) — agora abre por baixo do botão
+// "Criar painel" (mesmo padrão visual do "Criar conta" em Contas), passado
+// como headerAction pra ClientPanelView renderizar ao lado do título
+// "Painel".
 export default async function ClinicPainelPage({
   params,
   searchParams,
@@ -29,19 +30,9 @@ export default async function ClinicPainelPage({
   params: { id: string };
   searchParams: { week?: string };
 }) {
-  // select explícito nos campos do usuário (não só no filtro role: CLIENT)
-  // é essencial aqui, não só estilo — sem ele o Prisma traz TODOS os
-  // campos escalares do User, incluindo passwordHash, e esse objeto vai
-  // direto como prop pro ClientAccessModal ("use client"): qualquer campo
-  // que passe pela fronteira server->client component é serializado no
-  // payload RSC enviado pro navegador. Com o select restrito, o hash nunca
-  // sai do server.
   const clinic = await prisma.clinic.findUniqueOrThrow({
     where: { id: params.id },
-    select: {
-      users: { where: { role: "CLIENT" }, select: { id: true, name: true, email: true } },
-      clientPanelLink: { select: { token: true } },
-    },
+    select: { clientPanelLink: { select: { token: true } } },
   });
 
   const initialLink = clinic.clientPanelLink
@@ -55,7 +46,7 @@ export default async function ClinicPainelPage({
       base={`/crm/clinicas/${params.id}/painel`}
       noShowAction={setAppointmentAttendanceAction}
       standalone={false}
-      headerAction={<ClientAccessModal clinicId={params.id} users={clinic.users} initialLink={initialLink} />}
+      headerAction={<ClientAccessModal clinicId={params.id} initialLink={initialLink} />}
     />
   );
 }

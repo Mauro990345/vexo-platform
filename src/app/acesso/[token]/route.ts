@@ -8,11 +8,12 @@ import { prisma } from "@/lib/prisma";
 export const dynamic = "force-dynamic";
 
 // Login automático do cliente via link permanente (ver ClientPanelLink no
-// schema, gerado em getOrCreateClientPanelLink/regenerateClientPanelLink,
-// src/app/crm/clinicas/actions.ts) — o cliente clica, cai direto em
-// /dashboard, sem digitar e-mail/senha em lugar nenhum. Mesmo espírito do
-// /conectar/[token] que já existe pra conexão de canais, mas autentica em
-// vez de abrir uma tela de OAuth.
+// schema, gerado em getOrCreateClientPanelLink, src/app/crm/clinicas/actions.ts)
+// — único mecanismo de acesso do cliente ao painel dele: o cliente clica,
+// cai direto em /dashboard, sem e-mail/senha/tela de login em NENHUMA
+// hipótese (o fluxo antigo de e-mail+senha foi removido de propósito, ver
+// histórico do ClientAccessModal). Mesmo espírito do /conectar/[token] que
+// já existe pra conexão de canais, mas autentica em vez de abrir OAuth.
 //
 // Não existe signIn() do NextAuth v4 chamável fora de uma submissão de
 // formulário (o provider de credentials espera um POST vindo da tela de
@@ -22,6 +23,20 @@ export const dynamic = "force-dynamic";
 // mesmo NEXTAUTH_SECRET. getServerSession() no resto do app não diferencia
 // de onde veio o cookie — só decodifica e confia.
 //
+// BUG REAL já corrigido aqui: os redirects abaixo usavam
+// `new URL(path, req.url)` — e por trás do proxy do Railway (que termina
+// TLS na borda e fala HTTP puro com o container), req.url PODE vir com
+// esquema "http:" em vez de "https:", mesmo a conexão real do navegador
+// sendo https. O Location resultante apontava pra uma URL http que a borda
+// do Railway não repassa de volta corretamente pro container (edge só
+// aceita/roteia https pro app) — o link simplesmente não abria em aba
+// anônima, sem erro visível. Todo o resto do código do projeto (ver
+// api/oauth/*/callback/route.ts) já evita esse problema montando a URL a
+// partir de process.env.APP_URL (configurado explicitamente, nunca
+// inferido da requisição) em vez de req.url — mesma correção aplicada
+// abaixo.
+const appUrl = process.env.APP_URL ?? "";
+
 // sub sintético (não é um User.id real — esse acesso não tem User nenhum
 // por trás, só o ClientPanelLink) porque nada no fluxo CLIENT usa
 // session.user.id: requireClientSession, setAppointmentAttendanceClientAction
@@ -31,41 +46,34 @@ export const dynamic = "force-dynamic";
 // à mão.
 //
 // Sem expiração/uso único de propósito (ver comentário no schema) — dura
-// 1 ano, igual ao "login permanente" por e-mail/senha (authOptions.session.maxAge
-// em src/lib/auth.ts), renovado a cada clique no link.
-export async function GET(req: NextRequest, { params }: { params: { token: string } }) {
+// 1 ano, renovado a cada clique no link.
+export async function GET(_req: NextRequest, { params }: { params: { token: string } }) {
   const link = await prisma.clientPanelLink.findUnique({
     where: { token: params.token },
     select: { clinic: { select: { id: true, name: true, active: true } } },
   });
 
   if (!link || !link.clinic.active) {
-    return NextResponse.redirect(new URL("/login", req.url));
+    return NextResponse.redirect(`${appUrl}/login`);
   }
 
-  // Bug real reportado no primeiro teste deste link: alguém da equipe
-  // interna (M8 Growth) clicou nele NO MESMO NAVEGADOR onde já estava
-  // logado no CRM — e o cookie de sessão abaixo, ao ser sobrescrito sem
-  // aviso, trocou o login dela (INTERNAL_ADMIN/STAFF) pelo do cliente
-  // (CLIENT). Resultado: a sidebar do CRM "sumiu" e a navegação ficou
-  // presa em /dashboard — não por bug de layout (/dashboard nunca teve
-  // sidebar, ver comentário em src/app/dashboard/page.tsx), mas porque a
-  // sessão de staff genuinamente deixou de existir depois do clique, sem
-  // nenhuma tela avisando disso.
-  //
-  // Pra quem já está logado como equipe interna, não sobrescreve a sessão
-  // dela — manda pra visão de preview que já existe pra esse exato caso
-  // (Ver painel de clínica, /crm/painel-cliente/[id]: mesmo conteúdo do
-  // /dashboard do cliente, mas sob a própria sessão interna, sem tocar no
-  // cookie). Um cliente real nunca tem sessão prévia nesse navegador, então
-  // esse desvio não afeta o fluxo principal — só protege quem está testando
-  // logado.
+  // Quem já está logado como equipe interna (M8 Growth) no mesmo
+  // navegador não tem a sessão dela sobrescrita por este link — sem essa
+  // checagem, o cookie abaixo troca o login da pessoa (INTERNAL_ADMIN/
+  // STAFF) pelo do cliente (CLIENT) sem nenhum aviso, e ela "perde" o
+  // próprio acesso ao CRM até logar de novo manualmente (bug real
+  // reportado no primeiro teste desta feature). Em vez disso, manda pra
+  // visão de preview que já existe pra esse exato caso (Ver painel de
+  // clínica, /crm/painel-cliente/[id]: mesmo conteúdo do /dashboard do
+  // cliente, mas sob a própria sessão interna, sem tocar no cookie). Um
+  // cliente real nunca tem sessão prévia nesse navegador, então esse
+  // desvio não afeta o fluxo principal.
   const existingSession = await getServerSession(authOptions);
   if (existingSession?.user && isInternal(existingSession.user.role)) {
-    return NextResponse.redirect(new URL(`/crm/painel-cliente/${link.clinic.id}`, req.url));
+    return NextResponse.redirect(`${appUrl}/crm/painel-cliente/${link.clinic.id}`);
   }
 
-  const secureCookie = process.env.NEXTAUTH_URL?.startsWith("https://") ?? !!process.env.VERCEL;
+  const secureCookie = appUrl.startsWith("https://");
   const maxAge = 60 * 60 * 24 * 365;
 
   const sessionToken = await encode({
@@ -79,7 +87,7 @@ export async function GET(req: NextRequest, { params }: { params: { token: strin
     maxAge,
   });
 
-  const res = NextResponse.redirect(new URL("/dashboard", req.url));
+  const res = NextResponse.redirect(`${appUrl}/dashboard`);
   res.cookies.set({
     name: secureCookie ? "__Secure-next-auth.session-token" : "next-auth.session-token",
     value: sessionToken,
