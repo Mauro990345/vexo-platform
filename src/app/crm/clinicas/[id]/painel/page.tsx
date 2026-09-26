@@ -38,8 +38,15 @@ export default async function ClinicPainelPage({
   // sai do server.
   const clinic = await prisma.clinic.findUniqueOrThrow({
     where: { id: params.id },
-    select: { users: { where: { role: "CLIENT" }, select: { id: true, name: true, email: true } } },
+    select: {
+      users: { where: { role: "CLIENT" }, select: { id: true, name: true, email: true } },
+      clientPanelLink: { select: { token: true } },
+    },
   });
+
+  const initialLink = clinic.clientPanelLink
+    ? { token: clinic.clientPanelLink.token, url: `${process.env.APP_URL ?? ""}/acesso/${clinic.clientPanelLink.token}` }
+    : null;
 
   return (
     <ClientPanelView
@@ -48,7 +55,7 @@ export default async function ClinicPainelPage({
       base={`/crm/clinicas/${params.id}/painel`}
       noShowAction={setAppointmentAttendanceAction}
       standalone={false}
-      headerAction={<ClientAccessModal clinicId={params.id} users={clinic.users} />}
+      headerAction={<ClientAccessModal clinicId={params.id} users={clinic.users} initialLink={initialLink} />}
     />
   );
 }

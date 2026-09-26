@@ -3,18 +3,32 @@
 import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { CreateClientLoginForm } from "@/components/CreateClientLoginForm";
+import { ClientPanelLinkSection } from "@/components/ClientPanelLinkSection";
 import { removeClientLogin } from "@/app/crm/clinicas/actions";
 
 type ClientUser = { id: string; name: string; email: string };
+type ClientPanelLink = { token: string; url: string };
 
 // Botão "Criar painel" (mesmo padrão visual do "Criar conta" em Contas) +
 // modal com o gerenciamento de acesso do cliente — antes ficava fixo
 // direto no topo da página (ver histórico de clinicas/[id]/painel/page.tsx),
 // ocupando espaço e desalinhando a primeira dobra mesmo pra quem só queria
-// ver os números do dia. Só cria/remove login (nome+e-mail+senha) —
-// mesma função de sempre (CreateClientLoginForm/removeClientLogin), só que
-// atrás de um clique em vez de fixo na tela.
-export function ClientAccessModal({ clinicId, users }: { clinicId: string; users: ClientUser[] }) {
+// ver os números do dia.
+//
+// Dois mecanismos independentes de acesso, um embaixo do outro: o link
+// permanente (ClientPanelLinkSection — vira o principal, cliente só clica
+// e cai logado) e o e-mail+senha de sempre (CreateClientLoginForm/
+// removeClientLogin), mantido como alternativa pra quem já usa ou prefere
+// login de verdade em vez de guardar um link.
+export function ClientAccessModal({
+  clinicId,
+  users,
+  initialLink,
+}: {
+  clinicId: string;
+  users: ClientUser[];
+  initialLink: ClientPanelLink | null;
+}) {
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
@@ -46,7 +60,7 @@ export function ClientAccessModal({ clinicId, users }: { clinicId: string; users
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mb-3 flex items-center justify-between gap-3">
-              <h2 className="text-sm font-medium">Acesso do cliente ao painel dele ({users.length})</h2>
+              <h2 className="text-sm font-medium">Acesso do cliente ao painel dele</h2>
               <button
                 type="button"
                 onClick={() => setOpen(false)}
@@ -57,10 +71,13 @@ export function ClientAccessModal({ clinicId, users }: { clinicId: string; users
               </button>
             </div>
 
-            <p className="mb-3 text-card text-vexo-muted">
-              Login do painel do cliente — permanente, sem expiração. Revogado removendo o acesso
-              abaixo.
-            </p>
+            <ClientPanelLinkSection clinicId={clinicId} initialLink={initialLink} />
+
+            <div className="my-3 flex items-center gap-2 text-card text-vexo-muted">
+              <div className="h-px flex-1 bg-vexo-border" />
+              ou por e-mail e senha ({users.length})
+              <div className="h-px flex-1 bg-vexo-border" />
+            </div>
 
             {users.length > 0 && (
               <ul className="mb-3 divide-y divide-vexo-border rounded-lg border border-vexo-border">

@@ -295,6 +295,61 @@ export async function cancelConnectionBundle(clinicId: string, token: string): P
   revalidatePath(`/crm/clinicas/${clinicId}/conexoes`);
 }
 
+// Link permanente de login automático do cliente no painel (ver
+// ClientPanelLink no schema e /acesso/[token]/route.ts) — diferente de
+// createConnectionLink/createConnectionBundle acima, não expira e não
+// marca "usado" no primeiro clique: é pra ser salvo e reaberto pelo
+// cliente indefinidamente, então reaproveita o token existente em vez de
+// gerar um novo a cada clique em "Copiar link" (evita invalidar sem
+// querer um link que o cliente já salvou, só porque alguém abriu o modal
+// de novo).
+export async function getOrCreateClientPanelLink(clinicId: string): Promise<{ token: string; url: string }> {
+  await requireInternalSession();
+
+  const existing = await prisma.clientPanelLink.findUnique({ where: { clinicId } });
+  if (existing) {
+    return { token: existing.token, url: `${process.env.APP_URL ?? ""}/acesso/${existing.token}` };
+  }
+
+  const token = crypto.randomBytes(24).toString("base64url");
+  await prisma.clientPanelLink.create({ data: { clinicId, token } });
+
+  revalidatePath(`/crm/clinicas/${clinicId}/painel`);
+  return { token, url: `${process.env.APP_URL ?? ""}/acesso/${token}` };
+}
+
+// Sobrescreve o token do link existente (upsert — clinicId é @unique, só
+// existe UM link por clínica) — o link antigo para de funcionar
+// IMEDIATAMENTE, mesmo que o cliente ainda não tenha clicado nele. Usado
+// tanto pra "girar" um link que vazou/foi mandado errado quanto, no caso
+// raro de já existir uma linha só de teste antes desta feature, garante
+// que o botão "Gerar novo link" sempre produz um token fresco.
+export async function regenerateClientPanelLink(clinicId: string): Promise<{ token: string; url: string }> {
+  await requireInternalSession();
+
+  const token = crypto.randomBytes(24).toString("base64url");
+  await prisma.clientPanelLink.upsert({
+    where: { clinicId },
+    create: { clinicId, token },
+    update: { token },
+  });
+
+  revalidatePath(`/crm/clinicas/${clinicId}/painel`);
+  return { token, url: `${process.env.APP_URL ?? ""}/acesso/${token}` };
+}
+
+// Revoga o acesso por link (apaga a linha) — depois disso, o token antigo
+// devolve pra tela de login normal (ver /acesso/[token]/route.ts) em vez
+// de autenticar. Não afeta os acessos por e-mail/senha (CreateClientLoginForm),
+// que continuam funcionando — os dois mecanismos são independentes.
+export async function revokeClientPanelLink(clinicId: string): Promise<void> {
+  await requireInternalSession();
+
+  await prisma.clientPanelLink.deleteMany({ where: { clinicId } });
+
+  revalidatePath(`/crm/clinicas/${clinicId}/painel`);
+}
+
 export type CreateClientLoginState = { error: string | null };
 
 // Usa useActionState no form (ver CreateClientLoginForm) em vez de deixar
