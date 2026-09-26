@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import { decryptToken } from "@/lib/crypto";
 import { prisma } from "@/lib/prisma";
+import { withRetry, RetryableError } from "@/lib/retry";
 
 // Integração com Instagram Messaging via "Instagram API with Instagram
 // Login" (produto do App configurado no Meta for Developers) — NÃO é o
@@ -69,6 +70,26 @@ export function verifyWebhookSignature(rawBody: string, signatureHeader: string 
   return crypto.timingSafeEqual(a, b);
 }
 
+// Rate limit da Graph API costuma vir como HTTP 400 (não 429!) com um
+// código específico no corpo — códigos documentados pela própria Meta
+// (developers.facebook.com/docs/graph-api/guides/error-handling) pra
+// "chamou demais": 4 (limite da aplicação), 17 (limite do usuário), 32
+// (limite da página), 613 e 80004 (limite de chamadas). Checar só
+// `res.status === 429` deixaria passar a maioria dos casos reais de rate
+// limit da Meta — por isso faz o parse do corpo também, não só o status.
+// 5xx é sempre retryable (erro do lado da Meta, nunca da nossa chamada).
+const META_RATE_LIMIT_ERROR_CODES = new Set([4, 17, 32, 613, 80004]);
+
+function isRetryableMetaError(status: number, bodyText: string): boolean {
+  if (status === 429 || status >= 500) return true;
+  try {
+    const parsed = JSON.parse(bodyText) as { error?: { code?: number } };
+    return typeof parsed.error?.code === "number" && META_RATE_LIMIT_ERROR_CODES.has(parsed.error.code);
+  } catch {
+    return false;
+  }
+}
+
 export async function sendInstagramMessage(params: {
   accessTokenEnc: string;
   igUserId: string;
@@ -82,75 +103,92 @@ export async function sendInstagramMessage(params: {
     ? { attachment: { type: "video", payload: { url: params.mediaUrl, is_reusable: true } } }
     : { text: params.text ?? "" };
 
-  // "me", não params.igUserId, no path — ver comentário grande em
-  // verifyInstagramTokenAndId/subscribeInstagramWebhook logo abaixo sobre
-  // por que endereçar a própria conta pelo ID numérico não funciona nesse
-  // produto. Ainda não tinha sido testado de verdade (nenhuma mensagem
-  // chegou a esse ponto — o próprio subscribe do webhook nunca funcionou
-  // até agora), mas é o mesmo padrão exato, corrigido preventivamente
-  // pela mesma razão. params.igUserId continua sendo usado noutro lugar
-  // (handleInboundInstagramMessage, pra achar a clínica dona do evento
-  // recebido) — só parou de ser usado AQUI, no path da chamada de envio.
-  const res = await fetch(`${IG_GRAPH_BASE}/me/messages`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      recipient: { id: params.recipientIgScopedId },
-      message,
-      access_token: accessToken,
-    }),
-  });
+  return withRetry(
+    async () => {
+      // "me", não params.igUserId, no path — ver comentário grande em
+      // verifyInstagramTokenAndId/subscribeInstagramWebhook logo abaixo sobre
+      // por que endereçar a própria conta pelo ID numérico não funciona nesse
+      // produto. Ainda não tinha sido testado de verdade (nenhuma mensagem
+      // chegou a esse ponto — o próprio subscribe do webhook nunca funcionou
+      // até agora), mas é o mesmo padrão exato, corrigido preventivamente
+      // pela mesma razão. params.igUserId continua sendo usado noutro lugar
+      // (handleInboundInstagramMessage, pra achar a clínica dona do evento
+      // recebido) — só parou de ser usado AQUI, no path da chamada de envio.
+      const res = await fetch(`${IG_GRAPH_BASE}/me/messages`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          recipient: { id: params.recipientIgScopedId },
+          message,
+          access_token: accessToken,
+        }),
+      });
 
-  if (!res.ok) {
-    const body = await res.text();
-    // Diagnóstico automático pro erro "The action is invalid since it's
-    // not the thread owner" (IGApiException, subcode 2534037). Hipóteses
-    // já descartadas em produção, uma a uma, com teste real: ID de
-    // sender/recipient corrompido por perda de precisão; igUserId
-    // desatualizado (namespace errado); token colado manualmente com
-    // escopo insuficiente (falha idêntica com token 100% OAuth); modo
-    // desenvolvimento/Tester (duas contas JÁ testers conversando entre si
-    // falharam igual); thread pendente de aceitar (falhou até em
-    // conversas já na caixa principal); Conversation Routing/Handover
-    // Protocol desligado (configurado nas duas contas, sem efeito) — e
-    // esse último, aliás, confirmado sem sentido aqui: me/thread_owner
-    // (chamado por getThreadOwner, removido deste ponto) devolveu "Tried
-    // accessing nonexisting field (thread_owner)", ou seja, esse edge do
-    // Messenger Platform nem existe no produto "Instagram API with
-    // Instagram Login" — Conversation Routing pode não se aplicar a
-    // contas conectadas sem Página do Facebook.
-    //
-    // Hipótese atual: instagram_business_manage_messages aparece como
-    // "Pronto para teste" na aba Permissions and Features do App
-    // Dashboard, mas isso só confirma que o App PODE pedir esse escopo —
-    // não confirma que ESTE token especificamente o recebeu de fato no
-    // consentimento. debug_token é o endpoint universal da Graph API pra
-    // inspecionar os escopos reais de um token (usado por qualquer
-    // produto Meta, daí graph.facebook.com aqui e não graph.instagram.com
-    // — diferente das chamadas operacionais deste arquivo, que precisam
-    // do host específico do produto; esta é só leitura de metadado do
-    // token). Não confirmado ainda se esse host aceita consultar um token
-    // emitido via Instagram Login — se não aceitar, o corpo da resposta
-    // abaixo já mostra isso.
-    const appId = process.env.META_INSTAGRAM_APP_ID;
-    const appSecret = process.env.META_APP_SECRET;
-    const scopeDiagnosis =
-      appId && appSecret
-        ? await fetch(
-            `https://graph.facebook.com/debug_token?input_token=${encodeURIComponent(accessToken)}&access_token=${encodeURIComponent(`${appId}|${appSecret}`)}`
-          )
-            .then(async (diagRes) => `HTTP ${diagRes.status}: ${await diagRes.text()}`)
-            .catch(
-              (diagErr) => `falha ao consultar debug_token: ${diagErr instanceof Error ? diagErr.message : String(diagErr)}`
-            )
-        : "META_INSTAGRAM_APP_ID/META_APP_SECRET não configurados";
-    throw new Error(
-      `Falha ao enviar mensagem no Instagram (${res.status}) para recipient=${params.recipientIgScopedId} (conta remetente igUserId=${params.igUserId}): ${body}\nDiagnóstico debug_token: ${scopeDiagnosis}`
-    );
-  }
+      if (!res.ok) {
+        const body = await res.text();
 
-  const data = (await res.json()) as { message_id: string };
-  return { messageId: data.message_id };
+        // Rate limit (ver isRetryableMetaError acima) — nunca roda o
+        // diagnóstico de debug_token abaixo pra esse caso: chamar MAIS uma
+        // vez a Graph API bem no momento em que ela está nos limitando é
+        // contraproducente, e rate limit não tem nada a ver com escopo de
+        // token — o diagnóstico existe pra outra classe de erro.
+        if (isRetryableMetaError(res.status, body)) {
+          throw new RetryableError(
+            `Falha ao enviar mensagem no Instagram (${res.status}) para recipient=${params.recipientIgScopedId}: ${body}`
+          );
+        }
+
+        // Diagnóstico automático pro erro "The action is invalid since it's
+        // not the thread owner" (IGApiException, subcode 2534037). Hipóteses
+        // já descartadas em produção, uma a uma, com teste real: ID de
+        // sender/recipient corrompido por perda de precisão; igUserId
+        // desatualizado (namespace errado); token colado manualmente com
+        // escopo insuficiente (falha idêntica com token 100% OAuth); modo
+        // desenvolvimento/Tester (duas contas JÁ testers conversando entre si
+        // falharam igual); thread pendente de aceitar (falhou até em
+        // conversas já na caixa principal); Conversation Routing/Handover
+        // Protocol desligado (configurado nas duas contas, sem efeito) — e
+        // esse último, aliás, confirmado sem sentido aqui: me/thread_owner
+        // (chamado por getThreadOwner, removido deste ponto) devolveu "Tried
+        // accessing nonexisting field (thread_owner)", ou seja, esse edge do
+        // Messenger Platform nem existe no produto "Instagram API with
+        // Instagram Login" — Conversation Routing pode não se aplicar a
+        // contas conectadas sem Página do Facebook.
+        //
+        // Hipótese atual: instagram_business_manage_messages aparece como
+        // "Pronto para teste" na aba Permissions and Features do App
+        // Dashboard, mas isso só confirma que o App PODE pedir esse escopo —
+        // não confirma que ESTE token especificamente o recebeu de fato no
+        // consentimento. debug_token é o endpoint universal da Graph API pra
+        // inspecionar os escopos reais de um token (usado por qualquer
+        // produto Meta, daí graph.facebook.com aqui e não graph.instagram.com
+        // — diferente das chamadas operacionais deste arquivo, que precisam
+        // do host específico do produto; esta é só leitura de metadado do
+        // token). Não confirmado ainda se esse host aceita consultar um token
+        // emitido via Instagram Login — se não aceitar, o corpo da resposta
+        // abaixo já mostra isso.
+        const appId = process.env.META_INSTAGRAM_APP_ID;
+        const appSecret = process.env.META_APP_SECRET;
+        const scopeDiagnosis =
+          appId && appSecret
+            ? await fetch(
+                `https://graph.facebook.com/debug_token?input_token=${encodeURIComponent(accessToken)}&access_token=${encodeURIComponent(`${appId}|${appSecret}`)}`
+              )
+                .then(async (diagRes) => `HTTP ${diagRes.status}: ${await diagRes.text()}`)
+                .catch(
+                  (diagErr) => `falha ao consultar debug_token: ${diagErr instanceof Error ? diagErr.message : String(diagErr)}`
+                )
+            : "META_INSTAGRAM_APP_ID/META_APP_SECRET não configurados";
+        throw new Error(
+          `Falha ao enviar mensagem no Instagram (${res.status}) para recipient=${params.recipientIgScopedId} (conta remetente igUserId=${params.igUserId}): ${body}\nDiagnóstico debug_token: ${scopeDiagnosis}`
+        );
+      }
+
+      const data = (await res.json()) as { message_id: string };
+      return { messageId: data.message_id };
+    },
+    { label: `sendInstagramMessage (recipient=${params.recipientIgScopedId})` }
+  );
 }
 
 // User Profile API (instagram-platform/instagram-api-with-instagram-login,
@@ -194,12 +232,20 @@ export async function getInstagramUserProfile(
   url.searchParams.set("fields", "name");
   url.searchParams.set("access_token", accessToken);
 
-  const res = await fetch(url.toString());
-  if (!res.ok) {
-    throw new Error(`Falha ao buscar perfil do lead (HTTP ${res.status}): ${await res.text()}`);
-  }
-  const data = (await res.json()) as { name?: string };
-  return { name: data.name || undefined };
+  return withRetry(
+    async () => {
+      const res = await fetch(url.toString());
+      if (!res.ok) {
+        const body = await res.text();
+        const message = `Falha ao buscar perfil do lead (HTTP ${res.status}): ${body}`;
+        if (isRetryableMetaError(res.status, body)) throw new RetryableError(message);
+        throw new Error(message);
+      }
+      const data = (await res.json()) as { name?: string };
+      return { name: data.name || undefined };
+    },
+    { label: `getInstagramUserProfile (igScopedId=${igScopedId})` }
+  );
 }
 
 // Foto de perfil — MESMO node de getInstagramUserProfile acima
@@ -235,12 +281,20 @@ export async function getInstagramProfilePicture(
   url.searchParams.set("fields", "profile_pic");
   url.searchParams.set("access_token", accessToken);
 
-  const res = await fetch(url.toString());
-  if (!res.ok) {
-    throw new Error(`Falha ao buscar foto de perfil do lead (HTTP ${res.status}): ${await res.text()}`);
-  }
-  const data = (await res.json()) as { profile_pic?: string };
-  return { profilePictureUrl: data.profile_pic || undefined };
+  return withRetry(
+    async () => {
+      const res = await fetch(url.toString());
+      if (!res.ok) {
+        const body = await res.text();
+        const message = `Falha ao buscar foto de perfil do lead (HTTP ${res.status}): ${body}`;
+        if (isRetryableMetaError(res.status, body)) throw new RetryableError(message);
+        throw new Error(message);
+      }
+      const data = (await res.json()) as { profile_pic?: string };
+      return { profilePictureUrl: data.profile_pic || undefined };
+    },
+    { label: `getInstagramProfilePicture (igScopedId=${igScopedId})` }
+  );
 }
 
 // Conversations API — endpoint DIFERENTE do lookup de perfil acima (mesmo
@@ -307,17 +361,25 @@ export async function getInstagramConversationParticipantUsername(
   url.searchParams.set("fields", "participants");
   url.searchParams.set("access_token", accessToken);
 
-  const res = await fetch(url.toString());
-  if (!res.ok) {
-    throw new Error(`Falha ao buscar conversa do lead pra achar o username (HTTP ${res.status}): ${await res.text()}`);
-  }
+  return withRetry(
+    async () => {
+      const res = await fetch(url.toString());
+      if (!res.ok) {
+        const body = await res.text();
+        const message = `Falha ao buscar conversa do lead pra achar o username (HTTP ${res.status}): ${body}`;
+        if (isRetryableMetaError(res.status, body)) throw new RetryableError(message);
+        throw new Error(message);
+      }
 
-  const data = (await res.json()) as {
-    data?: { participants?: { data?: { id: string; username?: string }[] } }[];
-  };
-  const participants = data.data?.[0]?.participants?.data ?? [];
-  const leadParticipant = participants.find((p) => p.id !== igUserId);
-  return { username: leadParticipant?.username || undefined };
+      const data = (await res.json()) as {
+        data?: { participants?: { data?: { id: string; username?: string }[] } }[];
+      };
+      const participants = data.data?.[0]?.participants?.data ?? [];
+      const leadParticipant = participants.find((p) => p.id !== igUserId);
+      return { username: leadParticipant?.username || undefined };
+    },
+    { label: `getInstagramConversationParticipantUsername (leadIgScopedId=${leadIgScopedId})` }
+  );
 }
 
 // Mesmo endpoint/edge de getInstagramConversationParticipantUsername acima

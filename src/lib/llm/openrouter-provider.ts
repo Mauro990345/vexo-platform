@@ -7,6 +7,7 @@ import type {
   ModelTier,
   ToolDefinition,
 } from "./types";
+import { withRetry, RetryableError } from "@/lib/retry";
 
 // Segunda implementação de LLMProvider — fala com a OpenRouter (API
 // compatível com o formato de chat completions da OpenAI). Começou como
@@ -89,31 +90,48 @@ export class OpenRouterProvider implements LLMProvider {
     return tier === "conversation" ? CONVERSATION_MODEL : BACKSTAGE_MODEL;
   }
 
+  // Retry com backoff exponencial (ver src/lib/retry.ts) — 429 (rate limit)
+  // e 5xx (erro passageiro do lado da OpenRouter/do provedor por trás dela)
+  // tentam de novo automaticamente; qualquer outro erro (401 chave
+  // inválida, 400 payload malformado, 404 modelo inexistente etc.) é
+  // permanente e falha direto, sem retry inútil — tentar de novo não muda
+  // uma chave errada. Erro de rede (fetch() lançando TypeError) também
+  // tenta de novo, tratado dentro de withRetry, sem precisar de nada extra
+  // aqui.
   private async chatCompletion(
     body: Record<string, unknown>
   ): Promise<{ message: OpenAiChatMessage; finishReason: string }> {
-    const res = await fetch(`${this.baseUrl()}/chat/completions`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${this.apiKey()}`,
+    return withRetry(
+      async () => {
+        const res = await fetch(`${this.baseUrl()}/chat/completions`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${this.apiKey()}`,
+          },
+          body: JSON.stringify(body),
+        });
+
+        if (!res.ok) {
+          const detail = await res.text();
+          const message = `Falha ao chamar a OpenRouter (${res.status}): ${detail}`;
+          if (res.status === 429 || res.status >= 500) {
+            throw new RetryableError(message);
+          }
+          throw new Error(message);
+        }
+
+        const data = (await res.json()) as {
+          choices?: { message: OpenAiChatMessage; finish_reason: string }[];
+        };
+        const choice = data.choices?.[0];
+        if (!choice) {
+          throw new Error(`Resposta da OpenRouter sem nenhuma choice: ${JSON.stringify(data)}`);
+        }
+        return { message: choice.message, finishReason: choice.finish_reason };
       },
-      body: JSON.stringify(body),
-    });
-
-    if (!res.ok) {
-      const detail = await res.text();
-      throw new Error(`Falha ao chamar a OpenRouter (${res.status}): ${detail}`);
-    }
-
-    const data = (await res.json()) as {
-      choices?: { message: OpenAiChatMessage; finish_reason: string }[];
-    };
-    const choice = data.choices?.[0];
-    if (!choice) {
-      throw new Error(`Resposta da OpenRouter sem nenhuma choice: ${JSON.stringify(data)}`);
-    }
-    return { message: choice.message, finishReason: choice.finish_reason };
+      { label: `OpenRouter chat/completions (model=${body.model})` }
+    );
   }
 
   async complete(request: CompleteRequest): Promise<CompleteResult> {
