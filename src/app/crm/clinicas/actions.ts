@@ -3,8 +3,6 @@
 import crypto from "crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import bcrypt from "bcryptjs";
-import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireInternalSession } from "@/lib/session";
 import { setAppointmentAttendance } from "@/lib/appointments";
@@ -315,116 +313,25 @@ export async function getOrCreateClientPanelLink(clinicId: string): Promise<{ to
   await prisma.clientPanelLink.create({ data: { clinicId, token } });
 
   revalidatePath(`/crm/clinicas/${clinicId}/painel`);
-  return { token, url: `${process.env.APP_URL ?? ""}/acesso/${token}` };
-}
-
-// Sobrescreve o token do link existente (upsert — clinicId é @unique, só
-// existe UM link por clínica) — o link antigo para de funcionar
-// IMEDIATAMENTE, mesmo que o cliente ainda não tenha clicado nele. Usado
-// tanto pra "girar" um link que vazou/foi mandado errado quanto, no caso
-// raro de já existir uma linha só de teste antes desta feature, garante
-// que o botão "Gerar novo link" sempre produz um token fresco.
-export async function regenerateClientPanelLink(clinicId: string): Promise<{ token: string; url: string }> {
-  await requireInternalSession();
-
-  const token = crypto.randomBytes(24).toString("base64url");
-  await prisma.clientPanelLink.upsert({
-    where: { clinicId },
-    create: { clinicId, token },
-    update: { token },
-  });
-
-  revalidatePath(`/crm/clinicas/${clinicId}/painel`);
+  revalidatePath("/crm/painel");
   return { token, url: `${process.env.APP_URL ?? ""}/acesso/${token}` };
 }
 
 // Revoga o acesso por link (apaga a linha) — depois disso, o token antigo
 // devolve pra tela de login normal (ver /acesso/[token]/route.ts) em vez
-// de autenticar. Não afeta os acessos por e-mail/senha (CreateClientLoginForm),
-// que continuam funcionando — os dois mecanismos são independentes.
+// de autenticar. Pra gerar um link novo depois, é só usar
+// getOrCreateClientPanelLink de novo (cria um token novo, já que este foi
+// apagado) — não existe mais um "girar link" separado: link é só
+// criar/cancelar, sem meio-termo, por pedido explícito (o e-mail+senha
+// como alternativa foi removido de propósito, ver histórico do
+// ClientAccessModal — é só isso: um link, ou nenhum).
 export async function revokeClientPanelLink(clinicId: string): Promise<void> {
   await requireInternalSession();
 
   await prisma.clientPanelLink.deleteMany({ where: { clinicId } });
 
   revalidatePath(`/crm/clinicas/${clinicId}/painel`);
-}
-
-export type CreateClientLoginState = { error: string | null };
-
-// Usa useActionState no form (ver CreateClientLoginForm) em vez de deixar
-// o form disparar isso como action "crua" — email duplicado (User.email é
-// @unique) é um erro esperado, não excepcional (autofill do navegador
-// reenviando um e-mail já cadastrado antes é o caso mais comum), então
-// precisa aparecer como mensagem no formulário, não derrubar a página
-// inteira com a tela genérica de erro do Next.
-export async function createClientLogin(
-  clinicId: string,
-  _prevState: CreateClientLoginState,
-  formData: FormData
-): Promise<CreateClientLoginState> {
-  await requireInternalSession();
-
-  const email = String(formData.get("email") ?? "").trim().toLowerCase();
-  const name = String(formData.get("name") ?? "").trim();
-  const password = String(formData.get("password") ?? "");
-
-  if (!email || !name || password.length < 8) {
-    return { error: "Preencha nome, e-mail e senha (mín. 8 caracteres)." };
-  }
-
-  const passwordHash = await bcrypt.hash(password, 12);
-
-  try {
-    await prisma.user.create({
-      data: { email, name, passwordHash, role: "CLIENT", clinicId },
-    });
-  } catch (err) {
-    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
-      // User.email é @unique GLOBALMENTE (todo o sistema, não só nesta
-      // clínica) — então esse e-mail pode já pertencer a outra clínica, ou
-      // até a uma conta interna da equipe. Nos dois casos, o dono real não
-      // aparece na lista "Acesso do cliente ao painel dele" desta página
-      // (ela só lista os usuários DESTA clinicId), então sem essa consulta
-      // a mensagem genérica deixa a pessoa caçando um botão "Remover
-      // acesso" que nunca vai aparecer aqui — bug real reportado depois da
-      // PR #76: o acesso existia, só que em outra clínica.
-      const existing = await prisma.user.findUnique({
-        where: { email },
-        select: { role: true, clinicId: true, clinic: { select: { name: true } } },
-      });
-      if (existing?.role === "CLIENT" && existing.clinic) {
-        return {
-          error:
-            existing.clinicId === clinicId
-              ? `Esse e-mail já tem um acesso cadastrado nesta clínica — deve estar na lista abaixo. Se não aparecer, feche e reabra este modal pra atualizar a lista.`
-              : `Esse e-mail já tem acesso cadastrado na clínica "${existing.clinic.name}". Remova o acesso por lá (aba Painel dessa clínica) ou use outro e-mail.`,
-        };
-      }
-      if (existing?.role && existing.role !== "CLIENT") {
-        return { error: "Esse e-mail já é usado por uma conta interna da equipe. Use outro e-mail para o acesso do cliente." };
-      }
-      return { error: "Já existe um acesso cadastrado com esse e-mail." };
-    }
-    throw err;
-  }
-
   revalidatePath("/crm/painel");
-  revalidatePath(`/crm/clinicas/${clinicId}`);
-  revalidatePath(`/crm/clinicas/${clinicId}/painel`);
-  return { error: null };
-}
-
-export async function removeClientLogin(clinicId: string, userId: string) {
-  await requireInternalSession();
-
-  // Só remove se o usuário realmente pertencer a essa clínica e for CLIENT —
-  // evita que o formulário seja usado pra apagar qualquer usuário por id.
-  await prisma.user.deleteMany({ where: { id: userId, clinicId, role: "CLIENT" } });
-
-  revalidatePath("/crm/painel");
-  revalidatePath(`/crm/clinicas/${clinicId}`);
-  revalidatePath(`/crm/clinicas/${clinicId}/painel`);
 }
 
 export async function setConversationStatus(

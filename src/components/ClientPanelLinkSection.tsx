@@ -1,18 +1,18 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Copy, RefreshCw } from "lucide-react";
-import {
-  getOrCreateClientPanelLink,
-  regenerateClientPanelLink,
-  revokeClientPanelLink,
-} from "@/app/crm/clinicas/actions";
+import { Check, Copy } from "lucide-react";
+import { getOrCreateClientPanelLink, revokeClientPanelLink } from "@/app/crm/clinicas/actions";
 
 type Link = { token: string; url: string };
 
-// Bloco principal do modal "Acesso do cliente ao painel dele" — um link
-// permanente por clínica que autentica na hora (ver ClientPanelLink no
-// schema e /acesso/[token]/route.ts), sem e-mail/senha nem tela de login.
+// Único mecanismo de acesso do cliente ao painel dele: um link permanente
+// por clínica que autentica na hora (ver ClientPanelLink no schema e
+// /acesso/[token]/route.ts) — sem e-mail/senha/tela de login em nenhuma
+// hipótese (removido de propósito, ver histórico do ClientAccessModal).
+// Só duas ações possíveis: criar (se não existe) e cancelar (se existe) —
+// sem "gerar novo"/regenerar: pra trocar o link, cancela e cria de novo.
+//
 // Guarda o objeto {token, url} inteiro em estado (não só o token) porque a
 // URL final depende de APP_URL, calculado no server (page.tsx e as
 // server actions abaixo, mesmo padrão de createConnectionLink/
@@ -39,21 +39,8 @@ export function ClientPanelLinkSection({
     }
   }
 
-  async function handleRegenerate() {
-    if (!window.confirm("Gerar um novo link vai invalidar o link atual imediatamente — quem já tiver salvo o antigo perde o acesso. Continuar?")) {
-      return;
-    }
-    setPending(true);
-    try {
-      setLink(await regenerateClientPanelLink(clinicId));
-      setCopied(false);
-    } finally {
-      setPending(false);
-    }
-  }
-
-  async function handleRevoke() {
-    if (!window.confirm("Revogar remove o acesso por link — o cliente vai cair na tela de login se clicar de novo. Continuar?")) {
+  async function handleCancel() {
+    if (!window.confirm("Cancelar o acesso por link agora — o cliente não consegue mais entrar no painel até você gerar um link novo. Continuar?")) {
       return;
     }
     setPending(true);
@@ -77,15 +64,14 @@ export function ClientPanelLinkSection({
   }
 
   return (
-    <div className="mb-3 space-y-2 rounded-lg border border-vexo-border bg-vexo-bg p-2.5 text-xs">
-      <p className="font-medium text-vexo-fg">Link de acesso direto</p>
+    <div className="space-y-2 text-xs">
       <p className="text-vexo-muted">
-        O cliente clica e já cai no painel dele — sem digitar e-mail ou senha. Permanente até você revogar.
+        O cliente clica e já cai no painel dele — sem e-mail, senha ou tela de login.
       </p>
 
       {link ? (
         <>
-          <p className="break-all rounded-md border border-vexo-border bg-vexo-surface px-2 py-1.5 text-vexo-muted">
+          <p className="break-all rounded-md border border-vexo-border bg-vexo-bg px-2 py-1.5 text-vexo-muted">
             {link.url}
           </p>
           <div className="flex gap-1.5">
@@ -100,23 +86,13 @@ export function ClientPanelLinkSection({
             </button>
             <button
               type="button"
-              onClick={handleRegenerate}
+              onClick={handleCancel}
               disabled={pending}
-              title="Gerar novo link (invalida o atual)"
-              aria-label="Gerar novo link (invalida o atual)"
-              className="shrink-0 rounded-lg border border-vexo-border px-2 py-1.5 text-vexo-muted hover:text-vexo-fg disabled:opacity-50"
+              className="shrink-0 rounded-lg border border-vexo-error/40 px-2.5 py-1.5 font-medium text-vexo-error hover:bg-vexo-error/10 disabled:opacity-50"
             >
-              <RefreshCw className="h-3.5 w-3.5" strokeWidth={2} />
+              Cancelar acesso
             </button>
           </div>
-          <button
-            type="button"
-            onClick={handleRevoke}
-            disabled={pending}
-            className="w-full text-center text-vexo-error hover:underline disabled:opacity-50"
-          >
-            Revogar acesso por link
-          </button>
         </>
       ) : (
         <button

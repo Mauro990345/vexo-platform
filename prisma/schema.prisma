@@ -230,15 +230,15 @@ model ConnectionBundle {
 }
 
 // Link permanente de login automático do cliente no painel dele (ver
-// /acesso/[token]/route.ts) — substitui o fluxo de e-mail+senha
-// (CreateClientLoginForm/createClientLogin): um clínica → um link, sem
-// expiração e sem uso único (diferente de ConnectionLink/ConnectionBundle
-// acima, que são de uso pontual/OAuth) — o cliente salva e reabre esse
-// mesmo link sempre. "Gerar novo link" (ver regenerateClientPanelLink)
-// sobrescreve o token nesta mesma linha, invalidando o link antigo na
-// hora — não cria uma segunda linha, porque só existe UM link válido por
-// clínica de cada vez. clinicId @unique (não só @@index) garante isso no
-// banco, não só na lógica do action.
+// /acesso/[token]/route.ts) — ÚNICO mecanismo de acesso do cliente, sem
+// e-mail/senha/tela de login em nenhuma hipótese (o fluxo antigo de
+// e-mail+senha foi removido de propósito). Sem expiração e sem uso único
+// (diferente de ConnectionLink/ConnectionBundle acima, que são de uso
+// pontual/OAuth) — o cliente salva e reabre esse mesmo link sempre. Só
+// duas operações: criar (getOrCreateClientPanelLink) e cancelar
+// (revokeClientPanelLink, apaga a linha) — sem "regenerar": pra trocar o
+// link, cancela e cria de novo. clinicId @unique (não só @@index) garante
+// no banco que só existe UM link válido por clínica de cada vez.
 model ClientPanelLink {
   id       String @id @default(cuid())
   clinicId String @unique

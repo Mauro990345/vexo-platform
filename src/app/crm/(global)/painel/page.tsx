@@ -2,22 +2,24 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { getClinicMetrics, startOfDay, addDays } from "@/lib/metrics";
 import { ClinicMetricsCard } from "@/components/ClinicMetricsCard";
-import { removeClientLogin } from "@/app/crm/clinicas/actions";
-import { CreateClientLoginForm } from "@/components/CreateClientLoginForm";
+import { ClientAccessModal } from "@/components/ClientAccessModal";
 
 export const dynamic = "force-dynamic";
 
 // Dashboard de métricas de todas as clínicas — antes ficava misturado
 // dentro de "Contas" (ver /crm/page.tsx, que agora é só o seletor de
 // clínica). O bloco "Acesso do cliente" por clínica também veio pra cá —
-// antes era o card "Contas" dentro de Automações de cada clínica.
+// antes era o card "Contas" dentro de Automações de cada clínica. Reusa o
+// mesmo ClientAccessModal do Painel de dentro de uma clínica específica
+// (clinicas/[id]/painel/page.tsx) em vez de duplicar a lógica de acesso
+// aqui — os dois lugares mostram o mesmo link permanente por clínica.
 export default async function PainelPage() {
   const clinics = await prisma.clinic.findMany({
     orderBy: { createdAt: "desc" },
     include: {
       instagramAccount: true,
       googleCalendarAccount: true,
-      users: { where: { role: "CLIENT" } },
+      clientPanelLink: { select: { token: true } },
     },
   });
 
@@ -64,47 +66,24 @@ export default async function PainelPage() {
               last7Days={last7Days}
             />
 
-            <Link
-              href={`/crm/painel-cliente/${clinic.id}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="block rounded-lg border border-vexo-border px-2.5 py-1.5 text-center text-xs font-medium text-vexo-accent hover:bg-vexo-accent/10"
-            >
-              Ver painel de {clinic.name} ↗
-            </Link>
-
-            <details className="rounded-xl border border-vexo-border bg-vexo-surface p-3.5">
-              <summary className="cursor-pointer list-none text-xs font-medium text-vexo-muted">
-                Acesso do cliente ao painel dele ({clinic.users.length})
-              </summary>
-
-              <div className="mt-2.5 space-y-2.5">
-                <p className="text-card text-vexo-muted">
-                  Login do painel do cliente — permanente, sem expiração. Revogado removendo o
-                  acesso abaixo.
-                </p>
-
-                {clinic.users.length > 0 && (
-                  <ul className="divide-y divide-vexo-border rounded-lg border border-vexo-border">
-                    {clinic.users.map((u) => (
-                      <li key={u.id} className="flex items-center justify-between px-2.5 py-1.5 text-xs">
-                        <div>
-                          <p>{u.name}</p>
-                          <p className="text-card text-vexo-muted">{u.email}</p>
-                        </div>
-                        <form action={removeClientLogin.bind(null, clinic.id, u.id)}>
-                          <button className="rounded-md border border-vexo-border px-1.5 py-1 text-card text-vexo-error hover:border-vexo-error/40">
-                            Remover acesso
-                          </button>
-                        </form>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-
-                <CreateClientLoginForm clinicId={clinic.id} />
-              </div>
-            </details>
+            <div className="flex gap-2">
+              <Link
+                href={`/crm/painel-cliente/${clinic.id}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex-1 rounded-lg border border-vexo-border px-2.5 py-1.5 text-center text-xs font-medium text-vexo-accent hover:bg-vexo-accent/10"
+              >
+                Ver painel de {clinic.name} ↗
+              </Link>
+              <ClientAccessModal
+                clinicId={clinic.id}
+                initialLink={
+                  clinic.clientPanelLink
+                    ? { token: clinic.clientPanelLink.token, url: `${process.env.APP_URL ?? ""}/acesso/${clinic.clientPanelLink.token}` }
+                    : null
+                }
+              />
+            </div>
           </div>
         ))}
 

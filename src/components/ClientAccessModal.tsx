@@ -2,31 +2,27 @@
 
 import { useEffect, useState } from "react";
 import { X } from "lucide-react";
-import { CreateClientLoginForm } from "@/components/CreateClientLoginForm";
 import { ClientPanelLinkSection } from "@/components/ClientPanelLinkSection";
-import { removeClientLogin } from "@/app/crm/clinicas/actions";
 
-type ClientUser = { id: string; name: string; email: string };
 type ClientPanelLink = { token: string; url: string };
 
 // Botão "Criar painel" (mesmo padrão visual do "Criar conta" em Contas) +
-// modal com o gerenciamento de acesso do cliente — antes ficava fixo
-// direto no topo da página (ver histórico de clinicas/[id]/painel/page.tsx),
+// modal com o acesso do cliente ao painel dele — antes ficava fixo direto
+// no topo da página (ver histórico de clinicas/[id]/painel/page.tsx),
 // ocupando espaço e desalinhando a primeira dobra mesmo pra quem só queria
 // ver os números do dia.
 //
-// Dois mecanismos independentes de acesso, um embaixo do outro: o link
-// permanente (ClientPanelLinkSection — vira o principal, cliente só clica
-// e cai logado) e o e-mail+senha de sempre (CreateClientLoginForm/
-// removeClientLogin), mantido como alternativa pra quem já usa ou prefere
-// login de verdade em vez de guardar um link.
+// Único mecanismo de acesso: link permanente por clínica (ver
+// ClientPanelLinkSection) — sem e-mail/senha/tela de login em nenhuma
+// hipótese. O fluxo antigo de e-mail+senha (CreateClientLoginForm/
+// createClientLogin/removeClientLogin) foi removido de propósito, não
+// mantido como alternativa — pedido explícito depois de confusão
+// recorrente sobre qual dos dois mecanismos usar.
 export function ClientAccessModal({
   clinicId,
-  users,
   initialLink,
 }: {
   clinicId: string;
-  users: ClientUser[];
   initialLink: ClientPanelLink | null;
 }) {
   const [open, setOpen] = useState(false);
@@ -72,32 +68,6 @@ export function ClientAccessModal({
             </div>
 
             <ClientPanelLinkSection clinicId={clinicId} initialLink={initialLink} />
-
-            <div className="my-3 flex items-center gap-2 text-card text-vexo-muted">
-              <div className="h-px flex-1 bg-vexo-border" />
-              ou por e-mail e senha ({users.length})
-              <div className="h-px flex-1 bg-vexo-border" />
-            </div>
-
-            {users.length > 0 && (
-              <ul className="mb-3 divide-y divide-vexo-border rounded-lg border border-vexo-border">
-                {users.map((u) => (
-                  <li key={u.id} className="flex items-center justify-between px-2.5 py-1.5 text-xs">
-                    <div className="min-w-0">
-                      <p className="truncate">{u.name}</p>
-                      <p className="truncate text-card text-vexo-muted">{u.email}</p>
-                    </div>
-                    <form action={removeClientLogin.bind(null, clinicId, u.id)}>
-                      <button className="shrink-0 rounded-md border border-vexo-border px-1.5 py-1 text-card text-vexo-error hover:border-vexo-error/40">
-                        Remover acesso
-                      </button>
-                    </form>
-                  </li>
-                ))}
-              </ul>
-            )}
-
-            <CreateClientLoginForm clinicId={clinicId} />
           </div>
         </div>
       )}
