@@ -109,6 +109,20 @@ export async function cancelPendingFollowUp(
   ]);
 }
 
+// Teto por ciclo — mesmo racional de dispatchDueMessages (dispatch.ts,
+// take: 50): sem isso, esta função processava TODAS as conversas
+// silenciosas de uma vez, uma por uma, cada uma com uma chamada de IA
+// (classifyConversation) real. Ver diagnóstico de capacidade (avaliação
+// de escala pra 100 clínicas) — esse era o candidato mais forte a
+// estourar o intervalo de 30min entre ciclos conforme o volume de
+// conversas silenciosas crescesse, sem nenhum limite pra segurar isso.
+// Prioriza as conversas silenciosas HÁ MAIS TEMPO (lastLeadMessageAt
+// ascendente) — se o lote não cobrir tudo num ciclo só, as mais atrasadas
+// são tentadas primeiro, e o resto entra no próximo ciclo (30min depois),
+// nunca ficando pra trás indefinidamente enquanto o volume não passar
+// consistentemente da capacidade deste teto.
+const SILENT_CONVERSATION_BATCH_SIZE = 50;
+
 async function processSilentConversations(): Promise<number> {
   const { silenceHours } = await getSettings();
   const silenceThreshold = new Date(Date.now() - silenceHours * 60 * 60 * 1000);
@@ -118,6 +132,8 @@ async function processSilentConversations(): Promise<number> {
   const staleConversations = await prisma.conversation.findMany({
     where: { status: "IN_CONVERSATION", lastLeadMessageAt: { lt: silenceThreshold } },
     include: { messages: { orderBy: { createdAt: "asc" } } },
+    orderBy: { lastLeadMessageAt: "asc" },
+    take: SILENT_CONVERSATION_BATCH_SIZE,
   });
 
   let triggered = 0;
