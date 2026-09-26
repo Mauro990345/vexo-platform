@@ -12,7 +12,7 @@ import { NextRequest } from "next/server";
 // genérica, escondendo a causa de verdade. Estes testes provam que cada
 // desfecho grava sua própria mensagem e sai do loop, sem deixar o bloco
 // genérico rodar por cima.
-const verifyWebhookSignatureMock = vi.fn(() => true);
+const verifyWebhookSignatureMock = vi.fn((..._args: unknown[]) => true);
 vi.mock("@/lib/instagram", () => ({
   verifyWebhookSignature: (...args: unknown[]) => verifyWebhookSignatureMock(...args),
   requestThreadControl: vi.fn(),

@@ -86,6 +86,54 @@ describe("transcribeAudioFromUrl", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it("402 da OpenRouter: extrai limit_source/reason/remedy_hint do error.metadata pra reduzir incerteza sobre saldo vs. BYOK", async () => {
+    const fetchMock = fetch as unknown as ReturnType<typeof vi.fn>;
+    fetchMock.mockResolvedValueOnce(audioResponse("audio/aac")).mockResolvedValueOnce(
+      jsonResponse(402, {
+        error: {
+          code: 402,
+          message: "This request would exceed your available credits.",
+          metadata: {
+            reason: "weight_exceeds_budget",
+            limit_source: "openrouter_credits",
+            remedy_hint: "Add credits at https://openrouter.ai/settings/credits.",
+          },
+        },
+      })
+    );
+
+    // Sem retry num 402 (não é 429 nem 5xx) — falha já na 1ª tentativa,
+    // então dá pra confirmar isso junto com o conteúdo da mensagem.
+    let thrown: unknown;
+    try {
+      await transcribeAudioFromUrl("https://scontent.cdninstagram.com/audio-402.bin");
+    } catch (err) {
+      thrown = err;
+    }
+
+    expect(thrown).toBeInstanceOf(Error);
+    const message = (thrown as Error).message;
+    expect(message).toContain("limit_source=openrouter_credits");
+    expect(message).toContain("reason=weight_exceeds_budget");
+    expect(message).toContain("remedy_hint=Add credits at https://openrouter.ai/settings/credits.");
+    expect(message).toContain("HTTP 402");
+    // O corpo cru completo também precisa sobreviver — nunca perder
+    // informação mesmo se algum campo novo aparecer no futuro sem aviso.
+    expect(message).toContain("corpo_completo=");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("erro sem metadata (ex: corpo não-JSON) não quebra — só cai pro corpo cru", async () => {
+    const fetchMock = fetch as unknown as ReturnType<typeof vi.fn>;
+    fetchMock
+      .mockResolvedValueOnce(audioResponse("audio/aac"))
+      .mockResolvedValueOnce(new Response("Internal Server Error (texto puro, não-JSON)", { status: 400 }));
+
+    await expect(transcribeAudioFromUrl("https://scontent.cdninstagram.com/audio-texto.bin")).rejects.toThrow(
+      "corpo_completo=Internal Server Error"
+    );
+  });
+
   it("lança erro claro se OPENROUTER_API_KEY não estiver configurada", async () => {
     delete process.env.OPENROUTER_API_KEY;
     await expect(transcribeAudioFromUrl("https://scontent.cdninstagram.com/audio.bin")).rejects.toThrow(
