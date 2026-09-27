@@ -18,3 +18,15 @@ export async function closeStuckFollowUpLogAction(conversationId: string) {
   await cancelPendingFollowUp(conversationId);
   revalidatePath("/crm/dispatch-status");
 }
+
+// Mesma ação acima, chamada da aba "Status" de dentro de uma clínica
+// (clinicas/[id]/status/page.tsx) — função própria (em vez de um segundo
+// parâmetro opcional na de cima) porque `.bind(null, conversationId)` com
+// um parâmetro extra opcional sobrando quebra a checagem de tipo do prop
+// `action` de um <form> (TS exige que a função bindada aceite só FormData,
+// sem nenhum parâmetro extra restante, nem opcional).
+export async function closeStuckFollowUpLogForClinicAction(conversationId: string, clinicId: string) {
+  await requireInternalSession();
+  await cancelPendingFollowUp(conversationId);
+  revalidatePath(`/crm/clinicas/${clinicId}/status`);
+}

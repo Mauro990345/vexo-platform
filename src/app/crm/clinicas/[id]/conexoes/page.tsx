@@ -226,15 +226,16 @@ export default async function ClinicConexoesPage({
         </div>
         {/* Diagnóstico temporário (sem acesso a logs do Railway) — ver
             WebhookLog no schema e /api/webhooks/instagram/route.ts, e
-            dispatch-status/page.tsx pro envio de mensagens. */}
-        <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 text-right">
-          <Link href="/crm/webhook-logs" className="whitespace-nowrap text-card text-vexo-muted underline hover:text-vexo-fg">
-            Logs do webhook (Instagram)
-          </Link>
-          <Link href="/crm/dispatch-status" className="whitespace-nowrap text-card text-vexo-muted underline hover:text-vexo-fg">
-            Envio de mensagens
-          </Link>
-        </div>
+            dispatch-status/page.tsx pro envio de mensagens. Aponta pra aba
+            "Status" desta clínica (clinicas/[id]/status/page.tsx), que
+            reúne as duas coisas já filtradas por ela, em vez de linkar
+            direto pras páginas globais (todas as clínicas juntas). */}
+        <Link
+          href={`/crm/clinicas/${clinic.id}/status`}
+          className="shrink-0 whitespace-nowrap text-card text-vexo-muted underline hover:text-vexo-fg"
+        >
+          Ver status (webhook + envio de mensagens)
+        </Link>
       </div>
 
       {searchParams.status === "erro" && (
