@@ -358,6 +358,21 @@ model GoogleCalendarAccount {
   // do zero"; preenchido a cada rodada com o nextSyncToken do Google.
   syncToken String?
 
+  // Preenchido quando qualquer chamada ao Google (checkAvailability,
+  // createCalendarEvent, sync do worker etc.) detecta invalid_grant — o
+  // refresh token foi revogado do lado do Google (reconexão manual, acesso
+  // removido pela conta, etc.) e PRECISA ser refeito; a lib renova o access
+  // token sozinha quando expira, mas não tem como recuperar um refresh
+  // token morto. NULL = conexão presumida saudável. Nunca limpo
+  // automaticamente por uma chamada bem-sucedida (evita apagar o alerta por
+  // uma reconciliação parcial) — só volta a NULL quando a clínica reconecta
+  // de verdade (ver callback OAuth, que limpa os dois campos no upsert).
+  // Alimenta a bolinha de status em Conexões (deixa de ficar verde) e uma
+  // notificação única por WhatsApp pra secretária (ver
+  // markGoogleCalendarNeedsReconnect, google-calendar.ts).
+  needsReconnectAt     DateTime?
+  needsReconnectReason String?   @db.Text
+
   connectedAt DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }

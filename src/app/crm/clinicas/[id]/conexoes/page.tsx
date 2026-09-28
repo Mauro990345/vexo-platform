@@ -179,6 +179,11 @@ export default async function ClinicConexoesPage({
   const instagramConnected = Boolean(clinic.instagramAccount);
   const businessDiscoveryConnected = Boolean(clinic.instagramAccount?.businessDiscoveryAccessTokenEnc);
   const googleConnected = Boolean(clinic.googleCalendarAccount);
+  // invalid_grant detectado em qualquer chamada ao Google (ver
+  // markGoogleCalendarNeedsReconnect, src/lib/google-calendar.ts) — a
+  // linha continua existindo (googleConnected fica true), mas o token
+  // morreu de verdade; só reconectar de novo (novo OAuth) limpa isto.
+  const googleNeedsReconnect = Boolean(clinic.googleCalendarAccount?.needsReconnectAt);
 
   // Link pendente (não usado, não expirado) por canal — se existir, o card
   // correspondente mostra "Cancelar" no lugar de "Conectar" (ver
@@ -347,16 +352,32 @@ export default async function ClinicConexoesPage({
           description="IA consulta horários livres e cria os agendamentos."
           connected={googleConnected}
           statusLabel={
-            googleConnected
-              ? `Conectado · ${clinic.googleCalendarAccount!.googleAccountEmail}`
-              : "Não conectado"
+            googleNeedsReconnect
+              ? "Reconexão necessária"
+              : googleConnected
+                ? `Conectado · ${clinic.googleCalendarAccount!.googleAccountEmail}`
+                : "Não conectado"
           }
-          statusDot={googleConnected ? "bg-vexo-success" : "bg-vexo-muted"}
+          statusDot={googleNeedsReconnect ? "bg-vexo-warning" : googleConnected ? "bg-vexo-success" : "bg-vexo-muted"}
           href={`/api/oauth/google-calendar/start?clinicId=${clinic.id}`}
           openInNewTab
           disconnectAction={disconnectGoogleCalendarAction.bind(null, clinic.id)}
           notConnectedAction={
             <ConnectionLinkButton clinicId={clinic.id} channel="google-calendar" pendingToken={pendingGoogleLink?.token ?? null} />
+          }
+          connectedExtraAction={
+            // O token morreu de verdade (invalid_grant) — "Desconectar"
+            // sozinho não resolve nada (só apaga a linha, sem gerar um
+            // OAuth novo); precisa do mesmo fluxo de "Conectar" de novo,
+            // mesmo com connected=true (ver comentário em googleNeedsReconnect,
+            // acima). Mesmo mecanismo já usado pelos botões de diagnóstico
+            // do Instagram (ConnectionCard.connectedExtraAction).
+            googleNeedsReconnect ? (
+              <ConnectOAuthButton
+                href={`/api/oauth/google-calendar/start?clinicId=${clinic.id}`}
+                label="Reconectar"
+              />
+            ) : undefined
           }
         />
       </div>

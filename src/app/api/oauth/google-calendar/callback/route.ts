@@ -24,6 +24,13 @@ export async function GET(req: NextRequest) {
         accessTokenEnc: encryptToken(result.accessToken),
         refreshTokenEnc: encryptToken(result.refreshToken),
         tokenExpiresAt: result.expiryDate,
+        // Reconexão de verdade (novo refresh token) é o único jeito de
+        // limpar isso — ver comentário grande em markGoogleCalendarNeedsReconnect,
+        // src/lib/google-calendar.ts. Sem isso, a bolinha em Conexões
+        // continuaria mostrando "reconexão necessária" mesmo depois de
+        // reconectar com sucesso.
+        needsReconnectAt: null,
+        needsReconnectReason: null,
       },
       create: {
         clinicId,
