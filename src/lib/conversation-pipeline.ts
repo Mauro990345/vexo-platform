@@ -1,7 +1,15 @@
 import { prisma } from "@/lib/prisma";
 import { classifyConversation, generateLeadReply, summarizeOlderTurns, type AgentTools } from "@/lib/anthropic";
 import { buildConversationContext, withOlderSummary } from "@/lib/conversation-context";
-import { checkAvailability, createCalendarEvent, updateCalendarEvent, updateCalendarEventDescription, getRawBusyPeriods } from "@/lib/google-calendar";
+import {
+  checkAvailability,
+  createCalendarEvent,
+  updateCalendarEvent,
+  updateCalendarEventDescription,
+  getRawBusyPeriods,
+  BUSINESS_HOURS_START_UTC,
+  BUSINESS_HOURS_END_UTC,
+} from "@/lib/google-calendar";
 import {
   getInstagramUserProfile,
   getInstagramConversationParticipantUsername,
@@ -135,6 +143,41 @@ export function buildAvailabilityCheck(
 
     return result;
   };
+}
+
+// Decisão pura (sem chamada de rede/banco) usada dentro de scheduleAppointment
+// pra decidir se start/end estão realmente livres, ignorando especificamente
+// o período ocupado que corresponde ao evento GOOGLE ATUAL do agendamento já
+// ativo desta conversa (se houver um, via ownAppointmentWindow) — bug real
+// corrigido: remarcar pra um horário que se sobrepõe ao horário ATUAL do
+// próprio agendamento (ex.: 14:00 -> 14:30) era recusado como "não está
+// livre", porque o evento antigo ainda está no Google até ser movido (mais
+// abaixo, se este passo passar) e o freebusy do Google não distingue
+// "ocupado por mim mesmo" de "ocupado por outra pessoa". Só ignora o período
+// que bate EXATAMENTE com ownAppointmentWindow (mesmo start/end) — qualquer
+// outro período ocupado na janela (evento de outra pessoa, ou algo que não
+// bate exatamente) continua bloqueando normalmente.
+// Exportada só pra teste (mesmo padrão de buildAvailabilityCheck, acima).
+export function isSlotFreeIgnoringOwnAppointment(params: {
+  start: Date;
+  end: Date;
+  rawBusy: { start?: string | null; end?: string | null }[];
+  ownAppointmentWindow?: { start: Date; end: Date };
+}): boolean {
+  const { start, end, rawBusy, ownAppointmentWindow } = params;
+  return !rawBusy.some((b) => {
+    if (!b.start || !b.end) return false;
+    const busyStart = new Date(b.start).getTime();
+    const busyEnd = new Date(b.end).getTime();
+    if (
+      ownAppointmentWindow &&
+      busyStart === ownAppointmentWindow.start.getTime() &&
+      busyEnd === ownAppointmentWindow.end.getTime()
+    ) {
+      return false;
+    }
+    return start.getTime() < busyEnd && end.getTime() > busyStart;
+  });
 }
 
 export async function handleInboundInstagramMessage(
@@ -939,6 +982,15 @@ export async function handleInboundInstagramMessage(
         }
         const end = new Date(start.getTime() + 60 * 60 * 1000);
 
+        // Buscado JÁ AQUI (não só mais abaixo, na hora de criar/mover o
+        // evento) pra também servir de isenção na re-checagem de
+        // disponibilidade a seguir — ver o bloco "Bug real corrigido" logo
+        // depois do catch abaixo.
+        const existingAppointment = await prisma.appointment.findFirst({
+          where: { conversationId: conversation.id, status: { in: ["SCHEDULED", "CONFIRMED"] } },
+          orderBy: { createdAt: "desc" },
+        });
+
         let freeSlots: string[];
         try {
           freeSlots = await checkAvailability(clinic.id, start.toISOString(), end.toISOString());
@@ -962,7 +1014,56 @@ export async function handleInboundInstagramMessage(
           };
         }
 
-        if (!freeSlots.includes(start.toISOString())) {
+        let isFree = freeSlots.includes(start.toISOString());
+
+        // Bug real corrigido aqui: remarcar pra um horário que se sobrepõe
+        // ao horário ATUAL do próprio agendamento desta conversa (ex.:
+        // 14:00 -> 14:30) era recusado como "não está livre" — o evento
+        // antigo ainda está no Google (só é movido/atualizado DEPOIS, mais
+        // abaixo, se este passo passar) e checkAvailability não distingue
+        // "ocupado por mim mesmo" de "ocupado por outra pessoa" (mesma
+        // limitação documentada em buildAvailabilityCheck, bem acima). Só
+        // entra aqui quando a checagem normal rejeitou E existe um evento
+        // próprio de verdade pra verificar (googleEventId) — sem isso,
+        // continua recusando exatamente como antes.
+        if (!isFree && existingAppointment?.googleEventId) {
+          // withinBusinessHours reproduz a MESMA condição usada por
+          // checkAvailability pra gerar slots (google-calendar.ts) —
+          // precisa ser checado aqui separadamente porque, sem isso, um
+          // horário fora do funcionamento que por acaso caísse dentro da
+          // janela do próprio agendamento atual seria liberado por engano
+          // pela isenção abaixo (que só sabe reconhecer "ocupado por mim",
+          // não "fora do horário").
+          const hour = start.getUTCHours();
+          const withinBusinessHours = hour >= BUSINESS_HOURS_START_UTC && hour <= BUSINESS_HOURS_END_UTC;
+
+          if (withinBusinessHours) {
+            try {
+              const raw = await getRawBusyPeriods(clinic.id, start.toISOString(), end.toISOString());
+              const ownWindowStart = existingAppointment.scheduledAt;
+              const ownWindowEnd = new Date(ownWindowStart.getTime() + 60 * 60 * 1000); // evento sempre de 1h, ver createCalendarEvent
+              isFree = isSlotFreeIgnoringOwnAppointment({
+                start,
+                end,
+                rawBusy: raw.busy,
+                ownAppointmentWindow: { start: ownWindowStart, end: ownWindowEnd },
+              });
+            } catch (err) {
+              googleCalendarFailureReason =
+                `Falha ao consultar disponibilidade no Google Calendar (2ª checagem, ignorando o evento atual ` +
+                `da própria conversa) ao tentar confirmar ${args.startTimeLocal} (Brasília): ` +
+                `${err instanceof Error ? err.message : String(err)}`;
+              return {
+                error:
+                  "Não foi possível confirmar a disponibilidade agora (falha real do sistema, não é sobre o " +
+                  "horário) — NÃO diga ao lead que está confirmado nem que está indisponível; isso será " +
+                  "resolvido manualmente.",
+              };
+            }
+          }
+        }
+
+        if (!isFree) {
           // Diagnóstico: registra o que o Google devolveu de verdade (conta,
           // calendário, períodos ocupados crus do dia inteiro) em
           // WebhookLog.processingError — sem isso, uma rejeição "estranha"
@@ -1009,18 +1110,13 @@ export async function handleInboundInstagramMessage(
         // ANTES do "return confirmed:true", é a única forma de garantir
         // que essa mensagem só sai quando o evento realmente existe.
         //
-        // Mesma trava de idempotência de sempre (nunca duplicar): busca um
-        // Appointment ativo desta conversa — se existir e o horário for
-        // diferente, MOVE o evento existente (remarcação); se for igual, é
-        // só uma reconfirmação, não toca no Google de novo; se não existir
-        // nenhum, cria um evento novo.
+        // Mesma trava de idempotência de sempre (nunca duplicar): usa o
+        // MESMO existingAppointment já buscado acima — se existir e o
+        // horário for diferente, MOVE o evento existente (remarcação); se
+        // for igual, é só uma reconfirmação, não toca no Google de novo;
+        // se não existir nenhum, cria um evento novo.
         const leadNameForEvent = capturedLeadName?.trim() || lead.name!;
         const leadPhoneForEvent = capturedLeadPhone ?? lead.phone;
-
-        const existingAppointment = await prisma.appointment.findFirst({
-          where: { conversationId: conversation.id, status: { in: ["SCHEDULED", "CONFIRMED"] } },
-          orderBy: { createdAt: "desc" },
-        });
 
         try {
           if (existingAppointment) {
