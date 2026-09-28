@@ -35,7 +35,7 @@ vi.mock("@/lib/chat-history", () => ({ toChatHistory: vi.fn() }));
 vi.mock("@/lib/result-photo-message", () => ({}));
 vi.mock("@/lib/loop-guard", () => ({}));
 
-import { buildAvailabilityCheck } from "@/lib/conversation-pipeline";
+import { buildAvailabilityCheck, isSlotFreeIgnoringOwnAppointment } from "@/lib/conversation-pipeline";
 
 // Bug real corrigido (ver comentário grande em buildAvailabilityCheck):
 // qualquer erro de check_availability — incluindo uma falha REAL da API do
@@ -104,5 +104,70 @@ describe("buildAvailabilityCheck", () => {
     const result = await check({ dateFromLocal: "2026-09-19T09:00", dateToLocal: "2026-09-19T10:00" });
 
     expect(result).toEqual({ slots: [], ownAppointmentLocal: "2026-09-19T09:00" });
+  });
+});
+
+// Bug real corrigido: remarcar pra um horário que se sobrepõe ao horário
+// ATUAL do próprio agendamento desta conversa (ex.: 14:00 -> 14:30) era
+// recusado como "não está livre" — o evento antigo ainda está no Google
+// (só é movido DEPOIS de passar por esta checagem) e o freebusy não
+// distingue "ocupado por mim mesmo" de "ocupado por outra pessoa". Estes
+// testes cobrem a função pura extraída de dentro de scheduleAppointment
+// (conversation-pipeline.ts) que decide isso.
+describe("isSlotFreeIgnoringOwnAppointment", () => {
+  it("caso do bug: remarcar de 14:00 pra 14:30 (se sobrepõe ao horário atual do próprio lead) passa a ser considerado livre", () => {
+    // Evento atual: 14:00-15:00 (Brasília) = 17:00-18:00 UTC. Novo horário
+    // pedido: 14:30-15:30 (Brasília) = 17:30-18:30 UTC. O Google ainda
+    // reporta o período antigo (17:00-18:00 UTC) como ocupado — exatamente
+    // o próprio evento, ainda não movido.
+    const ownWindow = { start: new Date("2026-09-19T17:00:00.000Z"), end: new Date("2026-09-19T18:00:00.000Z") };
+    const result = isSlotFreeIgnoringOwnAppointment({
+      start: new Date("2026-09-19T17:30:00.000Z"),
+      end: new Date("2026-09-19T18:30:00.000Z"),
+      rawBusy: [{ start: ownWindow.start.toISOString(), end: ownWindow.end.toISOString() }],
+      ownAppointmentWindow: ownWindow,
+    });
+
+    expect(result).toBe(true);
+  });
+
+  it("horário realmente ocupado por OUTRA pessoa continua sendo recusado, mesmo com um agendamento próprio ativo", () => {
+    // Mesmo evento próprio de antes (17:00-18:00 UTC), mas agora existe
+    // TAMBÉM um evento de outra pessoa (17:45-18:15 UTC) que colide com o
+    // novo horário pedido (17:30-18:30 UTC) — esse período não bate com a
+    // janela do próprio agendamento, então continua bloqueando.
+    const ownWindow = { start: new Date("2026-09-19T17:00:00.000Z"), end: new Date("2026-09-19T18:00:00.000Z") };
+    const result = isSlotFreeIgnoringOwnAppointment({
+      start: new Date("2026-09-19T17:30:00.000Z"),
+      end: new Date("2026-09-19T18:30:00.000Z"),
+      rawBusy: [
+        { start: ownWindow.start.toISOString(), end: ownWindow.end.toISOString() },
+        { start: "2026-09-19T17:45:00.000Z", end: "2026-09-19T18:15:00.000Z" },
+      ],
+      ownAppointmentWindow: ownWindow,
+    });
+
+    expect(result).toBe(false);
+  });
+
+  it("sem ownAppointmentWindow (primeira marcação, sem agendamento ativo), um período ocupado continua bloqueando normalmente", () => {
+    const result = isSlotFreeIgnoringOwnAppointment({
+      start: new Date("2026-09-19T17:30:00.000Z"),
+      end: new Date("2026-09-19T18:30:00.000Z"),
+      rawBusy: [{ start: "2026-09-19T17:45:00.000Z", end: "2026-09-19T18:15:00.000Z" }],
+    });
+
+    expect(result).toBe(false);
+  });
+
+  it("sem nenhum período ocupado na janela, está livre", () => {
+    const result = isSlotFreeIgnoringOwnAppointment({
+      start: new Date("2026-09-19T17:30:00.000Z"),
+      end: new Date("2026-09-19T18:30:00.000Z"),
+      rawBusy: [],
+      ownAppointmentWindow: { start: new Date("2026-09-19T17:00:00.000Z"), end: new Date("2026-09-19T18:00:00.000Z") },
+    });
+
+    expect(result).toBe(true);
   });
 });

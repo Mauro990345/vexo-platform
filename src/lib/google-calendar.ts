@@ -14,8 +14,12 @@ import { sendWhatsappMessage, formatGoogleCalendarReconnectAlert } from "@/lib/w
 // conversão de fuso horário, ver comentário grande em timezone.ts).
 const BUSINESS_HOURS_START_LOCAL = 9; // 9h de Brasília
 const BUSINESS_HOURS_END_LOCAL = 18; // 18h de Brasília
-const BUSINESS_HOURS_START_UTC = BUSINESS_HOURS_START_LOCAL + SAO_PAULO_UTC_OFFSET_HOURS;
-const BUSINESS_HOURS_END_UTC = BUSINESS_HOURS_END_LOCAL + SAO_PAULO_UTC_OFFSET_HOURS;
+// Exportadas (só os dois números, sem mudar nada do comportamento aqui) —
+// reaproveitadas em conversation-pipeline.ts pra checar horário de
+// funcionamento antes de aplicar a isenção de "ocupado pelo próprio
+// agendamento" numa remarcação (ver comentário grande em scheduleAppointment).
+export const BUSINESS_HOURS_START_UTC = BUSINESS_HOURS_START_LOCAL + SAO_PAULO_UTC_OFFSET_HOURS;
+export const BUSINESS_HOURS_END_UTC = BUSINESS_HOURS_END_LOCAL + SAO_PAULO_UTC_OFFSET_HOURS;
 
 // A lib googleapis usa a Gaxios por baixo dos panos pra fazer as chamadas
 // HTTP — erros de verdade vêm como GaxiosError (nunca TypeError puro, que
