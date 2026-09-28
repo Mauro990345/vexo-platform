@@ -26,7 +26,7 @@ import { parseBrazilLocalDateTime, formatAsBrazilLocalDateTime } from "@/lib/tim
 export { toChatHistory } from "@/lib/chat-history";
 
 // Usado quando Clinic.confirmationVideoCaption está vazio (editável em
-// /crm/clinicas/[id]/agente-ia) — ver confirmAppointment mais abaixo.
+// /crm/clinicas/[id]/agente-ia) — ver a ferramenta scheduleAppointment mais abaixo.
 const DEFAULT_CONFIRMATION_VIDEO_CAPTION = "Vou te mandar um vídeo rápido mostrando como é o nosso atendimento 🙂";
 
 export type InboundInstagramEvent = {
@@ -69,38 +69,71 @@ export type InboundInstagramEvent = {
 // aqui, cruzando o horário consultado com o Appointment ativo desta
 // conversa, e devolvida explicitamente pra IA em vez de depender dela
 // adivinhar pela ausência do horário em `slots`.
-function buildAvailabilityCheck(clinicId: string, conversationId: string): AgentTools["checkAvailability"] {
+// onGoogleFailure: chamado só quando checkAvailability (a chamada de
+// verdade ao Google) falha de fato — nunca em erro de parsing das datas
+// (isso é a IA passando algo inválido, não uma falha de sistema). Bug real
+// corrigido aqui: antes, QUALQUER erro dentro deste try (incluindo
+// invalid_grant/token revogado/5xx do Google) virava só `{error:
+// err.message}` devolvido pra IA — que podia acabar dizendo ao lead algo
+// como "esse horário não está disponível", uma causa inventada pra um
+// problema que não tinha nada a ver com a agenda estar ocupada. Agora esse
+// caso é sinalizado pro chamador (handleInboundInstagramMessage) via este
+// callback, que decide separadamente escalar pra revisão humana e mandar
+// uma mensagem neutra ao lead — nunca "indisponível", nunca "confirmado".
+// Exportado (só pra teste, ver conversation-pipeline.test.ts) — reaproveita
+// o mesmo padrão já usado por toChatHistory (re-exportado no topo deste
+// arquivo): expõe uma função internamente pura o bastante pra testar
+// isolada, sem precisar montar todo o resto de handleInboundInstagramMessage.
+export function buildAvailabilityCheck(
+  clinicId: string,
+  conversationId: string,
+  onGoogleFailure: (reason: string) => void
+): AgentTools["checkAvailability"] {
   return async ({ dateFromLocal, dateToLocal }) => {
+    let dateFrom: string;
+    let dateTo: string;
     try {
-      const dateFrom = parseBrazilLocalDateTime(dateFromLocal).toISOString();
-      const dateTo = parseBrazilLocalDateTime(dateToLocal).toISOString();
-      const slots = await checkAvailability(clinicId, dateFrom, dateTo);
-
-      const ownAppointment = await prisma.appointment.findFirst({
-        where: {
-          conversationId,
-          status: { in: ["SCHEDULED", "CONFIRMED"] },
-          scheduledAt: { gte: new Date(dateFrom), lt: new Date(dateTo) },
-        },
-        orderBy: { createdAt: "desc" },
-      });
-
-      const result = {
-        slots: slots.map((iso) => formatAsBrazilLocalDateTime(new Date(iso))),
-        ...(ownAppointment ? { ownAppointmentLocal: formatAsBrazilLocalDateTime(ownAppointment.scheduledAt) } : {}),
-      };
-
-      console.log(
-        `[vexo:calendar] check_availability conversationId=${conversationId} ` +
-          `dateFromLocal=${dateFromLocal} dateToLocal=${dateToLocal} dateFromUtc=${dateFrom} dateToUtc=${dateTo} ` +
-          `slots=${JSON.stringify(result.slots)} ownAppointmentLocal=${result.ownAppointmentLocal ?? "n/a"} ` +
-          `ownAppointmentUtc=${ownAppointment?.scheduledAt.toISOString() ?? "n/a"}`
-      );
-
-      return result;
+      dateFrom = parseBrazilLocalDateTime(dateFromLocal).toISOString();
+      dateTo = parseBrazilLocalDateTime(dateToLocal).toISOString();
     } catch (err) {
-      return { error: err instanceof Error ? err.message : "Erro ao consultar agenda." };
+      return { error: err instanceof Error ? err.message : "Datas inválidas." };
     }
+
+    let slots: string[];
+    try {
+      slots = await checkAvailability(clinicId, dateFrom, dateTo);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Erro ao consultar o Google Calendar.";
+      onGoogleFailure(`Falha ao consultar disponibilidade no Google Calendar (check_availability): ${message}`);
+      return {
+        error:
+          "Sistema de agenda temporariamente indisponível — isto é uma falha real do sistema, NÃO diga ao lead " +
+          "que algum horário está confirmado ou indisponível; isso será resolvido manualmente pela equipe.",
+      };
+    }
+
+    const ownAppointment = await prisma.appointment.findFirst({
+      where: {
+        conversationId,
+        status: { in: ["SCHEDULED", "CONFIRMED"] },
+        scheduledAt: { gte: new Date(dateFrom), lt: new Date(dateTo) },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    const result = {
+      slots: slots.map((iso) => formatAsBrazilLocalDateTime(new Date(iso))),
+      ...(ownAppointment ? { ownAppointmentLocal: formatAsBrazilLocalDateTime(ownAppointment.scheduledAt) } : {}),
+    };
+
+    console.log(
+      `[vexo:calendar] check_availability conversationId=${conversationId} ` +
+        `dateFromLocal=${dateFromLocal} dateToLocal=${dateToLocal} dateFromUtc=${dateFrom} dateToUtc=${dateTo} ` +
+        `slots=${JSON.stringify(result.slots)} ownAppointmentLocal=${result.ownAppointmentLocal ?? "n/a"} ` +
+        `ownAppointmentUtc=${ownAppointment?.scheduledAt.toISOString() ?? "n/a"}`
+    );
+
+    return result;
   };
 }
 
@@ -668,7 +701,15 @@ export async function handleInboundInstagramMessage(
   const conversationContext = await buildConversationContext(history, summarizeOlderTurns);
   const windowedHistory = withOlderSummary(conversationContext);
 
-  let scheduledStartTime: string | undefined;
+  // Preenchido dentro de scheduleAppointment/checkAvailability (ferramentas
+  // abaixo) quando uma chamada de verdade ao Google Calendar falha (não
+  // "horário ocupado" — falha real de sistema, ver comentário grande em
+  // buildAvailabilityCheck). Usado depois de generateLeadReply pra
+  // DESCARTAR o texto que a IA gerou neste turno (que respondeu ao erro da
+  // ferramenta sem saber que a política aqui é nunca confirmar nem dizer
+  // "indisponível" nesse caso) e escalar pra revisão humana com uma
+  // mensagem neutra — ver o bloco logo depois de generateLeadReply.
+  let googleCalendarFailureReason: string | undefined;
   let capturedLeadPhone: string | undefined;
   let capturedLeadName: string | undefined;
   let capturedResultPhoto: ResultPhotoInput | undefined;
@@ -788,8 +829,10 @@ export async function handleInboundInstagramMessage(
     contextNote: dateTimeContext,
     history: windowedHistory,
     tools: {
-      checkAvailability: buildAvailabilityCheck(clinic.id, conversation.id),
-      // Leitura pura (sem side effect) — mesma consulta que confirmAppointment
+      checkAvailability: buildAvailabilityCheck(clinic.id, conversation.id, (reason) => {
+        googleCalendarFailureReason = reason;
+      }),
+      // Leitura pura (sem side effect) — mesma consulta que scheduleAppointment
       // já faz pra decidir criar vs. mover um agendamento, exposta aqui pra
       // IA poder responder "esqueci meu horário"/"quando é minha consulta?"
       // e servir de primeiro passo antes de uma remarcação.
@@ -895,9 +938,30 @@ export async function handleInboundInstagramMessage(
           };
         }
         const end = new Date(start.getTime() + 60 * 60 * 1000);
-        const freeSlots = await checkAvailability(clinic.id, start.toISOString(), end.toISOString()).catch(
-          () => [] as string[]
-        );
+
+        let freeSlots: string[];
+        try {
+          freeSlots = await checkAvailability(clinic.id, start.toISOString(), end.toISOString());
+        } catch (err) {
+          // Falha REAL da API do Google (token revogado, 5xx, rede — nunca
+          // "horário ocupado") — bug real corrigido aqui: antes, isto
+          // virava `.catch(() => [])`, e a ausência do horário resultante
+          // em `freeSlots` fazia o bloco abaixo dizer ao lead "esse horário
+          // não está livre", uma causa inventada pra um problema que não
+          // tinha nada a ver com a agenda estar ocupada. Sinaliza pro
+          // chamador via googleCalendarFailureReason (ver o bloco depois de
+          // generateLeadReply, em handleInboundInstagramMessage) em vez de
+          // deixar a IA decidir o que dizer com base num erro genérico.
+          googleCalendarFailureReason =
+            `Falha ao consultar disponibilidade no Google Calendar ao tentar confirmar ${args.startTimeLocal} ` +
+            `(Brasília): ${err instanceof Error ? err.message : String(err)}`;
+          return {
+            error:
+              "Não foi possível confirmar a disponibilidade agora (falha real do sistema, não é sobre o horário) " +
+              "— NÃO diga ao lead que está confirmado nem que está indisponível; isso será resolvido manualmente.",
+          };
+        }
+
         if (!freeSlots.includes(start.toISOString())) {
           // Diagnóstico: registra o que o Google devolveu de verdade (conta,
           // calendário, períodos ocupados crus do dia inteiro) em
@@ -931,7 +995,81 @@ export async function handleInboundInstagramMessage(
               `funcionamento). Chame check_availability de novo e ofereça outro horário — não confirme este ao lead.`,
           };
         }
-        scheduledStartTime = start.toISOString();
+
+        // Cria/move o evento de verdade no Google Calendar e persiste o
+        // Appointment AQUI, ANTES de devolver confirmed:true — bug crítico
+        // corrigido: antes, confirmed:true só significava "o horário
+        // estava livre nesta checagem", e a IA já escrevia a confirmação
+        // pro lead com base só nisso; a criação real do evento (então numa
+        // função separada, confirmAppointment, chamada só depois que
+        // generateLeadReply já tinha terminado e a resposta já estava na
+        // fila) podia falhar e ficar só num console.error — o lead já
+        // tinha recebido "confirmado" sem o evento existir de verdade em
+        // lugar nenhum. Mover a criação pra dentro da própria ferramenta,
+        // ANTES do "return confirmed:true", é a única forma de garantir
+        // que essa mensagem só sai quando o evento realmente existe.
+        //
+        // Mesma trava de idempotência de sempre (nunca duplicar): busca um
+        // Appointment ativo desta conversa — se existir e o horário for
+        // diferente, MOVE o evento existente (remarcação); se for igual, é
+        // só uma reconfirmação, não toca no Google de novo; se não existir
+        // nenhum, cria um evento novo.
+        const leadNameForEvent = capturedLeadName?.trim() || lead.name!;
+        const leadPhoneForEvent = capturedLeadPhone ?? lead.phone;
+
+        const existingAppointment = await prisma.appointment.findFirst({
+          where: { conversationId: conversation.id, status: { in: ["SCHEDULED", "CONFIRMED"] } },
+          orderBy: { createdAt: "desc" },
+        });
+
+        try {
+          if (existingAppointment) {
+            if (existingAppointment.scheduledAt.getTime() !== start.getTime()) {
+              if (existingAppointment.googleEventId) {
+                await updateCalendarEvent(clinic.id, existingAppointment.googleEventId, start.toISOString());
+              }
+              await prisma.appointment.update({
+                where: { id: existingAppointment.id },
+                data: { scheduledAt: start },
+              });
+            }
+            // Senão: mesmo horário já confirmado antes nesta conversa —
+            // reaproveita sem mexer no Google Calendar nem duplicar.
+          } else {
+            const googleEventId = await createCalendarEvent(
+              clinic.id,
+              start.toISOString(),
+              `VEXO — Avaliação: ${leadNameForEvent}`,
+              clinic.address ?? undefined,
+              buildCalendarEventDescription({ leadName: leadNameForEvent, leadPhone: leadPhoneForEvent })
+            );
+            await prisma.appointment.create({
+              data: {
+                clinicId: clinic.id,
+                conversationId: conversation.id,
+                leadId: lead.id,
+                scheduledAt: start,
+                googleEventId,
+                status: "SCHEDULED",
+              },
+            });
+          }
+        } catch (err) {
+          googleCalendarFailureReason =
+            `Falha ao criar/mover o evento no Google Calendar pro horário ${args.startTimeLocal} (Brasília): ` +
+            `${err instanceof Error ? err.message : String(err)}`;
+          return {
+            error:
+              "Não foi possível confirmar o agendamento agora (falha ao gravar no Google Calendar) — NÃO diga ao " +
+              "lead que está confirmado; isso será resolvido manualmente pela equipe.",
+          };
+        }
+
+        await prisma.conversation.update({
+          where: { id: conversation.id },
+          data: { status: "SCHEDULED" },
+        });
+
         return { confirmed: true, startTimeLocal: args.startTimeLocal };
       },
       async saveLeadPhone(args) {
@@ -993,7 +1131,11 @@ export async function handleInboundInstagramMessage(
   // `truncated` abaixo). Nesse caso usa FAST_REPLY_DELAY_SECONDS (sai
   // rápido) em vez do delay adaptativo normal, que não faz sentido pra
   // uma mensagem de espera/escalonamento.
-  const scheduledFor = reply.truncated
+  // googleCalendarFailureReason (setado dentro de checkAvailability/
+  // scheduleAppointment, ver comentário grande logo abaixo) usa o mesmo
+  // FAST_REPLY_DELAY_SECONDS de reply.truncated — mesmo raciocínio: não é
+  // uma resposta de conversação normal, o delay adaptativo não se aplica.
+  const scheduledFor = reply.truncated || googleCalendarFailureReason
     ? new Date(Date.now() + FAST_REPLY_DELAY_SECONDS * 1000)
     : new Date(Date.now() + delaySeconds * 1000);
 
@@ -1019,14 +1161,28 @@ export async function handleInboundInstagramMessage(
       `now=${new Date().toISOString()} scheduledFor=${scheduledFor.toISOString()}`
   );
 
+  // googleCalendarFailureReason TEM PRIORIDADE sobre o texto que a IA
+  // gerou neste turno — mesmo que o modelo tenha produzido uma resposta
+  // normal depois de ver o erro da ferramenta (ela não tem garantia
+  // nenhuma de seguir a instrução "não diga X nem Y" à risca), essa
+  // resposta é DESCARTADA e substituída por uma mensagem neutra: é a única
+  // forma de garantir que o lead NUNCA recebe uma confirmação falsa quando
+  // o evento real no Google Calendar não existe. Mesmo princípio de "não
+  // confia no texto do modelo, decide no código" que reply.truncated já
+  // usa abaixo — só que aqui o motivo é uma falha de sistema, não o loop
+  // de ferramentas ter esgotado.
+  const isGoogleCalendarFailure = Boolean(googleCalendarFailureReason);
+
   await prisma.message.create({
     data: {
       conversationId: conversation.id,
       direction: "OUTBOUND",
-      sender: reply.truncated ? "SYSTEM" : "AI",
-      content: reply.truncated
-        ? "Entendi! Vou repassar isso pra nossa equipe te dar mais detalhes por aqui, tá bom? 🙂"
-        : reply.text,
+      sender: reply.truncated || isGoogleCalendarFailure ? "SYSTEM" : "AI",
+      content: isGoogleCalendarFailure
+        ? "Só um instante — vou confirmar esse horário direto com a nossa equipe e te aviso em seguida, tá bom? 🙂"
+        : reply.truncated
+          ? "Entendi! Vou repassar isso pra nossa equipe te dar mais detalhes por aqui, tá bom? 🙂"
+          : reply.text,
       status: "PENDING",
       scheduledFor,
     },
@@ -1038,13 +1194,16 @@ export async function handleInboundInstagramMessage(
   // responder quando o LEAD mandava outra mensagem. Escalona pra revisão
   // humana (mesmo padrão de toda outra escalonagem) — mas, ao contrário
   // da versão anterior desta correção, NÃO retorna aqui: qualquer
-  // agendamento/telefone/nome que a IA já tinha CONFIRMADO via ferramenta
-  // antes de travar (ex.: schedule_appointment ou confirm_attendance bem-
-  // sucedidos numa iteração anterior do mesmo turno) precisa continuar
-  // sendo processado normalmente logo abaixo (persistência de
-  // nome/telefone, confirmAppointment, vídeo institucional, confirmação
+  // telefone/nome que a IA já tinha CONFIRMADO via ferramenta antes de
+  // travar (ex.: save_lead_phone/save_lead_name numa iteração anterior do
+  // mesmo turno) precisa continuar sendo processado normalmente logo
+  // abaixo (persistência de nome/telefone, vídeo institucional, confirmação
   // por WhatsApp) — um `return` aqui descartava esse progresso real em
-  // silêncio, mesmo quando ele já tinha sido salvo no banco.
+  // silêncio, mesmo quando ele já tinha sido salvo no banco. Agendamento em
+  // si não faz mais parte dessa lista: schedule_appointment já persiste o
+  // evento (e só devolve confirmed:true) dentro da própria ferramenta,
+  // antes de generateLeadReply terminar — nunca fica pendurado esperando
+  // este bloco rodar.
   if (reply.truncated) {
     await escalateToHuman(
       "A IA não conseguiu concluir a resposta dentro do limite de chamadas de ferramenta neste turno " +
@@ -1053,6 +1212,18 @@ export async function handleInboundInstagramMessage(
         "sem nunca responder de verdade. Qualquer agendamento/telefone/nome que a IA já tinha CONFIRMADO via " +
         "ferramenta antes de travar foi salvo normalmente — confira o card de agendamento antes de continuar " +
         "manualmente."
+    );
+  }
+
+  // Falha real do Google Calendar durante check_availability/schedule_appointment
+  // neste turno (ver comentário grande acima) — a mensagem neutra já saiu
+  // pro lead acima; aqui só falta garantir que um humano saiba que precisa
+  // confirmar esse agendamento manualmente, com o motivo técnico registrado.
+  if (isGoogleCalendarFailure) {
+    await escalateToHuman(
+      `Falha ao confirmar agendamento no Google Calendar — o lead NÃO recebeu uma confirmação de verdade ` +
+        `(mensagem neutra enviada em vez disso), o horário combinado precisa ser confirmado manualmente com ` +
+        `ele. Detalhe técnico: ${googleCalendarFailureReason}`
     );
   }
 
@@ -1071,21 +1242,21 @@ export async function handleInboundInstagramMessage(
       }),
     ]);
     // Mantém o objeto em memória atualizado — mesmo motivo do bloco
-    // análogo de capturedLeadName logo abaixo: confirmAppointment (mais
-    // adiante, se scheduledStartTime também estiver marcado neste turno)
-    // lê lead.phone pra incluir no evento do Google Calendar; sem isso, um
-    // telefone salvo NESTE MESMO turno só apareceria a partir do PRÓXIMO
-    // evento criado, nunca no que está sendo confirmado agora.
+    // análogo de capturedLeadName logo abaixo: outras chamadas neste MESMO
+    // turno, depois deste ponto (ex.: maybeSendConfirmationVideo/
+    // maybeSendWhatsappConfirmation abaixo), leem lead.phone; sem isso, um
+    // telefone salvo NESTE MESMO turno só apareceria a partir da PRÓXIMA
+    // mensagem. (schedule_appointment, mais acima, já leu o telefone certo
+    // pra este turno direto de capturedLeadPhone, sem depender disto.)
     lead.phone = capturedLeadPhone;
   }
 
   if (capturedLeadName) {
     await prisma.lead.update({ where: { id: lead.id }, data: { name: capturedLeadName } });
-    // Mantém o objeto em memória atualizado — confirmAppointment (mais
-    // abaixo, se scheduledStartTime também estiver marcado neste turno) lê
-    // lead.name pro título do evento no Google Calendar; sem isso, um nome
-    // salvo NESTE MESMO turno só apareceria a partir do PRÓXIMO evento
-    // criado, nunca no que está sendo confirmado agora.
+    // Mantém o objeto em memória atualizado — mesmo motivo do bloco acima
+    // (maybeSendConfirmationVideo/maybeSendWhatsappConfirmation, abaixo,
+    // leem lead.name). schedule_appointment já não depende mais disto (ver
+    // comentário no bloco de telefone, acima).
     lead.name = capturedLeadName;
   }
 
@@ -1125,21 +1296,11 @@ export async function handleInboundInstagramMessage(
     latestScheduledFor = photoMessages[photoMessages.length - 1]!.scheduledFor;
   }
 
-  if (scheduledStartTime) {
-    await confirmAppointment({
-      clinicId: clinic.id,
-      conversationId: conversation.id,
-      leadId: lead.id,
-      // Non-null: scheduledStartTime só fica marcado se o handler de
-      // scheduleAppointment (acima) passou pela própria trava que exige
-      // capturedLeadName ou lead.name preenchido — e, se foi capturedLeadName,
-      // o bloco logo acima já persistiu em lead.name antes de chegar aqui.
-      // "lead" genérico nunca mais é um fallback alcançável neste ponto.
-      leadName: lead.name!,
-      leadPhone: lead.phone,
-      startTimeIso: scheduledStartTime,
-    });
-  }
+  // Agendamento (criação/remarcação do evento no Google Calendar +
+  // Appointment) não roda mais aqui — schedule_appointment (ferramenta,
+  // bem mais acima) já faz isso sozinha, ANTES de devolver confirmed:true
+  // pra IA, e só devolve isso depois que o evento realmente existe. Ver o
+  // comentário grande lá pro bug crítico que motivou essa mudança.
 
   // Vídeo institucional de confirmação — disparado num ÚNICO ponto, sempre
   // no final de handleInboundInstagramMessage, depois que TUDO mais deste
@@ -1167,95 +1328,17 @@ export async function handleInboundInstagramMessage(
 }
 
 // Descrição do evento do Google Calendar — separada do summary (que já
-// leva o nome, ver "VEXO — Avaliação: ${leadName}" abaixo) pra que o
-// WhatsApp do lead apareça de forma legível assim que a secretária abrir
-// o compromisso, sem precisar abrir o CRM interno (tela que ela não tem
-// acesso) nem o Painel pra achar esse dado. Reaproveitada tanto na
-// criação (confirmAppointment) quanto no "backfill" quando o telefone
+// leva o nome, ver "VEXO — Avaliação: ${leadName}" na ferramenta
+// scheduleAppointment, bem mais acima) pra que o WhatsApp do lead apareça
+// de forma legível assim que a secretária abrir o compromisso, sem
+// precisar abrir o CRM interno (tela que ela não tem acesso) nem o Painel
+// pra achar esse dado. Reaproveitada tanto na criação (dentro da própria
+// ferramenta scheduleAppointment) quanto no "backfill" quando o telefone
 // chega numa conversa DEPOIS do agendamento já confirmado (ver
-// maybeSendWhatsappConfirmation).
+// maybeSendWhatsappConfirmation, abaixo).
 function buildCalendarEventDescription(params: { leadName: string; leadPhone?: string | null }): string {
   const phoneLine = params.leadPhone ? `WhatsApp: ${params.leadPhone}` : "WhatsApp: ainda não informado.";
   return `Lead: ${params.leadName}\n${phoneLine}\n\nCriado automaticamente pelo VEXO.`;
-}
-
-async function confirmAppointment(params: {
-  clinicId: string;
-  conversationId: string;
-  leadId: string;
-  leadName: string;
-  leadPhone?: string | null;
-  startTimeIso: string;
-}) {
-  // Buscado logo no início (não só mais abaixo, pra confirmationVideoUrl)
-  // porque address também alimenta o evento do Google Calendar criado a
-  // seguir — endereço da clínica preenchido uma vez em Automações, sem
-  // precisar digitar de novo aqui.
-  const clinic = await prisma.clinic.findUnique({ where: { id: params.clinicId } });
-
-  // Idempotente por conversa — bug real em produção: cada chamada
-  // bem-sucedida de schedule_appointment nesta MESMA conversa criava um
-  // Appointment + evento NOVO no Google Calendar, em vez de reaproveitar
-  // o que já existia. Confirmado direto na agenda real (dois eventos
-  // reais, mesmo lead, mesma conversa). O comentário mais abaixo (trava
-  // de reenvio do vídeo de confirmação) já apontava esse risco, mas só
-  // cobria o efeito colateral do vídeo — nunca a duplicata em si.
-  const existing = await prisma.appointment.findFirst({
-    where: { conversationId: params.conversationId, status: { in: ["SCHEDULED", "CONFIRMED"] } },
-    orderBy: { createdAt: "desc" },
-  });
-
-  const newScheduledAt = new Date(params.startTimeIso);
-
-  if (existing) {
-    if (existing.scheduledAt.getTime() !== newScheduledAt.getTime()) {
-      // Horário diferente do já agendado nesta conversa = remarcação:
-      // move o evento EXISTENTE em vez de criar outro.
-      if (existing.googleEventId) {
-        try {
-          await updateCalendarEvent(params.clinicId, existing.googleEventId, params.startTimeIso);
-        } catch (err) {
-          console.error("[vexo] Falha ao mover evento no Google Calendar:", err);
-        }
-      }
-      await prisma.appointment.update({
-        where: { id: existing.id },
-        data: { scheduledAt: newScheduledAt },
-      });
-    }
-    // Senão: mesmo horário já confirmado antes nesta conversa (reenvio da
-    // mesma chamada, ou o modelo confirmando de novo o que já estava
-    // certo) — reaproveita sem mexer no Google Calendar nem duplicar.
-  } else {
-    let googleEventId: string | undefined;
-    try {
-      googleEventId = await createCalendarEvent(
-        params.clinicId,
-        params.startTimeIso,
-        `VEXO — Avaliação: ${params.leadName}`,
-        clinic?.address ?? undefined,
-        buildCalendarEventDescription({ leadName: params.leadName, leadPhone: params.leadPhone })
-      );
-    } catch (err) {
-      console.error("[vexo] Falha ao criar evento no Google Calendar:", err);
-    }
-
-    await prisma.appointment.create({
-      data: {
-        clinicId: params.clinicId,
-        conversationId: params.conversationId,
-        leadId: params.leadId,
-        scheduledAt: newScheduledAt,
-        googleEventId,
-        status: "SCHEDULED",
-      },
-    });
-  }
-
-  await prisma.conversation.update({
-    where: { id: params.conversationId },
-    data: { status: "SCHEDULED" },
-  });
 }
 
 // Três gerações de bug real reportadas em produção, todas resolvidas

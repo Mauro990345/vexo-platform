@@ -1,6 +1,6 @@
 import { google, calendar_v3 } from "googleapis";
 import { prisma } from "@/lib/prisma";
-import { clientForClinic } from "@/lib/google-calendar";
+import { clientForClinic, withGoogleCalendarCall } from "@/lib/google-calendar";
 
 // Sincronização de LEITURA (Google -> VEXO) — complementa createCalendarEvent
 // em google-calendar.ts, que só escreve. Roda por polling (cron no worker,
@@ -23,8 +23,8 @@ import { clientForClinic } from "@/lib/google-calendar";
 // start.dateTime, só start.date).
 //
 // Limitação aceita: existe uma janela estreita (a chamada a createCalendarEvent
-// e a criação do Appointment com o googleEventId não são atômicas — ver
-// confirmAppointment em conversation-pipeline.ts) em que um sync poderia,
+// e a criação do Appointment com o googleEventId não são atômicas — ver a
+// ferramenta scheduleAppointment em conversation-pipeline.ts) em que um sync poderia,
 // em tese, ver o evento no Google antes do Appointment existir no Postgres
 // e importá-lo como manual. Na prática o intervalo é de poucas centenas de
 // milissegundos contra um polling de 5 em 5 minutos — probabilidade
@@ -47,18 +47,26 @@ export async function syncClinicCalendar(clinicId: string): Promise<SyncResult> 
 
   try {
     do {
-      const { data } = await calendar.events.list({
-        calendarId,
-        syncToken: account.syncToken ?? undefined,
-        pageToken,
-        singleEvents: true,
-      });
+      // withGoogleCalendarCall (google-calendar.ts) tenta de novo sozinho
+      // em 429/5xx/rede (ver PR #81/withRetry) e marca a clínica pra
+      // reconectar num invalid_grant (ver markGoogleCalendarNeedsReconnect)
+      // — o catch abaixo só precisa continuar tratando o 410 específico
+      // desta função (syncToken expirado), tudo mais já foi classificado.
+      const { data } = await withGoogleCalendarCall(clinicId, `syncClinicCalendar events.list clinicId=${clinicId}`, () =>
+        calendar.events.list({
+          calendarId,
+          syncToken: account.syncToken ?? undefined,
+          pageToken,
+          singleEvents: true,
+        })
+      );
       events.push(...(data.items ?? []));
       pageToken = data.nextPageToken ?? undefined;
       if (data.nextSyncToken) nextSyncToken = data.nextSyncToken;
     } while (pageToken);
   } catch (err) {
-    const status = (err as { code?: number; response?: { status?: number } })?.code
+    const status = (err as { status?: number; code?: number; response?: { status?: number } })?.status
+      ?? (err as { code?: number; response?: { status?: number } })?.code
       ?? (err as { response?: { status?: number } })?.response?.status;
     if (status === 410) {
       // syncToken expirado/inválido (calendário sem sync há muito tempo,

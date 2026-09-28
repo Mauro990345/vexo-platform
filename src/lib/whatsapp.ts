@@ -123,6 +123,23 @@ export function formatEscalationAlert(params: {
   ].join("\n");
 }
 
+// Alerta de NÍVEL DE CONEXÃO (não de uma conversa/lead específico) — a
+// clínica inteira precisa reconectar o Google Calendar (invalid_grant, ver
+// markGoogleCalendarNeedsReconnect em src/lib/google-calendar.ts). Mandado
+// só UMA vez por falha (não repete a cada nova tentativa de agendar/checar
+// disponibilidade enquanto a reconexão não acontece) — diferente de
+// formatEscalationAlert, que é por conversa e não tem conceito de "só uma
+// vez".
+export function formatGoogleCalendarReconnectAlert(params: { clinicName: string; reason: string }): string {
+  return [
+    `*VEXO — Google Calendar desconectado*`,
+    `Clínica: ${params.clinicName}`,
+    `A conexão com o Google Calendar caiu e precisa ser refeita — agendamentos não estão sendo criados/consultados na agenda real até isso ser resolvido.`,
+    `Motivo técnico: ${params.reason}`,
+    `Reconecte em Conexões > Google Calendar (botão "Reconectar").`,
+  ].join("\n");
+}
+
 export function formatReminderMessage(params: {
   leadFirstName: string;
   hoursBefore: number;

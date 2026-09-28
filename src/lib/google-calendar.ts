@@ -2,6 +2,8 @@ import { google } from "googleapis";
 import { decryptToken, encryptToken } from "@/lib/crypto";
 import { prisma } from "@/lib/prisma";
 import { SAO_PAULO_UTC_OFFSET_HOURS } from "@/lib/timezone";
+import { withRetry, RetryableError } from "@/lib/retry";
+import { sendWhatsappMessage, formatGoogleCalendarReconnectAlert } from "@/lib/whatsapp";
 
 // Janela de funcionamento em horário de Brasília — usada só pra filtrar
 // quais slots de 1h checkAvailability oferece (ver loop abaixo). Derivada
@@ -14,6 +16,110 @@ const BUSINESS_HOURS_START_LOCAL = 9; // 9h de Brasília
 const BUSINESS_HOURS_END_LOCAL = 18; // 18h de Brasília
 const BUSINESS_HOURS_START_UTC = BUSINESS_HOURS_START_LOCAL + SAO_PAULO_UTC_OFFSET_HOURS;
 const BUSINESS_HOURS_END_UTC = BUSINESS_HOURS_END_LOCAL + SAO_PAULO_UTC_OFFSET_HOURS;
+
+// A lib googleapis usa a Gaxios por baixo dos panos pra fazer as chamadas
+// HTTP — erros de verdade vêm como GaxiosError (nunca TypeError puro, que
+// withRetry já trata sozinho como rede — ver isNetworkError em retry.ts),
+// com `.status` (HTTP status, quando existe resposta) e `.code` (errno do
+// Node, ex. "ECONNRESET", quando a falha é de transporte e nem chega a
+// existir resposta) — confirmado direto em node_modules/gaxios/build/src/
+// common.js (classe GaxiosError). 429/5xx são erro passageiro do lado do
+// Google; sem NENHUM status HTTP (nem .status nem .response.status) é
+// erro de transporte (timeout, DNS, conexão recusada) — mesma natureza
+// transitória, mesmo tratamento.
+function isRetryableGoogleApiError(err: unknown): boolean {
+  const status =
+    (err as { status?: number; response?: { status?: number } })?.status ??
+    (err as { response?: { status?: number } })?.response?.status;
+  if (status === 429 || (typeof status === "number" && status >= 500)) return true;
+
+  const hasHttpStatus = typeof status === "number";
+  return !hasHttpStatus && err instanceof Error;
+}
+
+// invalid_grant = o refresh token foi revogado do lado do Google (cliente
+// revogou acesso manualmente, senha trocada com sessões invalidadas, token
+// nunca usado por tempo demais etc.) — SEMPRE permanente, nunca resolve
+// tentando de novo, só reconectando de verdade (novo OAuth). A Gaxios
+// coloca o corpo cru da resposta de erro em `.response.data` — o formato
+// exato (JSON `{error: "invalid_grant", ...}` vs. texto) varia entre
+// endpoints do Google, por isso checa tanto o corpo serializado quanto a
+// própria mensagem do erro, em vez de tentar casar um formato só.
+function isInvalidGrantError(err: unknown): boolean {
+  const responseData = (err as { response?: { data?: unknown } })?.response?.data;
+  const bodyText = typeof responseData === "string" ? responseData : JSON.stringify(responseData ?? {});
+  const message = err instanceof Error ? err.message : String(err);
+  return bodyText.includes("invalid_grant") || message.includes("invalid_grant");
+}
+
+// Grava que esta clínica precisa reconectar o Google Calendar — alimenta a
+// bolinha de status em Conexões (para de ficar verde, ver conexoes/page.tsx)
+// e dispara UM aviso por WhatsApp pra secretária (nunca repete a cada nova
+// falha enquanto o flag já estiver setado — sem isso, toda tentativa de
+// agendar/checar disponibilidade com o token morto mandaria um WhatsApp
+// novo). Reconectar de verdade (novo OAuth) é o único jeito de limpar isso
+// — ver o upsert em api/oauth/google-calendar/callback/route.ts.
+export async function markGoogleCalendarNeedsReconnect(clinicId: string, reason: string): Promise<void> {
+  const account = await prisma.googleCalendarAccount.findUnique({
+    where: { clinicId },
+    select: {
+      needsReconnectAt: true,
+      clinic: { select: { name: true, notifyWhatsappNumber: true, whatsappInstanceName: true } },
+    },
+  });
+  if (!account) return; // clínica já desconectou por conta própria nesse meio tempo — nada a marcar
+
+  const alreadyFlagged = Boolean(account.needsReconnectAt);
+  await prisma.googleCalendarAccount.update({
+    where: { clinicId },
+    data: { needsReconnectAt: new Date(), needsReconnectReason: reason },
+  });
+
+  if (alreadyFlagged) return;
+
+  const { clinic } = account;
+  if (clinic.notifyWhatsappNumber && clinic.whatsappInstanceName) {
+    try {
+      await sendWhatsappMessage(
+        clinic.whatsappInstanceName,
+        clinic.notifyWhatsappNumber,
+        formatGoogleCalendarReconnectAlert({ clinicName: clinic.name, reason })
+      );
+    } catch (err) {
+      console.error("[vexo] Falha ao notificar reconexão necessária do Google Calendar via WhatsApp:", err);
+    }
+  }
+}
+
+// Envelope comum pra TODA chamada de verdade à API do Google Calendar
+// (freebusy.query, events.insert/patch/list) — 429/5xx/rede tentam de novo
+// com backoff (ver withRetry, retry.ts); invalid_grant e qualquer outro
+// erro permanente falham direto, mas antes de propagar, invalid_grant
+// específico marca a clínica pra reconectar (ver markGoogleCalendarNeedsReconnect
+// acima) — detectado aqui, nesse ponto único, cobre TODA chamada (conversação
+// em tempo real E o sync periódico do worker, google-calendar-sync.ts, que
+// reaproveita esta mesma função).
+export async function withGoogleCalendarCall<T>(clinicId: string, label: string, fn: () => Promise<T>): Promise<T> {
+  try {
+    return await withRetry(async () => {
+      try {
+        return await fn();
+      } catch (err) {
+        if (isRetryableGoogleApiError(err)) {
+          throw new RetryableError(err instanceof Error ? err.message : String(err));
+        }
+        throw err;
+      }
+    }, { label });
+  } catch (err) {
+    if (isInvalidGrantError(err)) {
+      await markGoogleCalendarNeedsReconnect(clinicId, err instanceof Error ? err.message : String(err)).catch(
+        (markErr) => console.error("[vexo] Falha ao marcar Google Calendar precisando reconectar:", markErr)
+      );
+    }
+    throw err;
+  }
+}
 
 // Integração com Google Calendar via OAuth oficial, por clínica.
 // Nunca armazenamos senha — apenas access/refresh token, criptografados.
@@ -137,9 +243,11 @@ export async function getRawBusyPeriods(
   const account = await prisma.googleCalendarAccount.findUniqueOrThrow({ where: { clinicId } });
   const { client, calendarId } = await clientForClinic(clinicId);
   const calendar = google.calendar({ version: "v3", auth: client });
-  const { data } = await calendar.freebusy.query({
-    requestBody: { timeMin: dateFrom, timeMax: dateTo, items: [{ id: calendarId }] },
-  });
+  const { data } = await withGoogleCalendarCall(clinicId, `getRawBusyPeriods clinicId=${clinicId}`, () =>
+    calendar.freebusy.query({
+      requestBody: { timeMin: dateFrom, timeMax: dateTo, items: [{ id: calendarId }] },
+    })
+  );
   return {
     googleAccountEmail: account.googleAccountEmail,
     calendarId,
@@ -155,13 +263,15 @@ export async function checkAvailability(
   const { client, calendarId } = await clientForClinic(clinicId);
   const calendar = google.calendar({ version: "v3", auth: client });
 
-  const { data } = await calendar.freebusy.query({
-    requestBody: {
-      timeMin: dateFrom,
-      timeMax: dateTo,
-      items: [{ id: calendarId }],
-    },
-  });
+  const { data } = await withGoogleCalendarCall(clinicId, `checkAvailability clinicId=${clinicId}`, () =>
+    calendar.freebusy.query({
+      requestBody: {
+        timeMin: dateFrom,
+        timeMax: dateTo,
+        items: [{ id: calendarId }],
+      },
+    })
+  );
 
   const busy = data.calendars?.[calendarId]?.busy ?? [];
 
@@ -215,16 +325,18 @@ export async function createCalendarEvent(
   const start = new Date(startTimeIso);
   const end = new Date(start.getTime() + 60 * 60 * 1000);
 
-  const { data } = await calendar.events.insert({
-    calendarId,
-    requestBody: {
-      summary,
-      location,
-      description,
-      start: { dateTime: start.toISOString() },
-      end: { dateTime: end.toISOString() },
-    },
-  });
+  const { data } = await withGoogleCalendarCall(clinicId, `createCalendarEvent clinicId=${clinicId}`, () =>
+    calendar.events.insert({
+      calendarId,
+      requestBody: {
+        summary,
+        location,
+        description,
+        start: { dateTime: start.toISOString() },
+        end: { dateTime: end.toISOString() },
+      },
+    })
+  );
 
   if (!data.id) throw new Error("Google Calendar não retornou ID do evento criado.");
 
@@ -241,10 +353,10 @@ export async function createCalendarEvent(
 }
 
 // Move um evento JÁ EXISTENTE pra um novo horário (remarcação), em vez de
-// criar outro — usado por confirmAppointment (conversation-pipeline.ts)
-// quando a conversa já tem um Appointment ativo e o lead pede outro
-// horário. Bug real em produção: sem essa distinção entre "primeira
-// confirmação" e "remarcação", cada chamada bem-sucedida de
+// criar outro — usado dentro da própria ferramenta scheduleAppointment
+// (conversation-pipeline.ts) quando a conversa já tem um Appointment ativo
+// e o lead pede outro horário. Bug real em produção: sem essa distinção
+// entre "primeira confirmação" e "remarcação", cada chamada bem-sucedida de
 // schedule_appointment criava um Appointment + evento novo no Google
 // Calendar, duplicando o compromisso na agenda real da clínica.
 export async function updateCalendarEvent(clinicId: string, eventId: string, startTimeIso: string): Promise<void> {
@@ -254,14 +366,16 @@ export async function updateCalendarEvent(clinicId: string, eventId: string, sta
   const start = new Date(startTimeIso);
   const end = new Date(start.getTime() + 60 * 60 * 1000);
 
-  await calendar.events.patch({
-    calendarId,
-    eventId,
-    requestBody: {
-      start: { dateTime: start.toISOString() },
-      end: { dateTime: end.toISOString() },
-    },
-  });
+  await withGoogleCalendarCall(clinicId, `updateCalendarEvent clinicId=${clinicId}`, () =>
+    calendar.events.patch({
+      calendarId,
+      eventId,
+      requestBody: {
+        start: { dateTime: start.toISOString() },
+        end: { dateTime: end.toISOString() },
+      },
+    })
+  );
 }
 
 // Atualiza só a descrição de um evento JÁ EXISTENTE, sem tocar em
@@ -275,9 +389,11 @@ export async function updateCalendarEventDescription(clinicId: string, eventId: 
   const { client, calendarId } = await clientForClinic(clinicId);
   const calendar = google.calendar({ version: "v3", auth: client });
 
-  await calendar.events.patch({
-    calendarId,
-    eventId,
-    requestBody: { description },
-  });
+  await withGoogleCalendarCall(clinicId, `updateCalendarEventDescription clinicId=${clinicId}`, () =>
+    calendar.events.patch({
+      calendarId,
+      eventId,
+      requestBody: { description },
+    })
+  );
 }
