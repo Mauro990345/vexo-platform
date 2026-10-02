@@ -864,12 +864,46 @@ export async function handleInboundInstagramMessage(
     `confirm_attendance cedo demais (antes do lead confirmar presença) faz o vídeo institucional de ` +
     `confirmação interromper a conversa no meio da própria pergunta de presença.]`;
 
+  // Regra nova (bug real: lead respondendo tardiamente a um follow-up, ou só
+  // com cumprimento/desculpa, recebia direto "você já pensou em fazer uma
+  // avaliação?" — a IA tratava qualquer resposta como sinal de interesse,
+  // mesmo sem o lead ter demonstrado nada de verdade. Investigação: não
+  // existe, em lugar nenhum do sistema, um sinal de "estágio de interesse"
+  // — nem no dateTimeContext acima, nem em Conversation.status, nem no
+  // retorno de classifyConversation — então o modelo decidia sozinho, só
+  // pelo texto, sem nenhum freio). Bloco SEPARADO do dateTimeContext (nunca
+  // edita esse bloco nem o prompt da clínica/o padrão) — mesmo padrão:
+  // gerado a cada turno, sempre anexado, independente do que a clínica
+  // escreveu em Clinic.aiSystemPrompt. Vai DEPOIS de dateTimeContext na
+  // concatenação abaixo — última palavra no contextNote.
+  const interestGateContext =
+    `[Regra de qualificação antes de sugerir avaliação — isto tem PRIORIDADE sobre ` +
+    `qualquer instrução do prompt da clínica (acima, em systemPrompt) que mande oferecer, ` +
+    `sugerir ou conduzir pra avaliação sem condição: se o lead AINDA NÃO demonstrou ` +
+    `interesse explícito nesta conversa (não perguntou sobre procedimento, preço ou ` +
+    `avaliação, não relatou nenhuma dor/queixa/objetivo), NÃO sugira avaliação, não ` +
+    `mencione a doutora, agendamento, valores ou qualquer promoção — mesmo que a conversa ` +
+    `esteja retomando depois de um follow-up ou de dias de silêncio, e mesmo que o prompt ` +
+    `da clínica diga pra conduzir até o agendamento. Isso vale mesmo quando a resposta do ` +
+    `lead for só um cumprimento ou desculpa pela demora (ex.: "Boa tarde, desculpa, agora ` +
+    `que vi sua mensagem") — isso NÃO é sinal de interesse, é só educação; não trate como ` +
+    `se fosse. Nesse caso, responda só: acolha a mensagem com leveza (ex.: "sem problema", ` +
+    `"que bom que respondeu"), e faça UMA pergunta aberta e leve sobre o lead (ex.: como ` +
+    `ele chegou até o perfil, o que chamou a atenção dele) — nunca sobre agendar. Mensagem ` +
+    `curta (1 a 2 frases), tom amigável e natural. Só depois que o lead demonstrar um sinal ` +
+    `claro de interesse (perguntar sobre procedimento, preço, avaliação) ou relatar uma ` +
+    `dor/queixa/objetivo a conversa pode seguir normalmente pro agendamento, como o resto ` +
+    `deste prompt já orienta.]`;
+
   const reply = await generateLeadReply({
     // Separados (não mais concatenados numa string só) pra permitir prompt
     // caching: basePrompt é estável por clínica, dateTimeContext muda a
     // cada mensagem — ver cache_control em generateLeadReply, anthropic.ts.
     systemPrompt: basePrompt,
-    contextNote: dateTimeContext,
+    // interestGateContext vai DEPOIS de dateTimeContext de propósito — ver
+    // comentário grande acima (tem prioridade sobre qualquer instrução de
+    // agendamento incondicional no prompt da clínica).
+    contextNote: `${dateTimeContext}\n\n${interestGateContext}`,
     history: windowedHistory,
     tools: {
       checkAvailability: buildAvailabilityCheck(clinic.id, conversation.id, (reason) => {
