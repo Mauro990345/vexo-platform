@@ -232,14 +232,29 @@ function addHours(date: Date, hours: number): Date {
 // nenhum dos dois existir (a mensagem sai sem o nome nesse caso, em vez de
 // deixar a variável sem substituir).
 //
+// Bug real corrigido: ao cair pro igUsername, o nome saía com o @ inteiro
+// sempre que ele tinha ponto (ex.: "mauro.iphone" — sem espaço nenhum, o
+// split por `\s+` de antes não tinha efeito nenhum nesse caso). Instagram
+// usa ponto como separador comum em username (ex. sobrenome.apelido,
+// nome.profissao) — a parte depois do ponto raramente é o nome de
+// verdade. Regra: @ com ponto usa só a parte ANTES do primeiro ponto
+// (ex.: "mauro.iphone" -> "mauro"); @ sem ponto usa ele inteiro (ex.:
+// "luiscarlos" -> "luiscarlos"). Só vale pro fallback de username — nome
+// real (Lead.name) continua usando o primeiro nome por espaço, como já
+// era.
+//
 // Exportadas (não só usadas aqui): conversation-pipeline.ts também aplica
 // em clinic.aiSystemPrompt antes de mandar pro modelo — sem isso, um
 // prompt customizado escrito com essa mesma variável (convenção já usada
 // nos templates de lembrete/follow-up) sai literal na resposta da IA
 // ("Por nada, {{primeiro_nome}}...") em vez de virar o nome do lead.
 export function leadFirstName(lead: { name: string | null; igUsername: string | null }): string {
-  const raw = (lead.name ?? lead.igUsername ?? "").trim();
-  return raw.split(/\s+/)[0] ?? "";
+  const name = lead.name?.trim();
+  if (name) return name.split(/\s+/)[0] ?? "";
+
+  const username = lead.igUsername?.trim();
+  if (!username) return "";
+  return username.split(".")[0] ?? "";
 }
 
 export function applyTemplateVariables(text: string, lead: { name: string | null; igUsername: string | null }): string {
