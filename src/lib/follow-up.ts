@@ -261,7 +261,10 @@ export function applyTemplateVariables(text: string, lead: { name: string | null
   return text.replaceAll("{{primeiro_nome}}", leadFirstName(lead));
 }
 
-async function dispatchFollowUpSteps(): Promise<number> {
+// Exportada só pra teste (mesmo padrão já usado por buildAvailabilityCheck/
+// isSlotFreeIgnoringOwnAppointment em conversation-pipeline.ts) — chamada
+// de verdade continua sendo via processFollowUps, mais abaixo.
+export async function dispatchFollowUpSteps(): Promise<number> {
   const [silenceSteps, noShowSteps, settings] = await Promise.all([
     prisma.followUpStep.findMany({ where: { trigger: "SILENCE" }, orderBy: { order: "asc" } }),
     prisma.followUpStep.findMany({ where: { trigger: "NO_SHOW" }, orderBy: { order: "asc" } }),
@@ -319,10 +322,30 @@ async function dispatchFollowUpSteps(): Promise<number> {
       continue;
     }
 
-    // O passo já venceu (dueAt <= now) — mas o envio de fato só acontece
-    // dentro da janela configurada; fora dela, adia pra próxima ocorrência
-    // válida em vez de disparar na hora.
-    const sendAt = nextValidSendTime(now, settings.windowDays, settings.windowStartMinute, settings.windowEndMinute);
+    // O passo já venceu (dueAt <= now) — mas só é enviado se a janela
+    // estiver ABERTA agora. Comportamento pedido: se vence com a janela
+    // fechada, o passo é DESCARTADO (pulado), nunca enviado quando a
+    // janela abrir depois — nextValidSendTime devolve o próprio `now`
+    // quando já está dentro da janela; qualquer valor diferente significa
+    // que está fora agora.
+    const nextWindowOpen = nextValidSendTime(now, settings.windowDays, settings.windowStartMinute, settings.windowEndMinute);
+    if (nextWindowOpen.getTime() !== now.getTime()) {
+      // Mesmo padrão já usado pelo passo WHATSAPP sem telefone (mais
+      // abaixo): avança lastStepIndex/lastStepSentAt normalmente, sem
+      // enviar nada — a sequência continua pro próximo passo, contado a
+      // partir de AGORA (não muda o espaçamento configurado entre
+      // passos). Sem campo novo no banco pra marcar isso — só um log, já
+      // que não existe rastro nenhum hoje pro caso análogo do WHATSAPP.
+      console.log(
+        `[vexo:followup] passo descartado (janela de envio fechada): followUpLogId=${log.id} ` +
+          `stepIndex=${nextIndex} now=${now.toISOString()}`
+      );
+      await prisma.followUpLog.update({
+        where: { id: log.id },
+        data: { lastStepIndex: nextIndex, lastStepSentAt: now },
+      });
+      continue;
+    }
 
     const stepContent = nextStep.content ? applyTemplateVariables(nextStep.content, log.conversation.lead) : "";
 
@@ -346,9 +369,14 @@ async function dispatchFollowUpSteps(): Promise<number> {
           sender: "AI" as const,
           content: stepContent,
           status: "PENDING" as const,
-          scheduledFor: sendAt,
+          scheduledFor: now,
           channel: "WHATSAPP" as const,
         });
+      } else if (stepContent && !log.conversation.lead.phone) {
+        console.log(
+          `[vexo:followup] passo descartado (canal WHATSAPP sem telefone do lead): followUpLogId=${log.id} ` +
+            `stepIndex=${nextIndex} now=${now.toISOString()}`
+        );
       }
     } else {
       if (stepContent) {
@@ -358,7 +386,7 @@ async function dispatchFollowUpSteps(): Promise<number> {
           sender: "AI" as const,
           content: stepContent,
           status: "PENDING" as const,
-          scheduledFor: sendAt,
+          scheduledFor: now,
         });
       }
       if (nextStep.attachmentUrl) {
@@ -372,7 +400,7 @@ async function dispatchFollowUpSteps(): Promise<number> {
           // Se já existe uma mensagem de texto no mesmo passo, o anexo chega
           // logo em seguida, como duas mensagens separadas (limite da API do
           // Instagram: não dá pra combinar texto + anexo numa única mensagem).
-          scheduledFor: stepContent ? new Date(sendAt.getTime() + 5_000) : sendAt,
+          scheduledFor: stepContent ? new Date(now.getTime() + 5_000) : now,
         });
       }
     }
