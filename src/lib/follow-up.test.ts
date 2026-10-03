@@ -3,22 +3,37 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 const followUpStepFindManyMock = vi.fn();
 const followUpSettingsFindUniqueMock = vi.fn();
 const followUpLogFindManyMock = vi.fn();
+const followUpLogFindFirstMock = vi.fn();
+const followUpLogCreateMock = vi.fn();
 const messageCreateMock = vi.fn();
 const followUpLogUpdateMock = vi.fn();
+const conversationFindManyMock = vi.fn();
+const conversationUpdateMock = vi.fn();
+const classifyConversationMock = vi.fn();
 vi.mock("@/lib/prisma", () => ({
   prisma: {
     followUpStep: { findMany: (...args: unknown[]) => followUpStepFindManyMock(...args) },
     followUpSettings: { findUnique: (...args: unknown[]) => followUpSettingsFindUniqueMock(...args) },
     followUpLog: {
       findMany: (...args: unknown[]) => followUpLogFindManyMock(...args),
+      findFirst: (...args: unknown[]) => followUpLogFindFirstMock(...args),
+      create: (...args: unknown[]) => followUpLogCreateMock(...args),
       update: (...args: unknown[]) => followUpLogUpdateMock(...args),
+    },
+    conversation: {
+      findMany: (...args: unknown[]) => conversationFindManyMock(...args),
+      update: (...args: unknown[]) => conversationUpdateMock(...args),
     },
     message: { create: (...args: unknown[]) => messageCreateMock(...args) },
     $transaction: (ops: unknown[]) => Promise.all(ops),
   },
 }));
 
-import { leadFirstName, applyTemplateVariables, dispatchFollowUpSteps } from "@/lib/follow-up";
+vi.mock("@/lib/anthropic", () => ({
+  classifyConversation: (...args: unknown[]) => classifyConversationMock(...args),
+}));
+
+import { leadFirstName, applyTemplateVariables, dispatchFollowUpSteps, processSilentConversations } from "@/lib/follow-up";
 
 // Bug real corrigido: ao cair pro igUsername (Lead.name ausente), o nome
 // saía com o @ inteiro sempre que ele tinha ponto (ex.: "mauro.iphone") —
@@ -146,5 +161,67 @@ describe("dispatchFollowUpSteps", () => {
       where: { id: "log-1" },
       data: { lastStepIndex: 0, lastStepSentAt: now },
     });
+  });
+});
+
+// Bug real corrigido: a checagem de "já tem follow-up em andamento" só
+// olhava logs ABERTOS (respondedAt: null). Um lead que já recebeu a
+// sequência SILENCE, respondeu (fechando o log via cancelPendingFollowUp)
+// e voltou a silenciar depois disparava a sequência inteira de novo,
+// repetindo as mesmas 3 mensagens. Regra nova: a sequência SILENCE roda
+// uma única vez por conversa, pra sempre — não importa se o lead
+// respondeu no meio, nem quantos passos chegaram a sair antes disso.
+describe("processSilentConversations", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    followUpSettingsFindUniqueMock.mockResolvedValue(null); // silenceHours default = 24h
+    conversationUpdateMock.mockResolvedValue({});
+    followUpLogCreateMock.mockResolvedValue({});
+  });
+
+  function mockStaleConversation() {
+    conversationFindManyMock.mockResolvedValue([
+      {
+        id: "conv-2",
+        lastLeadMessageAt: new Date("2026-01-01T00:00:00.000Z"),
+        messages: [],
+      },
+    ]);
+  }
+
+  it("lead que já recebeu a sequência, respondeu e silenciou de novo: não dispara outra vez", async () => {
+    mockStaleConversation();
+    // Já existe um log SILENCE antigo, respondido/fechado (reopeningFromFollowUp
+    // chamou cancelPendingFollowUp quando o lead voltou a responder) — mas a
+    // sequência SILENCE já rodou uma vez pra essa conversa.
+    followUpLogFindFirstMock.mockImplementation(({ where }: { where: { trigger?: string; respondedAt?: null } }) =>
+      Promise.resolve(
+        where.trigger === "SILENCE"
+          ? { id: "log-old", trigger: "SILENCE", respondedAt: new Date("2025-12-01T00:00:00.000Z") }
+          : null // nenhum log ABERTO agora
+      )
+    );
+
+    const triggered = await processSilentConversations();
+
+    expect(triggered).toBe(0);
+    expect(classifyConversationMock).not.toHaveBeenCalled();
+    expect(followUpLogCreateMock).not.toHaveBeenCalled();
+    expect(conversationUpdateMock).not.toHaveBeenCalled();
+  });
+
+  it("lead que nunca recebeu a sequência: dispara normalmente quando a IA sugere follow-up", async () => {
+    mockStaleConversation();
+    followUpLogFindFirstMock.mockResolvedValue(null); // nenhum log, nem aberto nem SILENCE antigo
+    classifyConversationMock.mockResolvedValue({
+      suggestedFollowUp: true,
+      suggestedFollowUpReason: "lead sumiu no meio do atendimento",
+      summary: "lead perguntou preço e não respondeu mais",
+    });
+
+    const triggered = await processSilentConversations();
+
+    expect(triggered).toBe(1);
+    expect(followUpLogCreateMock).toHaveBeenCalledWith({ data: { conversationId: "conv-2", trigger: "SILENCE" } });
   });
 });
