@@ -123,7 +123,9 @@ export async function cancelPendingFollowUp(
 // consistentemente da capacidade deste teto.
 const SILENT_CONVERSATION_BATCH_SIZE = 50;
 
-async function processSilentConversations(): Promise<number> {
+// Exportada só pra teste (mesmo padrão de dispatchFollowUpSteps, mais
+// abaixo) — chamada de verdade continua sendo via processFollowUps.
+export async function processSilentConversations(): Promise<number> {
   const { silenceHours } = await getSettings();
   const silenceThreshold = new Date(Date.now() - silenceHours * 60 * 60 * 1000);
 
@@ -158,10 +160,31 @@ async function processSilentConversations(): Promise<number> {
     // conversa agora: uma falha aqui nunca mais pode impedir as outras
     // nem o passo de despacho.
     try {
+      // Checagem original: algum log ainda ABERTO (de qualquer trigger) pra
+      // essa conversa — guarda contra corrida com o próprio status (na
+      // prática não deveria coexistir com IN_CONVERSATION, já que
+      // triggerFollowUp move pra FOLLOW_UP, mas mantém a rede de segurança
+      // como estava).
       const alreadyPending = await prisma.followUpLog.findFirst({
         where: { conversationId: conv.id, respondedAt: null },
       });
       if (alreadyPending) continue;
+
+      // Regra nova: a sequência SILENCE roda UMA ÚNICA VEZ por conversa —
+      // não só "uma vez por vez que está aberta". Sem isto, um lead que
+      // respondeu (fechando o log via cancelPendingFollowUp, ver
+      // reopeningFromFollowUp em conversation-pipeline.ts) e depois
+      // silenciou de novo passava pela checagem acima (não há mais log
+      // aberto) e disparava a sequência inteira outra vez, do passo 0,
+      // repetindo as mesmas mensagens. Agora qualquer log SILENCE já
+      // existente pra essa conversa — aberto ou já respondido, completo ou
+      // com só o passo 1 enviado antes do lead responder — bloqueia um novo
+      // disparo pra sempre. Não afeta NO_SHOW (checagem separada, continua
+      // podendo repetir por agendamento — não é o caso deste trigger).
+      const alreadyRanSilenceSequence = await prisma.followUpLog.findFirst({
+        where: { conversationId: conv.id, trigger: "SILENCE" },
+      });
+      if (alreadyRanSilenceSequence) continue;
 
       const signal = await classifyConversation(toChatHistory(conv.messages));
       const activeProvider = getLLMProvider();
