@@ -139,6 +139,79 @@ export async function classifyConversation(
 }
 
 // -----------------------------------------------------------------------
+// Bastidor (Haiku) — resposta do lead à pergunta "posso contar com sua
+// presença?" (ver fireAttendanceConfirmationSequence, conversation-pipeline.ts)
+// -----------------------------------------------------------------------
+
+export type AttendanceReplyDecision = "REMARCA" | "NAO_REMARCA" | "DUVIDA";
+
+// Substitui a antiga ferramenta confirm_attendance (removida) — em vez de
+// depender da IA decidir sozinha, por conta própria, o momento certo de
+// avisar o sistema, um classificador de bastidor olha a resposta do lead
+// à pergunta de presença e decide por código. REMARCA = o lead pediu pra
+// remarcar/cancelar ou disse que não pode ir (nesse caso o timer de 1h é
+// cancelado — ver conversation-pipeline.ts); NAO_REMARCA = qualquer outra
+// resposta (confirmação, agradecimento, "espera um minutinho" etc. —
+// nenhum sinal de remarcação, então a sequência vídeo+cafezinho dispara
+// na hora); DUVIDA = a mensagem não deixa claro o suficiente pra decidir
+// com segurança entre as duas opções acima.
+//
+// DUVIDA é tratado pelo chamador como "não faz nada agora" — nem dispara
+// a sequência, nem cancela o timer de 1h (que decide sozinho mais tarde,
+// dentro ou fora da janela de envio). Por isso qualquer falha real (erro
+// de rede/API, resposta que não vem em JSON válido) também devolve
+// DUVIDA, nunca lança — é o valor seguro por definição desta função,
+// diferente de classifyConversation (que propaga erro de chamada pro
+// chamador registrar em FollowUpSettings.lastSilenceCheckError).
+const ATTENDANCE_REPLY_CLASSIFIER_PROMPT = `Você é uma IA de bastidor de uma clínica de saúde estética/odontológica.
+Sua função é puramente de bastidor: classificar a resposta mais recente do lead, nunca responder a ele.
+
+Contexto: a clínica já confirmou um agendamento e perguntou ao lead "posso contar com a sua presença?". Você
+recebe o fim da conversa, terminando na resposta do lead a essa pergunta (ou à conversa que se seguiu a ela).
+
+Responda SOMENTE com um JSON no formato:
+{
+  "decision": "REMARCA" | "NAO_REMARCA" | "DUVIDA"
+}
+
+"REMARCA": o lead deixou INEQUÍVOCO que não vai comparecer no horário combinado, pediu pra remarcar/mudar
+o horário, ou pediu pra cancelar (ex.: "essa hora não posso, remarca pra amanhã 10h", "vou ter que cancelar",
+"não vou poder ir mais", "pode ser outro dia?").
+
+"NAO_REMARCA": a resposta do lead NÃO contém nenhum pedido de remarcação/cancelamento — inclui confirmações
+("sim", "pode contar comigo", "vou com certeza"), agradecimentos ("ok obrigado", "👍") e qualquer resposta
+neutra ou de espera sem nenhum sinal de reagendamento ("espera um minutinho", "só um instante"). Na ausência
+de qualquer menção a remarcar/cancelar/não poder ir, prefira NAO_REMARCA.
+
+"DUVIDA": a mensagem é ambígua, incompleta, não tem relação clara com a pergunta de presença (ex.: o lead
+mudou de assunto, mandou uma pergunta nova sobre outro procedimento, ou o conteúdo realmente não permite
+decidir com segurança entre REMARCA e NAO_REMARCA). Prefira DUVIDA a arriscar uma classificação errada.`;
+
+export async function classifyAttendanceReply(
+  history: ChatTurn[],
+  provider: LLMProvider = getLLMProvider()
+): Promise<AttendanceReplyDecision> {
+  const transcript = history.map((t) => `${t.role === "user" ? "LEAD" : "IA"}: ${t.content}`).join("\n");
+
+  try {
+    const response = await provider.complete({
+      tier: "backstage",
+      maxTokens: 100,
+      systemPrompt: ATTENDANCE_REPLY_CLASSIFIER_PROMPT,
+      userMessage: transcript || "(sem mensagens)",
+    });
+    const match = response.text.match(/\{[\s\S]*\}/);
+    const parsed = JSON.parse(match ? match[0] : response.text);
+    if (parsed.decision === "REMARCA" || parsed.decision === "NAO_REMARCA" || parsed.decision === "DUVIDA") {
+      return parsed.decision;
+    }
+    return "DUVIDA";
+  } catch {
+    return "DUVIDA";
+  }
+}
+
+// -----------------------------------------------------------------------
 // Bastidor (Haiku) — resumo do início de conversas longas
 // -----------------------------------------------------------------------
 
@@ -213,18 +286,6 @@ export type AgentTools = {
   scheduleAppointment: (args: { startTimeLocal: string; leadConfirmationQuote?: string }) => Promise<
     { confirmed: true; startTimeLocal: string } | { error: string }
   >;
-  // Chamada só depois que a sequência INTEIRA de confirmação de presença
-  // termina: o lead confirmou explicitamente que vai comparecer E você já
-  // mandou a mensagem final com as instruções de chegada (ver descrição
-  // completa em TOOL_DEFINITIONS). Bug real em produção: o vídeo
-  // institucional saía logo depois de schedule_appointment confirmar o
-  // horário — no meio da própria pergunta "posso contar com sua
-  // presença?", antes do lead sequer responder. Nada no código sabia
-  // identificar sozinho o fim dessa sequência (ela só existe como texto
-  // livre gerado pela IA), então esta chamada é o sinal explícito que
-  // faltava — ver Appointment.attendanceConfirmedAt e
-  // maybeSendConfirmationVideo, conversation-pipeline.ts.
-  confirmAttendance: () => Promise<{ confirmed: true } | { error: string }>;
   // Leitura pura, sem side effect — consulta o agendamento ativo do lead
   // NESTA conversa (o sistema já sabe quem está conversando, não precisa
   // perguntar). Usada tanto pra responder "esqueci meu horário"/"quando é
@@ -332,20 +393,6 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
     },
   },
   {
-    name: "confirm_attendance",
-    description:
-      "Chame esta ferramenta só depois de TER FEITO AS DUAS COISAS, NESSA ORDEM: (1) o lead confirmar " +
-      "explicitamente que vai comparecer ao horário marcado (ex.: \"sim\", \"pode contar comigo\", \"vou " +
-      "sim\") — uma resposta genérica tipo só \"ok\" ou \"👍\" a uma pergunta ANTERIOR não conta; (2) você já " +
-      "ter enviado ao lead a mensagem final da sequência de agendamento, com as instruções de chegada (ex.: " +
-      "\"chegue uns 15 minutinhos antes...\"). NUNCA chame antes das duas terem acontecido de verdade — em " +
-      "especial, NUNCA chame só por schedule_appointment ter confirmado o horário, e NUNCA chame só por ter " +
-      "PERGUNTADO \"posso contar com sua presença?\" — ela precisa da RESPOSTA do lead E da sua mensagem " +
-      "final já enviada. Esta chamada é o que libera o envio do vídeo institucional de confirmação pro lead " +
-      "— chamar cedo demais faz o vídeo interromper a conversa no meio da própria confirmação de presença.",
-    inputSchema: { type: "object", properties: {}, required: [] },
-  },
-  {
     name: "save_lead_phone",
     description:
       "Salva o número de WhatsApp do lead assim que ele informar na conversa. Chame sempre que o lead enviar um número de telefone/WhatsApp, mesmo que fora do momento em que foi pedido. Chame mesmo se já existir um número salvo de uma conversa anterior — schedule_appointment exige que o WhatsApp seja confirmado NESTA conversa, nunca reaproveita um número de outra.",
@@ -437,9 +484,6 @@ export async function generateLeadReply(params: {
         scheduled = { startTimeLocal: outcome.startTimeLocal };
       }
       return outcome;
-    }
-    if (name === "confirm_attendance") {
-      return params.tools.confirmAttendance();
     }
     if (name === "check_current_appointment") {
       return params.tools.checkCurrentAppointment();

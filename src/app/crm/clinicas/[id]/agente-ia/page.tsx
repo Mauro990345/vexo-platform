@@ -155,6 +155,23 @@ export default async function ClinicAiAgentPage({ params }: { params: { id: stri
                         deixa combinar texto e vídeo numa mensagem só). Vazio usa a frase padrão acima.
                       </p>
                     </div>
+
+                    <div>
+                      <label className="mb-1 block text-xs text-vexo-muted" htmlFor="attendanceTipMessage">
+                        Mensagem do "cafezinho" (depois do vídeo)
+                      </label>
+                      <input
+                        id="attendanceTipMessage"
+                        name="attendanceTipMessage"
+                        defaultValue={clinic.attendanceTipMessage ?? ""}
+                        placeholder="Ex: Se puder, chegue uns 15 minutinhos antes, teremos um cafezinho te esperando."
+                        className="w-full rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5 text-xs outline-none focus:border-vexo-accent"
+                      />
+                      <p className="mt-1 text-caption text-vexo-muted">
+                        Enviada 1 minuto depois do vídeo de confirmação, sempre nessa ordem — a IA não escreve
+                        mais esse texto sozinha. Vazio usa a frase padrão acima.
+                      </p>
+                    </div>
                   </div>
 
                   <button

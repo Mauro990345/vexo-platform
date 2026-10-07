@@ -72,6 +72,15 @@ model Clinic {
   // CONFIRMATION_VIDEO_CAPTION em conversation-pipeline.ts).
   confirmationVideoCaption String? @db.Text
 
+  // Frase enviada DEPOIS do vídeo de confirmação acima (ver
+  // ATTENDANCE_TIP_DELAY_AFTER_VIDEO_MS em conversation-pipeline.ts) —
+  // antes era texto livre que a própria IA escrevia ("chegue uns 15
+  // minutinhos antes, teremos um cafezinho te esperando"), sem ordem
+  // garantida em relação ao vídeo; agora é um texto fixo por clínica,
+  // disparado em código, sempre depois do vídeo. Null usa o texto padrão
+  // (ver DEFAULT_ATTENDANCE_TIP_MESSAGE em conversation-pipeline.ts).
+  attendanceTipMessage String? @db.Text
+
   // Delay de resposta da IA quando o lead está em silêncio há até 1h (ver
   // computeAdaptiveDelaySeconds em src/lib/scheduler.ts) — por clínica,
   // não global: cada uma pode querer um tom de "primeira resposta"
@@ -661,18 +670,31 @@ model Appointment {
 
   status                  AppointmentStatus @default(SCHEDULED)
   confirmationVideoSentAt DateTime?
-  // Marcado pela ferramenta confirm_attendance (ver AgentTools,
-  // src/lib/anthropic.ts) só depois que o lead confirma explicitamente que
-  // vai comparecer E a IA já mandou a mensagem final da sequência (ex.:
-  // "chegue uns 15 minutinhos antes..."). Bug real em produção: o vídeo
-  // institucional saía logo depois de schedule_appointment confirmar o
-  // horário — no meio da própria sequência de confirmação de presença,
-  // antes do lead sequer responder "sim posso ir". Esse campo é o sinal
-  // explícito que faltava (nada no código sabia identificar sozinho o fim
-  // dessa sequência, que só existe como texto livre gerado pela IA) — ver
-  // maybeSendConfirmationVideo, conversation-pipeline.ts, que agora exige
-  // isto preenchido antes de mandar o vídeo.
+  // OBSOLETO (não removido da coluna de propósito — só parou de ser
+  // escrito/lido no fluxo novo, ver comentário grande em
+  // fireAttendanceConfirmationSequence, conversation-pipeline.ts, pra
+  // quem quiser auditar linhas antigas). Era marcado pela ferramenta
+  // confirm_attendance (removida) só depois que o lead confirmava
+  // explicitamente que ia comparecer E a IA já tinha mandado a mensagem
+  // final da sequência. Substituído por attendancePromptSentAt (abaixo) +
+  // um classificador de bastidor (classifyAttendanceReply, anthropic.ts),
+  // que decidem isso em código em vez de depender da IA chamar uma tool
+  // no momento certo.
   attendanceConfirmedAt DateTime?
+  // Marcado por scheduleAppointment assim que confirma um horário (novo
+  // agendamento OU remarcação pra um horário diferente, enquanto o vídeo
+  // ainda não saiu) — é o sinal explícito de "a pergunta 'posso contar
+  // com sua presença?' está pendente desde este instante". Usado por dois
+  // disparadores da sequência vídeo+cafezinho (ver
+  // fireAttendanceConfirmationSequence): a resposta do lead (classificada
+  // por classifyAttendanceReply — REMARCA zera este campo, cancelando a
+  // espera; NAO_REMARCA dispara a sequência) e o job de timeout
+  // (processAttendanceConfirmationTimeouts, 1h sem resposta, respeitando a
+  // janela de envio do follow-up). null = sem pergunta de presença
+  // pendente (nunca perguntada, já respondida/cancelada, ou sequência já
+  // disparada — ver confirmationVideoSentAt, que é a trava real de "nunca
+  // mais", nunca resetado por uma remarcação).
+  attendancePromptSentAt DateTime?
   // Marcado ao ENFILEIRAR a mensagem de confirmação imediata por WhatsApp
   // (ver maybeSendWhatsappConfirmation, conversation-pipeline.ts) — mesmo
   // instante de "enfileirado", não de "efetivamente entregue pelo

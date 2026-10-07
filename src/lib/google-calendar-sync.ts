@@ -89,7 +89,15 @@ export async function syncClinicCalendar(clinicId: string): Promise<SyncResult> 
     if (event.status === "cancelled") {
       const appt = await prisma.appointment.findFirst({ where: { clinicId, googleEventId: event.id } });
       if (appt && appt.status !== "CANCELLED") {
-        await prisma.appointment.update({ where: { id: appt.id }, data: { status: "CANCELLED" } });
+        await prisma.appointment.update({
+          where: { id: appt.id },
+          // attendancePromptSentAt: null cancela a espera pela sequência de
+          // confirmação de presença (vídeo+cafezinho, ver
+          // fireAttendanceConfirmationSequence em conversation-pipeline.ts)
+          // — sem isso, um agendamento cancelado direto no Google Calendar
+          // (fora do VEXO) continuaria elegível pro job de timeout de 1h.
+          data: { status: "CANCELLED", attendancePromptSentAt: null },
+        });
         cancelled++;
       }
       continue;
