@@ -29,13 +29,24 @@ vi.mock("@/lib/lead-profile-picture-backfill", () => ({}));
 vi.mock("@/lib/crypto", () => ({}));
 vi.mock("@/lib/scheduler", () => ({}));
 vi.mock("@/lib/default-prompt", () => ({}));
-vi.mock("@/lib/whatsapp", () => ({}));
+// formatBrazilianPhoneForDisplay é usada de verdade por
+// buildCalendarEventDescription (testada abaixo) — importActual mantém a
+// implementação real (pura, sem I/O) em vez de `{}`, que faria
+// buildCalendarEventDescription quebrar ao chamar uma função inexistente.
+vi.mock("@/lib/whatsapp", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/whatsapp")>("@/lib/whatsapp");
+  return { formatBrazilianPhoneForDisplay: actual.formatBrazilianPhoneForDisplay };
+});
 vi.mock("@/lib/follow-up", () => ({}));
 vi.mock("@/lib/chat-history", () => ({ toChatHistory: vi.fn() }));
 vi.mock("@/lib/result-photo-message", () => ({}));
 vi.mock("@/lib/loop-guard", () => ({}));
 
-import { buildAvailabilityCheck, isSlotFreeIgnoringOwnAppointment } from "@/lib/conversation-pipeline";
+import {
+  buildAvailabilityCheck,
+  isSlotFreeIgnoringOwnAppointment,
+  buildCalendarEventDescription,
+} from "@/lib/conversation-pipeline";
 
 // Bug real corrigido (ver comentário grande em buildAvailabilityCheck):
 // qualquer erro de check_availability — incluindo uma falha REAL da API do
@@ -262,5 +273,25 @@ describe("isSlotFreeIgnoringOwnAppointment", () => {
     });
 
     expect(result).toBe(true);
+  });
+});
+
+// Bug real reportado: "WhatsApp: 998223038" (sem DDD) aparecia na descrição
+// do evento do Google Calendar — buildCalendarEventDescription só colava
+// leadPhone cru, sem formatar nem validar. leadPhone chega aqui já
+// validado (ver validateBrazilianPhone, saveLeadPhone em
+// conversation-pipeline.ts) — esta função só cuida da exibição legível.
+describe("buildCalendarEventDescription", () => {
+  it("formata o WhatsApp legível (DDD + celular) na descrição do evento", () => {
+    const description = buildCalendarEventDescription({ leadName: "Mauro Camargo", leadPhone: "5521998223038" });
+
+    expect(description).toContain("WhatsApp: (21) 99822-3038");
+    expect(description).toContain("Lead: Mauro Camargo");
+  });
+
+  it("sem telefone, mostra \"ainda não informado\" em vez de uma linha vazia", () => {
+    const description = buildCalendarEventDescription({ leadName: "Mauro Camargo", leadPhone: null });
+
+    expect(description).toContain("WhatsApp: ainda não informado.");
   });
 });
