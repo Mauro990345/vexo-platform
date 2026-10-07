@@ -23,14 +23,75 @@
 // com 55) voltam como vieram, sem adivinhar — melhor um número que ainda
 // pode falhar do que um que a gente corrompeu tentando "consertar".
 export function normalizeBrazilianWhatsappNumber(rawPhone: string): string {
-  const digits = rawPhone.replace(/\D/g, "");
+  const result = validateBrazilianPhone(rawPhone);
+  // Mantém o comportamento best-effort de sempre pra quem já chama esta
+  // função hoje (sendWhatsappMessage — envio pra um telefone JÁ salvo,
+  // nunca deveria travar um envio por causa de um dado legado gravado
+  // antes de validateBrazilianPhone existir): se não validar, devolve só
+  // os dígitos, sem adivinhar. A validação de verdade (rejeitar e nunca
+  // salvar) é responsabilidade de quem CAPTURA o telefone agora — ver
+  // validateBrazilianPhone, usada em saveLeadPhone (conversation-pipeline.ts).
+  return result.valid ? result.e164 : rawPhone.replace(/\D/g, "");
+}
+
+// Bug real reportado: "998223038" (9 dígitos, sem DDD) era salvo direto em
+// Lead.phone e na descrição do evento do Google Calendar — o código antigo
+// só sabia ADICIONAR o "55" quando o número já vinha com DDD (10/11
+// dígitos); qualquer outro tamanho (8/9 dígitos, sem DDD) caía no fallback
+// "devolve como veio", sem nenhuma validação de verdade. DDD é sempre
+// obrigatório pro WhatsApp funcionar — esta função é a validação de
+// verdade, usada só no momento de CAPTURAR o telefone (saveLeadPhone),
+// nunca no envio (que precisa continuar best-effort pra não quebrar
+// clínicas com dado legado já salvo antes desta correção existir).
+//
+// Ordem importa: remove dígito 0 inicial ANTES de checar o prefixo "55" —
+// é o que faz "021998223038" (DDD com 0 na frente, erro comum de digitação)
+// virar "21998223038" (11 dígitos, válido) em vez de ficar com 12 dígitos
+// e cair no caminho errado. Só remove o "55" quando o resultado tiver 12
+// ou 13 dígitos — em 10 ou 11 dígitos "55" pode ser o PRÓPRIO DDD (Rio de
+// Janeiro/Niterói), então removê-lo ali destruiria um número válido.
+export function validateBrazilianPhone(
+  rawPhone: string
+): { valid: true; localDigits: string; e164: string } | { valid: false; reason: string } {
+  let digits = rawPhone.replace(/\D/g, "");
+  if (digits.startsWith("0")) {
+    digits = digits.slice(1);
+  }
   if (digits.startsWith("55") && (digits.length === 12 || digits.length === 13)) {
-    return digits;
+    digits = digits.slice(2);
   }
+
   if (digits.length === 10 || digits.length === 11) {
-    return `55${digits}`;
+    return { valid: true, localDigits: digits, e164: `55${digits}` };
   }
-  return digits;
+
+  return {
+    valid: false,
+    reason:
+      `Telefone inválido: "${rawPhone}" tem ${digits.length} dígito(s) depois de limpar (DDD + número precisa ` +
+      `ter 10 ou 11 dígitos) — provavelmente falta o DDD. Peça o número completo, com DDD, antes de salvar.`,
+  };
+}
+
+// Formata pra exibição legível (ex.: na descrição do evento do Google
+// Calendar) — "(21) 99822-3038" em vez do E.164 cru ("5521998223038").
+// Só formata o que já bate com um celular (DDD + 9 dígitos) ou fixo (DDD +
+// 8 dígitos) brasileiro válido; qualquer outra coisa volta como veio, sem
+// adivinhar (mesmo princípio de normalizeBrazilianWhatsappNumber acima).
+export function formatBrazilianPhoneForDisplay(phone: string): string {
+  let digits = phone.replace(/\D/g, "");
+  if (digits.startsWith("55") && (digits.length === 12 || digits.length === 13)) {
+    digits = digits.slice(2);
+  }
+  const ddd = digits.slice(0, 2);
+  const rest = digits.slice(2);
+  if (rest.length === 9) {
+    return `(${ddd}) ${rest.slice(0, 5)}-${rest.slice(5)}`;
+  }
+  if (rest.length === 8) {
+    return `(${ddd}) ${rest.slice(0, 4)}-${rest.slice(4)}`;
+  }
+  return phone;
 }
 
 export function evolutionBaseConfig() {

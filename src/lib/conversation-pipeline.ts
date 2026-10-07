@@ -23,7 +23,8 @@ import {
   sendWhatsappMessage,
   formatEscalationAlert,
   formatAppointmentConfirmationMessage,
-  normalizeBrazilianWhatsappNumber,
+  validateBrazilianPhone,
+  formatBrazilianPhoneForDisplay,
 } from "@/lib/whatsapp";
 import { cancelPendingFollowUp, getSilenceHours, applyTemplateVariables } from "@/lib/follow-up";
 import { toChatHistory } from "@/lib/chat-history";
@@ -1235,13 +1236,22 @@ export async function handleInboundInstagramMessage(
       async saveLeadPhone(args) {
         const phone = args.phone.trim();
         if (!phone) return { error: "Número vazio." };
-        // Normaliza JÁ na captura (não só na hora de usar) — bug real: o
-        // lead digita o número sem o código do país (convenção comum no
-        // Brasil, "11987654321" em vez de "5511987654321"), e sem isso
-        // tanto o link de WhatsApp do Painel quanto o envio via Evolution
-        // API tratavam como número internacional inválido. Ver
-        // normalizeBrazilianWhatsappNumber, src/lib/whatsapp.ts.
-        capturedLeadPhone = normalizeBrazilianWhatsappNumber(phone);
+        // Valida JÁ na captura (não só normaliza) — bug real: um número
+        // sem DDD (ex.: "998223038", 9 dígitos) era salvo direto em
+        // Lead.phone e na descrição do evento do Google Calendar, porque a
+        // normalização antiga só sabia ADICIONAR o 55 quando o número já
+        // vinha com DDD — qualquer outro tamanho caía num fallback que
+        // devolvia o número como veio, sem avisar que faltava o DDD. DDD é
+        // sempre obrigatório. Ver validateBrazilianPhone, src/lib/whatsapp.ts.
+        // Em caso de erro, NADA é salvo aqui (capturedLeadPhone continua
+        // undefined) — isso já basta pra schedule_appointment continuar
+        // bloqueado por "WhatsApp ainda não confirmado" mais abaixo, sem
+        // precisar de nenhuma checagem nova lá.
+        const validation = validateBrazilianPhone(phone);
+        if (!validation.valid) {
+          return { error: validation.reason };
+        }
+        capturedLeadPhone = validation.e164;
         return { saved: true };
       },
       async saveLeadName(args) {
@@ -1496,8 +1506,14 @@ export async function handleInboundInstagramMessage(
 // ferramenta scheduleAppointment) quanto no "backfill" quando o telefone
 // chega numa conversa DEPOIS do agendamento já confirmado (ver
 // maybeSendWhatsappConfirmation, abaixo).
-function buildCalendarEventDescription(params: { leadName: string; leadPhone?: string | null }): string {
-  const phoneLine = params.leadPhone ? `WhatsApp: ${params.leadPhone}` : "WhatsApp: ainda não informado.";
+// Exportada só pra teste (mesmo padrão de buildAvailabilityCheck, acima).
+export function buildCalendarEventDescription(params: { leadName: string; leadPhone?: string | null }): string {
+  // formatBrazilianPhoneForDisplay (whatsapp.ts): mostra "(21) 99822-3038"
+  // em vez do E.164 cru ("5521998223038") que fica salvo em Lead.phone —
+  // só formatação, o valor já chega aqui validado (ver saveLeadPhone).
+  const phoneLine = params.leadPhone
+    ? `WhatsApp: ${formatBrazilianPhoneForDisplay(params.leadPhone)}`
+    : "WhatsApp: ainda não informado.";
   return `Lead: ${params.leadName}\n${phoneLine}\n\nCriado automaticamente pelo VEXO.`;
 }
 
