@@ -107,6 +107,36 @@ export function buildAvailabilityCheck(
       return { error: err instanceof Error ? err.message : "Datas inválidas." };
     }
 
+    // Bug real corrigido (caso Mauro Camargo, 06/10 ~19:38): nada aqui
+    // comparava dateFrom com dateTo antes de repassar os dois pro Google
+    // como timeMin/timeMax — ao reconfirmar um horário específico ("9h
+    // fica bom"), o modelo chamou check_availability com dateFromLocal ==
+    // dateToLocal (tratando como um instante, não uma janela), gerando um
+    // intervalo de largura ZERO. O Google rejeita isso com "The specified
+    // time range is empty", que virava uma falha "real" de sistema
+    // (NEEDS_HUMAN) pra um lead que só confirmou um horário normalmente.
+    //
+    // dateTo === dateFrom não é tratado como erro — é a forma mais comum
+    // de o modelo pedir "esse horário específico está livre?", então
+    // estende a janela sozinho pra 1h (mesma duração de todo agendamento,
+    // ver createCalendarEvent) e segue a consulta normalmente, sem nunca
+    // devolver isso como problema pra IA. Só dateTo < dateFrom (datas
+    // realmente invertidas — sem leitura razoável) vira erro de
+    // ferramenta, do mesmo jeito que qualquer outro argumento inválido já
+    // tratado aqui (ex.: Datas inválidas acima) — o modelo corrige e tenta
+    // de novo no mesmo turno, sem precisar de nenhuma instrução nova de
+    // prompt.
+    if (dateTo < dateFrom) {
+      return {
+        error:
+          "dateToLocal não pode ser antes de dateFromLocal (intervalo invertido) — confira as duas datas e " +
+          "tente de novo.",
+      };
+    }
+    if (dateTo === dateFrom) {
+      dateTo = new Date(new Date(dateFrom).getTime() + 60 * 60 * 1000).toISOString();
+    }
+
     let slots: string[];
     try {
       slots = await checkAvailability(clinicId, dateFrom, dateTo);

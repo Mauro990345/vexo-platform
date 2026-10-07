@@ -105,6 +105,99 @@ describe("buildAvailabilityCheck", () => {
 
     expect(result).toEqual({ slots: [], ownAppointmentLocal: "2026-09-19T09:00" });
   });
+
+  // Bug real corrigido (caso Mauro Camargo, 06/10 ~19:38): ao reconfirmar
+  // um horário específico ("9h fica bom"), o modelo chamou
+  // check_availability com dateFromLocal == dateToLocal — um intervalo de
+  // largura ZERO, que o Google rejeita com "The specified time range is
+  // empty", virando uma falha de sistema (NEEDS_HUMAN) pra um agendamento
+  // perfeitamente normal. Os testes abaixo cobrem a correção (estender pra
+  // 1h em vez de devolver erro) e a distinção do caso genuinamente
+  // inválido (invertido).
+  describe("validação de dateFromLocal/dateToLocal", () => {
+    it("horário cheio (9h, janela de 1h) — passa normalmente", async () => {
+      checkAvailabilityMock.mockResolvedValue([]);
+      const check = buildAvailabilityCheck("clinic-1", "conv-1", vi.fn());
+
+      await check({ dateFromLocal: "2026-10-07T09:00", dateToLocal: "2026-10-07T10:00" });
+
+      expect(checkAvailabilityMock).toHaveBeenCalledWith(
+        "clinic-1",
+        "2026-10-07T12:00:00.000Z",
+        "2026-10-07T13:00:00.000Z"
+      );
+    });
+
+    it("meia hora (janela menor que 1h, mas não-vazia) — passa sem estender", async () => {
+      checkAvailabilityMock.mockResolvedValue([]);
+      const check = buildAvailabilityCheck("clinic-1", "conv-1", vi.fn());
+
+      await check({ dateFromLocal: "2026-10-07T09:00", dateToLocal: "2026-10-07T09:30" });
+
+      expect(checkAvailabilityMock).toHaveBeenCalledWith(
+        "clinic-1",
+        "2026-10-07T12:00:00.000Z",
+        "2026-10-07T12:30:00.000Z"
+      );
+    });
+
+    it("fim de dia (17h-18h, borda do horário de funcionamento) — passa normalmente", async () => {
+      checkAvailabilityMock.mockResolvedValue([]);
+      const check = buildAvailabilityCheck("clinic-1", "conv-1", vi.fn());
+
+      await check({ dateFromLocal: "2026-10-07T17:00", dateToLocal: "2026-10-07T18:00" });
+
+      expect(checkAvailabilityMock).toHaveBeenCalledWith(
+        "clinic-1",
+        "2026-10-07T20:00:00.000Z",
+        "2026-10-07T21:00:00.000Z"
+      );
+    });
+
+    it("CASO REAL DO BUG — dateFromLocal === dateToLocal (9h == 9h): estende pra 1h e NÃO falha, nunca chama onGoogleFailure", async () => {
+      checkAvailabilityMock.mockResolvedValue([]);
+      const onGoogleFailure = vi.fn();
+      const check = buildAvailabilityCheck("clinic-1", "conv-1", onGoogleFailure);
+
+      const result = await check({ dateFromLocal: "2026-10-07T09:00", dateToLocal: "2026-10-07T09:00" });
+
+      // Antes desta correção, isto chamava o Google com
+      // timeMin === timeMax === "2026-10-07T12:00:00.000Z" (intervalo
+      // vazio) — agora dateTo é estendido pra dateFrom + 1h.
+      expect(checkAvailabilityMock).toHaveBeenCalledWith(
+        "clinic-1",
+        "2026-10-07T12:00:00.000Z",
+        "2026-10-07T13:00:00.000Z"
+      );
+      expect(onGoogleFailure).not.toHaveBeenCalled();
+      expect("error" in result).toBe(false);
+    });
+
+    it("invertido (10h -> 9h, sem leitura razoável): devolve erro, NUNCA chama checkAvailability nem onGoogleFailure", async () => {
+      const onGoogleFailure = vi.fn();
+      const check = buildAvailabilityCheck("clinic-1", "conv-1", onGoogleFailure);
+
+      const result = await check({ dateFromLocal: "2026-10-07T10:00", dateToLocal: "2026-10-07T09:00" });
+
+      expect(checkAvailabilityMock).not.toHaveBeenCalled();
+      expect(onGoogleFailure).not.toHaveBeenCalled();
+      expect("error" in result).toBe(true);
+    });
+
+    it("virada de dia (23h -> 1h do dia seguinte): passa normalmente, ordem preservada na conversão pra UTC", async () => {
+      checkAvailabilityMock.mockResolvedValue([]);
+      const check = buildAvailabilityCheck("clinic-1", "conv-1", vi.fn());
+
+      await check({ dateFromLocal: "2026-10-07T23:00", dateToLocal: "2026-10-08T01:00" });
+
+      // 23:00 BRT (07/10) = 02:00 UTC (08/10); 01:00 BRT (08/10) = 04:00 UTC (08/10).
+      expect(checkAvailabilityMock).toHaveBeenCalledWith(
+        "clinic-1",
+        "2026-10-08T02:00:00.000Z",
+        "2026-10-08T04:00:00.000Z"
+      );
+    });
+  });
 });
 
 // Bug real corrigido: remarcar pra um horário que se sobrepõe ao horário
