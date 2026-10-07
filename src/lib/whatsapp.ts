@@ -112,7 +112,14 @@ export async function sendWhatsappMessage(instanceName: string | null | undefine
 
   // Apesar do nome do parâmetro, nada garantia até aqui que phoneE164
   // realmente vinha em E.164 — ver normalizeBrazilianWhatsappNumber acima
-  // pro bug real que isso corrige.
+  // pro bug real que isso corrige. Desde que Lead.phone passou a ser
+  // salvo SEM o 55 (ver saveLeadPhone, conversation-pipeline.ts), este é
+  // o ÚNICO ponto do sistema que acrescenta o código do país — a Evolution
+  // API exige E.164 pra enviar de verdade, mas nada rio-acima (Lead.phone,
+  // follow-up WHATSAPP em dispatch.ts, lembrete em reminders.ts, resumo
+  // semanal, alerta de escalonamento) precisa saber disso: todos chamam
+  // sendWhatsappMessage passando o telefone como está salvo, e é aqui —
+  // só na hora de mandar de verdade — que o 55 entra.
   const number = normalizeBrazilianWhatsappNumber(phoneE164);
 
   const res = await fetch(`${baseUrl}/message/sendText/${instanceName}`, {

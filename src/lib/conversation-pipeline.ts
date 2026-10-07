@@ -1247,11 +1247,18 @@ export async function handleInboundInstagramMessage(
         // undefined) — isso já basta pra schedule_appointment continuar
         // bloqueado por "WhatsApp ainda não confirmado" mais abaixo, sem
         // precisar de nenhuma checagem nova lá.
+        //
+        // Salva localDigits (DDD + número, SEM o 55) — não e164. Lead.phone
+        // guarda o formato "de exibição" (ex.: usado cru no link wa.me do
+        // Painel e na descrição do evento, ver buildCalendarEventDescription
+        // mais abaixo); o 55 só é acrescentado na hora de ENVIAR de verdade
+        // pela Evolution API, dentro de normalizeBrazilianWhatsappNumber
+        // (chamada por sendWhatsappMessage) — nunca aqui na captura.
         const validation = validateBrazilianPhone(phone);
         if (!validation.valid) {
           return { error: validation.reason };
         }
-        capturedLeadPhone = validation.e164;
+        capturedLeadPhone = validation.localDigits;
         return { saved: true };
       },
       async saveLeadName(args) {

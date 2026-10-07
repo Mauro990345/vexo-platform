@@ -34,6 +34,17 @@ describe("normalizeBrazilianWhatsappNumber", () => {
   it("devolve como veio (só os dígitos) quando o formato não bate com nenhum caso conhecido", () => {
     expect(normalizeBrazilianWhatsappNumber("123")).toBe("123");
   });
+
+  // Ajuste: Lead.phone agora é salvo SEM o 55 (ver describe "localDigits"
+  // mais abaixo) — este é o teste que prova que o envio de verdade
+  // (sendWhatsappMessage, usado por confirmação de agendamento e pelos 3
+  // passos de follow-up) continua funcionando: ele chama
+  // normalizeBrazilianWhatsappNumber no telefone exatamente como está
+  // salvo, que acrescenta o 55 aqui, só neste ponto, antes de mandar pra
+  // Evolution API.
+  it('telefone salvo como Lead.phone hoje ("21998223038", sem 55) ganha o 55 só na hora de enviar', () => {
+    expect(normalizeBrazilianWhatsappNumber("21998223038")).toBe("5521998223038");
+  });
 });
 
 // Bug real reportado: "998223038" (9 dígitos, sem DDD) era salvo direto em
@@ -87,6 +98,40 @@ describe("validateBrazilianPhone", () => {
     const result = validateBrazilianPhone("998223038");
     expect(result.valid).toBe(false);
     expect((result as { valid: false; reason: string }).reason).toContain("DDD");
+  });
+});
+
+// Ajuste: Lead.phone passa a salvar localDigits (DDD + número, SEM o 55),
+// não mais e164 — saveLeadPhone (conversation-pipeline.ts) usa
+// validateBrazilianPhone(...).localDigits, nunca .e164. O 55 só entra na
+// hora de ENVIAR de verdade (ver normalizeBrazilianWhatsappNumber, chamada
+// por sendWhatsappMessage) — nunca no valor persistido. Estes testes
+// isolam exatamente esse contrato (o campo que vira o valor salvo), com
+// os mesmos casos de validateBrazilianPhone acima.
+describe("localDigits — valor que agora é salvo em Lead.phone (sem o 55)", () => {
+  it('"21998223038" -> salva "21998223038" (antes salvava "5521998223038")', () => {
+    const result = validateBrazilianPhone("21998223038");
+    expect(result.valid && result.localDigits).toBe("21998223038");
+  });
+
+  it('"+55 21 99822-3038" -> salva "21998223038" (55 do país removido, nunca salvo)', () => {
+    const result = validateBrazilianPhone("+55 21 99822-3038");
+    expect(result.valid && result.localDigits).toBe("21998223038");
+  });
+
+  it('"2198223038" (10 dígitos) -> salva "2198223038"', () => {
+    const result = validateBrazilianPhone("2198223038");
+    expect(result.valid && result.localDigits).toBe("2198223038");
+  });
+
+  it('"55998223038" (DDD 55, 11 dígitos) -> salva "55998223038" (o 55 aqui é DDD, não código do país — nunca removido)', () => {
+    const result = validateBrazilianPhone("55998223038");
+    expect(result.valid && result.localDigits).toBe("55998223038");
+  });
+
+  it('"998223038" (sem DDD) -> continua inválido, nada é salvo', () => {
+    const result = validateBrazilianPhone("998223038");
+    expect(result.valid).toBe(false);
   });
 });
 

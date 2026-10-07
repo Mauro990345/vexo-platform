@@ -282,11 +282,22 @@ describe("isSlotFreeIgnoringOwnAppointment", () => {
 // validado (ver validateBrazilianPhone, saveLeadPhone em
 // conversation-pipeline.ts) — esta função só cuida da exibição legível.
 describe("buildCalendarEventDescription", () => {
-  it("formata o WhatsApp legível (DDD + celular) na descrição do evento", () => {
-    const description = buildCalendarEventDescription({ leadName: "Mauro Camargo", leadPhone: "5521998223038" });
+  it("formata o WhatsApp legível (DDD + celular) na descrição do evento — Lead.phone salvo SEM o 55", () => {
+    // Formato salvo hoje em Lead.phone (ver saveLeadPhone): só DDD + número,
+    // sem o código do país — o 55 só entra na hora de ENVIAR (sendWhatsappMessage).
+    const description = buildCalendarEventDescription({ leadName: "Mauro Camargo", leadPhone: "21998223038" });
 
     expect(description).toContain("WhatsApp: (21) 99822-3038");
     expect(description).toContain("Lead: Mauro Camargo");
+  });
+
+  it("formata igual pra um telefone legado salvo ANTES desta correção, ainda com o 55 na frente", () => {
+    // Retrocompatibilidade: leads capturados enquanto Lead.phone ainda
+    // salvava com 55 (antes desta correção) continuam exibindo certo —
+    // formatBrazilianPhoneForDisplay reconhece os dois formatos.
+    const description = buildCalendarEventDescription({ leadName: "Mauro Camargo", leadPhone: "5521998223038" });
+
+    expect(description).toContain("WhatsApp: (21) 99822-3038");
   });
 
   it("sem telefone, mostra \"ainda não informado\" em vez de uma linha vazia", () => {
