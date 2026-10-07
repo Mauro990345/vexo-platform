@@ -1,6 +1,12 @@
 import { describe, it, expect, vi } from "vitest";
 import type { CompleteRequest, ConverseRequest, LLMProvider } from "@/lib/llm/types";
-import { classifyConversation, summarizeOlderTurns, generateLeadReply, type AgentTools } from "@/lib/anthropic";
+import {
+  classifyConversation,
+  classifyAttendanceReply,
+  summarizeOlderTurns,
+  generateLeadReply,
+  type AgentTools,
+} from "@/lib/anthropic";
 
 // Testa a camada de NEGÓCIO (prompts, parsing, dispatch de ferramenta) com
 // um LLMProvider falso injetado — sem tocar rede nem @anthropic-ai/sdk.
@@ -120,6 +126,97 @@ describe("classifyConversation", () => {
   });
 });
 
+// Substitui a antiga tool confirm_attendance — classifica a resposta do
+// lead à pergunta "posso contar com sua presença?" em REMARCA/NAO_REMARCA/
+// DUVIDA. DUVIDA (inclusive em erro de chamada/parsing) é o valor seguro:
+// o chamador (conversation-pipeline.ts) não dispara nada nem cancela o
+// timer de 1h quando recebe DUVIDA.
+describe("classifyAttendanceReply", () => {
+  it("usa o tier backstage e manda o histórico formatado como transcript", async () => {
+    const complete = vi.fn(async (_request: CompleteRequest) => ({ text: '{"decision": "NAO_REMARCA"}' }));
+    const provider = fakeProvider({ complete });
+
+    const decision = await classifyAttendanceReply(
+      [
+        { role: "assistant", content: "Posso contar com a sua presença?" },
+        { role: "user", content: "sim, pode contar comigo" },
+      ],
+      provider
+    );
+
+    expect(decision).toBe("NAO_REMARCA");
+    const request = complete.mock.calls.at(0)?.[0] as unknown as CompleteRequest;
+    expect(request.tier).toBe("backstage");
+    expect(request.userMessage).toBe("IA: Posso contar com a sua presença?\nLEAD: sim, pode contar comigo");
+  });
+
+  it('"essa hora não posso, remarca pra amanhã 10h" -> REMARCA', async () => {
+    const provider = fakeProvider({
+      complete: vi.fn(async () => ({ text: '{"decision": "REMARCA"}' })),
+    });
+
+    const decision = await classifyAttendanceReply(
+      [{ role: "user", content: "essa hora não posso, remarca pra amanhã 10h" }],
+      provider
+    );
+
+    expect(decision).toBe("REMARCA");
+  });
+
+  it.each(["sim", "ok obrigado", "espera um minutinho", "vou com certeza"])(
+    '"%s" -> NAO_REMARCA (nenhum sinal de remarcação)',
+    async (leadMessage) => {
+      const provider = fakeProvider({
+        complete: vi.fn(async () => ({ text: '{"decision": "NAO_REMARCA"}' })),
+      });
+
+      const decision = await classifyAttendanceReply([{ role: "user", content: leadMessage }], provider);
+
+      expect(decision).toBe("NAO_REMARCA");
+    }
+  );
+
+  it("extrai o JSON mesmo com texto extra ao redor", async () => {
+    const provider = fakeProvider({
+      complete: vi.fn(async () => ({ text: 'Claro: {"decision": "REMARCA"} — essa é minha resposta.' })),
+    });
+
+    const decision = await classifyAttendanceReply([], provider);
+
+    expect(decision).toBe("REMARCA");
+  });
+
+  it("resposta sem JSON válido -> DUVIDA (nunca lança, nunca assume REMARCA/NAO_REMARCA)", async () => {
+    const provider = fakeProvider({ complete: vi.fn(async () => ({ text: "não sei classificar isso" })) });
+
+    const decision = await classifyAttendanceReply([{ role: "user", content: "??" }], provider);
+
+    expect(decision).toBe("DUVIDA");
+  });
+
+  it("decision fora do enum esperado -> DUVIDA", async () => {
+    const provider = fakeProvider({
+      complete: vi.fn(async () => ({ text: '{"decision": "TALVEZ"}' })),
+    });
+
+    const decision = await classifyAttendanceReply([], provider);
+
+    expect(decision).toBe("DUVIDA");
+  });
+
+  it("erro de chamada ao provider (rede/API) -> DUVIDA, não lança", async () => {
+    const provider = fakeProvider({
+      complete: vi.fn(async () => {
+        throw new Error("rede fora do ar");
+      }),
+    });
+
+    const decision = await classifyAttendanceReply([{ role: "user", content: "sim" }], provider);
+
+    expect(decision).toBe("DUVIDA");
+  });
+});
+
 describe("summarizeOlderTurns", () => {
   it("não chama o provider quando não há turnos (evita chamada de API desnecessária)", async () => {
     const complete = vi.fn(async () => ({ text: "não deveria ser chamado" }));
@@ -148,7 +245,6 @@ describe("generateLeadReply", () => {
     return {
       checkAvailability: vi.fn(async () => ({ slots: [] })),
       scheduleAppointment: vi.fn(async () => ({ error: "não implementado no fake" })),
-      confirmAttendance: vi.fn(async () => ({ confirmed: true as const })),
       checkCurrentAppointment: vi.fn(async () => ({ none: true as const })),
       saveLeadPhone: vi.fn(async () => ({ saved: true as const })),
       saveLeadName: vi.fn(async () => ({ saved: true as const })),
@@ -178,12 +274,15 @@ describe("generateLeadReply", () => {
     expect(request.tier).toBe("conversation");
     expect(request.cacheableSystemPrompt).toBe("Você é a IA da Clínica X.");
     expect(request.volatileContext).toBe("[Data/hora atual: 2026-09-17T12:00:00Z]");
-    // As 7 ferramentas de negócio do VEXO, sempre as mesmas — não muda por
+    // As 6 ferramentas de negócio do VEXO, sempre as mesmas — não muda por
     // conta de tools passado (que são as implementações, não a lista).
+    // confirm_attendance foi removida — a decisão de disparar a sequência
+    // de confirmação de presença passou a ser de um classificador de
+    // bastidor (classifyAttendanceReply), não mais de uma tool que a IA
+    // escolhia chamar.
     expect(request.tools.map((t) => t.name)).toEqual([
       "check_availability",
       "schedule_appointment",
-      "confirm_attendance",
       "save_lead_phone",
       "save_lead_name",
       "check_current_appointment",

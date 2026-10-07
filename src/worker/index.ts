@@ -6,6 +6,7 @@ import { sendWeeklySummaries } from "@/lib/weekly-summary";
 import { syncAllGoogleCalendars } from "@/lib/google-calendar-sync";
 import { backfillLeadInstagramUsernames } from "@/lib/lead-username-backfill";
 import { refreshLeadProfilePictures } from "@/lib/lead-profile-picture-backfill";
+import { processAttendanceConfirmationTimeouts } from "@/lib/conversation-pipeline";
 
 // Worker de background do VEXO — processo separado (serviço próprio no
 // Railway) que compartilha o mesmo banco Postgres da aplicação web.
@@ -22,6 +23,7 @@ const WEEKLY_SUMMARY_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
 const GOOGLE_CALENDAR_SYNC_INTERVAL_MS = 5 * 60 * 1000;
 const USERNAME_BACKFILL_INTERVAL_MS = 10 * 60 * 1000;
 const PROFILE_PICTURE_BACKFILL_INTERVAL_MS = 10 * 60 * 1000;
+const ATTENDANCE_CONFIRMATION_TIMEOUT_INTERVAL_MS = 3 * 60 * 1000;
 
 // Alarme de atraso cumulativo — ver diagnóstico de capacidade (avaliação de
 // escala pra 100 clínicas): node-cron não tem proteção nenhuma contra
@@ -103,6 +105,18 @@ cron.schedule(
 // é tempo real crítico) e bem mais simples que webhook (ver
 // src/lib/google-calendar-sync.ts).
 cron.schedule("*/5 * * * *", () => runSafely("syncGoogleCalendars", syncAllGoogleCalendars, GOOGLE_CALENDAR_SYNC_INTERVAL_MS));
+
+// Timeout de 1h da sequência de confirmação de presença (vídeo+cafezinho)
+// — dispara sozinho quando o lead não responde à pergunta "posso contar
+// com sua presença?" (ver ATTENDANCE_AUTO_SEND_AFTER_MS,
+// conversation-pipeline.ts). A cada 3 minutos: bem mais preciso que o
+// ciclo de follow-up (30min, erro grande demais sobre um alvo de 1h),
+// sem precisar da precisão de 15s do despacho de mensagens (não é uma
+// fila de envio real, é uma decisão de negócio).
+cron.schedule(
+  "*/3 * * * *",
+  () => runSafely("processAttendanceConfirmationTimeouts", processAttendanceConfirmationTimeouts, ATTENDANCE_CONFIRMATION_TIMEOUT_INTERVAL_MS)
+);
 
 // Backfill do @ do Instagram (Lead.igUsername) pra leads que já existiam
 // antes desse lookup existir (ver comentário grande em

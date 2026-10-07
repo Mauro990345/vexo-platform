@@ -55,6 +55,19 @@ export async function getSilenceHours(): Promise<number> {
   return (await getSettings()).silenceHours;
 }
 
+// Exportado pra processAttendanceConfirmationTimeouts (conversation-pipeline.ts)
+// reaproveitar a MESMA janela de envio do follow-up (configurável em
+// /crm/clinicas/[id]/agente-ia) pro timeout de 1h da sequência de
+// confirmação de presença, em vez de inventar uma janela separada.
+export async function getFollowUpWindowSettings(): Promise<{
+  windowDays: number[];
+  windowStartMinute: number;
+  windowEndMinute: number;
+}> {
+  const { windowDays, windowStartMinute, windowEndMinute } = await getSettings();
+  return { windowDays, windowStartMinute, windowEndMinute };
+}
+
 // Move a conversa pra FOLLOW_UP e abre um log — chamada tanto pela detecção
 // automática de silêncio quanto pela marcação manual de "não compareceu"
 // (src/lib/appointments.ts). `previousStatus` é opcional e só usado pelo

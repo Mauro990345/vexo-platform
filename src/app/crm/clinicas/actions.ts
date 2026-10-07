@@ -98,6 +98,7 @@ export async function updateAiAgentSettings(clinicId: string, formData: FormData
 
   const aiSystemPrompt = String(formData.get("aiSystemPrompt") ?? "").trim() || null;
   const confirmationVideoCaption = String(formData.get("confirmationVideoCaption") ?? "").trim() || null;
+  const attendanceTipMessage = String(formData.get("attendanceTipMessage") ?? "").trim() || null;
 
   // Mesmo padrão de upload do anexo de follow-up (ver
   // src/app/crm/(global)/follow-up/actions.ts): campo de arquivo em vez de
@@ -119,7 +120,7 @@ export async function updateAiAgentSettings(clinicId: string, formData: FormData
 
   await prisma.clinic.update({
     where: { id: clinicId },
-    data: { aiSystemPrompt, confirmationVideoUrl, confirmationVideoCaption },
+    data: { aiSystemPrompt, confirmationVideoUrl, confirmationVideoCaption, attendanceTipMessage },
   });
 
   revalidatePath(`/crm/clinicas/${clinicId}/agente-ia`);
@@ -425,6 +426,19 @@ export async function setConversationStatus(
     prisma.message.deleteMany({
       where: { conversationId, status: "PENDING", sender: "AI" },
     }),
+    // Cancela o timer de 1h da sequência de confirmação de presença (ver
+    // ATTENDANCE_AUTO_SEND_AFTER_MS, conversation-pipeline.ts) quando a
+    // conversa é marcada como perdida — mesmo motivo do cancelamento em
+    // escalateToHuman (NEEDS_HUMAN): sem isso, um agendamento de uma
+    // conversa já perdida continuaria elegível pro job de timeout.
+    ...(status === "LOST"
+      ? [
+          prisma.appointment.updateMany({
+            where: { conversationId, status: { in: ["SCHEDULED", "CONFIRMED"] }, confirmationVideoSentAt: null },
+            data: { attendancePromptSentAt: null },
+          }),
+        ]
+      : []),
     prisma.conversation.update({
       where: { id: conversationId },
       data: {
