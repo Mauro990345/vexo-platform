@@ -56,8 +56,20 @@ const DEFAULT_CONFIRMATION_VIDEO_CAPTION = "Vou te mandar um vídeo rápido most
 // frase que anuncia o vídeo, e deste até o vídeo em si — mesmo motivo de
 // sempre: a API do Instagram não deixa combinar texto + mídia numa única
 // mensagem, então saem sempre como dois envios separados.
-const ATTENDANCE_VIDEO_INTRO_DELAY_MS = 10_000;
-const ATTENDANCE_VIDEO_DELAY_MS = 15_000;
+//
+// 10s -> 15s (ajuste pedido): o gap entre a resposta da IA (confirmação do
+// agendamento) e a apresentação do vídeo era MENOR que o intervalo do
+// worker de despacho (dispatchDueMessages, a cada 15s — ver
+// DISPATCH_INTERVAL_MS, src/worker/index.ts) — mesmo com a âncora
+// corrigida (afterScheduledFor buscado no banco, nunca no passado — ver
+// fireAttendanceConfirmationSequence), ainda existia uma janela estrutural
+// em que as duas mensagens caíam no MESMO ciclo de 15s e saíam coladas,
+// sem pausa real entre elas. 15s elimina essa janela por completo: o gap
+// agendado nunca é menor que o próprio intervalo do worker.
+const ATTENDANCE_VIDEO_INTRO_DELAY_MS = 15_000;
+// Continua 5s depois da apresentação (pedido explícito) — só acompanha o
+// ajuste acima pra manter esse mesmo intervalo relativo.
+const ATTENDANCE_VIDEO_DELAY_MS = 20_000;
 // Intervalo entre o vídeo e o cafezinho — pedido explícito: vídeo primeiro
 // (pra não passar despercebido), cafezinho só depois, nunca colados.
 // Contado a partir do ENVIO REAL do vídeo (sentAt, confirmado por
