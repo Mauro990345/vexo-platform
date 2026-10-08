@@ -38,7 +38,19 @@
 // conversa comum (mensagem única) sensivelmente mais lenta. Ver
 // [vexo:debounce] abaixo — log permanente que deixa confirmar/medir isso
 // de verdade da próxima vez, em vez de só ajustar o número no escuro.
-export const DEFAULT_DEBOUNCE_WINDOW_MS = 10_000;
+//
+// Segundo bug real reportado, com o log acima já confirmando a reinício
+// do timer em toda mensagem nova (não era mais dúvida): 10s é curto pra
+// um lead digitando uma frase longa em mais de uma mensagem (comum no
+// app do Instagram — a pessoa manda um pedaço, continua digitando,
+// manda o resto) — a IA respondia só à primeira parte antes da segunda
+// chegar, do mesmo jeito que o bug original desta correção, só que com
+// uma causa diferente (tempo de digitação real do lead, não latência de
+// entrega do webhook). 20s dá folga pra isso sem deixar uma conversa
+// comum (mensagem única) sensivelmente mais lenta — o teto abaixo
+// continua garantindo que um lead "verborrágico" nunca trava o lote
+// indefinidamente.
+export const LEAD_DEBOUNCE_WINDOW_MS = 20_000;
 
 // Teto pro adiamento TOTAL de um lote, mesmo que cada mensagem nova
 // continue reiniciando a janela de silêncio acima — sem isso, um lead
@@ -49,8 +61,16 @@ export const DEFAULT_DEBOUNCE_WINDOW_MS = 10_000;
 // trava, independente da janela de silêncio: força o flush quando o lote
 // como um todo já espera tempo demais desde a PRIMEIRA mensagem, mesmo
 // que a mais recente ainda esteja "fresca" dentro da janela normal.
-// Escalado junto com DEFAULT_DEBOUNCE_WINDOW_MS (mesma proporção ~3x de
-// antes) pra manter a mesma folga relativa.
+//
+// Mantido em 30s de propósito (pedido explícito), mesmo depois de
+// LEAD_DEBOUNCE_WINDOW_MS subir pra 20s — a proporção que era ~3x (10s
+// janela / 30s teto) cai pra 1.5x: um lead que manda uma segunda
+// mensagem já perto do fim da janela de 20s tem bem menos margem antes
+// do teto forçar o flush do que tinha antes. Nunca impede o agrupamento
+// de 2 mensagens digitadas em sequência normal (o caso que motivou
+// LEAD_DEBOUNCE_WINDOW_MS acima) — só limita quantas RODADAS de reset
+// consecutivas um lead muito falante consegue emendar antes de ser
+// cortado.
 export const MAX_DEBOUNCE_TOTAL_WAIT_MS = 30_000;
 
 type PendingBatch = {
@@ -65,7 +85,7 @@ export function bufferForDebounce<T>(
   key: string,
   item: T,
   onFlush: (items: T[]) => void,
-  windowMs: number = DEFAULT_DEBOUNCE_WINDOW_MS
+  windowMs: number = LEAD_DEBOUNCE_WINDOW_MS
 ): void {
   const existing = pendingByKey.get(key);
   if (existing) {
