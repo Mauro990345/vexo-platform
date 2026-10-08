@@ -27,7 +27,7 @@ describe("bufferForDebounce", () => {
     expect(onFlush).toHaveBeenCalledWith(["oi"]);
   });
 
-  it("usa LEAD_DEBOUNCE_WINDOW_MS (20s) quando nenhuma janela é passada explicitamente — valor de produção, não só o default usado nos outros testes (6s)", () => {
+  it("usa LEAD_DEBOUNCE_WINDOW_MS (15s) quando nenhuma janela é passada explicitamente — valor de produção, não só o default usado nos outros testes (6s)", () => {
     const onFlush = vi.fn();
     bufferForDebounce("lead-a", "frase longa, parte 1", onFlush);
 

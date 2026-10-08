@@ -46,11 +46,22 @@
 // manda o resto) — a IA respondia só à primeira parte antes da segunda
 // chegar, do mesmo jeito que o bug original desta correção, só que com
 // uma causa diferente (tempo de digitação real do lead, não latência de
-// entrega do webhook). 20s dá folga pra isso sem deixar uma conversa
-// comum (mensagem única) sensivelmente mais lenta — o teto abaixo
-// continua garantindo que um lead "verborrágico" nunca trava o lote
-// indefinidamente.
-export const LEAD_DEBOUNCE_WINDOW_MS = 20_000;
+// entrega do webhook). 20s dava folga pra isso sem deixar uma conversa
+// comum (mensagem única) sensivelmente mais lenta.
+//
+// 20s -> 15s (ajuste pedido): investigação do tempo de resposta real em
+// conversa ativa (meta ~40s entre a última mensagem do lead e a resposta
+// da IA) mostrou que o debounce era a MAIOR fatia fixa do total — somado
+// ao delay adaptativo configurado (Clinic.firstBandDelaySeconds) e à
+// espera do próprio ciclo do worker de despacho (até ~15s,
+// DISPATCH_INTERVAL_MS, src/worker/index.ts), o total ficava perto de um
+// minuto, bem mais que o esperado por quem configura o delay na tela.
+// 15s é o mesmo valor já usado como piso defensivo (antes da correção da
+// "frase longa" acima) e ainda dá folga real: o gap médio entre entregas
+// de webhook da Meta pra duas mensagens do lead raramente passa de uns
+// poucos segundos — 15s continua ABSORVENDO esse jitter sem reintroduzir
+// o bug original (texto cortado em duas mensagens).
+export const LEAD_DEBOUNCE_WINDOW_MS = 15_000;
 
 // Teto pro adiamento TOTAL de um lote, mesmo que cada mensagem nova
 // continue reiniciando a janela de silêncio acima — sem isso, um lead
@@ -62,14 +73,13 @@ export const LEAD_DEBOUNCE_WINDOW_MS = 20_000;
 // como um todo já espera tempo demais desde a PRIMEIRA mensagem, mesmo
 // que a mais recente ainda esteja "fresca" dentro da janela normal.
 //
-// Mantido em 30s de propósito (pedido explícito), mesmo depois de
-// LEAD_DEBOUNCE_WINDOW_MS subir pra 20s — a proporção que era ~3x (10s
-// janela / 30s teto) cai pra 1.5x: um lead que manda uma segunda
-// mensagem já perto do fim da janela de 20s tem bem menos margem antes
-// do teto forçar o flush do que tinha antes. Nunca impede o agrupamento
-// de 2 mensagens digitadas em sequência normal (o caso que motivou
-// LEAD_DEBOUNCE_WINDOW_MS acima) — só limita quantas RODADAS de reset
-// consecutivas um lead muito falante consegue emendar antes de ser
+// Mantido em 30s de propósito (pedido explícito), tanto na subida de
+// LEAD_DEBOUNCE_WINDOW_MS pra 20s quanto na volta pra 15s — a proporção
+// janela/teto (2x com a janela em 15s) continua garantindo pelo menos uma
+// rodada de reset antes do teto forçar o flush. Nunca impede o
+// agrupamento de 2 mensagens digitadas em sequência normal (o caso que
+// motivou LEAD_DEBOUNCE_WINDOW_MS acima) — só limita quantas RODADAS de
+// reset consecutivas um lead muito falante consegue emendar antes de ser
 // cortado.
 export const MAX_DEBOUNCE_TOTAL_WAIT_MS = 30_000;
 
