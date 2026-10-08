@@ -168,7 +168,7 @@ export default async function ClinicAiAgentPage({ params }: { params: { id: stri
                         className="w-full rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5 text-xs outline-none focus:border-vexo-accent"
                       />
                       <p className="mt-1 text-caption text-vexo-muted">
-                        Enviada 1 minuto depois do vídeo de confirmação, sempre nessa ordem — a IA não escreve
+                        Enviada 20 segundos depois do vídeo de confirmação, sempre nessa ordem — a IA não escreve
                         mais esse texto sozinha. Vazio usa a frase padrão acima.
                       </p>
                     </div>

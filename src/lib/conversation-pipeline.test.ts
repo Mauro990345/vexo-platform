@@ -334,7 +334,7 @@ describe("buildCalendarEventDescription", () => {
 });
 
 // Mudança de comportamento pedida: vídeo do doutor + cafezinho saem
-// separados (vídeo primeiro, cafezinho 60s depois — nunca colados), uma
+// separados (vídeo primeiro, cafezinho 20s depois — nunca colados), uma
 // única vez por agendamento, disparados só por código (nunca mais a IA
 // escrevendo o texto do cafezinho sozinha).
 describe("fireAttendanceConfirmationSequence", () => {
@@ -346,7 +346,7 @@ describe("fireAttendanceConfirmationSequence", () => {
     appointmentUpdateManyMock.mockResolvedValue({ count: 1 });
   });
 
-  it("dispara vídeo e depois o cafezinho, nessa ordem, com o intervalo configurado (60s)", async () => {
+  it("dispara vídeo e depois o cafezinho, nessa ordem, com o intervalo configurado (20s)", async () => {
     clinicFindUniqueMock.mockResolvedValue(CLINIC_OK);
     conversationFindUniqueMock.mockResolvedValue(CONVERSATION_OK);
     const afterScheduledFor = new Date("2026-10-07T12:00:00.000Z");
@@ -364,15 +364,15 @@ describe("fireAttendanceConfirmationSequence", () => {
     const [introCall, videoCall, tipCall] = messageCreateMock.mock.calls.map((c) => c[0].data);
     expect(introCall).toMatchObject({
       content: "Vou te mandar um vídeo rápido mostrando como é o nosso atendimento 🙂",
-      scheduledFor: new Date("2026-10-07T12:00:05.000Z"), // +5s
+      scheduledFor: new Date("2026-10-07T12:00:10.000Z"), // +10s
     });
     expect(videoCall).toMatchObject({
       mediaUrl: "https://cdn/video.mp4",
-      scheduledFor: new Date("2026-10-07T12:00:08.000Z"), // +8s
+      scheduledFor: new Date("2026-10-07T12:00:15.000Z"), // +15s
     });
     expect(tipCall).toMatchObject({
       content: "Se puder, chegue uns 15 minutinhos antes, teremos um cafezinho te esperando.",
-      scheduledFor: new Date("2026-10-07T12:01:08.000Z"), // vídeo (+8s) + 60s
+      scheduledFor: new Date("2026-10-07T12:00:35.000Z"), // vídeo (+15s) + 20s
     });
     // Ordem de envio real (scheduledFor crescente): intro < vídeo < cafezinho.
     expect(introCall.scheduledFor.getTime()).toBeLessThan(videoCall.scheduledFor.getTime());
