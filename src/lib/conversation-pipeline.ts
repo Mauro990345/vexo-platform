@@ -59,7 +59,14 @@ const ATTENDANCE_VIDEO_INTRO_DELAY_MS = 10_000;
 const ATTENDANCE_VIDEO_DELAY_MS = 15_000;
 // Intervalo entre o vídeo e o cafezinho — pedido explícito: vídeo primeiro
 // (pra não passar despercebido), cafezinho só depois, nunca colados.
-const ATTENDANCE_TIP_DELAY_AFTER_VIDEO_MS = 20_000; // 20s
+// Contado a partir do ENVIO REAL do vídeo (sentAt, confirmado por
+// dispatchDueMessages — ver Message.pendingAttendanceTip), não mais de um
+// scheduledFor calculado adiantado: a Meta aceita o pedido do vídeo rápido,
+// mas busca/processa a mídia de forma assíncrona do lado deles, e um
+// cafezinho (texto puro) agendado num relógio cego podia chegar antes do
+// vídeo mesmo com os dois scheduledFor na ordem certa. Exportada pra
+// dispatch.ts reaproveitar o mesmo número, sem duplicar a constante.
+export const ATTENDANCE_TIP_DELAY_AFTER_VIDEO_MS = 20_000; // 20s
 // Tempo de espera pela resposta do lead à pergunta de presença antes do
 // job de timeout disparar a sequência sozinho (ver
 // processAttendanceConfirmationTimeouts) — respeitando a janela de envio
@@ -1686,14 +1693,24 @@ export async function fireAttendanceConfirmationSequence(params: {
   //
   // Frase-intro + vídeo primeiro (API do Instagram não combina texto e
   // mídia numa mensagem só, por isso são dois envios separados — mesmo
-  // padrão dos passos de follow-up com anexo em follow-up.ts); cafezinho
-  // só depois, com o intervalo configurável acima — nunca colado no vídeo.
+  // padrão dos passos de follow-up com anexo em follow-up.ts).
   const introAt = new Date(params.afterScheduledFor.getTime() + ATTENDANCE_VIDEO_INTRO_DELAY_MS);
   const videoAt = new Date(params.afterScheduledFor.getTime() + ATTENDANCE_VIDEO_DELAY_MS);
-  const tipAt = new Date(videoAt.getTime() + ATTENDANCE_TIP_DELAY_AFTER_VIDEO_MS);
   const introText = clinic.confirmationVideoCaption?.trim() || DEFAULT_CONFIRMATION_VIDEO_CAPTION;
   const tipText = clinic.attendanceTipMessage?.trim() || DEFAULT_ATTENDANCE_TIP_MESSAGE;
 
+  // O cafezinho NÃO é criado aqui — bug real corrigido: com scheduledFor
+  // calculado adiantado (videoAt + 20s), o cafezinho (texto puro, entrega
+  // quase instantânea) podia chegar antes do vídeo, porque a Meta aceita o
+  // pedido do vídeo rápido mas busca/processa a mídia de forma assíncrona
+  // do lado deles — nosso sentAt só certifica "a Meta aceitou", nunca "o
+  // vídeo chegou". Em vez de um relógio cego, o texto do cafezinho (já
+  // resolvido aqui, por clínica) viaja DENTRO da própria mensagem do
+  // vídeo (Message.pendingAttendanceTip) — dispatchDueMessages
+  // (src/lib/dispatch.ts) só cria a Message do cafezinho de verdade depois
+  // de CONFIRMAR o envio deste vídeo (status SENT), ancorada no sentAt
+  // real dele + ATTENDANCE_TIP_DELAY_AFTER_VIDEO_MS. Se o vídeo falhar, a
+  // Message do cafezinho nunca chega a ser criada (ver dispatch.ts).
   await prisma.$transaction([
     prisma.message.create({
       data: {
@@ -1714,16 +1731,7 @@ export async function fireAttendanceConfirmationSequence(params: {
         mediaUrl: clinic.confirmationVideoUrl,
         status: "PENDING",
         scheduledFor: videoAt,
-      },
-    }),
-    prisma.message.create({
-      data: {
-        conversationId: params.conversationId,
-        direction: "OUTBOUND",
-        sender: "SYSTEM",
-        content: tipText,
-        status: "PENDING",
-        scheduledFor: tipAt,
+        pendingAttendanceTip: tipText,
       },
     }),
   ]);

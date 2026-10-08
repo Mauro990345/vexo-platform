@@ -334,9 +334,16 @@ describe("buildCalendarEventDescription", () => {
 });
 
 // Mudança de comportamento pedida: vídeo do doutor + cafezinho saem
-// separados (vídeo primeiro, cafezinho 20s depois — nunca colados), uma
-// única vez por agendamento, disparados só por código (nunca mais a IA
-// escrevendo o texto do cafezinho sozinha).
+// separados (vídeo primeiro), uma única vez por agendamento, disparados só
+// por código (nunca mais a IA escrevendo o texto do cafezinho sozinha).
+// Ajuste posterior: esta função NÃO cria mais a Message do cafezinho —
+// ela só cria intro+vídeo, e leva o texto do cafezinho já resolvido em
+// Message.pendingAttendanceTip (na própria Message do vídeo).
+// dispatchDueMessages (dispatch.test.ts) é quem de fato cria a Message do
+// cafezinho, só depois de confirmar que o vídeo foi enviado — ver o
+// comentário grande em fireAttendanceConfirmationSequence pro motivo
+// (a Meta aceita o vídeo rápido mas entrega de forma assíncrona; um
+// cafezinho agendado num relógio cego podia chegar antes do vídeo).
 describe("fireAttendanceConfirmationSequence", () => {
   const CLINIC_OK = { confirmationVideoUrl: "https://cdn/video.mp4", confirmationVideoCaption: null, attendanceTipMessage: null };
   const CONVERSATION_OK = { lead: { phone: "21998223038" } };
@@ -346,7 +353,7 @@ describe("fireAttendanceConfirmationSequence", () => {
     appointmentUpdateManyMock.mockResolvedValue({ count: 1 });
   });
 
-  it("dispara vídeo e depois o cafezinho, nessa ordem, com o intervalo configurado (20s)", async () => {
+  it("cria intro e vídeo, nessa ordem, e leva o texto do cafezinho em pendingAttendanceTip na Message do vídeo", async () => {
     clinicFindUniqueMock.mockResolvedValue(CLINIC_OK);
     conversationFindUniqueMock.mockResolvedValue(CONVERSATION_OK);
     const afterScheduledFor = new Date("2026-10-07T12:00:00.000Z");
@@ -359,9 +366,9 @@ describe("fireAttendanceConfirmationSequence", () => {
     });
 
     expect(sent).toBe(true);
-    expect(messageCreateMock).toHaveBeenCalledTimes(3);
+    expect(messageCreateMock).toHaveBeenCalledTimes(2); // só intro + vídeo — cafezinho não é criado aqui
 
-    const [introCall, videoCall, tipCall] = messageCreateMock.mock.calls.map((c) => c[0].data);
+    const [introCall, videoCall] = messageCreateMock.mock.calls.map((c) => c[0].data);
     expect(introCall).toMatchObject({
       content: "Vou te mandar um vídeo rápido mostrando como é o nosso atendimento 🙂",
       scheduledFor: new Date("2026-10-07T12:00:10.000Z"), // +10s
@@ -369,14 +376,9 @@ describe("fireAttendanceConfirmationSequence", () => {
     expect(videoCall).toMatchObject({
       mediaUrl: "https://cdn/video.mp4",
       scheduledFor: new Date("2026-10-07T12:00:15.000Z"), // +15s
+      pendingAttendanceTip: "Se puder, chegue uns 15 minutinhos antes, teremos um cafezinho te esperando.",
     });
-    expect(tipCall).toMatchObject({
-      content: "Se puder, chegue uns 15 minutinhos antes, teremos um cafezinho te esperando.",
-      scheduledFor: new Date("2026-10-07T12:00:35.000Z"), // vídeo (+15s) + 20s
-    });
-    // Ordem de envio real (scheduledFor crescente): intro < vídeo < cafezinho.
     expect(introCall.scheduledFor.getTime()).toBeLessThan(videoCall.scheduledFor.getTime());
-    expect(videoCall.scheduledFor.getTime()).toBeLessThan(tipCall.scheduledFor.getTime());
 
     expect(appointmentUpdateManyMock).toHaveBeenCalledWith({
       where: { id: "appt-1", confirmationVideoSentAt: null },
@@ -399,9 +401,9 @@ describe("fireAttendanceConfirmationSequence", () => {
       afterScheduledFor: new Date(),
     });
 
-    const contents = messageCreateMock.mock.calls.map((c) => c[0].data.content);
-    expect(contents).toContain("Olha o vídeo da clínica!");
-    expect(contents).toContain("Cafézinho especial esperando por você.");
+    const [introCall, videoCall] = messageCreateMock.mock.calls.map((c) => c[0].data);
+    expect(introCall.content).toBe("Olha o vídeo da clínica!");
+    expect(videoCall.pendingAttendanceTip).toBe("Cafézinho especial esperando por você.");
   });
 
   it("clínica sem vídeo configurado: não reivindica nem manda nada (tenta de novo depois)", async () => {
@@ -454,7 +456,7 @@ describe("fireAttendanceConfirmationSequence", () => {
     ]);
 
     expect([firstResult, secondResult].filter(Boolean)).toHaveLength(1);
-    expect(messageCreateMock).toHaveBeenCalledTimes(3); // só uma vez (3 mensagens), nunca 6
+    expect(messageCreateMock).toHaveBeenCalledTimes(2); // só uma vez (intro + vídeo), nunca 4
   });
 });
 
@@ -486,7 +488,10 @@ describe("maybeHandlePendingAttendanceReply", () => {
       afterScheduledFor: new Date("2026-10-07T12:00:00.000Z"),
     });
 
-    expect(messageCreateMock).toHaveBeenCalledTimes(3); // intro + vídeo + cafezinho
+    // intro + vídeo — cafezinho não é criado aqui (vai em
+    // Message.pendingAttendanceTip, na Message do vídeo — dispatchDueMessages
+    // é quem cria a Message do cafezinho de verdade, só depois do vídeo SENT).
+    expect(messageCreateMock).toHaveBeenCalledTimes(2);
     expect(appointmentUpdateManyMock).toHaveBeenCalledWith({
       where: { id: "appt-1", confirmationVideoSentAt: null },
       data: { confirmationVideoSentAt: expect.any(Date) },
@@ -584,7 +589,7 @@ describe("processAttendanceConfirmationTimeouts", () => {
     const result = await processAttendanceConfirmationTimeouts();
 
     expect(result).toEqual({ fired: 1 });
-    expect(messageCreateMock).toHaveBeenCalledTimes(3);
+    expect(messageCreateMock).toHaveBeenCalledTimes(2); // intro + vídeo (cafezinho vem depois, via dispatch.ts)
   });
 
   it("1h vencida FORA da janela de envio: adia (não dispara nada neste ciclo, mas não descarta)", async () => {
@@ -615,6 +620,6 @@ describe("processAttendanceConfirmationTimeouts", () => {
     const result = await processAttendanceConfirmationTimeouts();
 
     expect(result).toEqual({ fired: 1 }); // só o "good" disparou
-    expect(messageCreateMock).toHaveBeenCalledTimes(3);
+    expect(messageCreateMock).toHaveBeenCalledTimes(2); // intro + vídeo do "good"
   });
 });
