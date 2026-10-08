@@ -146,7 +146,12 @@ export async function processSilentConversations(): Promise<number> {
   // — o gatilho de silêncio só vale antes do agendamento acontecer.
   const staleConversations = await prisma.conversation.findMany({
     where: { status: "IN_CONVERSATION", lastLeadMessageAt: { lt: silenceThreshold } },
-    include: { messages: { orderBy: { createdAt: "asc" } } },
+    // Desempate por id — mesmo motivo do `history` em conversation-pipeline.ts:
+    // mensagens do mesmo lote do lead (ou do mesmo $transaction de resposta
+    // da IA) têm createdAt empatado, e sem desempate toChatHistory (abaixo)
+    // pode mesclá-las fora de ordem antes de classifyConversation julgar a
+    // conversa.
+    include: { messages: { orderBy: [{ createdAt: "asc" }, { id: "asc" }] } },
     orderBy: { lastLeadMessageAt: "asc" },
     take: SILENT_CONVERSATION_BATCH_SIZE,
   });

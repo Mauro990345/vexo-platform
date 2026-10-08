@@ -39,6 +39,7 @@ import { toChatHistory } from "@/lib/chat-history";
 import { buildResultPhotoMessages, type ResultPhotoInput } from "@/lib/result-photo-message";
 import { detectStagnation, STAGNATION_SIMILARITY_THRESHOLD, STAGNATION_WINDOW_SIZE } from "@/lib/loop-guard";
 import { parseBrazilLocalDateTime, formatAsBrazilLocalDateTime } from "@/lib/timezone";
+import { resolveBatchTimestamps } from "@/lib/message-batch-timestamps";
 
 export { toChatHistory } from "@/lib/chat-history";
 
@@ -274,14 +275,24 @@ export async function handleInboundInstagramMessage(
   // o lead observa.
   const pipelineStartedAt = Date.now();
 
-  // firstMessage: quando o lead começou a responder — usado só pra medir
-  // tempo de resposta de verdade (leadResponseTimeSeconds, mais abaixo),
-  // sem inflar esse número pelo tempo que o debounce esperou por possíveis
-  // mensagens seguintes. lastMessage: a mais recente do lote — usada em
-  // todo o resto (marcar lastLeadMessageAt, checar silêncio, janela do
-  // loop guard etc.), por ser o timestamp mais próximo de "agora".
-  const firstMessage = event.messages[0]!;
-  const lastMessage = event.messages[event.messages.length - 1]!;
+  // Resolve timestamp ausente/inválido/muito fora do horário atual (cai pro
+  // horário atual) e garante ordem estritamente crescente dentro do lote
+  // mesmo quando duas mensagens vêm com o MESMO timestamp (a Meta só reporta
+  // em segundos) — ver comentário grande em resolveBatchTimestamps,
+  // message-batch-timestamps.ts, pro bug real que isso corrige (createdAt
+  // empatado dentro da mesma transação, ORDER BY sem desempate, histórico
+  // mesclado fora de ordem pro modelo). Calculado UMA vez aqui, no topo, e
+  // reaproveitado em TUDO que precisaria do timestamp cru do Instagram
+  // daqui pra baixo (marcar lastLeadMessageAt, checar silêncio, janela do
+  // loop guard, leadResponseTimeSeconds etc.) — nunca lido de novo direto
+  // de event.messages[...].timestamp nesta função. firstResolvedAt: quando
+  // o lead começou a responder, sem inflar leadResponseTimeSeconds pelo
+  // tempo que o debounce esperou por possíveis mensagens seguintes.
+  // lastResolvedAt: a mais recente do lote, por ser o timestamp mais
+  // próximo de "agora".
+  const resolvedBatchTimestamps = resolveBatchTimestamps(event.messages.map((m) => m.timestamp));
+  const firstResolvedAt = resolvedBatchTimestamps[0]!.sentAt;
+  const lastResolvedAt = resolvedBatchTimestamps[resolvedBatchTimestamps.length - 1]!.sentAt;
 
   let igAccount = await prisma.instagramAccount.findFirst({
     where: { igUserId: event.igUserId },
@@ -512,13 +523,14 @@ export async function handleInboundInstagramMessage(
     // e o TypeScript não carrega o narrowing pra dentro de uma closure.
     const needsHumanConversationId = conversation.id;
     await prisma.message.createMany({
-      data: event.messages.map((m) => ({
+      data: event.messages.map((m, index) => ({
         conversationId: needsHumanConversationId,
         direction: "INBOUND" as const,
         sender: "LEAD" as const,
         content: m.text,
         igMessageId: m.igMessageId,
-        sentAt: m.timestamp,
+        sentAt: resolvedBatchTimestamps[index]!.sentAt,
+        createdAt: resolvedBatchTimestamps[index]!.createdAt,
       })),
     });
     return;
@@ -538,12 +550,18 @@ export async function handleInboundInstagramMessage(
   const silenceHours = await getSilenceHours();
   const wentSilent =
     Boolean(conversation.lastLeadMessageAt) &&
-    firstMessage.timestamp.getTime() - conversation.lastLeadMessageAt!.getTime() > silenceHours * 60 * 60 * 1000;
+    firstResolvedAt.getTime() - conversation.lastLeadMessageAt!.getTime() > silenceHours * 60 * 60 * 1000;
   const reengaged = reopeningFromFollowUp || wentSilent;
 
+  // Desempate por id (ver resolveBatchTimestamps acima) — ties de createdAt
+  // continuam possíveis entre mensagens de TURNOS diferentes desta mesma
+  // conversa (ex.: duas respostas da IA no mesmo $transaction, caso do
+  // envio de foto de resultado com legenda — buildResultPhotoMessages), não
+  // só dentro de um lote do lead. id é gerado no processo Node (cuid) na
+  // mesma ordem de criação, então serve como desempate estável.
   const previousAiMessage = await prisma.message.findFirst({
     where: { conversationId: conversation.id, sender: "AI", direction: "OUTBOUND" },
-    orderBy: { createdAt: "desc" },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
   });
 
   // Mesmo motivo de sempre pra capturar numa const antes dos closures do
@@ -551,7 +569,7 @@ export async function handleInboundInstagramMessage(
   // narrowing (já non-null aqui) pra dentro de uma função aninhada.
   const activeConversationId = conversation.id;
   await prisma.$transaction([
-    ...event.messages.map((m) =>
+    ...event.messages.map((m, index) =>
       prisma.message.create({
         data: {
           conversationId: activeConversationId,
@@ -559,15 +577,16 @@ export async function handleInboundInstagramMessage(
           sender: "LEAD",
           content: m.text,
           igMessageId: m.igMessageId,
-          sentAt: m.timestamp,
+          sentAt: resolvedBatchTimestamps[index]!.sentAt,
+          createdAt: resolvedBatchTimestamps[index]!.createdAt,
         },
       })
     ),
     prisma.conversation.update({
       where: { id: activeConversationId },
       data: {
-        lastLeadMessageAt: lastMessage.timestamp,
-        lastMessageAt: lastMessage.timestamp,
+        lastLeadMessageAt: lastResolvedAt,
+        lastMessageAt: lastResolvedAt,
         status: conversation.status === "NEW" || reopeningFromFollowUp ? "IN_CONVERSATION" : conversation.status,
         ...(reengaged ? { resultPhotoSentAt: null } : {}),
       },
@@ -580,7 +599,7 @@ export async function handleInboundInstagramMessage(
   // colocado na fila segundos antes ainda sairia mesmo com o lead já tendo
   // respondido.
   if (reopeningFromFollowUp) {
-    await cancelPendingFollowUp(conversation.id, lastMessage.timestamp);
+    await cancelPendingFollowUp(conversation.id, lastResolvedAt);
   }
 
   // Proteção contra loop automático: sem isso, se o "lead" do outro lado
@@ -670,7 +689,7 @@ export async function handleInboundInstagramMessage(
       conversationId: conversation.id,
       sender: "AI",
       direction: "OUTBOUND",
-      createdAt: { gte: new Date(lastMessage.timestamp.getTime() - LOOP_GUARD_WINDOW_MINUTES * 60 * 1000) },
+      createdAt: { gte: new Date(lastResolvedAt.getTime() - LOOP_GUARD_WINDOW_MINUTES * 60 * 1000) },
     },
   });
 
@@ -708,7 +727,12 @@ export async function handleInboundInstagramMessage(
         channel: "INSTAGRAM",
         mediaUrl: null,
       },
-      orderBy: { createdAt: "desc" },
+      // Desempate por id — ver comentário grande em resolveBatchTimestamps,
+      // message-batch-timestamps.ts: duas respostas da IA no MESMO
+      // $transaction (ex.: texto + foto de resultado com legenda) têm
+      // createdAt empatado, e sem desempate a ordem "mais recente primeiro"
+      // fica indefinida.
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       take: STAGNATION_WINDOW_SIZE,
       select: { content: true },
     });
@@ -735,9 +759,21 @@ export async function handleInboundInstagramMessage(
     }
   }
 
+  // Desempate por id — É A QUERY do bug real investigado: duas (ou mais)
+  // mensagens do lead do MESMO lote (debounce) são criadas no MESMO
+  // $transaction, com createdAt empatado (now()/CURRENT_TIMESTAMP é
+  // congelado por transação no Postgres); "ORDER BY createdAt ASC" sem
+  // nenhuma chave de desempate não garante NADA sobre a ordem relativa de
+  // linhas empatadas. Sem o `id` aqui, toChatHistory (abaixo) podia mesclar
+  // as duas mensagens do lead FORA de ordem no texto que vai pro modelo —
+  // ele via as duas, só que embaralhadas, e respondia como se tivesse
+  // ignorado uma delas. resolveBatchTimestamps (acima, na criação) já evita
+  // o empate em mensagens NOVAS a partir de agora; isto aqui é a segunda
+  // camada de defesa, pra qualquer linha antiga já empatada ou outro ponto
+  // que ainda não passou por essa correção.
   const history = await prisma.message.findMany({
     where: { conversationId: conversation.id },
-    orderBy: { createdAt: "asc" },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
   });
 
   const chatHistory = toChatHistory(history);
@@ -1343,7 +1379,7 @@ export async function handleInboundInstagramMessage(
   // pelo tempo que o debounce esperou por possíveis mensagens seguintes no
   // mesmo lote (ver InboundInstagramEvent.messages).
   const leadResponseTimeSeconds = previousAiMessage?.sentAt
-    ? Math.max(0, Math.round((firstMessage.timestamp.getTime() - previousAiMessage.sentAt.getTime()) / 1000))
+    ? Math.max(0, Math.round((firstResolvedAt.getTime() - previousAiMessage.sentAt.getTime()) / 1000))
     : null;
 
   const aiSettings = await prisma.aiSettings.findUnique({ where: { id: "singleton" } });
