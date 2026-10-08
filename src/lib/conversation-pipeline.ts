@@ -55,11 +55,11 @@ const DEFAULT_CONFIRMATION_VIDEO_CAPTION = "Vou te mandar um vídeo rápido most
 // frase que anuncia o vídeo, e deste até o vídeo em si — mesmo motivo de
 // sempre: a API do Instagram não deixa combinar texto + mídia numa única
 // mensagem, então saem sempre como dois envios separados.
-const ATTENDANCE_VIDEO_INTRO_DELAY_MS = 5_000;
-const ATTENDANCE_VIDEO_DELAY_MS = 8_000;
+const ATTENDANCE_VIDEO_INTRO_DELAY_MS = 10_000;
+const ATTENDANCE_VIDEO_DELAY_MS = 15_000;
 // Intervalo entre o vídeo e o cafezinho — pedido explícito: vídeo primeiro
 // (pra não passar despercebido), cafezinho só depois, nunca colados.
-const ATTENDANCE_TIP_DELAY_AFTER_VIDEO_MS = 60_000; // 60s
+const ATTENDANCE_TIP_DELAY_AFTER_VIDEO_MS = 20_000; // 20s
 // Tempo de espera pela resposta do lead à pergunta de presença antes do
 // job de timeout disparar a sequência sozinho (ver
 // processAttendanceConfirmationTimeouts) — respeitando a janela de envio
