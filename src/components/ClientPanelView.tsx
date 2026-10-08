@@ -11,6 +11,7 @@ import { normalizeBrazilianWhatsappNumber } from "@/lib/whatsapp";
 import { leadDisplayParts } from "@/lib/lead-display";
 import { LeadAvatar } from "@/components/LeadAvatar";
 import { InstagramGlyphIcon, WhatsAppGlyphIcon } from "@/components/BrandIcons";
+import { NeedsHumanBanner, type NeedsHumanLead } from "@/components/NeedsHumanBanner";
 
 // Marcar "Não compareceu" só faz sentido pra agendamento ainda em aberto —
 // já compareceu ou já foi cancelado não tem o que alternar aqui.
@@ -77,7 +78,7 @@ export async function ClientPanelView({
   const parsedRef = week ? new Date(week) : now;
   const weekStart = startOfWeek(Number.isNaN(parsedRef.getTime()) ? now : parsedRef);
 
-  const [clinic, periods, appointments, dailyApproached] = await Promise.all([
+  const [clinic, periods, appointments, dailyApproached, needsHumanConversations] = await Promise.all([
     prisma.clinic.findUniqueOrThrow({
       where: { id: clinicId },
       select: {
@@ -105,7 +106,34 @@ export async function ClientPanelView({
       take: 100,
     }),
     getDailyApproachCounts(clinicId, weekStart),
+    // Faixa "precisa de atendimento humano" (ver NeedsHumanBanner) — o
+    // Painel do cliente não buscava NENHUMA Conversation antes disto, só
+    // Appointment; escopado por clinicId, igual a tudo mais nesta tela (o
+    // clinicId em si já vem validado — da sessão CLIENT em /dashboard, ou
+    // do parâmetro de rota só acessível a sessão INTERNAL no CRM — nunca de
+    // entrada do usuário). "Mais recente primeiro": lastMessageAt (ou
+    // updatedAt como desempate/fallback quando null) — ambos ficam
+    // congelados no momento da escalada pra NEEDS_HUMAN na prática (nada
+    // atualiza esses campos enquanto o status permanece NEEDS_HUMAN), então
+    // refletem "há quanto tempo está esperando humano", não só "criado há
+    // quanto tempo".
+    prisma.conversation.findMany({
+      where: { clinicId, status: "NEEDS_HUMAN" },
+      include: { lead: true },
+      orderBy: [{ lastMessageAt: "desc" }, { updatedAt: "desc" }],
+      take: 50,
+    }),
   ]);
+
+  const needsHumanLeads: NeedsHumanLead[] = needsHumanConversations.map((conv) => {
+    const { primary } = leadDisplayParts(conv.lead, null);
+    return {
+      conversationId: conv.id,
+      primary,
+      profilePictureUrl: conv.lead.profilePictureUrl,
+      igUsername: conv.lead.igUsername,
+    };
+  });
 
   return (
     <div className={standalone ? "min-h-screen bg-vexo-bg px-4 pt-4 pb-6 sm:px-8 sm:pt-6 sm:pb-8" : undefined}>
@@ -188,6 +216,7 @@ export async function ClientPanelView({
           {/* Coluna direita: agendamentos */}
           <div className="space-y-3">
             <h2 className="text-caption font-medium uppercase tracking-wide text-vexo-muted">Agendamentos</h2>
+            <NeedsHumanBanner leads={needsHumanLeads} />
             <div className="space-y-2">
               {appointments.map((a) => {
                 const { primary, handle } = leadDisplayParts(a.lead, a.manualTitle);
