@@ -2,7 +2,13 @@ import { prisma } from "@/lib/prisma";
 import { sendInstagramMessage } from "@/lib/instagram";
 import { sendWhatsappMessage } from "@/lib/whatsapp";
 import { toPublicUploadUrl } from "@/lib/uploads";
-import { ATTENDANCE_TIP_DELAY_AFTER_VIDEO_MS } from "@/lib/conversation-pipeline";
+import {
+  ATTENDANCE_VIDEO_DELAY_AFTER_INTRO_MS,
+  ATTENDANCE_TIP_DELAY_AFTER_VIDEO_MS,
+  ATTENDANCE_FINAL_DELAY_AFTER_TIP_MS,
+  decodePendingAttendanceStep,
+  encodePendingAttendanceStep,
+} from "@/lib/conversation-pipeline";
 
 // Despacha mensagens OUTBOUND com status PENDING cujo horário de envio
 // (timing adaptativo) já chegou. Chamado periodicamente pelo worker.
@@ -190,76 +196,144 @@ export async function dispatchDueMessages(): Promise<{ sent: number; failed: num
         );
       }
 
-      await prisma.$transaction([
-        prisma.message.update({
+      // Marcar SENT + avançar a cadeia de confirmação de presença (próximo
+      // elo: apresentação -> vídeo -> cafezinho -> frase final, ver
+      // PendingAttendanceStep em conversation-pipeline.ts) precisam ser
+      // ATÔMICOS JUNTOS, não só cada um por si — bug real que isto evita:
+      // se o worker fosse derrubado (deploy, crash) ENTRE marcar SENT e
+      // criar o próximo elo (quando eram duas operações separadas), a
+      // mensagem ficava SENT de verdade, mas pendingAttendanceStep nunca
+      // era zerado nem o próximo elo criado — a cadeia morria ali, órfã,
+      // sem nenhum jeito de retomar sozinha (nada mais no sistema procura
+      // "mensagens SENT com pendingAttendanceStep ainda preenchido"). Uma
+      // transação interativa (callback, não a forma de array) garante que
+      // as duas coisas comitam juntas ou nenhuma comita: se cair antes do
+      // commit, a mensagem continua SENDING, reclaimStaleSendingMessages
+      // (topo do arquivo) devolve pra PENDING depois de 2min, e o ciclo
+      // seguinte reprocessa do zero — reenvia pelo Instagram (mesmo risco
+      // de duplicidade que já existia pra qualquer mensagem nesse cenário,
+      // nada novo) e, dessa vez, com sucesso, cria o próximo elo
+      // corretamente. Nunca fica "SENT mas sem o próximo elo".
+      await prisma.$transaction(async (tx) => {
+        await tx.message.update({
           where: { id: message.id },
           data: { status: "SENT", sentAt: now, igMessageId: result.messageId },
-        }),
-        prisma.conversation.update({
+        });
+        await tx.conversation.update({
           where: { id: message.conversationId },
           data: {
             lastMessageAt: now,
             ...(message.sender === "AI" ? { lastAiMessageAt: now } : {}),
           },
-        }),
-      ]);
-      sent++;
-
-      // Cafezinho (ver Message.pendingAttendanceTip, schema.prisma, e
-      // fireAttendanceConfirmationSequence, conversation-pipeline.ts) — só é
-      // criado AGORA, depois de confirmar que o vídeo foi mesmo enviado
-      // (chegou até aqui com sucesso), nunca num scheduledFor calculado
-      // adiantado no momento da criação do vídeo. Bug real corrigido: a Meta
-      // aceita o pedido do vídeo rápido mas processa/entrega a mídia de
-      // forma assíncrona do lado deles — um cafezinho (texto puro, entrega
-      // quase instantânea) agendado num relógio cego podia chegar ANTES do
-      // vídeo mesmo com os dois scheduledFor na ordem certa dos dois lados
-      // nossos.
-      //
-      // Claim atômico (mesmo padrão de claimMessage, no topo do arquivo)
-      // garante no máximo um cafezinho por vídeo mesmo se este bloco rodar
-      // de novo pra essa mesma Message (reprocessamento) — count === 1 quer
-      // dizer que ESTA execução foi quem zerou o campo, nenhuma outra.
-      if (message.pendingAttendanceTip) {
-        const tipClaim = await prisma.message.updateMany({
-          where: { id: message.id, pendingAttendanceTip: { not: null } },
-          data: { pendingAttendanceTip: null },
         });
 
-        if (tipClaim.count === 1) {
-          // Status ATUAL da conversa, não o snapshot carregado no topo da
-          // função — pode ter virado NEEDS_HUMAN/LOST enquanto este vídeo
-          // esperava a vez no lote (due é uma leva de até 50 mensagens).
-          const conversation = await prisma.conversation.findUnique({
-            where: { id: message.conversationId },
-            select: { status: true },
-          });
+        if (!message.pendingAttendanceStep) return;
+        const step = decodePendingAttendanceStep(message.pendingAttendanceStep);
+        if (!step) return;
 
-          if (conversation && conversation.status !== "NEEDS_HUMAN" && conversation.status !== "LOST") {
-            await prisma.message.create({
-              data: {
-                conversationId: message.conversationId,
-                direction: "OUTBOUND",
-                sender: "SYSTEM",
-                content: message.pendingAttendanceTip,
-                status: "PENDING",
-                scheduledFor: new Date(now.getTime() + ATTENDANCE_TIP_DELAY_AFTER_VIDEO_MS),
-              },
-            });
-          }
+        // Claim atômico (mesmo padrão de claimMessage, no topo do arquivo)
+        // garante no máximo UMA criação do próximo elo por elo atual,
+        // mesmo se este bloco rodar de novo pra essa mesma Message
+        // (reprocessamento) — count === 1 quer dizer que ESTA execução foi
+        // quem zerou o campo, nenhuma outra.
+        const stepClaim = await tx.message.updateMany({
+          where: { id: message.id, pendingAttendanceStep: { not: null } },
+          data: { pendingAttendanceStep: null },
+        });
+        if (stepClaim.count !== 1) return;
+
+        // Status ATUAL da conversa, não o snapshot carregado no topo da
+        // função — pode ter virado NEEDS_HUMAN/LOST enquanto este elo
+        // esperava a vez no lote (due é uma leva de até 50 mensagens). Vale
+        // pra TODOS os elos (vídeo, cafezinho e frase final), não só a
+        // última.
+        const conversation = await tx.conversation.findUnique({
+          where: { id: message.conversationId },
+          select: { status: true },
+        });
+        if (!conversation || conversation.status === "NEEDS_HUMAN" || conversation.status === "LOST") return;
+
+        if (step.next === "video") {
+          await tx.message.create({
+            data: {
+              conversationId: message.conversationId,
+              direction: "OUTBOUND",
+              sender: "SYSTEM",
+              content: "[vídeo de confirmação de agendamento]",
+              mediaUrl: step.mediaUrl,
+              status: "PENDING",
+              scheduledFor: new Date(now.getTime() + ATTENDANCE_VIDEO_DELAY_AFTER_INTRO_MS),
+              pendingAttendanceStep: encodePendingAttendanceStep({
+                next: "tip",
+                tipText: step.tipText,
+                finalText: step.finalText,
+                appointmentId: step.appointmentId,
+                scheduledAtMs: step.scheduledAtMs,
+              }),
+            },
+          });
+          return;
         }
-      }
+
+        if (step.next === "tip") {
+          await tx.message.create({
+            data: {
+              conversationId: message.conversationId,
+              direction: "OUTBOUND",
+              sender: "SYSTEM",
+              content: step.tipText,
+              status: "PENDING",
+              scheduledFor: new Date(now.getTime() + ATTENDANCE_TIP_DELAY_AFTER_VIDEO_MS),
+              pendingAttendanceStep: encodePendingAttendanceStep({
+                next: "final",
+                finalText: step.finalText,
+                appointmentId: step.appointmentId,
+                scheduledAtMs: step.scheduledAtMs,
+              }),
+            },
+          });
+          return;
+        }
+
+        // step.next === "final" — último elo: confere, além da conversa
+        // (já feito acima), que o agendamento ainda existe, continua
+        // SCHEDULED/CONFIRMED (não foi cancelado) e que o horário não
+        // mudou desde que a apresentação foi criada (scheduledAtMs,
+        // capturado em fireAttendanceConfirmationSequence) — remarcado
+        // nesse meio-tempo faria "até [dia]" sair com o dia errado, então
+        // a frase final simplesmente não é criada nesse caso.
+        const appointment = await tx.appointment.findUnique({
+          where: { id: step.appointmentId },
+          select: { status: true, scheduledAt: true },
+        });
+        if (!appointment) return;
+        if (appointment.status !== "SCHEDULED" && appointment.status !== "CONFIRMED") return;
+        if (appointment.scheduledAt.getTime() !== step.scheduledAtMs) return;
+
+        await tx.message.create({
+          data: {
+            conversationId: message.conversationId,
+            direction: "OUTBOUND",
+            sender: "SYSTEM",
+            content: step.finalText,
+            status: "PENDING",
+            scheduledFor: new Date(now.getTime() + ATTENDANCE_FINAL_DELAY_AFTER_TIP_MS),
+          },
+        });
+      });
+      sent++;
     } catch (err) {
       const detail = err instanceof Error ? `${err.message}\n${err.stack ?? ""}` : String(err);
       failed++;
       console.error(`[vexo] Falha ao processar mensagem ${message.id}:`, err);
-      // Vídeo falhou — o cafezinho nunca é criado (nem o claim acima roda,
-      // já que essa parte do código só é alcançada em sucesso). Sem campo
+      // Elo falhou — o próximo elo da cadeia de confirmação de presença
+      // (vídeo/cafezinho/frase final) nunca é criado (nem o claim roda, já
+      // que essa parte do código só é alcançada em sucesso). Sem campo
       // novo pra marcar isso, só log — útil pra auditar manualmente um caso
-      // de vídeo que falhou e não gerou cafezinho nenhum.
-      if (message.pendingAttendanceTip) {
+      // de elo que falhou e não gerou o próximo.
+      if (message.pendingAttendanceStep) {
         console.log(
-          `[vexo] Vídeo de confirmação de presença falhou — cafezinho nunca será criado (conversa ${message.conversationId}, mensagem ${message.id}).`
+          `[vexo] Elo da sequência de confirmação de presença falhou — o próximo elo nunca será criado (conversa ${message.conversationId}, mensagem ${message.id}).`
         );
       }
       // Catch própria pro update em si — se ATÉ marcar como FAILED falhar,
