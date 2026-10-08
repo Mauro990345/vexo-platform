@@ -17,6 +17,7 @@ vi.mock("@/lib/google-calendar", () => ({
 
 const appointmentFindFirstMock = vi.fn();
 const appointmentFindManyMock = vi.fn();
+const appointmentFindUniqueMock = vi.fn();
 const appointmentUpdateManyMock = vi.fn();
 const appointmentCreateMock = vi.fn();
 const appointmentUpdateMock = vi.fn();
@@ -29,6 +30,7 @@ vi.mock("@/lib/prisma", () => ({
     appointment: {
       findFirst: (...args: unknown[]) => appointmentFindFirstMock(...args),
       findMany: (...args: unknown[]) => appointmentFindManyMock(...args),
+      findUnique: (...args: unknown[]) => appointmentFindUniqueMock(...args),
       updateMany: (...args: unknown[]) => appointmentUpdateManyMock(...args),
       create: (...args: unknown[]) => appointmentCreateMock(...args),
       update: (...args: unknown[]) => appointmentUpdateMock(...args),
@@ -74,7 +76,8 @@ import {
   isSlotFreeIgnoringOwnAppointment,
   buildCalendarEventDescription,
   fireAttendanceConfirmationSequence,
-  maybeHandlePendingAttendanceReply,
+  checkPendingAttendanceReply,
+  applyAttendanceReplyDecision,
   processAttendanceConfirmationTimeouts,
 } from "@/lib/conversation-pipeline";
 
@@ -337,30 +340,41 @@ describe("buildCalendarEventDescription", () => {
   });
 });
 
-// Mudança de comportamento pedida: vídeo do doutor + cafezinho saem
-// separados (vídeo primeiro), uma única vez por agendamento, disparados só
-// por código (nunca mais a IA escrevendo o texto do cafezinho sozinha).
-// Ajuste posterior: esta função NÃO cria mais a Message do cafezinho —
-// ela só cria intro+vídeo, e leva o texto do cafezinho já resolvido em
-// Message.pendingAttendanceTip (na própria Message do vídeo).
-// dispatchDueMessages (dispatch.test.ts) é quem de fato cria a Message do
-// cafezinho, só depois de confirmar que o vídeo foi enviado — ver o
-// comentário grande em fireAttendanceConfirmationSequence pro motivo
-// (a Meta aceita o vídeo rápido mas entrega de forma assíncrona; um
-// cafezinho agendado num relógio cego podia chegar antes do vídeo).
+// Mudança de comportamento pedida: vídeo do doutor + cafezinho + frase
+// final saem separados (apresentação primeiro), uma única vez por
+// agendamento, disparados só por código (nunca mais a IA escrevendo esses
+// textos sozinha). Ajuste mais recente: esta função cria SÓ a apresentação
+// — vídeo, cafezinho e frase final são criados em CADEIA por
+// dispatchDueMessages (dispatch.test.ts), cada um só depois de confirmar o
+// SENT do anterior (ver PendingAttendanceStep, Message.pendingAttendanceStep
+// e o comentário grande na função, pro motivo: a Meta aceita um vídeo
+// rápido mas entrega de forma assíncrona; um elo de texto puro agendado num
+// relógio cego podia chegar antes do elo anterior).
 //
-// Ajuste mais recente: afterScheduledFor não é mais um parâmetro — a função
-// busca a referência direto no banco (última Message OUTBOUND ainda PENDING
-// da conversa), nunca menor que "agora" (Math.max). Corrige o bug de
-// confirmação+apresentação do vídeo saindo coladas (ver comentário grande
-// na função).
+// afterScheduledFor não é parâmetro — a função busca a referência direto no
+// banco (última Message OUTBOUND ainda PENDING da conversa), nunca menor
+// que "agora" (Math.max). Corrige o bug de confirmação+apresentação do
+// vídeo saindo coladas (ver comentário grande na função).
 describe("fireAttendanceConfirmationSequence", () => {
-  const CLINIC_OK = { confirmationVideoUrl: "https://cdn/video.mp4", confirmationVideoCaption: null, attendanceTipMessage: null };
+  const CLINIC_OK = {
+    confirmationVideoUrl: "https://cdn/video.mp4",
+    confirmationVideoCaption: null,
+    attendanceTipMessage: null,
+    attendanceFinalMessage: null,
+  };
   const CONVERSATION_OK = { lead: { phone: "21998223038" } };
+  // "amanhã" em relação aos horários de "agora" usados nos testes (sempre
+  // 2026-10-07, ver vi.setSystemTime abaixo).
+  const APPOINTMENT_OK = { scheduledAt: new Date("2026-10-08T12:00:00.000Z") };
+
+  function decodeIntroStep(introCallData: { pendingAttendanceStep: string }) {
+    return JSON.parse(introCallData.pendingAttendanceStep);
+  }
 
   beforeEach(() => {
     vi.clearAllMocks();
     appointmentUpdateManyMock.mockResolvedValue({ count: 1 });
+    appointmentFindUniqueMock.mockResolvedValue(APPOINTMENT_OK);
     // Default: nenhuma Message OUTBOUND PENDING na conversa — ancora em
     // "agora" (comportamento quando não há nada pendente, ver testes
     // dedicados mais abaixo).
@@ -371,7 +385,7 @@ describe("fireAttendanceConfirmationSequence", () => {
     vi.useRealTimers();
   });
 
-  it("resposta da IA pendente com scheduledFor FUTURO: apresentação sai pelo menos 15s depois dela (+15s/+20s sobre o scheduledFor pendente, não sobre 'agora')", async () => {
+  it("resposta da IA pendente com scheduledFor FUTURO: apresentação sai pelo menos 15s depois dela (não sobre 'agora')", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-10-07T11:59:30.000Z")); // "agora" ANTES do scheduledFor pendente
     clinicFindUniqueMock.mockResolvedValue(CLINIC_OK);
@@ -392,22 +406,26 @@ describe("fireAttendanceConfirmationSequence", () => {
       orderBy: [{ scheduledFor: "desc" }, { id: "desc" }],
       select: { scheduledFor: true },
     });
-    expect(messageCreateMock).toHaveBeenCalledTimes(2); // só intro + vídeo — cafezinho não é criado aqui
+    expect(messageCreateMock).toHaveBeenCalledTimes(1); // só a apresentação — o resto vem em cadeia, via dispatch.ts
 
-    const [introCall, videoCall] = messageCreateMock.mock.calls.map((c) => c[0].data);
+    const introCall = messageCreateMock.mock.calls[0]![0].data;
     expect(introCall).toMatchObject({
       content: "Vou te mandar um vídeo rápido mostrando como é o nosso atendimento 🙂",
       scheduledFor: new Date("2026-10-07T12:00:15.000Z"), // +15s sobre o scheduledFor pendente
     });
-    expect(videoCall).toMatchObject({
-      mediaUrl: "https://cdn/video.mp4",
-      scheduledFor: new Date("2026-10-07T12:00:20.000Z"), // +20s
-      pendingAttendanceTip: "Se puder, chegue uns 15 minutinhos antes, teremos um cafezinho te esperando.",
-    });
-    expect(introCall.scheduledFor.getTime()).toBeLessThan(videoCall.scheduledFor.getTime());
     expect(introCall.scheduledFor.getTime() - new Date("2026-10-07T12:00:00.000Z").getTime()).toBeGreaterThanOrEqual(
       15_000
     );
+
+    const step = decodeIntroStep(introCall);
+    expect(step).toEqual({
+      next: "video",
+      mediaUrl: "https://cdn/video.mp4",
+      tipText: "Se puder, chegue uns 15 minutinhos antes, teremos um cafezinho te esperando.",
+      finalText: "Perfeito, até amanhã.",
+      appointmentId: "appt-1",
+      scheduledAtMs: APPOINTMENT_OK.scheduledAt.getTime(),
+    });
 
     expect(appointmentUpdateManyMock).toHaveBeenCalledWith({
       where: { id: "appt-1", confirmationVideoSentAt: null },
@@ -428,9 +446,8 @@ describe("fireAttendanceConfirmationSequence", () => {
       conversationId: "conv-1",
     });
 
-    const [introCall, videoCall] = messageCreateMock.mock.calls.map((c) => c[0].data);
+    const introCall = messageCreateMock.mock.calls[0]![0].data;
     expect(introCall.scheduledFor).toEqual(new Date("2026-10-07T12:00:15.000Z")); // +15s sobre "agora"
-    expect(videoCall.scheduledFor).toEqual(new Date("2026-10-07T12:00:20.000Z")); // +20s sobre "agora"
   });
 
   it("resposta pendente com scheduledFor já no PASSADO (processamento mais lento que o delay adaptativo): ancora em 'agora', nunca num instante já passado", async () => {
@@ -451,16 +468,18 @@ describe("fireAttendanceConfirmationSequence", () => {
       conversationId: "conv-1",
     });
 
-    const [introCall, videoCall] = messageCreateMock.mock.calls.map((c) => c[0].data);
+    const introCall = messageCreateMock.mock.calls[0]![0].data;
     expect(introCall.scheduledFor).toEqual(new Date("2026-10-07T12:00:15.000Z")); // +15s sobre "agora", não sobre o valor passado
-    expect(videoCall.scheduledFor).toEqual(new Date("2026-10-07T12:00:20.000Z"));
   });
 
-  it("usa os textos configurados pela clínica, quando preenchidos", async () => {
+  it("usa os textos configurados pela clínica, quando preenchidos (inclusive a frase final com {{dia}})", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-10-07T12:00:00.000Z"));
     clinicFindUniqueMock.mockResolvedValue({
       ...CLINIC_OK,
       confirmationVideoCaption: "Olha o vídeo da clínica!",
       attendanceTipMessage: "Cafézinho especial esperando por você.",
+      attendanceFinalMessage: "Combinado, {{dia}} te vejo lá!",
     });
     conversationFindUniqueMock.mockResolvedValue(CONVERSATION_OK);
 
@@ -470,9 +489,30 @@ describe("fireAttendanceConfirmationSequence", () => {
       conversationId: "conv-1",
     });
 
-    const [introCall, videoCall] = messageCreateMock.mock.calls.map((c) => c[0].data);
+    const introCall = messageCreateMock.mock.calls[0]![0].data;
     expect(introCall.content).toBe("Olha o vídeo da clínica!");
-    expect(videoCall.pendingAttendanceTip).toBe("Cafézinho especial esperando por você.");
+    const step = decodeIntroStep(introCall);
+    expect(step.tipText).toBe("Cafézinho especial esperando por você.");
+    expect(step.finalText).toBe("Combinado, amanhã te vejo lá!");
+  });
+
+  it("frase final de agendamento em 3 dias usa o nome do dia da semana (não 'amanhã'/'hoje')", async () => {
+    vi.useFakeTimers();
+    // Segunda-feira 2026-10-05 (Brasília) -> agendamento quinta-feira 2026-10-08 (Brasília), 3 dias depois.
+    vi.setSystemTime(new Date("2026-10-05T12:00:00.000Z"));
+    appointmentFindUniqueMock.mockResolvedValue({ scheduledAt: new Date("2026-10-08T12:00:00.000Z") });
+    clinicFindUniqueMock.mockResolvedValue(CLINIC_OK);
+    conversationFindUniqueMock.mockResolvedValue(CONVERSATION_OK);
+
+    await fireAttendanceConfirmationSequence({
+      appointmentId: "appt-1",
+      clinicId: "clinic-1",
+      conversationId: "conv-1",
+    });
+
+    const introCall = messageCreateMock.mock.calls[0]![0].data;
+    const step = decodeIntroStep(introCall);
+    expect(step.finalText).toBe("Perfeito, até quinta.");
   });
 
   it("clínica sem vídeo configurado: não reivindica nem manda nada (tenta de novo depois)", async () => {
@@ -523,31 +563,30 @@ describe("fireAttendanceConfirmationSequence", () => {
     ]);
 
     expect([firstResult, secondResult].filter(Boolean)).toHaveLength(1);
-    expect(messageCreateMock).toHaveBeenCalledTimes(2); // só uma vez (intro + vídeo), nunca 4
+    expect(messageCreateMock).toHaveBeenCalledTimes(1); // só uma vez (a apresentação), nunca 2
   });
 });
 
 // Classificador REMARCA/NAO_REMARCA/DUVIDA (substitui a antiga tool
 // confirm_attendance) decidindo o que fazer com a resposta do lead à
-// pergunta de presença.
-describe("maybeHandlePendingAttendanceReply", () => {
-  const CLINIC_OK = { confirmationVideoUrl: "https://cdn/video.mp4", confirmationVideoCaption: null, attendanceTipMessage: null };
-  const CONVERSATION_OK = { lead: { phone: "21998223038" } };
-
+// pergunta de presença. checkPendingAttendanceReply (lookup + classifica)
+// e applyAttendanceReplyDecision (age sobre a decisão já calculada) agora
+// são duas funções separadas — handleInboundInstagramMessage chama a
+// primeira ANTES de generateLeadReply (pra moldar o contextNote deste
+// turno) e reaproveita o mesmo resultado, no fim do turno, pra
+// applyAttendanceReplyDecision. Os testes abaixo cobrem as duas funções
+// separadamente e, por último, o reaproveitamento (sem segunda chamada ao
+// classificador).
+describe("checkPendingAttendanceReply", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    appointmentUpdateManyMock.mockResolvedValue({ count: 1 });
-    clinicFindUniqueMock.mockResolvedValue(CLINIC_OK);
-    conversationFindUniqueMock.mockResolvedValue(CONVERSATION_OK);
-    messageFindFirstMock.mockResolvedValue(null);
   });
 
-  it("lead responde com confirmação (NAO_REMARCA): dispara a sequência — vídeo sai, cafezinho depois", async () => {
+  it("existe pergunta de presença pendente: classifica a resposta mais recente e devolve a decisão junto do appointmentId", async () => {
     appointmentFindFirstMock.mockResolvedValue({ id: "appt-1" });
     classifyAttendanceReplyMock.mockResolvedValue("NAO_REMARCA");
 
-    await maybeHandlePendingAttendanceReply({
-      clinicId: "clinic-1",
+    const result = await checkPendingAttendanceReply({
       conversationId: "conv-1",
       recentHistory: [
         { role: "assistant", content: "Posso contar com a sua presença?" },
@@ -555,24 +594,82 @@ describe("maybeHandlePendingAttendanceReply", () => {
       ],
     });
 
-    // intro + vídeo — cafezinho não é criado aqui (vai em
-    // Message.pendingAttendanceTip, na Message do vídeo — dispatchDueMessages
-    // é quem cria a Message do cafezinho de verdade, só depois do vídeo SENT).
-    expect(messageCreateMock).toHaveBeenCalledTimes(2);
+    expect(result).toEqual({ appointmentId: "appt-1", decision: "NAO_REMARCA" });
+    expect(appointmentFindFirstMock).toHaveBeenCalledWith({
+      where: {
+        conversationId: "conv-1",
+        status: { in: ["SCHEDULED", "CONFIRMED"] },
+        attendancePromptSentAt: { not: null },
+        confirmationVideoSentAt: null,
+      },
+      orderBy: { createdAt: "desc" },
+    });
+  });
+
+  it("sem pergunta de presença pendente (ex.: sequência já enviada antes — segunda resposta ou \"obrigado\" depois): nem chama o classificador, devolve null", async () => {
+    appointmentFindFirstMock.mockResolvedValue(null); // a query real já filtra confirmationVideoSentAt: null
+
+    const result = await checkPendingAttendanceReply({
+      conversationId: "conv-1",
+      recentHistory: [{ role: "user", content: "obrigado!" }],
+    });
+
+    expect(result).toBeNull();
+    expect(classifyAttendanceReplyMock).not.toHaveBeenCalled();
+  });
+
+  it("classificador devolve DUVIDA (inclusive por erro de chamada, já tratado dentro de classifyAttendanceReply): devolve a decisão como DUVIDA mesmo assim — quem decide o que fazer é applyAttendanceReplyDecision", async () => {
+    appointmentFindFirstMock.mockResolvedValue({ id: "appt-1" });
+    classifyAttendanceReplyMock.mockResolvedValue("DUVIDA");
+
+    const result = await checkPendingAttendanceReply({
+      conversationId: "conv-1",
+      recentHistory: [{ role: "user", content: "oi, vcs tem estacionamento?" }],
+    });
+
+    expect(result).toEqual({ appointmentId: "appt-1", decision: "DUVIDA" });
+  });
+});
+
+describe("applyAttendanceReplyDecision", () => {
+  const CLINIC_OK = {
+    confirmationVideoUrl: "https://cdn/video.mp4",
+    confirmationVideoCaption: null,
+    attendanceTipMessage: null,
+    attendanceFinalMessage: null,
+  };
+  const CONVERSATION_OK = { lead: { phone: "21998223038" } };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    appointmentUpdateManyMock.mockResolvedValue({ count: 1 });
+    appointmentFindUniqueMock.mockResolvedValue({ scheduledAt: new Date("2026-10-08T12:00:00.000Z") });
+    clinicFindUniqueMock.mockResolvedValue(CLINIC_OK);
+    conversationFindUniqueMock.mockResolvedValue(CONVERSATION_OK);
+    messageFindFirstMock.mockResolvedValue(null);
+  });
+
+  it("decisão NAO_REMARCA: dispara a sequência (fireAttendanceConfirmationSequence) — só a apresentação sai aqui, o resto vem em cadeia via dispatch.ts", async () => {
+    await applyAttendanceReplyDecision({
+      clinicId: "clinic-1",
+      conversationId: "conv-1",
+      appointmentId: "appt-1",
+      decision: "NAO_REMARCA",
+    });
+
+    expect(messageCreateMock).toHaveBeenCalledTimes(1);
     expect(appointmentUpdateManyMock).toHaveBeenCalledWith({
       where: { id: "appt-1", confirmationVideoSentAt: null },
       data: { confirmationVideoSentAt: expect.any(Date) },
     });
   });
 
-  it('lead pede remarcação (REMARCA): nada sai e o timer (attendancePromptSentAt) é zerado', async () => {
-    appointmentFindFirstMock.mockResolvedValue({ id: "appt-1" });
-    classifyAttendanceReplyMock.mockResolvedValue("REMARCA");
-
-    await maybeHandlePendingAttendanceReply({
+  it('decisão REMARCA: nada sai e o timer (attendancePromptSentAt) é zerado', async () => {
+    await applyAttendanceReplyDecision({
       clinicId: "clinic-1",
       conversationId: "conv-1",
-      recentHistory: [{ role: "user", content: "essa hora não posso, remarca pra amanhã 10h" }],
+      appointmentId: "appt-1",
+      decision: "REMARCA",
     });
 
     expect(messageCreateMock).not.toHaveBeenCalled();
@@ -582,32 +679,84 @@ describe("maybeHandlePendingAttendanceReply", () => {
     });
   });
 
-  it("classificador devolve DUVIDA (inclusive por erro de chamada): não envia nada e não cancela — o timer de 1h decide depois", async () => {
-    appointmentFindFirstMock.mockResolvedValue({ id: "appt-1" });
-    classifyAttendanceReplyMock.mockResolvedValue("DUVIDA");
-
-    await maybeHandlePendingAttendanceReply({
+  it("decisão DUVIDA: não envia nada e não cancela — o timer de 1h decide depois (mesmo comportamento seguro de antes)", async () => {
+    await applyAttendanceReplyDecision({
       clinicId: "clinic-1",
       conversationId: "conv-1",
-      recentHistory: [{ role: "user", content: "oi, vcs tem estacionamento?" }],
+      appointmentId: "appt-1",
+      decision: "DUVIDA",
     });
 
     expect(messageCreateMock).not.toHaveBeenCalled();
     expect(appointmentUpdateManyMock).not.toHaveBeenCalled();
   });
+});
 
-  it("sem pergunta de presença pendente (ex.: sequência já enviada antes — segunda resposta ou \"obrigado\" depois): nem chama o classificador, nunca reenvia", async () => {
-    appointmentFindFirstMock.mockResolvedValue(null); // a query real já filtra confirmationVideoSentAt: null
+// Item explícito pedido: a classificação roda ANTES de generateLeadReply
+// (pra moldar o contextNote deste turno, suprimindo a despedida da própria
+// IA quando a sequência vai disparar) e o MESMO resultado é reaproveitado
+// no fim do turno, por applyAttendanceReplyDecision — nunca uma segunda
+// chamada ao classificador pro mesmo turno, mesmo em caso de erro/DUVIDA.
+describe("checkPendingAttendanceReply + applyAttendanceReplyDecision (reaproveitamento, sem segunda chamada)", () => {
+  const CLINIC_OK = {
+    confirmationVideoUrl: "https://cdn/video.mp4",
+    confirmationVideoCaption: null,
+    attendanceTipMessage: null,
+    attendanceFinalMessage: null,
+  };
+  const CONVERSATION_OK = { lead: { phone: "21998223038" } };
 
-    await maybeHandlePendingAttendanceReply({
+  beforeEach(() => {
+    vi.clearAllMocks();
+    appointmentUpdateManyMock.mockResolvedValue({ count: 1 });
+    appointmentFindUniqueMock.mockResolvedValue({ scheduledAt: new Date("2026-10-08T12:00:00.000Z") });
+    clinicFindUniqueMock.mockResolvedValue(CLINIC_OK);
+    conversationFindUniqueMock.mockResolvedValue(CONVERSATION_OK);
+    messageFindFirstMock.mockResolvedValue(null);
+  });
+
+  it("DUVIDA (ou erro de classificação, já absorvido como DUVIDA): classifica uma única vez, não dispara a sequência, não cancela o timer", async () => {
+    appointmentFindFirstMock.mockResolvedValue({ id: "appt-1" });
+    classifyAttendanceReplyMock.mockResolvedValue("DUVIDA");
+
+    const check = await checkPendingAttendanceReply({
+      conversationId: "conv-1",
+      recentHistory: [{ role: "user", content: "oi, vcs tem estacionamento?" }],
+    });
+    expect(check).toEqual({ appointmentId: "appt-1", decision: "DUVIDA" });
+
+    // Reaproveita o resultado já calculado (como handleInboundInstagramMessage faz
+    // no fim do turno) — não reclassifica.
+    await applyAttendanceReplyDecision({
       clinicId: "clinic-1",
       conversationId: "conv-1",
-      recentHistory: [{ role: "user", content: "obrigado!" }],
+      appointmentId: check!.appointmentId,
+      decision: check!.decision,
     });
 
-    expect(classifyAttendanceReplyMock).not.toHaveBeenCalled();
+    expect(classifyAttendanceReplyMock).toHaveBeenCalledTimes(1);
     expect(messageCreateMock).not.toHaveBeenCalled();
     expect(appointmentUpdateManyMock).not.toHaveBeenCalled();
+  });
+
+  it("NAO_REMARCA: classifica uma única vez e dispara a sequência ao aplicar a decisão reaproveitada", async () => {
+    appointmentFindFirstMock.mockResolvedValue({ id: "appt-1" });
+    classifyAttendanceReplyMock.mockResolvedValue("NAO_REMARCA");
+
+    const check = await checkPendingAttendanceReply({
+      conversationId: "conv-1",
+      recentHistory: [{ role: "user", content: "sim, pode contar comigo!" }],
+    });
+
+    await applyAttendanceReplyDecision({
+      clinicId: "clinic-1",
+      conversationId: "conv-1",
+      appointmentId: check!.appointmentId,
+      decision: check!.decision,
+    });
+
+    expect(classifyAttendanceReplyMock).toHaveBeenCalledTimes(1);
+    expect(messageCreateMock).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -615,7 +764,12 @@ describe("maybeHandlePendingAttendanceReply", () => {
 // lead não responde à pergunta de presença em 1h, respeitando a janela de
 // envio do follow-up (adia se vencer fora da janela, nunca descarta).
 describe("processAttendanceConfirmationTimeouts", () => {
-  const CLINIC_OK = { confirmationVideoUrl: "https://cdn/video.mp4", confirmationVideoCaption: null, attendanceTipMessage: null };
+  const CLINIC_OK = {
+    confirmationVideoUrl: "https://cdn/video.mp4",
+    confirmationVideoCaption: null,
+    attendanceTipMessage: null,
+    attendanceFinalMessage: null,
+  };
   const CONVERSATION_OK = { lead: { phone: "21998223038" } };
   // Segunda-feira 12:00 UTC = 09:00 em Brasília — dentro da janela padrão (08h-18h, seg-sex).
   const NOW_WITHIN_WINDOW = new Date("2026-10-05T12:00:00.000Z");
@@ -626,6 +780,7 @@ describe("processAttendanceConfirmationTimeouts", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     appointmentUpdateManyMock.mockResolvedValue({ count: 1 });
+    appointmentFindUniqueMock.mockResolvedValue({ scheduledAt: new Date("2026-10-08T12:00:00.000Z") });
     clinicFindUniqueMock.mockResolvedValue(CLINIC_OK);
     conversationFindUniqueMock.mockResolvedValue(CONVERSATION_OK);
     getFollowUpWindowSettingsMock.mockResolvedValue(DEFAULT_WINDOW_SETTINGS);
@@ -654,7 +809,7 @@ describe("processAttendanceConfirmationTimeouts", () => {
     const result = await processAttendanceConfirmationTimeouts();
 
     expect(result).toEqual({ fired: 1 });
-    expect(messageCreateMock).toHaveBeenCalledTimes(2); // intro + vídeo (cafezinho vem depois, via dispatch.ts)
+    expect(messageCreateMock).toHaveBeenCalledTimes(1); // só a apresentação — o resto vem em cadeia, via dispatch.ts
   });
 
   it("1h vencida FORA da janela de envio: adia (não dispara nada neste ciclo, mas não descarta)", async () => {
@@ -685,6 +840,6 @@ describe("processAttendanceConfirmationTimeouts", () => {
     const result = await processAttendanceConfirmationTimeouts();
 
     expect(result).toEqual({ fired: 1 }); // só o "good" disparou
-    expect(messageCreateMock).toHaveBeenCalledTimes(2); // intro + vídeo do "good"
+    expect(messageCreateMock).toHaveBeenCalledTimes(1); // só a apresentação do "good"
   });
 });

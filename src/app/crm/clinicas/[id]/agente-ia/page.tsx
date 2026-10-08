@@ -168,8 +168,27 @@ export default async function ClinicAiAgentPage({ params }: { params: { id: stri
                         className="w-full rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5 text-xs outline-none focus:border-vexo-accent"
                       />
                       <p className="mt-1 text-caption text-vexo-muted">
-                        Enviada 20 segundos depois do vídeo de confirmação, sempre nessa ordem — a IA não escreve
+                        Enviada 10 segundos depois do vídeo de confirmação, sempre nessa ordem — a IA não escreve
                         mais esse texto sozinha. Vazio usa a frase padrão acima.
+                      </p>
+                    </div>
+
+                    <div>
+                      <label className="mb-1 block text-xs text-vexo-muted" htmlFor="attendanceFinalMessage">
+                        Mensagem final (depois do cafezinho)
+                      </label>
+                      <input
+                        id="attendanceFinalMessage"
+                        name="attendanceFinalMessage"
+                        defaultValue={clinic.attendanceFinalMessage ?? ""}
+                        placeholder='Ex: Perfeito, até {{dia}}.'
+                        className="w-full rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5 text-xs outline-none focus:border-vexo-accent"
+                      />
+                      <p className="mt-1 text-caption text-vexo-muted">
+                        Enviada 10 segundos depois do cafezinho, encerrando a sequência — a IA não escreve mais
+                        despedida nenhuma quando o lead confirma presença, pra não duplicar esta mensagem. Use{" "}
+                        <code>{"{{dia}}"}</code> onde quiser o dia calculado automaticamente ("amanhã", "hoje" ou
+                        o dia da semana, ex. "sexta"). Vazio usa a frase padrão acima.
                       </p>
                     </div>
                   </div>

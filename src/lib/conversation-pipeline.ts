@@ -6,6 +6,7 @@ import {
   summarizeOlderTurns,
   type AgentTools,
   type ChatTurn,
+  type AttendanceReplyDecision,
 } from "@/lib/anthropic";
 import { buildConversationContext, withOlderSummary } from "@/lib/conversation-context";
 import {
@@ -38,7 +39,7 @@ import { nextValidSendTime } from "@/lib/follow-up-window";
 import { toChatHistory } from "@/lib/chat-history";
 import { buildResultPhotoMessages, type ResultPhotoInput } from "@/lib/result-photo-message";
 import { detectStagnation, STAGNATION_SIMILARITY_THRESHOLD, STAGNATION_WINDOW_SIZE } from "@/lib/loop-guard";
-import { parseBrazilLocalDateTime, formatAsBrazilLocalDateTime } from "@/lib/timezone";
+import { parseBrazilLocalDateTime, formatAsBrazilLocalDateTime, startOfBrazilDay } from "@/lib/timezone";
 import { resolveBatchTimestamps } from "@/lib/message-batch-timestamps";
 
 export { toChatHistory } from "@/lib/chat-history";
@@ -47,39 +48,49 @@ export { toChatHistory } from "@/lib/chat-history";
 // /crm/clinicas/[id]/agente-ia) — ver a ferramenta scheduleAppointment mais abaixo.
 const DEFAULT_CONFIRMATION_VIDEO_CAPTION = "Vou te mandar um vídeo rápido mostrando como é o nosso atendimento 🙂";
 
-// Sequência de confirmação de presença (vídeo institucional + cafezinho) —
-// ver fireAttendanceConfirmationSequence, mais abaixo. Constantes nomeadas
-// de propósito (antes eram números soltos dentro da função) — ajuste aqui
-// pra mudar o timing sem precisar caçar literais pelo arquivo.
+// Sequência de confirmação de presença (apresentação -> vídeo institucional
+// -> cafezinho -> frase final) — ver fireAttendanceConfirmationSequence,
+// PendingAttendanceStep e dispatch.ts. Constantes nomeadas de propósito
+// (antes eram números soltos dentro da função) — ajuste aqui pra mudar o
+// timing sem precisar caçar literais pelo arquivo.
 //
 // Intervalo entre o fim do turno (ou o disparo do job de timeout) e a
-// frase que anuncia o vídeo, e deste até o vídeo em si — mesmo motivo de
-// sempre: a API do Instagram não deixa combinar texto + mídia numa única
-// mensagem, então saem sempre como dois envios separados.
+// frase que anuncia o vídeo — a API do Instagram não deixa combinar texto
+// + mídia numa única mensagem, então vídeo e apresentação saem sempre como
+// dois envios separados.
 //
-// 10s -> 15s (ajuste pedido): o gap entre a resposta da IA (confirmação do
-// agendamento) e a apresentação do vídeo era MENOR que o intervalo do
+// 10s -> 15s (ajuste anterior): o gap entre a resposta da IA (confirmação
+// do agendamento) e a apresentação do vídeo era MENOR que o intervalo do
 // worker de despacho (dispatchDueMessages, a cada 15s — ver
-// DISPATCH_INTERVAL_MS, src/worker/index.ts) — mesmo com a âncora
-// corrigida (afterScheduledFor buscado no banco, nunca no passado — ver
+// DISPATCH_INTERVAL_MS, src/worker/index.ts) — mesmo com a âncora corrigida
+// (afterScheduledFor buscado no banco, nunca no passado — ver
 // fireAttendanceConfirmationSequence), ainda existia uma janela estrutural
-// em que as duas mensagens caíam no MESMO ciclo de 15s e saíam coladas,
-// sem pausa real entre elas. 15s elimina essa janela por completo: o gap
-// agendado nunca é menor que o próprio intervalo do worker.
+// em que as duas mensagens caíam no MESMO ciclo de 15s e saíam coladas, sem
+// pausa real entre elas. 15s elimina essa janela por completo: o gap
+// agendado nunca é menor que o próprio intervalo do worker. Mantida nesse
+// valor no ajuste atual (pedido explícito).
 const ATTENDANCE_VIDEO_INTRO_DELAY_MS = 15_000;
-// Continua 5s depois da apresentação (pedido explícito) — só acompanha o
-// ajuste acima pra manter esse mesmo intervalo relativo.
-const ATTENDANCE_VIDEO_DELAY_MS = 20_000;
-// Intervalo entre o vídeo e o cafezinho — pedido explícito: vídeo primeiro
-// (pra não passar despercebido), cafezinho só depois, nunca colados.
-// Contado a partir do ENVIO REAL do vídeo (sentAt, confirmado por
-// dispatchDueMessages — ver Message.pendingAttendanceTip), não mais de um
-// scheduledFor calculado adiantado: a Meta aceita o pedido do vídeo rápido,
-// mas busca/processa a mídia de forma assíncrona do lado deles, e um
-// cafezinho (texto puro) agendado num relógio cego podia chegar antes do
-// vídeo mesmo com os dois scheduledFor na ordem certa. Exportada pra
-// dispatch.ts reaproveitar o mesmo número, sem duplicar a constante.
-export const ATTENDANCE_TIP_DELAY_AFTER_VIDEO_MS = 20_000; // 20s
+// Vídeo, cafezinho e frase final: cada um ancorado no ENVIO REAL (sentAt,
+// confirmado por dispatchDueMessages) do elo ANTERIOR — nunca num
+// scheduledFor calculado adiantado no momento da criação de um elo mais
+// cedo na cadeia. Mesmo motivo sempre: a Meta aceita o pedido de um vídeo
+// rápido, mas busca/processa a mídia de forma assíncrona do lado deles —
+// um elo de texto puro (entrega quase instantânea) agendado num relógio
+// cego podia chegar ANTES do elo anterior mesmo com os scheduledFor/sentAt
+// na ordem certa dos dois lados nossos. Ver PendingAttendanceStep,
+// encodePendingAttendanceStep/decodePendingAttendanceStep e o uso em
+// dispatch.ts — cada elo só é criado depois de CONFIRMAR o SENT do
+// anterior, nunca em lote junto com ele (o que também garante, por
+// construção, que dois elos consecutivos nunca saem no mesmo ciclo do
+// dispatch: a Message do próximo elo não existe ainda quando o `due` do
+// ciclo atual foi lido — só entra na consulta do ciclo seguinte).
+export const ATTENDANCE_VIDEO_DELAY_AFTER_INTRO_MS = 10_000;
+// Exportada pra dispatch.ts reaproveitar o mesmo número, sem duplicar a
+// constante. 20s -> 10s (ajuste pedido: toda a cadeia unificada em +10s
+// por elo).
+export const ATTENDANCE_TIP_DELAY_AFTER_VIDEO_MS = 10_000;
+// Frase final ("Perfeito, até [dia].") — mesmo intervalo dos outros elos.
+export const ATTENDANCE_FINAL_DELAY_AFTER_TIP_MS = 10_000;
 // Tempo de espera pela resposta do lead à pergunta de presença antes do
 // job de timeout disparar a sequência sozinho (ver
 // processAttendanceConfirmationTimeouts) — respeitando a janela de envio
@@ -94,6 +105,77 @@ const ATTENDANCE_AUTO_SEND_AFTER_MS = 60 * 60 * 1000; // 1h
 // depender de uma mensagem nova do lead (ver timeout de 1h acima).
 const DEFAULT_ATTENDANCE_TIP_MESSAGE =
   "Se puder, chegue uns 15 minutinhos antes, teremos um cafezinho te esperando.";
+
+// Última mensagem da cadeia (ver ATTENDANCE_FINAL_DELAY_AFTER_TIP_MS acima)
+// — mesmo padrão de DEFAULT_ATTENDANCE_TIP_MESSAGE: texto fixo por clínica
+// (Clinic.attendanceFinalMessage), nunca escrito pela IA. "{{dia}}" é
+// substituído por describeAppointmentDay (abaixo) — "amanhã", "hoje" ou o
+// dia da semana, calculado a partir de Appointment.scheduledAt no momento
+// em que a sequência começa (ver fireAttendanceConfirmationSequence). Sem
+// exclamação/emoji/travessão (pedido explícito) — tom neutro, mesma família
+// das outras mensagens fixas da sequência.
+const DEFAULT_ATTENDANCE_FINAL_MESSAGE = "Perfeito, até {{dia}}.";
+
+const WEEKDAY_NAMES_PT_BR = ["domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sábado"];
+
+// "amanhã"/"hoje"/dia da semana, comparando o DIA em Brasília (startOfBrazilDay,
+// src/lib/timezone.ts) do agendamento contra o de "agora" — nunca a
+// diferença em horas corridas (um agendamento às 23h50 de "hoje" não pode
+// virar "amanhã" só porque faltam poucas horas, e um às 00h10 de "amanhã"
+// não pode virar "hoje" só por estar a poucas horas de distância).
+function describeAppointmentDay(scheduledAt: Date, now: Date): string {
+  const diffDays = Math.round(
+    (startOfBrazilDay(scheduledAt).getTime() - startOfBrazilDay(now).getTime()) / (24 * 60 * 60 * 1000)
+  );
+  if (diffDays === 0) return "hoje";
+  if (diffDays === 1) return "amanhã";
+  // startOfBrazilDay devolve o instante UTC correspondente à meia-noite em
+  // Brasília daquele dia — como o deslocamento fixo (+3h) nunca atravessa
+  // a virada de dia em UTC partindo de 00:00 BRT, getUTCDay() já é o dia da
+  // semana certo em Brasília, sem precisar de mais nenhuma conversão.
+  return WEEKDAY_NAMES_PT_BR[startOfBrazilDay(scheduledAt).getUTCDay()]!;
+}
+
+function resolveAttendanceFinalMessage(clinicTemplate: string | null | undefined, scheduledAt: Date, now: Date): string {
+  const template = clinicTemplate?.trim() || DEFAULT_ATTENDANCE_FINAL_MESSAGE;
+  return template.replaceAll("{{dia}}", describeAppointmentDay(scheduledAt, now));
+}
+
+// Carregado no campo Message.pendingAttendanceStep (JSON) — descreve o
+// PRÓXIMO elo da cadeia de confirmação de presença e tudo que ele precisa
+// pra ser criado, mais o que os elos SEGUINTES vão precisar (appointmentId/
+// scheduledAtMs/finalText viajam por toda a cadeia, não só pro elo
+// imediatamente seguinte). Ver dispatch.ts — só é consumido depois de
+// confirmar o SENT do elo atual.
+export type PendingAttendanceStep =
+  | { next: "video"; mediaUrl: string; tipText: string; finalText: string; appointmentId: string; scheduledAtMs: number }
+  | { next: "tip"; tipText: string; finalText: string; appointmentId: string; scheduledAtMs: number }
+  | { next: "final"; finalText: string; appointmentId: string; scheduledAtMs: number };
+
+export function encodePendingAttendanceStep(step: PendingAttendanceStep): string {
+  return JSON.stringify(step);
+}
+
+// null em qualquer JSON inválido/inesperado — defensivo (nunca deveria
+// acontecer, já que só este arquivo escreve este campo), mas um valor
+// corrompido não pode travar o despacho da mensagem em si, só pular o
+// próximo elo (mesmo espírito de "falha num elo nunca envia o próximo
+// sozinho", ver comentário grande em fireAttendanceConfirmationSequence).
+export function decodePendingAttendanceStep(raw: string): PendingAttendanceStep | null {
+  try {
+    const parsed = JSON.parse(raw);
+    if (
+      parsed &&
+      typeof parsed === "object" &&
+      (parsed.next === "video" || parsed.next === "tip" || parsed.next === "final")
+    ) {
+      return parsed as PendingAttendanceStep;
+    }
+  } catch {
+    // ignora — JSON inválido cai no null abaixo
+  }
+  return null;
+}
 
 export type InboundInstagramEvent = {
   igUserId: string; // ID da conta profissional do Instagram da clínica (destinatária)
@@ -872,6 +954,18 @@ export async function handleInboundInstagramMessage(
     return;
   }
 
+  // Calculado ANTES de generateLeadReply (não só no fim do turno, como
+  // antes) — ver comentário grande em checkPendingAttendanceReply pro
+  // motivo: a resposta deste turno precisa saber de antemão se a sequência
+  // de confirmação de presença vai disparar, pra não escrever sua própria
+  // despedida (ver attendanceConfirmedContext, mais abaixo) e duplicar a
+  // frase final. Reaproveitado no fim do turno (applyAttendanceReplyDecision)
+  // — nunca reclassifica.
+  const pendingAttendanceCheck = await checkPendingAttendanceReply({
+    conversationId: conversation.id,
+    recentHistory: chatHistory.slice(-6),
+  });
+
   // Janela de mensagens recentes mandadas por inteiro pra IA de
   // conversação (generateLeadReply, mais abaixo) — o que ficar de fora
   // vira um resumo curto (ver buildConversationContext/withOlderSummary em
@@ -1033,6 +1127,27 @@ export async function handleInboundInstagramMessage(
     `dor/queixa/objetivo a conversa pode seguir normalmente pro agendamento, como o resto ` +
     `deste prompt já orienta.]`;
 
+  // Só existe quando pendingAttendanceCheck (acima, calculado ANTES desta
+  // chamada) classificou a resposta deste turno como NAO_REMARCA — ou seja,
+  // a sequência de confirmação de presença (apresentação + vídeo +
+  // cafezinho + frase final) vai disparar no fim deste mesmo turno (ver
+  // applyAttendanceReplyDecision, mais abaixo). Pedido explícito: a IA não
+  // pode mais escrever sua própria despedida nesse caso, pra não duplicar
+  // a frase final que o código já vai mandar. Ajuste só de instrução
+  // interna (este bloco) — nunca em Clinic.aiSystemPrompt nem no prompt
+  // padrão; e não descarta reply.text (ver decisão grande nesta mesma
+  // investigação) — a IA continua respondendo normalmente a qualquer outra
+  // coisa que o lead tenha dito junto da confirmação, só sem a despedida.
+  const attendanceConfirmedContext =
+    pendingAttendanceCheck?.decision === "NAO_REMARCA"
+      ? `[O lead acabou de confirmar presença. Responda de forma breve e natural (ex.: ` +
+        `agradecendo, confirmando que anotou) — mas NÃO inclua nenhuma despedida ou frase de ` +
+        `encerramento (ex.: "até amanhã", "até mais", "nos vemos", "até sexta"): o sistema vai ` +
+        `enviar uma mensagem de encerramento separada automaticamente, junto do vídeo ` +
+        `institucional. Se o lead tiver dito mais alguma coisa junto da confirmação (uma ` +
+        `pergunta, um aviso — ex.: "vou chegar atrasada"), responda essa parte normalmente.]`
+      : null;
+
   const reply = await generateLeadReply({
     // Separados (não mais concatenados numa string só) pra permitir prompt
     // caching: basePrompt é estável por clínica, dateTimeContext muda a
@@ -1040,8 +1155,9 @@ export async function handleInboundInstagramMessage(
     systemPrompt: basePrompt,
     // interestGateContext vai DEPOIS de dateTimeContext de propósito — ver
     // comentário grande acima (tem prioridade sobre qualquer instrução de
-    // agendamento incondicional no prompt da clínica).
-    contextNote: `${dateTimeContext}\n\n${interestGateContext}`,
+    // agendamento incondicional no prompt da clínica). attendanceConfirmedContext
+    // (quando existe) vai por último — a mais específica/recente das três.
+    contextNote: [dateTimeContext, interestGateContext, attendanceConfirmedContext].filter(Boolean).join("\n\n"),
     history: windowedHistory,
     tools: {
       checkAvailability: buildAvailabilityCheck(clinic.id, conversation.id, (reason) => {
@@ -1569,19 +1685,25 @@ export async function handleInboundInstagramMessage(
   // pra IA, e só devolve isso depois que o evento realmente existe. Ver o
   // comentário grande lá pro bug crítico que motivou essa mudança.
 
-  // Sequência de confirmação de presença (vídeo + cafezinho) — avaliada num
-  // ÚNICO ponto, sempre no final de handleInboundInstagramMessage, depois
-  // que TUDO mais deste turno (resposta em texto, agendamento e foto de
-  // resultado, se houver) já foi decidido. Não precisa mais passar um
+  // Sequência de confirmação de presença (apresentação + vídeo + cafezinho
+  // + frase final) — aplicada num ÚNICO ponto, sempre no final de
+  // handleInboundInstagramMessage, depois que TUDO mais deste turno
+  // (resposta em texto, agendamento e foto de resultado, se houver) já foi
+  // decidido. Reaproveita pendingAttendanceCheck, calculado ANTES de
+  // generateLeadReply (ver comentário grande lá) — nunca chama
+  // classifyAttendanceReply de novo pra este turno. Não precisa passar um
   // scheduledFor rastreado localmente aqui — fireAttendanceConfirmationSequence
   // busca a referência direto no banco (última Message OUTBOUND ainda
   // PENDING da conversa), a mesma lógica pros dois chamadores (resposta do
   // lead neste turno e o job de timeout de 1h). Ver comentário grande lá.
-  await maybeHandlePendingAttendanceReply({
-    clinicId: clinic.id,
-    conversationId: conversation.id,
-    recentHistory: chatHistory.slice(-6),
-  });
+  if (pendingAttendanceCheck) {
+    await applyAttendanceReplyDecision({
+      clinicId: clinic.id,
+      conversationId: conversation.id,
+      appointmentId: pendingAttendanceCheck.appointmentId,
+      decision: pendingAttendanceCheck.decision,
+    });
+  }
 
   // Confirmação IMEDIATA do agendamento por WhatsApp — diferente da
   // sequência acima (que só sai depois da resposta do lead à pergunta de
@@ -1614,20 +1736,23 @@ export function buildCalendarEventDescription(params: { leadName: string; leadPh
 
 // Avalia se existe uma pergunta de presença pendente pra esta conversa
 // (Appointment.attendancePromptSentAt setado por scheduleAppointment,
-// sequência ainda não disparada) e, se existir, classifica a resposta
-// mais recente do lead (classifyAttendanceReply, anthropic.ts) pra
-// decidir o que fazer — ver fireAttendanceConfirmationSequence, mais
-// abaixo, pro contexto completo da sequência vídeo+cafezinho. Extraída
-// num nome próprio (em vez de inline no fim de handleInboundInstagramMessage)
-// só pra poder testar isolada — mesmo padrão de buildAvailabilityCheck.
+// sequência ainda não disparada) e, se existir, classifica a resposta mais
+// recente do lead (classifyAttendanceReply, anthropic.ts). Separada de
+// applyAttendanceReplyDecision (abaixo) — e chamada ANTES de
+// generateLeadReply, não só no fim do turno como antes — porque a resposta
+// da IA pra este MESMO turno precisa saber, de antemão, se a sequência vai
+// disparar (pra não escrever sua própria despedida e duplicar a frase
+// final, ver attendanceConfirmedContext/contextNote em
+// handleInboundInstagramMessage). O resultado é reaproveitado no fim do
+// turno (applyAttendanceReplyDecision) — NUNCA chama classifyAttendanceReply
+// de novo pra esse mesmo turno.
 //
 // Fora de um agendamento recém-confirmado isso é raro, então o lookup
 // extra em toda mensagem nova é barato.
-export async function maybeHandlePendingAttendanceReply(params: {
-  clinicId: string;
+export async function checkPendingAttendanceReply(params: {
   conversationId: string;
   recentHistory: ChatTurn[];
-}): Promise<void> {
+}): Promise<{ appointmentId: string; decision: AttendanceReplyDecision } | null> {
   const pendingAttendanceAppointment = await prisma.appointment.findFirst({
     where: {
       conversationId: params.conversationId,
@@ -1637,27 +1762,45 @@ export async function maybeHandlePendingAttendanceReply(params: {
     },
     orderBy: { createdAt: "desc" },
   });
-  if (!pendingAttendanceAppointment) return;
+  if (!pendingAttendanceAppointment) return null;
 
   // classifyAttendanceReply (anthropic.ts) substitui a antiga tool
   // confirm_attendance — classifica a resposta do lead em
-  // REMARCA/NAO_REMARCA/DUVIDA. DUVIDA (ambiguidade OU qualquer erro de
-  // chamada/parsing — ver a função) não faz nada aqui de propósito: nem
-  // dispara a sequência, nem cancela o timer de 1h — deixa o job de
-  // timeout (processAttendanceConfirmationTimeouts) decidir mais tarde,
-  // com mais contexto (ou nenhum, se o lead nunca mais responder).
+  // REMARCA/NAO_REMARCA/DUVIDA. Nunca lança (ver a função — qualquer erro
+  // de chamada/parsing já cai em DUVIDA sozinho), e DUVIDA é tratado em
+  // applyAttendanceReplyDecision exatamente como "nada pendente ainda":
+  // nem dispara a sequência, nem cancela o timer de 1h, e (ver
+  // handleInboundInstagramMessage) nem muda a instrução da IA pra esse
+  // turno — o job de timeout (processAttendanceConfirmationTimeouts)
+  // decide mais tarde, com mais contexto (ou nenhum, se o lead nunca mais
+  // responder). Mesmo comportamento seguro de sempre, só que decidido mais
+  // cedo no turno.
   const decision = await classifyAttendanceReply(params.recentHistory);
-  if (decision === "REMARCA") {
+  return { appointmentId: pendingAttendanceAppointment.id, decision };
+}
+
+// Aplica a decisão já calculada por checkPendingAttendanceReply — nunca
+// reclassifica. Separada só pra poder ser chamada depois de
+// generateLeadReply, no fim do turno (mesmo ponto onde
+// maybeHandlePendingAttendanceReply, versão anterior desta função, era
+// chamada), sem duplicar a classificação feita mais cedo no mesmo turno.
+export async function applyAttendanceReplyDecision(params: {
+  clinicId: string;
+  conversationId: string;
+  appointmentId: string;
+  decision: AttendanceReplyDecision;
+}): Promise<void> {
+  if (params.decision === "REMARCA") {
     // Cancela a espera — o fluxo de remarcação segue normal pelo resto da
     // conversa (schedule_appointment, se o lead der um horário novo, seta
     // attendancePromptSentAt de novo — ver comentário lá).
     await prisma.appointment.updateMany({
-      where: { id: pendingAttendanceAppointment.id, confirmationVideoSentAt: null },
+      where: { id: params.appointmentId, confirmationVideoSentAt: null },
       data: { attendancePromptSentAt: null },
     });
-  } else if (decision === "NAO_REMARCA") {
+  } else if (params.decision === "NAO_REMARCA") {
     await fireAttendanceConfirmationSequence({
-      appointmentId: pendingAttendanceAppointment.id,
+      appointmentId: params.appointmentId,
       clinicId: params.clinicId,
       conversationId: params.conversationId,
     });
@@ -1703,9 +1846,14 @@ export async function fireAttendanceConfirmationSequence(params: {
   clinicId: string;
   conversationId: string;
 }): Promise<boolean> {
-  const [clinic, conversation] = await Promise.all([
+  const [clinic, conversation, appointment] = await Promise.all([
     prisma.clinic.findUnique({ where: { id: params.clinicId } }),
     prisma.conversation.findUnique({ where: { id: params.conversationId }, include: { lead: true } }),
+    // scheduledAt capturado AQUI, antes de qualquer envio — é o valor
+    // contra o qual a frase final (último elo, ver dispatch.ts) confere se
+    // o agendamento foi remarcado nesse meio-tempo, antes de decidir se
+    // ainda faz sentido mandar "até [dia]".
+    prisma.appointment.findUnique({ where: { id: params.appointmentId }, select: { scheduledAt: true } }),
   ]);
   // Sem vídeo configurado ou sem WhatsApp do lead ainda — não é erro, só
   // significa "ainda não é a hora"; a próxima chamada (job de 1h seguinte,
@@ -1714,6 +1862,7 @@ export async function fireAttendanceConfirmationSequence(params: {
   // o que enviar de verdade.
   if (!clinic?.confirmationVideoUrl) return false;
   if (!conversation?.lead.phone) return false;
+  if (!appointment) return false; // defensivo — appointmentId sempre vem de uma query que já filtra agendamento existente
 
   const claim = await prisma.appointment.updateMany({
     where: { id: params.appointmentId, confirmationVideoSentAt: null },
@@ -1752,10 +1901,6 @@ export async function fireAttendanceConfirmationSequence(params: {
   // é a MESMA lógica pros dois chamadores (resposta do lead no mesmo turno
   // e o job de 1h) — elimina a dependência de cada um calcular/rastrear
   // isso por conta própria.
-  //
-  // Frase-intro + vídeo primeiro (API do Instagram não combina texto e
-  // mídia numa mensagem só, por isso são dois envios separados — mesmo
-  // padrão dos passos de follow-up com anexo em follow-up.ts).
   const latestPendingOutbound = await prisma.message.findFirst({
     where: { conversationId: params.conversationId, direction: "OUTBOUND", status: "PENDING" },
     orderBy: [{ scheduledFor: "desc" }, { id: "desc" }],
@@ -1764,46 +1909,36 @@ export async function fireAttendanceConfirmationSequence(params: {
   const afterScheduledFor = new Date(Math.max(Date.now(), latestPendingOutbound?.scheduledFor?.getTime() ?? 0));
 
   const introAt = new Date(afterScheduledFor.getTime() + ATTENDANCE_VIDEO_INTRO_DELAY_MS);
-  const videoAt = new Date(afterScheduledFor.getTime() + ATTENDANCE_VIDEO_DELAY_MS);
   const introText = clinic.confirmationVideoCaption?.trim() || DEFAULT_CONFIRMATION_VIDEO_CAPTION;
   const tipText = clinic.attendanceTipMessage?.trim() || DEFAULT_ATTENDANCE_TIP_MESSAGE;
+  const finalText = resolveAttendanceFinalMessage(clinic.attendanceFinalMessage, appointment.scheduledAt, new Date());
 
-  // O cafezinho NÃO é criado aqui — bug real corrigido: com scheduledFor
-  // calculado adiantado (videoAt + 20s), o cafezinho (texto puro, entrega
-  // quase instantânea) podia chegar antes do vídeo, porque a Meta aceita o
-  // pedido do vídeo rápido mas busca/processa a mídia de forma assíncrona
-  // do lado deles — nosso sentAt só certifica "a Meta aceitou", nunca "o
-  // vídeo chegou". Em vez de um relógio cego, o texto do cafezinho (já
-  // resolvido aqui, por clínica) viaja DENTRO da própria mensagem do
-  // vídeo (Message.pendingAttendanceTip) — dispatchDueMessages
-  // (src/lib/dispatch.ts) só cria a Message do cafezinho de verdade depois
-  // de CONFIRMAR o envio deste vídeo (status SENT), ancorada no sentAt
-  // real dele + ATTENDANCE_TIP_DELAY_AFTER_VIDEO_MS. Se o vídeo falhar, a
-  // Message do cafezinho nunca chega a ser criada (ver dispatch.ts).
-  await prisma.$transaction([
-    prisma.message.create({
-      data: {
-        conversationId: params.conversationId,
-        direction: "OUTBOUND",
-        sender: "SYSTEM",
-        content: introText,
-        status: "PENDING",
-        scheduledFor: introAt,
-      },
-    }),
-    prisma.message.create({
-      data: {
-        conversationId: params.conversationId,
-        direction: "OUTBOUND",
-        sender: "SYSTEM",
-        content: "[vídeo de confirmação de agendamento]",
+  // Só a apresentação é criada aqui — vídeo, cafezinho e frase final são
+  // criados em CADEIA, cada um só depois que dispatch.ts confirma o SENT
+  // do anterior (ver PendingAttendanceStep, no topo do arquivo, e o
+  // comentário grande em ATTENDANCE_VIDEO_DELAY_AFTER_INTRO_MS). O que o
+  // vídeo vai precisar (mediaUrl) e tudo que os elos seguintes vão
+  // precisar (tipText/finalText/appointmentId/scheduledAtMs) já viaja
+  // resolvido daqui — nenhum elo mais adiante recalcula nada por conta
+  // própria, só repassa.
+  await prisma.message.create({
+    data: {
+      conversationId: params.conversationId,
+      direction: "OUTBOUND",
+      sender: "SYSTEM",
+      content: introText,
+      status: "PENDING",
+      scheduledFor: introAt,
+      pendingAttendanceStep: encodePendingAttendanceStep({
+        next: "video",
         mediaUrl: clinic.confirmationVideoUrl,
-        status: "PENDING",
-        scheduledFor: videoAt,
-        pendingAttendanceTip: tipText,
-      },
-    }),
-  ]);
+        tipText,
+        finalText,
+        appointmentId: params.appointmentId,
+        scheduledAtMs: appointment.scheduledAt.getTime(),
+      }),
+    },
+  });
   return true;
 }
 

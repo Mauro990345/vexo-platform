@@ -81,6 +81,17 @@ model Clinic {
   // (ver DEFAULT_ATTENDANCE_TIP_MESSAGE em conversation-pipeline.ts).
   attendanceTipMessage String? @db.Text
 
+  // Última mensagem da sequência de confirmação de presença, enviada
+  // DEPOIS do cafezinho acima (ver ATTENDANCE_FINAL_DELAY_AFTER_TIP_MS em
+  // conversation-pipeline.ts) — mesmo padrão de attendanceTipMessage:
+  // texto fixo por clínica, disparado em código, nunca escrito pela IA.
+  // Suporta o placeholder "{{dia}}" (substituído por "amanhã", "hoje" ou
+  // o dia da semana, calculado a partir de Appointment.scheduledAt no
+  // momento em que a sequência começa) — sem esse placeholder, o texto
+  // sai sem o dia. Null usa o texto padrão (ver
+  // DEFAULT_ATTENDANCE_FINAL_MESSAGE em conversation-pipeline.ts).
+  attendanceFinalMessage String? @db.Text
+
   // Delay de resposta da IA quando o lead está em silêncio há até 1h (ver
   // computeAdaptiveDelaySeconds em src/lib/scheduler.ts) — por clínica,
   // não global: cada uma pode querer um tom de "primeira resposta"
@@ -620,21 +631,31 @@ model Message {
   sentAt       DateTime?
   failReason   String?
 
-  // Preenchido SÓ na mensagem do vídeo de confirmação de presença (ver
-  // fireAttendanceConfirmationSequence, conversation-pipeline.ts) — já
-  // guarda o texto do cafezinho, resolvido no momento de criar o vídeo.
-  // dispatchDueMessages (src/lib/dispatch.ts) só cria a Message do
-  // cafezinho de verdade depois de CONFIRMAR o envio deste vídeo (status
-  // SENT) — nunca antes, nunca num relógio cego. Bug real corrigido: o
-  // cafezinho tinha scheduledFor fixo, calculado no mesmo instante do
-  // vídeo; a Meta aceita o pedido do vídeo rápido mas processa/entrega a
-  // mídia de forma assíncrona (busca a URL, transcodifica) — o cafezinho
-  // (texto puro, entrega quase instantânea) podia chegar ANTES do vídeo
-  // mesmo com scheduledFor/sentAt na ordem certa dos dois lados nossos.
-  // Zerado atomicamente (updateMany condicional) no momento de criar o
-  // cafezinho — garante no máximo um cafezinho por vídeo, mesmo se o
-  // envio for reprocessado. null em toda mensagem que não é essa.
-  pendingAttendanceTip String? @db.Text
+  // Generalizado (era "pendingAttendanceTip", só o texto do cafezinho na
+  // Message do vídeo) pra carregar TODA a cadeia de confirmação de
+  // presença: intro -> vídeo -> cafezinho -> frase final (ver
+  // fireAttendanceConfirmationSequence e PendingAttendanceStep,
+  // conversation-pipeline.ts). @map mantém o nome da COLUNA no banco
+  // igual ("pendingAttendanceTip") — renomear só o campo do Prisma
+  // Client, sem migration, sem tocar em nenhuma linha existente (uma
+  // Message antiga com esse campo preenchido continua sendo lida/zerada
+  // do mesmo jeito, só com um nome de propriedade diferente no código).
+  //
+  // Guarda um JSON (ver encodePendingAttendanceStep/decodePendingAttendanceStep)
+  // com o que falta criar a seguir e os dados pra isso: mediaUrl/tipText/
+  // finalText/appointmentId/scheduledAtMs, dependendo do elo. dispatchDueMessages
+  // (src/lib/dispatch.ts) só cria o PRÓXIMO elo depois de CONFIRMAR o
+  // envio do elo atual (status SENT) — nunca antes, nunca num relógio
+  // cego: a Meta aceita o pedido de um vídeo rápido mas processa/entrega
+  // a mídia de forma assíncrona, então um próximo elo (texto puro, entrega
+  // quase instantânea) agendado num scheduledFor calculado adiantado podia
+  // chegar ANTES do elo anterior mesmo com os scheduledFor/sentAt na ordem
+  // certa dos dois lados nossos. Zerado atomicamente (updateMany
+  // condicional) no momento de criar o próximo elo — garante no máximo
+  // uma criação por elo, mesmo se o envio for reprocessado. null em toda
+  // mensagem que não tem mais nada pendente na cadeia (inclui a última,
+  // a frase final).
+  pendingAttendanceStep String? @map("pendingAttendanceTip") @db.Text
 
   createdAt DateTime @default(now())
   // Usado só pra detectar uma mensagem presa em SENDING (processo do

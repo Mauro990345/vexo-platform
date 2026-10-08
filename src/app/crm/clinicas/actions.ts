@@ -99,6 +99,7 @@ export async function updateAiAgentSettings(clinicId: string, formData: FormData
   const aiSystemPrompt = String(formData.get("aiSystemPrompt") ?? "").trim() || null;
   const confirmationVideoCaption = String(formData.get("confirmationVideoCaption") ?? "").trim() || null;
   const attendanceTipMessage = String(formData.get("attendanceTipMessage") ?? "").trim() || null;
+  const attendanceFinalMessage = String(formData.get("attendanceFinalMessage") ?? "").trim() || null;
 
   // Mesmo padrão de upload do anexo de follow-up (ver
   // src/app/crm/(global)/follow-up/actions.ts): campo de arquivo em vez de
@@ -120,7 +121,7 @@ export async function updateAiAgentSettings(clinicId: string, formData: FormData
 
   await prisma.clinic.update({
     where: { id: clinicId },
-    data: { aiSystemPrompt, confirmationVideoUrl, confirmationVideoCaption, attendanceTipMessage },
+    data: { aiSystemPrompt, confirmationVideoUrl, confirmationVideoCaption, attendanceTipMessage, attendanceFinalMessage },
   });
 
   revalidatePath(`/crm/clinicas/${clinicId}/agente-ia`);
