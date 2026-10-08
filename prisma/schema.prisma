@@ -620,6 +620,22 @@ model Message {
   sentAt       DateTime?
   failReason   String?
 
+  // Preenchido SÓ na mensagem do vídeo de confirmação de presença (ver
+  // fireAttendanceConfirmationSequence, conversation-pipeline.ts) — já
+  // guarda o texto do cafezinho, resolvido no momento de criar o vídeo.
+  // dispatchDueMessages (src/lib/dispatch.ts) só cria a Message do
+  // cafezinho de verdade depois de CONFIRMAR o envio deste vídeo (status
+  // SENT) — nunca antes, nunca num relógio cego. Bug real corrigido: o
+  // cafezinho tinha scheduledFor fixo, calculado no mesmo instante do
+  // vídeo; a Meta aceita o pedido do vídeo rápido mas processa/entrega a
+  // mídia de forma assíncrona (busca a URL, transcodifica) — o cafezinho
+  // (texto puro, entrega quase instantânea) podia chegar ANTES do vídeo
+  // mesmo com scheduledFor/sentAt na ordem certa dos dois lados nossos.
+  // Zerado atomicamente (updateMany condicional) no momento de criar o
+  // cafezinho — garante no máximo um cafezinho por vídeo, mesmo se o
+  // envio for reprocessado. null em toda mensagem que não é essa.
+  pendingAttendanceTip String? @db.Text
+
   createdAt DateTime @default(now())
   // Usado só pra detectar uma mensagem presa em SENDING (processo do
   // worker derrubado no meio do envio, antes de conseguir marcar SENT ou
