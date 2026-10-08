@@ -1,5 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { bufferForDebounce, pendingDebounceCount, MAX_DEBOUNCE_TOTAL_WAIT_MS } from "./inbound-debounce";
+import {
+  bufferForDebounce,
+  pendingDebounceCount,
+  MAX_DEBOUNCE_TOTAL_WAIT_MS,
+  LEAD_DEBOUNCE_WINDOW_MS,
+} from "./inbound-debounce";
 
 describe("bufferForDebounce", () => {
   beforeEach(() => {
@@ -20,6 +25,18 @@ describe("bufferForDebounce", () => {
     vi.advanceTimersByTime(1);
     expect(onFlush).toHaveBeenCalledOnce();
     expect(onFlush).toHaveBeenCalledWith(["oi"]);
+  });
+
+  it("usa LEAD_DEBOUNCE_WINDOW_MS (20s) quando nenhuma janela é passada explicitamente — valor de produção, não só o default usado nos outros testes (6s)", () => {
+    const onFlush = vi.fn();
+    bufferForDebounce("lead-a", "frase longa, parte 1", onFlush);
+
+    vi.advanceTimersByTime(LEAD_DEBOUNCE_WINDOW_MS - 1);
+    expect(onFlush).not.toHaveBeenCalled();
+
+    vi.advanceTimersByTime(1);
+    expect(onFlush).toHaveBeenCalledOnce();
+    expect(onFlush).toHaveBeenCalledWith(["frase longa, parte 1"]);
   });
 
   it("agrupa itens que chegam DENTRO da janela numa única chamada, em ordem", () => {
