@@ -371,7 +371,7 @@ describe("fireAttendanceConfirmationSequence", () => {
     vi.useRealTimers();
   });
 
-  it("resposta da IA pendente com scheduledFor FUTURO: apresentação sai pelo menos 10s depois dela (+10s/+15s sobre o scheduledFor pendente, não sobre 'agora')", async () => {
+  it("resposta da IA pendente com scheduledFor FUTURO: apresentação sai pelo menos 15s depois dela (+15s/+20s sobre o scheduledFor pendente, não sobre 'agora')", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-10-07T11:59:30.000Z")); // "agora" ANTES do scheduledFor pendente
     clinicFindUniqueMock.mockResolvedValue(CLINIC_OK);
@@ -397,16 +397,16 @@ describe("fireAttendanceConfirmationSequence", () => {
     const [introCall, videoCall] = messageCreateMock.mock.calls.map((c) => c[0].data);
     expect(introCall).toMatchObject({
       content: "Vou te mandar um vídeo rápido mostrando como é o nosso atendimento 🙂",
-      scheduledFor: new Date("2026-10-07T12:00:10.000Z"), // +10s sobre o scheduledFor pendente
+      scheduledFor: new Date("2026-10-07T12:00:15.000Z"), // +15s sobre o scheduledFor pendente
     });
     expect(videoCall).toMatchObject({
       mediaUrl: "https://cdn/video.mp4",
-      scheduledFor: new Date("2026-10-07T12:00:15.000Z"), // +15s
+      scheduledFor: new Date("2026-10-07T12:00:20.000Z"), // +20s
       pendingAttendanceTip: "Se puder, chegue uns 15 minutinhos antes, teremos um cafezinho te esperando.",
     });
     expect(introCall.scheduledFor.getTime()).toBeLessThan(videoCall.scheduledFor.getTime());
     expect(introCall.scheduledFor.getTime() - new Date("2026-10-07T12:00:00.000Z").getTime()).toBeGreaterThanOrEqual(
-      10_000
+      15_000
     );
 
     expect(appointmentUpdateManyMock).toHaveBeenCalledWith({
@@ -429,8 +429,8 @@ describe("fireAttendanceConfirmationSequence", () => {
     });
 
     const [introCall, videoCall] = messageCreateMock.mock.calls.map((c) => c[0].data);
-    expect(introCall.scheduledFor).toEqual(new Date("2026-10-07T12:00:10.000Z")); // +10s sobre "agora"
-    expect(videoCall.scheduledFor).toEqual(new Date("2026-10-07T12:00:15.000Z")); // +15s sobre "agora"
+    expect(introCall.scheduledFor).toEqual(new Date("2026-10-07T12:00:15.000Z")); // +15s sobre "agora"
+    expect(videoCall.scheduledFor).toEqual(new Date("2026-10-07T12:00:20.000Z")); // +20s sobre "agora"
   });
 
   it("resposta pendente com scheduledFor já no PASSADO (processamento mais lento que o delay adaptativo): ancora em 'agora', nunca num instante já passado", async () => {
@@ -452,8 +452,8 @@ describe("fireAttendanceConfirmationSequence", () => {
     });
 
     const [introCall, videoCall] = messageCreateMock.mock.calls.map((c) => c[0].data);
-    expect(introCall.scheduledFor).toEqual(new Date("2026-10-07T12:00:10.000Z")); // +10s sobre "agora", não sobre o valor passado
-    expect(videoCall.scheduledFor).toEqual(new Date("2026-10-07T12:00:15.000Z"));
+    expect(introCall.scheduledFor).toEqual(new Date("2026-10-07T12:00:15.000Z")); // +15s sobre "agora", não sobre o valor passado
+    expect(videoCall.scheduledFor).toEqual(new Date("2026-10-07T12:00:20.000Z"));
   });
 
   it("usa os textos configurados pela clínica, quando preenchidos", async () => {
