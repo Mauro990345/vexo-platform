@@ -15,7 +15,11 @@ export default async function ConversationDetailPage({ params }: { params: { id:
     include: {
       lead: true,
       clinic: true,
-      messages: { orderBy: { createdAt: "asc" } },
+      // Desempate por id — mensagens do mesmo lote do lead (ou do mesmo
+      // $transaction de resposta da IA) têm createdAt empatado (ver
+      // resolveBatchTimestamps, message-batch-timestamps.ts); sem isso o
+      // painel podia exibir duas mensagens do mesmo lote fora da ordem real.
+      messages: { orderBy: [{ createdAt: "asc" }, { id: "asc" }] },
       appointments: { orderBy: { scheduledAt: "desc" }, take: 1 },
     },
   });
