@@ -1523,13 +1523,6 @@ export async function handleInboundInstagramMessage(
     lead.name = capturedLeadName;
   }
 
-  // Rastreia o scheduledFor MAIS TARDE entre tudo que este turno enfileirou
-  // até aqui — usado só como âncora do vídeo de confirmação, mais abaixo,
-  // pra garantir que ele saia sempre DEPOIS de qualquer outra coisa deste
-  // turno (nunca no meio), mesmo num turno que também manda uma foto de
-  // resultado.
-  let latestScheduledFor = scheduledFor;
-
   if (capturedResultPhoto) {
     // +5s pra chegar logo depois da resposta em texto, não junto/antes dela
     // — a legenda cadastrada (ResultPhoto.caption), quando existe, sai
@@ -1556,7 +1549,6 @@ export async function handleInboundInstagramMessage(
         data: { resultPhotoSentAt: new Date() },
       }),
     ]);
-    latestScheduledFor = photoMessages[photoMessages.length - 1]!.scheduledFor;
   }
 
   // Agendamento (criação/remarcação do evento no Google Calendar +
@@ -1568,15 +1560,15 @@ export async function handleInboundInstagramMessage(
   // Sequência de confirmação de presença (vídeo + cafezinho) — avaliada num
   // ÚNICO ponto, sempre no final de handleInboundInstagramMessage, depois
   // que TUDO mais deste turno (resposta em texto, agendamento e foto de
-  // resultado, se houver) já foi decidido — mesmo motivo histórico de
-  // sempre (ver comentário grande em fireAttendanceConfirmationSequence):
-  // evita disparar ancorado num scheduledFor que não é realmente o último
-  // da sequência deste turno.
+  // resultado, se houver) já foi decidido. Não precisa mais passar um
+  // scheduledFor rastreado localmente aqui — fireAttendanceConfirmationSequence
+  // busca a referência direto no banco (última Message OUTBOUND ainda
+  // PENDING da conversa), a mesma lógica pros dois chamadores (resposta do
+  // lead neste turno e o job de timeout de 1h). Ver comentário grande lá.
   await maybeHandlePendingAttendanceReply({
     clinicId: clinic.id,
     conversationId: conversation.id,
     recentHistory: chatHistory.slice(-6),
-    afterScheduledFor: latestScheduledFor,
   });
 
   // Confirmação IMEDIATA do agendamento por WhatsApp — diferente da
@@ -1623,7 +1615,6 @@ export async function maybeHandlePendingAttendanceReply(params: {
   clinicId: string;
   conversationId: string;
   recentHistory: ChatTurn[];
-  afterScheduledFor: Date;
 }): Promise<void> {
   const pendingAttendanceAppointment = await prisma.appointment.findFirst({
     where: {
@@ -1657,7 +1648,6 @@ export async function maybeHandlePendingAttendanceReply(params: {
       appointmentId: pendingAttendanceAppointment.id,
       clinicId: params.clinicId,
       conversationId: params.conversationId,
-      afterScheduledFor: params.afterScheduledFor,
     });
   }
 }
@@ -1700,7 +1690,6 @@ export async function fireAttendanceConfirmationSequence(params: {
   appointmentId: string;
   clinicId: string;
   conversationId: string;
-  afterScheduledFor: Date;
 }): Promise<boolean> {
   const [clinic, conversation] = await Promise.all([
     prisma.clinic.findUnique({ where: { id: params.clinicId } }),
@@ -1723,15 +1712,47 @@ export async function fireAttendanceConfirmationSequence(params: {
   // Bug real reportado em produção (ver histórico grande acima): o vídeo
   // saía IMEDIATAMENTE (scheduledFor: agora), antes da própria mensagem de
   // texto deste turno (reply.text, com delay adaptativo — ver
-  // computeAdaptiveDelaySeconds) ter saído. Ancorado alguns segundos DEPOIS
-  // de params.afterScheduledFor (o scheduledFor mais tarde deste turno, ou
-  // "agora" quando disparado pelo job de timeout, sem turno nenhum).
+  // computeAdaptiveDelaySeconds) ter saído.
+  //
+  // Segundo bug real reportado, mesma família: a mensagem de confirmação do
+  // agendamento ("Sua avaliação está marcada para...") e a apresentação do
+  // vídeo ("vou te mandar um vídeo rápido...") saindo COLADAS, sem
+  // intervalo nenhum. Causa raiz: o valor antigo usado como âncora vinha de
+  // um parâmetro (afterScheduledFor) calculado pelo CHAMADOR — uma variável
+  // local em handleInboundInstagramMessage (o scheduledFor da própria
+  // resposta deste turno, congelado no momento em que ela foi criada) ou um
+  // "agora" literal no job de timeout de 1h. Nos dois casos, nada garantia
+  // que esse valor ainda refletisse a realidade no momento em que este
+  // código de fato rodava — bastava o processamento (classificação +
+  // geração da IA) demorar um pouco mais que o próprio delay adaptativo da
+  // resposta pendente pra esse valor já estar no passado, fazendo
+  // introAt = valor_já_passado + 10s cair perto (ou dentro) do MESMO ciclo
+  // de despacho (dispatchDueMessages roda a cada 15s) da resposta ainda
+  // PENDING — as duas saíam juntas, sem qualquer intervalo real percebido
+  // pelo lead.
+  //
+  // Corrigido buscando a referência direto no banco: o scheduledFor da
+  // última Message OUTBOUND ainda PENDING desta conversa (normalmente a
+  // própria resposta de texto deste turno, ou a foto de resultado, se
+  // houver — mas também cobre qualquer outra mensagem pendente que o
+  // chamador não soubesse rastrear, como no job de timeout) — nunca menor
+  // que "agora" (Math.max), pra nunca ancorar num instante já passado. Essa
+  // é a MESMA lógica pros dois chamadores (resposta do lead no mesmo turno
+  // e o job de 1h) — elimina a dependência de cada um calcular/rastrear
+  // isso por conta própria.
   //
   // Frase-intro + vídeo primeiro (API do Instagram não combina texto e
   // mídia numa mensagem só, por isso são dois envios separados — mesmo
   // padrão dos passos de follow-up com anexo em follow-up.ts).
-  const introAt = new Date(params.afterScheduledFor.getTime() + ATTENDANCE_VIDEO_INTRO_DELAY_MS);
-  const videoAt = new Date(params.afterScheduledFor.getTime() + ATTENDANCE_VIDEO_DELAY_MS);
+  const latestPendingOutbound = await prisma.message.findFirst({
+    where: { conversationId: params.conversationId, direction: "OUTBOUND", status: "PENDING" },
+    orderBy: [{ scheduledFor: "desc" }, { id: "desc" }],
+    select: { scheduledFor: true },
+  });
+  const afterScheduledFor = new Date(Math.max(Date.now(), latestPendingOutbound?.scheduledFor?.getTime() ?? 0));
+
+  const introAt = new Date(afterScheduledFor.getTime() + ATTENDANCE_VIDEO_INTRO_DELAY_MS);
+  const videoAt = new Date(afterScheduledFor.getTime() + ATTENDANCE_VIDEO_DELAY_MS);
   const introText = clinic.confirmationVideoCaption?.trim() || DEFAULT_CONFIRMATION_VIDEO_CAPTION;
   const tipText = clinic.attendanceTipMessage?.trim() || DEFAULT_ATTENDANCE_TIP_MESSAGE;
 
@@ -1820,7 +1841,6 @@ export async function processAttendanceConfirmationTimeouts(): Promise<{ fired: 
         appointmentId: appt.id,
         clinicId: appt.clinicId,
         conversationId: appt.conversationId,
-        afterScheduledFor: now,
       });
       if (sent) fired++;
     } catch (err) {
