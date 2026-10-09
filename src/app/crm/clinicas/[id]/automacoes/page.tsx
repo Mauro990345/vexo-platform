@@ -67,7 +67,7 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
 
                   <div>
                     <label className="mb-1 block text-xs" htmlFor="clientWhatsappNumber">
-                      WhatsApp da clínica (resumo semanal)
+                      WhatsApp da clínica (resumo semanal + link direto pro lead)
                     </label>
                     <input
                       id="clientWhatsappNumber"
@@ -77,10 +77,12 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
                       className="w-full rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5 text-xs outline-none focus:border-vexo-accent"
                     />
                     <p className="mt-1 text-caption text-vexo-muted">
-                      Número que recebe o resumo semanal de atendimentos por WhatsApp, toda
-                      sexta-feira. Inclua o código do país (55 para o Brasil) e o DDD — espaços,
-                      parênteses, traços ou "+" não atrapalham, são removidos automaticamente, mas
-                      os dígitos do 55+DDD precisam estar lá.
+                      Recebe o resumo semanal de atendimentos por WhatsApp, toda sexta-feira. Além
+                      disso, quando o lead pede para falar com a equipe, a IA responde com um link
+                      direto pra ESTE número (wa.me) em vez de escalar pra atendimento humano —
+                      por isso precisa estar correto e validado: inclua o código do país (55 para
+                      o Brasil) e o DDD; espaços, parênteses, traços ou "+" não atrapalham, são
+                      removidos automaticamente, mas os dígitos do 55+DDD precisam estar lá.
                     </p>
                   </div>
 
@@ -97,9 +99,44 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
                     />
                     <p className="mt-1 text-caption text-vexo-muted">
                       Recebe um alerta por WhatsApp sempre que a IA identifica que o lead precisa
-                      falar com uma pessoa. Pode ser um número diferente do resumo semanal acima.
-                      Mesmo formato: código do país (55) + DDD, sem exigir "+" ou pontuação
-                      específica.
+                      falar com uma pessoa (e a clínica não tem um WhatsApp próprio válido
+                      configurado acima, ver campo anterior). Pode ser um número diferente do
+                      resumo semanal. Mesmo formato: código do país (55) + DDD, sem exigir "+" ou
+                      pontuação específica. Só é usado de verdade se o interruptor abaixo estiver
+                      ligado.
+                    </p>
+                    <label className="mt-2 flex items-center gap-2 text-xs">
+                      <input
+                        type="checkbox"
+                        name="notifyWhatsappEnabled"
+                        defaultChecked={clinic.notifyWhatsappEnabled}
+                        className="rounded border-vexo-border"
+                      />
+                      Avisar a secretária por WhatsApp (só desta clínica)
+                    </label>
+                    <p className="mt-1 text-caption text-vexo-muted">
+                      Desligado por padrão. Com o WhatsApp da clínica (acima) configurado e
+                      válido, o aviso nem chega a ser necessário na maioria dos casos — o lead já
+                      recebe o link direto.
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="flex items-center gap-2 text-xs">
+                      <input
+                        type="checkbox"
+                        name="remindersWhatsappEnabled"
+                        defaultChecked={clinic.remindersWhatsappEnabled}
+                        className="rounded border-vexo-border"
+                      />
+                      Enviar lembretes de agendamento por WhatsApp (só desta clínica)
+                    </label>
+                    <p className="mt-1 text-caption text-vexo-muted">
+                      Desligado por padrão (risco ao número/chip). Com o lembrete desligado aqui,
+                      ele continua saindo pelo Instagram normalmente (mesmo fallback de sempre
+                      quando falta telefone ou WhatsApp conectado) — nunca é pulado em silêncio. A
+                      confirmação do agendamento em si (assim que o horário é marcado) continua
+                      sempre por WhatsApp, sem ligação com este interruptor.
                     </p>
                   </div>
 
