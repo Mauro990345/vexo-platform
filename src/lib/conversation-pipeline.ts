@@ -55,6 +55,16 @@ const DEFAULT_CONFIRMATION_VIDEO_CAPTION = "Vou te mandar um vídeo rápido most
 export const CLINIC_CONTACT_CARD_SUBTITLE = "Fale com a equipe pelo WhatsApp";
 export const CLINIC_CONTACT_CARD_BUTTON_TITLE = "Abrir WhatsApp";
 
+// Bug real em produção: o cartão saía DE NOVO num turno sem nenhum pedido
+// novo de humano (classificador reagindo a um pedido antigo que nunca
+// "saiu" do histórico — ver classifierCutoff/clinicContactCardSentAt,
+// mais abaixo). Mesmo com esse corte corrigido, um pedido LEGÍTIMO e novo
+// dentro de uma janela curta (ex.: o lead insiste, ou pede de novo por
+// impaciência) não deveria gerar um SEGUNDO cartão — a conversa já tem um
+// válido por essa janela. Nomeada (não um número solto) pra deixar
+// explícito o que esse intervalo significa.
+export const CLINIC_CONTACT_CARD_RESEND_COOLDOWN_MS = 60 * 60 * 1000;
+
 // Mesma validação de Lead.phone (ver validateBrazilianPhone/saveLeadPhone)
 // aplicada a Clinic.clientWhatsappNumber — null/vazio/inválido (ex.:
 // faltando DDD) devolve null, o que mantém o comportamento de sempre
@@ -64,6 +74,56 @@ export const CLINIC_CONTACT_CARD_BUTTON_TITLE = "Abrir WhatsApp";
 export function resolveClinicWhatsappLink(clientWhatsappNumber: string | null | undefined): string | null {
   const validation = validateBrazilianPhone(clientWhatsappNumber ?? "");
   return validation.valid ? validation.e164 : null;
+}
+
+// Até onde cortar a janela do classificador (classifyConversation julga a
+// conversa INTEIRA, não só a mensagem nova — ver comentário grande em
+// handleInboundInstagramMessage) — usa o corte mais recente entre
+// Conversation.humanReviewedAt (escalonamento resolvido manualmente por
+// um humano) e Conversation.clinicContactCardSentAt (cartão de contato já
+// enviado pra esse mesmo pedido). CAUSA RAIZ do bug real corrigido aqui:
+// o cartão nunca escalona pra NEEDS_HUMAN (esse é o ponto dele), então
+// humanReviewedAt nunca era marcado nesse caminho — sem
+// clinicContactCardSentAt, o pedido de humano que gerou o cartão nunca
+// "saía" do transcript, e a primeira mensagem comercial normal de um
+// turno seguinte reclassificava needsHuman=true de novo, reenviando o
+// cartão sem nenhum pedido novo. Função pura, extraída e exportada só
+// pra teste (mesmo padrão de buildAvailabilityCheck, acima) — usada
+// dentro de handleInboundInstagramMessage, que não dá pra testar direto.
+export function resolveClassifierHistoryCutoff(params: {
+  humanReviewedAt: Date | null;
+  clinicContactCardSentAt: Date | null;
+}): Date | null {
+  return [params.humanReviewedAt, params.clinicContactCardSentAt].reduce<Date | null>(
+    (latest, d) => (d && (!latest || d > latest) ? d : latest),
+    null
+  );
+}
+
+// Decide, pro turno atual, se o cartão de contato deve ser mandado e se a
+// escalação pra NEEDS_HUMAN deve ser suprimida — separado do corte do
+// classificador acima porque resolve um problema DIFERENTE: mesmo com o
+// corte corrigindo a causa raiz (classificador não resuscita mais um
+// pedido antigo), um pedido NOVO e legítimo de humano, repetido pelo lead
+// dentro de uma janela curta (ex.: insistência, impaciência), ainda não
+// deveria gerar um SEGUNDO cartão — ver CLINIC_CONTACT_CARD_RESEND_COOLDOWN_MS,
+// acima. Em cooldown, a escalação continua suprimida mesmo assim (nunca
+// escala só porque está em cooldown — a resposta certa é a IA responder
+// normalmente, sem cartão novo e sem nenhuma instrução especial). Função
+// pura, exportada só pra teste.
+export function resolveClinicContactCardDecision(params: {
+  needsHuman: boolean;
+  hasValidClinicWhatsapp: boolean;
+  clinicContactCardSentAt: Date | null;
+  now: Date;
+}): { suppressHumanEscalation: boolean; wantsHumanWithClinicWhatsapp: boolean } {
+  const cardSentRecently = Boolean(
+    params.clinicContactCardSentAt &&
+      params.now.getTime() - params.clinicContactCardSentAt.getTime() < CLINIC_CONTACT_CARD_RESEND_COOLDOWN_MS
+  );
+  const suppressHumanEscalation = params.needsHuman && params.hasValidClinicWhatsapp;
+  const wantsHumanWithClinicWhatsapp = suppressHumanEscalation && !cardSentRecently;
+  return { suppressHumanEscalation, wantsHumanWithClinicWhatsapp };
 }
 
 // Monta o bloco de contexto pra IA quando o cartão de contato vai sair
@@ -963,8 +1023,28 @@ export async function handleInboundInstagramMessage(
   // entram na classificação — o histórico completo (chatHistory, acima)
   // continua indo pra geração da resposta da IA, que se beneficia do
   // contexto inteiro; só o classificador de bastidor precisa desse corte.
-  const classifierHistory = conversation.humanReviewedAt
-    ? toChatHistory(history.filter((m) => m.createdAt > conversation.humanReviewedAt!))
+  //
+  // BUG REAL em produção: o mesmo problema acontecia com o cartão de
+  // contato da clínica (ver wantsHumanWithClinicWhatsapp, mais abaixo) —
+  // esse caminho NUNCA escala pra NEEDS_HUMAN (é o ponto dele: a IA segue
+  // respondendo normalmente), então humanReviewedAt nunca era marcado, e
+  // o pedido de humano que disparou o cartão ficava no transcript pra
+  // sempre. Resultado: um lead que pediu humano às 15:48 (recebeu o
+  // cartão) e voltou às 18:57 com uma pergunta comercial normal recebia o
+  // cartão DE NOVO — classifyConversation via o "quero falar com a
+  // secretária" antigo ainda dentro da janela e reclassificava
+  // needsHuman=true, mesmo sem nenhum pedido novo naquele turno. Corrigido
+  // com o MESMO mecanismo: Conversation.clinicContactCardSentAt (marcado
+  // junto da criação do cartão, mais abaixo) também corta a janela do
+  // classificador — usa o corte mais recente entre os dois marcadores,
+  // já que qualquer um dos dois significa "esse pedido antigo já foi
+  // tratado, não julgue a conversa por causa dele de novo".
+  const classifierCutoff = resolveClassifierHistoryCutoff({
+    humanReviewedAt: conversation.humanReviewedAt,
+    clinicContactCardSentAt: conversation.clinicContactCardSentAt,
+  });
+  const classifierHistory = classifierCutoff
+    ? toChatHistory(history.filter((m) => m.createdAt > classifierCutoff))
     : chatHistory;
 
   const signal = await classifyConversation(classifierHistory);
@@ -974,16 +1054,22 @@ export async function handleInboundInstagramMessage(
   // com o WhatsApp da própria clínica configurado E válido (mesma
   // validação de Lead.phone, ver validateBrazilianPhone/saveLeadPhone) não
   // escalona mais pra NEEDS_HUMAN — a IA responde normalmente neste mesmo
-  // turno, com o link wa.me pronto injetado no contexto (ver
-  // clinicContactContext, mais abaixo). Sem número configurado, ou
+  // turno, com o cartão enviado separadamente (ver clinicContactContext/
+  // wantsHumanWithClinicWhatsapp, mais abaixo). Sem número configurado, ou
   // configurado mas inválido (ex.: faltando DDD), mantém EXATAMENTE o
   // comportamento de sempre: escala, manda a mensagem fixa, avisa a
   // secretária conforme o interruptor — nunca falha silenciosamente pra
   // nenhum lado.
   const clinicWhatsappE164 = resolveClinicWhatsappLink(clinic.clientWhatsappNumber);
-  const wantsHumanWithClinicWhatsapp = signal.needsHuman && Boolean(clinicWhatsappE164);
 
-  if (signal.needsHuman && !wantsHumanWithClinicWhatsapp) {
+  const { suppressHumanEscalation, wantsHumanWithClinicWhatsapp } = resolveClinicContactCardDecision({
+    needsHuman: signal.needsHuman,
+    hasValidClinicWhatsapp: Boolean(clinicWhatsappE164),
+    clinicContactCardSentAt: conversation.clinicContactCardSentAt,
+    now: new Date(),
+  });
+
+  if (signal.needsHuman && !suppressHumanEscalation) {
     await prisma.conversation.update({
       where: { id: conversation.id },
       data: { status: "NEEDS_HUMAN", needsHumanReason: signal.needsHumanReason ?? "Não especificado" },
@@ -1676,22 +1762,35 @@ export async function handleInboundInstagramMessage(
   // `content` como mensagem de texto normal se a Graph API rejeitar o
   // cartão; nunca manda os dois. +2s pra chegar depois da resposta em
   // texto, nunca antes/junto dela.
+  //
+  // Conversation.clinicContactCardSentAt marcado ATOMICAMENTE junto da
+  // criação da Message (mesma transação) — é o que alimenta tanto o
+  // corte da janela do classificador (resolveClassifierHistoryCutoff,
+  // acima) quanto o cooldown contra um segundo cartão
+  // (resolveClinicContactCardDecision/CLINIC_CONTACT_CARD_RESEND_COOLDOWN_MS,
+  // acima) na mesma hora.
   if (wantsHumanWithClinicWhatsapp && clinicWhatsappE164) {
-    await prisma.message.create({
-      data: {
-        conversationId: conversation.id,
-        direction: "OUTBOUND",
-        sender: "SYSTEM",
-        content: buildClinicContactFallbackText(clinic.name, clinic.id),
-        clinicContactCard: encodeClinicContactCard({
-          clinicId: clinic.id,
-          clinicName: clinic.name,
-          whatsappE164: clinicWhatsappE164,
-        }),
-        status: "PENDING",
-        scheduledFor: new Date(scheduledFor.getTime() + 2_000),
-      },
-    });
+    await prisma.$transaction([
+      prisma.message.create({
+        data: {
+          conversationId: conversation.id,
+          direction: "OUTBOUND",
+          sender: "SYSTEM",
+          content: buildClinicContactFallbackText(clinic.name, clinic.id),
+          clinicContactCard: encodeClinicContactCard({
+            clinicId: clinic.id,
+            clinicName: clinic.name,
+            whatsappE164: clinicWhatsappE164,
+          }),
+          status: "PENDING",
+          scheduledFor: new Date(scheduledFor.getTime() + 2_000),
+        },
+      }),
+      prisma.conversation.update({
+        where: { id: conversation.id },
+        data: { clinicContactCardSentAt: new Date() },
+      }),
+    ]);
   }
 
   // Mandar a mensagem de espera genérica como se fosse a resposta final

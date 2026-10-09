@@ -90,6 +90,8 @@ import {
   applyAttendanceReplyDecision,
   processAttendanceConfirmationTimeouts,
   resolveClinicWhatsappLink,
+  resolveClassifierHistoryCutoff,
+  resolveClinicContactCardDecision,
   buildClinicContactContext,
   encodeClinicContactCard,
   decodeClinicContactCard,
@@ -383,6 +385,138 @@ describe("resolveClinicWhatsappLink", () => {
 
   it("número inválido (sem DDD, 9 dígitos): devolve null", () => {
     expect(resolveClinicWhatsappLink("987654321")).toBeNull();
+  });
+});
+
+// Bug real em produção: o cartão de contato da clínica saiu DE NOVO num
+// turno em que o lead NÃO pediu humano (às 15:48 pediu "falar com a
+// secretária" e recebeu o cartão; às 18:57 só perguntou sobre
+// procedimentos, mas o cartão saiu de novo). Causa raiz: classifyConversation
+// julga a conversa INTEIRA a cada turno, e o caminho do cartão nunca
+// marca Conversation.humanReviewedAt (só escalonamento manual marca) —
+// então o "quero falar com a secretária" de 15:48 nunca saía da janela
+// julgada, e o classificador reclassificava needsHuman=true de novo no
+// turno seguinte, mesmo sem nenhum pedido novo. Estes testes cobrem as
+// duas peças puras extraídas da correção (ver comentário grande em cada
+// uma, conversation-pipeline.ts).
+describe("resolveClassifierHistoryCutoff", () => {
+  it("sem nenhum marcador: sem corte (null) — comportamento original intacto", () => {
+    expect(resolveClassifierHistoryCutoff({ humanReviewedAt: null, clinicContactCardSentAt: null })).toBeNull();
+  });
+
+  it("só clinicContactCardSentAt preenchido: corta nesse ponto — é a correção da causa raiz do bug", () => {
+    const cardSentAt = new Date("2026-10-09T15:48:30.000Z");
+    const cutoff = resolveClassifierHistoryCutoff({ humanReviewedAt: null, clinicContactCardSentAt: cardSentAt });
+
+    expect(cutoff).toEqual(cardSentAt);
+
+    // Prova o efeito de verdade, reproduzindo o cenário relatado: a
+    // mensagem que pediu humano (antes do corte) desaparece da janela do
+    // classificador; a pergunta comercial normal de um turno seguinte
+    // (depois do corte) continua visível.
+    const history = [
+      { createdAt: new Date("2026-10-09T15:48:00.000Z"), content: "Quero falar com a secretária" },
+      { createdAt: new Date("2026-10-09T18:57:00.000Z"), content: "Queria saber sobre procedimentos" },
+    ];
+    const visibleParaClassificador = history.filter((m) => !cutoff || m.createdAt > cutoff);
+
+    expect(visibleParaClassificador).toHaveLength(1);
+    expect(visibleParaClassificador[0]!.content).toBe("Queria saber sobre procedimentos");
+  });
+
+  it("só humanReviewedAt preenchido: corta nesse ponto — comportamento original (escalonamento manual) preservado", () => {
+    const reviewedAt = new Date("2026-10-09T10:00:00.000Z");
+    expect(resolveClassifierHistoryCutoff({ humanReviewedAt: reviewedAt, clinicContactCardSentAt: null })).toEqual(reviewedAt);
+  });
+
+  it("os dois preenchidos: usa o MAIS RECENTE dos dois, não importa a ordem dos parâmetros", () => {
+    const older = new Date("2026-10-09T10:00:00.000Z");
+    const newer = new Date("2026-10-09T15:48:00.000Z");
+
+    expect(resolveClassifierHistoryCutoff({ humanReviewedAt: older, clinicContactCardSentAt: newer })).toEqual(newer);
+    expect(resolveClassifierHistoryCutoff({ humanReviewedAt: newer, clinicContactCardSentAt: older })).toEqual(newer);
+  });
+});
+
+describe("resolveClinicContactCardDecision", () => {
+  const ONE_HOUR_MS = 60 * 60 * 1000;
+
+  it("turno sem pedido de humano (needsHuman=false): nunca manda cartão, mesmo com um cartão enviado antes nesta conversa", () => {
+    const result = resolveClinicContactCardDecision({
+      needsHuman: false,
+      hasValidClinicWhatsapp: true,
+      clinicContactCardSentAt: new Date("2026-10-09T15:48:30.000Z"),
+      now: new Date("2026-10-09T18:57:00.000Z"),
+    });
+
+    expect(result.wantsHumanWithClinicWhatsapp).toBe(false);
+  });
+
+  it("pedido de humano novo, sem cartão enviado antes nesta conversa: manda o cartão e suprime a escalação", () => {
+    const result = resolveClinicContactCardDecision({
+      needsHuman: true,
+      hasValidClinicWhatsapp: true,
+      clinicContactCardSentAt: null,
+      now: new Date("2026-10-09T15:48:00.000Z"),
+    });
+
+    expect(result.wantsHumanWithClinicWhatsapp).toBe(true);
+    expect(result.suppressHumanEscalation).toBe(true);
+  });
+
+  it("pedido de humano novo, cartão anterior enviado há MAIS de 60 minutos: manda de novo", () => {
+    const cardSentAt = new Date("2026-10-09T15:48:00.000Z");
+    const now = new Date(cardSentAt.getTime() + ONE_HOUR_MS + 1_000); // 1h e 1s depois
+
+    const result = resolveClinicContactCardDecision({
+      needsHuman: true,
+      hasValidClinicWhatsapp: true,
+      clinicContactCardSentAt: cardSentAt,
+      now,
+    });
+
+    expect(result.wantsHumanWithClinicWhatsapp).toBe(true);
+  });
+
+  it("pedido de humano novo, cartão anterior enviado há MENOS de 60 minutos: NÃO reenvia — mas também não escala (IA só responde normalmente)", () => {
+    const cardSentAt = new Date("2026-10-09T15:48:00.000Z");
+    const now = new Date(cardSentAt.getTime() + 30 * 60 * 1000); // 30min depois
+
+    const result = resolveClinicContactCardDecision({
+      needsHuman: true,
+      hasValidClinicWhatsapp: true,
+      clinicContactCardSentAt: cardSentAt,
+      now,
+    });
+
+    expect(result.wantsHumanWithClinicWhatsapp).toBe(false);
+    expect(result.suppressHumanEscalation).toBe(true);
+  });
+
+  it("exatamente no limite dos 60 minutos: cooldown já encerrado (comparação estrita), pode mandar de novo", () => {
+    const cardSentAt = new Date("2026-10-09T15:48:00.000Z");
+    const now = new Date(cardSentAt.getTime() + ONE_HOUR_MS);
+
+    const result = resolveClinicContactCardDecision({
+      needsHuman: true,
+      hasValidClinicWhatsapp: true,
+      clinicContactCardSentAt: cardSentAt,
+      now,
+    });
+
+    expect(result.wantsHumanWithClinicWhatsapp).toBe(true);
+  });
+
+  it("sem WhatsApp válido configurado na clínica: nunca manda cartão, nunca suprime escalação — comportamento de sempre", () => {
+    const result = resolveClinicContactCardDecision({
+      needsHuman: true,
+      hasValidClinicWhatsapp: false,
+      clinicContactCardSentAt: null,
+      now: new Date(),
+    });
+
+    expect(result.wantsHumanWithClinicWhatsapp).toBe(false);
+    expect(result.suppressHumanEscalation).toBe(false);
   });
 });
 

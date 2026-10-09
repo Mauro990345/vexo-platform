@@ -535,6 +535,19 @@ model Conversation {
   // geração da resposta da IA, que se beneficia do contexto).
   humanReviewedAt DateTime?
 
+  // Marcado junto da criação do cartão de contato da clínica (ver
+  // wantsHumanWithClinicWhatsapp/clinicContactContext, conversation-pipeline.ts)
+  // — serve a DOIS propósitos: (1) mesmo corte de janela do classificador
+  // que humanReviewedAt (acima) faz pro caso de escalonamento manual —
+  // sem isso, o pedido de humano que gerou o cartão nunca "saía" do
+  // transcript, e qualquer mensagem comercial normal num turno seguinte
+  // reclassificava needsHuman=true de novo, reenviando o cartão sem
+  // nenhum pedido novo (bug real em produção); (2) janela de cooldown
+  // (CLINIC_CONTACT_CARD_RESEND_COOLDOWN_MS) contra um SEGUNDO cartão
+  // mesmo quando o lead pede humano de novo de verdade pouco tempo depois
+  // — nesse caso a IA só responde normalmente, sem cartão novo.
+  clinicContactCardSentAt DateTime?
+
   // Diagnóstico POR CONVERSA da última vez que o classificador do gatilho
   // SILENCE (classifyConversation, chamado por processSilentConversations
   // em follow-up.ts) avaliou esta conversa — bug real reportado: uma
