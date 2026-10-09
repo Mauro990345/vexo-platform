@@ -8,8 +8,20 @@ import { sendInstagramMessage } from "@/lib/instagram";
 // agendamento (ver maybeSendWhatsappConfirmation, conversation-pipeline.ts),
 // nunca pra lembrete. Sem Instagram conectado, pula o lembrete neste ciclo
 // (sem gravar ReminderLog) — o próximo ciclo tenta de novo, nunca descarta.
+//
+// DESLIGADO (pedido explícito do dono do produto — os campos "horas
+// antes"/"texto" nunca foram usados de propósito pela tela de Automações,
+// que os removeu; os lembretes em si também pararam de sair). `const`
+// boolean, não variável de ambiente, de propósito: religar é só virar
+// isto pra `true`, sem precisar de deploy de infra nem remover nada do
+// resto da função (query, ReminderConfig, ReminderLog) nem do cron em
+// worker/index.ts. Nenhuma coluna/tabela apagada, sem migration — mesmo
+// padrão já usado por WEEKLY_SUMMARY_WHATSAPP_ENABLED em weekly-summary.ts.
+const REMINDERS_ENABLED = false;
 
 export async function processReminders(): Promise<{ sent: number }> {
+  if (!REMINDERS_ENABLED) return { sent: 0 };
+
   const now = new Date();
   const horizon = new Date(now.getTime() + 48 * 60 * 60 * 1000); // maior janela configurável (48h)
 
