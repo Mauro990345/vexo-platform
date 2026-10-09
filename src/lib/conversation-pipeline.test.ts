@@ -61,7 +61,13 @@ vi.mock("@/lib/default-prompt", () => ({}));
 // buildCalendarEventDescription quebrar ao chamar uma função inexistente.
 vi.mock("@/lib/whatsapp", async () => {
   const actual = await vi.importActual<typeof import("@/lib/whatsapp")>("@/lib/whatsapp");
-  return { formatBrazilianPhoneForDisplay: actual.formatBrazilianPhoneForDisplay };
+  return {
+    formatBrazilianPhoneForDisplay: actual.formatBrazilianPhoneForDisplay,
+    // validateBrazilianPhone é pura (sem I/O) e usada de verdade por
+    // resolveClinicWhatsappLink, testada abaixo — mesmo motivo de manter
+    // formatBrazilianPhoneForDisplay real, acima.
+    validateBrazilianPhone: actual.validateBrazilianPhone,
+  };
 });
 const getFollowUpWindowSettingsMock = vi.fn();
 vi.mock("@/lib/follow-up", () => ({
@@ -79,6 +85,8 @@ import {
   checkPendingAttendanceReply,
   applyAttendanceReplyDecision,
   processAttendanceConfirmationTimeouts,
+  resolveClinicWhatsappLink,
+  buildClinicContactContext,
 } from "@/lib/conversation-pipeline";
 
 // Bug real corrigido (ver comentário grande em buildAvailabilityCheck):
@@ -337,6 +345,55 @@ describe("buildCalendarEventDescription", () => {
     const description = buildCalendarEventDescription({ leadName: "Mauro Camargo", leadPhone: null });
 
     expect(description).toContain("WhatsApp: ainda não informado.");
+  });
+});
+
+// Enxugamento do atendimento humano: Clinic.clientWhatsappNumber passa a
+// alimentar também o link wa.me mandado direto ao lead quando ele pede
+// humano (ver handleInboundInstagramMessage — não testável direto, função
+// enorme — então as duas peças puras usadas lá dentro são testadas aqui,
+// isoladas, mesmo padrão de buildAvailabilityCheck acima).
+describe("resolveClinicWhatsappLink", () => {
+  it("número válido (com DDD): devolve os dígitos em E.164, com 55", () => {
+    expect(resolveClinicWhatsappLink("11987654321")).toBe("5511987654321");
+  });
+
+  it("número válido já com 55 e pontuação: normaliza igual", () => {
+    expect(resolveClinicWhatsappLink("+55 (11) 98765-4321")).toBe("5511987654321");
+  });
+
+  it("sem número (null): devolve null", () => {
+    expect(resolveClinicWhatsappLink(null)).toBeNull();
+  });
+
+  it("sem número (undefined): devolve null", () => {
+    expect(resolveClinicWhatsappLink(undefined)).toBeNull();
+  });
+
+  it("número inválido (sem DDD, 9 dígitos): devolve null", () => {
+    expect(resolveClinicWhatsappLink("987654321")).toBeNull();
+  });
+});
+
+describe("buildClinicContactContext", () => {
+  it("monta o link wa.me com o número recebido e o texto pré-preenchido URL-encoded, acentos inclusive", () => {
+    const context = buildClinicContactContext("5511987654321");
+
+    expect(context).toContain("https://wa.me/5511987654321?text=");
+    // "Olá! Vim pelo Instagram e gostaria de falar com a equipe." —
+    // encodeURIComponent escapa "á" (%C3%A1) e os espaços (%20); confere
+    // que não foi um texto cru colado na URL (quebraria o link em
+    // qualquer cliente que pare de ler no primeiro espaço/acento).
+    expect(context).toContain(encodeURIComponent("Olá! Vim pelo Instagram e gostaria de falar com a equipe."));
+    expect(context).toContain("%C3%A1"); // "á" codificado
+    expect(context).toContain("%20"); // espaço codificado
+    expect(context).not.toContain(" Olá"); // nunca o texto cru dentro da URL
+  });
+
+  it("nunca pede pra IA montar ou codificar a URL sozinha — devolve a URL já completa, pronta pra repassar", () => {
+    const context = buildClinicContactContext("5521998223038");
+
+    expect(context).toMatch(/https:\/\/wa\.me\/5521998223038\?text=\S+/);
   });
 });
 

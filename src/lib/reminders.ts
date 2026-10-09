@@ -53,7 +53,15 @@ export async function processReminders(): Promise<{ sent: number }> {
         ? applyReminderTemplate(customTemplate, { leadFirstName, scheduledAt: appt.scheduledAt })
         : formatReminderMessage({ leadFirstName: leadFirstName || "tudo bem", hoursBefore, scheduledAt: appt.scheduledAt });
 
-      const canUseWhatsapp = Boolean(appt.lead.phone && appt.clinic.whatsappInstanceName);
+      // remindersWhatsappEnabled — interruptor por clínica (padrão
+      // desligado, ver schema.prisma), some ALÉM das duas condições de
+      // sempre (telefone do lead + WhatsApp conectado). Desligado, cai
+      // direto no fallback de sempre (Instagram, abaixo) — nunca pula o
+      // lembrete em silêncio por causa disso: só muda POR QUAL canal ele
+      // sai, exatamente como já acontecia quando faltava telefone/instância.
+      const canUseWhatsapp = Boolean(
+        appt.lead.phone && appt.clinic.whatsappInstanceName && appt.clinic.remindersWhatsappEnabled
+      );
 
       try {
         if (canUseWhatsapp) {

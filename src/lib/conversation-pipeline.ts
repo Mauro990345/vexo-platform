@@ -48,6 +48,36 @@ export { toChatHistory } from "@/lib/chat-history";
 // /crm/clinicas/[id]/agente-ia) — ver a ferramenta scheduleAppointment mais abaixo.
 const DEFAULT_CONFIRMATION_VIDEO_CAPTION = "Vou te mandar um vídeo rápido mostrando como é o nosso atendimento 🙂";
 
+// Texto pré-preenchido do link wa.me mandado pro lead quando ele pede pra
+// falar com humano e a clínica tem WhatsApp próprio configurado (ver
+// clinicContactContext, mais abaixo) — identifica de onde o lead está vindo
+// pra quem atender na outra ponta, sem o lead precisar digitar nada.
+const CLINIC_WHATSAPP_PREFILLED_TEXT = "Olá! Vim pelo Instagram e gostaria de falar com a equipe.";
+
+// Mesma validação de Lead.phone (ver validateBrazilianPhone/saveLeadPhone)
+// aplicada a Clinic.clientWhatsappNumber — null/vazio/inválido (ex.:
+// faltando DDD) devolve null, o que mantém o comportamento de sempre
+// (escalar pra NEEDS_HUMAN) no branch de needsHuman, mais abaixo. Exportada
+// só pra teste (mesmo padrão de buildAvailabilityCheck, acima) — é usada
+// dentro de handleInboundInstagramMessage, que não dá pra testar direto.
+export function resolveClinicWhatsappLink(clientWhatsappNumber: string | null | undefined): string | null {
+  const validation = validateBrazilianPhone(clientWhatsappNumber ?? "");
+  return validation.valid ? validation.e164 : null;
+}
+
+// Monta o bloco de contexto com o link wa.me já pronto — a IA só repassa,
+// nunca monta nem codifica a URL sozinha (mesmo motivo de dateTimeContext
+// nunca deixar a IA fazer conta de fuso horário). encodeURIComponent cuida
+// de acentos/espaços no texto pré-preenchido. Exportada só pra teste.
+export function buildClinicContactContext(clinicWhatsappE164: string): string {
+  return (
+    `[O lead pediu para falar com a equipe/um humano. Aqui está o link direto do WhatsApp da ` +
+    `clínica, já pronto — repasse exatamente esse link ao lead nesta resposta, sem reescrevê-lo, ` +
+    `sem adicionar nem remover nada dele: https://wa.me/${clinicWhatsappE164}?text=` +
+    `${encodeURIComponent(CLINIC_WHATSAPP_PREFILLED_TEXT)}]`
+  );
+}
+
 // Sequência de confirmação de presença (apresentação -> vídeo institucional
 // -> cafezinho -> frase final) — ver fireAttendanceConfirmationSequence,
 // PendingAttendanceStep e dispatch.ts. Constantes nomeadas de propósito
@@ -767,7 +797,10 @@ export async function handleInboundInstagramMessage(
       where: { conversationId, status: { in: ["SCHEDULED", "CONFIRMED"] }, confirmationVideoSentAt: null },
       data: { attendancePromptSentAt: null },
     });
-    if (clinic.notifyWhatsappNumber && clinic.whatsappInstanceName) {
+    // notifyWhatsappEnabled — interruptor por clínica (padrão desligado,
+    // ver schema.prisma) — some além das duas condições de sempre (número
+    // configurado + WhatsApp conectado), nunca no lugar delas.
+    if (clinic.notifyWhatsappEnabled && clinic.notifyWhatsappNumber && clinic.whatsappInstanceName) {
       try {
         await sendWhatsappMessage(
           clinic.whatsappInstanceName,
@@ -899,7 +932,20 @@ export async function handleInboundInstagramMessage(
   const signal = await classifyConversation(classifierHistory);
   console.log(`[vexo:timing] classifyConversation levou ${Date.now() - pipelineStartedAt}ms (desde o início do processamento deste evento)`);
 
-  if (signal.needsHuman) {
+  // Enxugamento do atendimento humano: lead pedindo humano (needsHuman)
+  // com o WhatsApp da própria clínica configurado E válido (mesma
+  // validação de Lead.phone, ver validateBrazilianPhone/saveLeadPhone) não
+  // escalona mais pra NEEDS_HUMAN — a IA responde normalmente neste mesmo
+  // turno, com o link wa.me pronto injetado no contexto (ver
+  // clinicContactContext, mais abaixo). Sem número configurado, ou
+  // configurado mas inválido (ex.: faltando DDD), mantém EXATAMENTE o
+  // comportamento de sempre: escala, manda a mensagem fixa, avisa a
+  // secretária conforme o interruptor — nunca falha silenciosamente pra
+  // nenhum lado.
+  const clinicWhatsappE164 = resolveClinicWhatsappLink(clinic.clientWhatsappNumber);
+  const wantsHumanWithClinicWhatsapp = signal.needsHuman && Boolean(clinicWhatsappE164);
+
+  if (signal.needsHuman && !wantsHumanWithClinicWhatsapp) {
     await prisma.conversation.update({
       where: { id: conversation.id },
       data: { status: "NEEDS_HUMAN", needsHumanReason: signal.needsHumanReason ?? "Não especificado" },
@@ -938,7 +984,10 @@ export async function handleInboundInstagramMessage(
       },
     });
 
-    if (clinic.notifyWhatsappNumber) {
+    // notifyWhatsappEnabled — interruptor por clínica (padrão desligado),
+    // ver schema.prisma — some além das condições de sempre, nunca no
+    // lugar delas.
+    if (clinic.notifyWhatsappEnabled && clinic.notifyWhatsappNumber) {
       if (!clinic.whatsappInstanceName) {
         console.warn(`[vexo] Clínica ${clinic.id} sem WhatsApp conectado — notificação de escalonamento pulada.`);
       } else {
@@ -1157,6 +1206,14 @@ export async function handleInboundInstagramMessage(
         `pergunta, um aviso — ex.: "vou chegar atrasada"), responda essa parte normalmente.]`
       : null;
 
+  // Só existe quando wantsHumanWithClinicWhatsapp (calculado bem acima,
+  // junto de signal.needsHuman) for true nesse turno — lead pediu humano E
+  // a clínica tem um WhatsApp próprio válido configurado, então a
+  // escalada pra NEEDS_HUMAN foi suprimida ali (ver o bloco logo depois
+  // de classifyConversation) a favor deste link.
+  const clinicContactContext =
+    wantsHumanWithClinicWhatsapp && clinicWhatsappE164 ? buildClinicContactContext(clinicWhatsappE164) : null;
+
   const reply = await generateLeadReply({
     // Separados (não mais concatenados numa string só) pra permitir prompt
     // caching: basePrompt é estável por clínica, dateTimeContext muda a
@@ -1165,8 +1222,11 @@ export async function handleInboundInstagramMessage(
     // interestGateContext vai DEPOIS de dateTimeContext de propósito — ver
     // comentário grande acima (tem prioridade sobre qualquer instrução de
     // agendamento incondicional no prompt da clínica). attendanceConfirmedContext
-    // (quando existe) vai por último — a mais específica/recente das três.
-    contextNote: [dateTimeContext, interestGateContext, attendanceConfirmedContext].filter(Boolean).join("\n\n"),
+    // e clinicContactContext (quando existem) vão por último — as mais
+    // específicas/recentes.
+    contextNote: [dateTimeContext, interestGateContext, attendanceConfirmedContext, clinicContactContext]
+      .filter(Boolean)
+      .join("\n\n"),
     history: windowedHistory,
     tools: {
       checkAvailability: buildAvailabilityCheck(clinic.id, conversation.id, (reason) => {

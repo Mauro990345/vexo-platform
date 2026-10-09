@@ -18,6 +18,7 @@ import {
 } from "@/lib/instagram";
 import { decryptToken } from "@/lib/crypto";
 import { saveUploadedAttachment, deleteUploadedAttachment } from "@/lib/uploads";
+import { validateBrazilianPhone } from "@/lib/whatsapp";
 
 const CONNECTION_LINK_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 dias
 
@@ -157,8 +158,24 @@ export async function updateClinicSettings(clinicId: string, formData: FormData)
   await requireInternalSession();
 
   const address = String(formData.get("address") ?? "").trim() || null;
-  const clientWhatsappNumber = String(formData.get("clientWhatsappNumber") ?? "").trim() || null;
-  const notifyWhatsappNumber = String(formData.get("notifyWhatsappNumber") ?? "").trim() || null;
+  const clientWhatsappNumberRaw = String(formData.get("clientWhatsappNumber") ?? "").trim() || null;
+  // Mesma validação de Lead.phone (ver saveLeadPhone, conversation-pipeline.ts)
+  // — este número agora também alimenta o link wa.me mandado DIRETO ao
+  // lead (clinicContactContext), não só o resumo semanal interno, então um
+  // DDD faltando aqui quebraria um link que o lead vê de verdade. Só
+  // valida o que está sendo gravado AGORA (vazio continua permitido,
+  // limpa o campo); não reescreve nem apaga nada que já estava salvo —
+  // isso só acontece se a própria clínica resubmeter o formulário.
+  if (clientWhatsappNumberRaw) {
+    const validation = validateBrazilianPhone(clientWhatsappNumberRaw);
+    if (!validation.valid) {
+      throw new Error(`WhatsApp da clínica: ${validation.reason}`);
+    }
+  }
+  const clientWhatsappNumber = clientWhatsappNumberRaw;
+  const notifyWhatsappNumber = String(formData.get("notifyWhatsappNumber") ?? "").trim() || null; // sem validação — fora do pedido atual (só clientWhatsappNumber, ver investigação)
+  const notifyWhatsappEnabled = formData.get("notifyWhatsappEnabled") === "on";
+  const remindersWhatsappEnabled = formData.get("remindersWhatsappEnabled") === "on";
   const active = formData.get("active") === "on";
 
   const firstReminderHours = parseInt(String(formData.get("firstReminderHours") ?? ""), 10);
@@ -179,6 +196,8 @@ export async function updateClinicSettings(clinicId: string, formData: FormData)
       address,
       clientWhatsappNumber,
       notifyWhatsappNumber,
+      notifyWhatsappEnabled,
+      remindersWhatsappEnabled,
       active,
       reminderConfig: {
         upsert: {

@@ -40,7 +40,17 @@ model Clinic {
 
   // Contato para escalonamento humano e resumo semanal
   notifyWhatsappNumber String? // Mauro/secretária desta clínica
-  clientWhatsappNumber String? // número da clínica p/ resumo semanal
+  clientWhatsappNumber String? // número da clínica p/ resumo semanal E link direto pro lead (ver clinicContactContext, conversation-pipeline.ts)
+
+  // Interruptores por clínica (padrão desligado) — parte do enxugamento do
+  // atendimento humano: liga/desliga o aviso à secretária
+  // (escalateToHuman/o bloco needsHuman, conversation-pipeline.ts) e os
+  // lembretes de agendamento por WhatsApp (reminders.ts) sem remover
+  // nenhum código nem precisar de deploy pra reverter — só esses dois
+  // fluxos; a confirmação de agendamento ao lead (maybeSendWhatsappConfirmation)
+  // nunca checa nenhum dos dois, continua sempre ligada.
+  notifyWhatsappEnabled    Boolean @default(false)
+  remindersWhatsappEnabled Boolean @default(false)
 
   // Instância própria na Evolution API — cada clínica tem seu próprio
   // WhatsApp, pareado via QR code (ver src/lib/whatsapp-connection.ts).
