@@ -97,6 +97,7 @@ import {
   encodeInstagramConfirmationCard,
   decodeInstagramConfirmationCard,
   buildInstagramConfirmationCardSubtitle,
+  INSTAGRAM_CONFIRMATION_CARD_ENABLED,
 } from "@/lib/conversation-pipeline";
 
 // Bug real corrigido (ver comentário grande em buildAvailabilityCheck):
@@ -487,6 +488,17 @@ describe("buildInstagramConfirmationCardSubtitle", () => {
     const subtitle = buildInstagramConfirmationCardSubtitle(new Date("2026-09-19T12:00:00.000Z"), "Av. Paulista, 1000");
     expect(subtitle.toLowerCase()).not.toContain("http");
     expect(subtitle.toLowerCase()).not.toContain("wa.me");
+  });
+});
+
+// Decisão de produto: confirmação de agendamento sai SÓ por WhatsApp — o
+// lead já recebe a frase da IA confirmando o horário na mesma conversa do
+// Instagram. maybeSendInstagramConfirmationCard sai sem fazer nada quando
+// esta flag é false (mesmo padrão de REMINDERS_ENABLED, reminders.ts) —
+// este teste falha alto e claro se alguém religar a flag sem querer.
+describe("INSTAGRAM_CONFIRMATION_CARD_ENABLED", () => {
+  it("está desligada — nenhum cartão de confirmação é criado no Instagram ao agendar", () => {
+    expect(INSTAGRAM_CONFIRMATION_CARD_ENABLED).toBe(false);
   });
 });
 
