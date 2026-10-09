@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { sendInstagramMessage } from "@/lib/instagram";
+import { sendInstagramMessage, sendInstagramGenericTemplateCard } from "@/lib/instagram";
 import { sendWhatsappMessage } from "@/lib/whatsapp";
 import { toPublicUploadUrl } from "@/lib/uploads";
 import {
@@ -8,6 +8,9 @@ import {
   ATTENDANCE_FINAL_DELAY_AFTER_TIP_MS,
   decodePendingAttendanceStep,
   encodePendingAttendanceStep,
+  decodeClinicContactCard,
+  CLINIC_CONTACT_CARD_SUBTITLE,
+  CLINIC_CONTACT_CARD_BUTTON_TITLE,
 } from "@/lib/conversation-pipeline";
 
 // Despacha mensagens OUTBOUND com status PENDING cujo horário de envio
@@ -254,13 +257,50 @@ async function dispatchOneMessage(
       return { status: "failed", nextChainLink: null };
     }
 
-    const result = await sendInstagramMessage({
-      accessTokenEnc: igAccount.accessTokenEnc,
-      igUserId: igAccount.igUserId,
-      recipientIgScopedId: message.conversation.lead.igScopedId,
-      text: message.mediaUrl ? undefined : message.content,
-      mediaUrl: message.mediaUrl ? toPublicUploadUrl(message.mediaUrl) : undefined,
-    });
+    // Cartão de contato da clínica (ver Message.clinicContactCard, schema
+    // e clinicContactContext, conversation-pipeline.ts) — tenta mandar
+    // como Generic Template primeiro; QUALQUER falha da Graph API
+    // (permissão ausente, feature não habilitada, erro de rede, etc.) cai
+    // pro fallback: `message.content` já vem pronto com o link /c/<id> do
+    // próprio VEXO (nunca o número cru), mandado como texto normal pelo
+    // MESMO sendInstagramMessage de sempre. Nunca manda os dois, nunca
+    // deixa a falha do cartão propagar e falhar o turno — só loga o erro
+    // devolvido pela Meta pra conferir no App Dashboard depois.
+    const clinicContactCard = message.clinicContactCard ? decodeClinicContactCard(message.clinicContactCard) : null;
+    let result: { messageId: string };
+    if (clinicContactCard) {
+      try {
+        result = await sendInstagramGenericTemplateCard({
+          accessTokenEnc: igAccount.accessTokenEnc,
+          igUserId: igAccount.igUserId,
+          recipientIgScopedId: message.conversation.lead.igScopedId,
+          title: clinicContactCard.clinicName,
+          subtitle: CLINIC_CONTACT_CARD_SUBTITLE,
+          buttonTitle: CLINIC_CONTACT_CARD_BUTTON_TITLE,
+          buttonUrl: `https://wa.me/${clinicContactCard.whatsappE164}`,
+        });
+      } catch (cardErr) {
+        console.error(
+          `[vexo] Cartão de contato da clínica ${clinicContactCard.clinicId} rejeitado pela Graph API ` +
+            `(mensagem ${message.id}) — caindo pro link de fallback /c/<id> em texto normal:`,
+          cardErr
+        );
+        result = await sendInstagramMessage({
+          accessTokenEnc: igAccount.accessTokenEnc,
+          igUserId: igAccount.igUserId,
+          recipientIgScopedId: message.conversation.lead.igScopedId,
+          text: message.content,
+        });
+      }
+    } else {
+      result = await sendInstagramMessage({
+        accessTokenEnc: igAccount.accessTokenEnc,
+        igUserId: igAccount.igUserId,
+        recipientIgScopedId: message.conversation.lead.igScopedId,
+        text: message.mediaUrl ? undefined : message.content,
+        mediaUrl: message.mediaUrl ? toPublicUploadUrl(message.mediaUrl) : undefined,
+      });
+    }
 
     const now = new Date();
 

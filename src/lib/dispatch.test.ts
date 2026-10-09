@@ -53,8 +53,10 @@ vi.mock("@/lib/prisma", () => ({
 }));
 
 const sendInstagramMessageMock = vi.fn();
+const sendInstagramGenericTemplateCardMock = vi.fn();
 vi.mock("@/lib/instagram", () => ({
   sendInstagramMessage: (...args: unknown[]) => sendInstagramMessageMock(...args),
+  sendInstagramGenericTemplateCard: (...args: unknown[]) => sendInstagramGenericTemplateCardMock(...args),
 }));
 
 const sendWhatsappMessageMock = vi.fn();
@@ -79,6 +81,10 @@ vi.mock("@/lib/conversation-pipeline", async () => {
     ATTENDANCE_FINAL_DELAY_AFTER_TIP_MS: actual.ATTENDANCE_FINAL_DELAY_AFTER_TIP_MS,
     encodePendingAttendanceStep: actual.encodePendingAttendanceStep,
     decodePendingAttendanceStep: actual.decodePendingAttendanceStep,
+    encodeClinicContactCard: actual.encodeClinicContactCard,
+    decodeClinicContactCard: actual.decodeClinicContactCard,
+    CLINIC_CONTACT_CARD_SUBTITLE: actual.CLINIC_CONTACT_CARD_SUBTITLE,
+    CLINIC_CONTACT_CARD_BUTTON_TITLE: actual.CLINIC_CONTACT_CARD_BUTTON_TITLE,
   };
 });
 
@@ -88,6 +94,9 @@ import {
   ATTENDANCE_TIP_DELAY_AFTER_VIDEO_MS,
   ATTENDANCE_FINAL_DELAY_AFTER_TIP_MS,
   encodePendingAttendanceStep,
+  encodeClinicContactCard,
+  CLINIC_CONTACT_CARD_SUBTITLE,
+  CLINIC_CONTACT_CARD_BUTTON_TITLE,
   type PendingAttendanceStep,
 } from "@/lib/conversation-pipeline";
 
@@ -575,5 +584,121 @@ describe("dispatchDueMessages — cadeia de confirmação de presença (apresent
       expect(sendInstagramMessageMock).toHaveBeenCalledTimes(1);
       expect(messageCreateMock).toHaveBeenCalledTimes(1);
     });
+  });
+});
+
+// Cartão de contato da clínica (Generic Template) — ver
+// Message.clinicContactCard/clinicContactContext (conversation-pipeline.ts)
+// e o comentário grande em dispatchOneMessage (dispatch.ts): tenta o
+// cartão primeiro, cai pro fallback em texto (message.content, já pronto
+// com o link /c/<id>) em QUALQUER erro, sem nunca mandar os dois nem
+// falhar o turno.
+describe("dispatchDueMessages — cartão de contato da clínica", () => {
+  let sendingClaims: Set<string>;
+
+  function buildClinicContactCardMessage(overrides: Partial<Record<string, unknown>> = {}) {
+    return {
+      id: "msg-card-1",
+      conversationId: "conv-1",
+      channel: "INSTAGRAM",
+      sender: "SYSTEM",
+      content: "Pra falar direto com a equipe da Clínica Bela Vida pelo WhatsApp, é só clicar aqui: https://vexo.app/c/clinic-1",
+      mediaUrl: null,
+      pendingAttendanceStep: null,
+      clinicContactCard: encodeClinicContactCard({
+        clinicId: "clinic-1",
+        clinicName: "Clínica Bela Vida",
+        whatsappE164: "5511987654321",
+      }),
+      createdAt: new Date("2026-10-09T10:00:00.000Z"),
+      scheduledFor: new Date("2026-10-09T10:00:02.000Z"),
+      conversation: {
+        lead: { phone: null, igScopedId: "ig-scoped-1" },
+        clinic: {
+          whatsappInstanceName: null,
+          instagramAccount: { accessTokenEnc: "enc-token", igUserId: "ig-user-1" },
+        },
+      },
+      ...overrides,
+    };
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    sendingClaims = new Set();
+    messageUpdateManyMock.mockImplementation(async (args: { where?: { id?: string }; data?: Record<string, unknown> }) => {
+      const id = args?.where?.id;
+      if (args?.data?.status === "SENDING") {
+        if (!id || sendingClaims.has(id)) return { count: 0 };
+        sendingClaims.add(id);
+        return { count: 1 };
+      }
+      return { count: 1 };
+    });
+    messageUpdateMock.mockResolvedValue({});
+    conversationFindUniqueMock.mockResolvedValue({ status: "ACTIVE" });
+  });
+
+  it("Meta aceita o cartão: manda o Generic Template com nome/subtítulo/botão certos e NUNCA chama sendInstagramMessage (nenhum segundo link)", async () => {
+    const card = buildClinicContactCardMessage();
+    messageFindManyMock.mockResolvedValueOnce([card]);
+    sendInstagramGenericTemplateCardMock.mockResolvedValue({ messageId: "ig-card-msg-1" });
+
+    const result = await dispatchDueMessages();
+
+    expect(result.sent).toBe(1);
+    expect(result.failed).toBe(0);
+    expect(sendInstagramGenericTemplateCardMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        recipientIgScopedId: "ig-scoped-1",
+        title: "Clínica Bela Vida",
+        subtitle: CLINIC_CONTACT_CARD_SUBTITLE,
+        buttonTitle: CLINIC_CONTACT_CARD_BUTTON_TITLE,
+        buttonUrl: "https://wa.me/5511987654321",
+      })
+    );
+    expect(sendInstagramMessageMock).not.toHaveBeenCalled();
+    expect(messageUpdateMock).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ status: "SENT", igMessageId: "ig-card-msg-1" }) })
+    );
+  });
+
+  it("Meta rejeita o cartão (ex.: feature não habilitada): cai pro fallback em texto (content com o link /c/<id>) e marca SENT normalmente, sem falhar o turno", async () => {
+    const card = buildClinicContactCardMessage();
+    messageFindManyMock.mockResolvedValueOnce([card]);
+    sendInstagramGenericTemplateCardMock.mockRejectedValue(
+      new Error("Falha ao enviar cartão de contato da clínica no Instagram (400): Template feature is not enabled for this app")
+    );
+    sendInstagramMessageMock.mockResolvedValue({ messageId: "ig-fallback-msg-1" });
+
+    const result = await dispatchDueMessages();
+
+    expect(result.sent).toBe(1);
+    expect(result.failed).toBe(0);
+    // Fallback mandado como texto normal, com o CONTENT já pronto (link
+    // /c/<id>) — nunca um segundo link/cartão junto.
+    expect(sendInstagramMessageMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        recipientIgScopedId: "ig-scoped-1",
+        text: card.content,
+      })
+    );
+    expect(sendInstagramMessageMock).toHaveBeenCalledTimes(1);
+    expect(messageUpdateMock).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ status: "SENT", igMessageId: "ig-fallback-msg-1" }) })
+    );
+  });
+
+  it("clinicContactCard corrompido (JSON inválido) também cai pro fallback em texto, sem lançar", async () => {
+    const card = buildClinicContactCardMessage({ clinicContactCard: "{ json inválido" });
+    messageFindManyMock.mockResolvedValueOnce([card]);
+    sendInstagramMessageMock.mockResolvedValue({ messageId: "ig-fallback-msg-2" });
+
+    const result = await dispatchDueMessages();
+
+    expect(result.sent).toBe(1);
+    expect(result.failed).toBe(0);
+    expect(sendInstagramGenericTemplateCardMock).not.toHaveBeenCalled();
+    expect(sendInstagramMessageMock).toHaveBeenCalledWith(expect.objectContaining({ text: card.content }));
   });
 });

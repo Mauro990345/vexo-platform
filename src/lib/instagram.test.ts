@@ -1,5 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { isRealIgScopedId, getInstagramUserProfile, sendInstagramMessage } from "@/lib/instagram";
+import {
+  isRealIgScopedId,
+  getInstagramUserProfile,
+  sendInstagramMessage,
+  sendInstagramGenericTemplateCard,
+} from "@/lib/instagram";
 import { encryptToken } from "@/lib/crypto";
 
 // Bug real: prisma/seed-demo.ts cria 40 leads de demonstração com igScopedId
@@ -91,5 +96,80 @@ describe("retry em erro transitório da Graph API", () => {
     // Só as 2 chamadas de envio (1ª falhou, 2ª funcionou) — nenhuma chamada
     // extra ao debug_token, que só roda pra erro NÃO retryable.
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+});
+
+// Cartão de contato da clínica (Generic Template) — ver
+// clinicContactContext/buildClinicContactContext (conversation-pipeline.ts)
+// e dispatchOneMessage (dispatch.ts), que trata qualquer erro daqui como
+// sinal pra cair no link de fallback /c/<id>, nunca mandar os dois.
+describe("sendInstagramGenericTemplateCard", () => {
+  beforeEach(() => {
+    process.env.TOKEN_ENCRYPTION_KEY = "test-key-para-os-testes-de-retry";
+    vi.stubGlobal("fetch", vi.fn());
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("monta o payload de Generic Template com o nome da clínica (título), subtítulo fixo e botão web_url — nunca o número em texto visível", async () => {
+    const fetchMock = fetch as unknown as ReturnType<typeof vi.fn>;
+    fetchMock.mockResolvedValue(jsonResponse(200, { message_id: "mid.card.1" }));
+
+    const result = await sendInstagramGenericTemplateCard({
+      accessTokenEnc: encryptToken("fake-token"),
+      igUserId: "999",
+      recipientIgScopedId: "17841400000000000",
+      title: "Clínica Bela Vida",
+      subtitle: "Fale com a equipe pelo WhatsApp",
+      buttonTitle: "Abrir WhatsApp",
+      buttonUrl: "https://wa.me/5511987654321",
+    });
+
+    expect(result).toEqual({ messageId: "mid.card.1" });
+
+    const [, requestInit] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(requestInit.body as string);
+
+    expect(body.message.attachment.type).toBe("template");
+    expect(body.message.attachment.payload.template_type).toBe("generic");
+    const [element] = body.message.attachment.payload.elements;
+    expect(element.title).toBe("Clínica Bela Vida");
+    expect(element.subtitle).toBe("Fale com a equipe pelo WhatsApp");
+    expect(element.buttons).toEqual([
+      { type: "web_url", url: "https://wa.me/5511987654321", title: "Abrir WhatsApp" },
+    ]);
+    // sem ?text= na URL do botão — pedido explícito.
+    expect(element.buttons[0].url).not.toContain("?text=");
+    // Nenhum campo visível do cartão (título/subtítulo/texto do botão)
+    // contém dígitos de telefone — o número só existe dentro da URL do
+    // botão, nunca como texto que o Instagram mostraria por extenso.
+    expect(element.title).not.toMatch(/\d{8,}/);
+    expect(element.subtitle).not.toMatch(/\d{8,}/);
+    expect(element.buttons[0].title).not.toMatch(/\d{8,}/);
+  });
+
+  it("propaga o erro cru da Graph API quando o cartão é rejeitado (ex.: feature não habilitada), sem tentar de novo", async () => {
+    const fetchMock = fetch as unknown as ReturnType<typeof vi.fn>;
+    fetchMock.mockResolvedValue(
+      jsonResponse(400, { error: { message: "Template feature is not enabled for this app", code: 100 } })
+    );
+
+    await expect(
+      sendInstagramGenericTemplateCard({
+        accessTokenEnc: encryptToken("fake-token"),
+        igUserId: "999",
+        recipientIgScopedId: "17841400000000000",
+        title: "Clínica Bela Vida",
+        subtitle: "Fale com a equipe pelo WhatsApp",
+        buttonTitle: "Abrir WhatsApp",
+        buttonUrl: "https://wa.me/5511987654321",
+      })
+    ).rejects.toThrow(/Template feature is not enabled/);
+
+    // Uma única tentativa — nunca retry nem diagnóstico extra pra este
+    // caminho (ver comentário grande na função).
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });

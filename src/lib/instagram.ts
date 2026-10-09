@@ -191,6 +191,70 @@ export async function sendInstagramMessage(params: {
   );
 }
 
+// Cartão de contato da clínica (Generic Template) mandado ao lead que pede
+// pra falar com um humano, no lugar do link cru de WhatsApp em texto (ver
+// clinicContactContext/buildClinicContactContext, conversation-pipeline.ts)
+// — mostra o NOME da clínica e um botão clicável "Abrir WhatsApp", sem o
+// número aparecer em nenhum texto visível (ele só existe dentro da URL do
+// botão, que o Instagram nunca mostra por extenso ao lead). Mesmo endpoint
+// de sendInstagramMessage (/me/messages), só muda o payload de `message`.
+//
+// Sem withRetry/diagnóstico de debug_token de propósito: ao contrário de
+// sendInstagramMessage (onde uma falha definitiva precisa propagar pro
+// chamador decidir o que fazer), aqui QUALQUER rejeição da Graph API —
+// permissão ausente, feature "Generic Template" não habilitada pro App,
+// erro transitório — deve virar fallback imediato pro link /c/<id> em texto
+// normal (ver dispatchOneMessage, dispatch.ts), nunca uma segunda tentativa
+// automática. Uma única chamada; o erro (corpo cru da resposta) é só
+// propagado pra quem chama logar e decidir o fallback.
+export async function sendInstagramGenericTemplateCard(params: {
+  accessTokenEnc: string;
+  igUserId: string;
+  recipientIgScopedId: string;
+  title: string;
+  subtitle: string;
+  buttonTitle: string;
+  buttonUrl: string;
+}): Promise<{ messageId: string }> {
+  const accessToken = decryptToken(params.accessTokenEnc);
+
+  const message = {
+    attachment: {
+      type: "template",
+      payload: {
+        template_type: "generic",
+        elements: [
+          {
+            title: params.title,
+            subtitle: params.subtitle,
+            buttons: [{ type: "web_url", url: params.buttonUrl, title: params.buttonTitle }],
+          },
+        ],
+      },
+    },
+  };
+
+  const res = await fetch(`${IG_GRAPH_BASE}/me/messages`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      recipient: { id: params.recipientIgScopedId },
+      message,
+      access_token: accessToken,
+    }),
+  });
+
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(
+      `Falha ao enviar cartão de contato da clínica no Instagram (${res.status}) para recipient=${params.recipientIgScopedId} (conta remetente igUserId=${params.igUserId}): ${body}`
+    );
+  }
+
+  const data = (await res.json()) as { message_id: string };
+  return { messageId: data.message_id };
+}
+
 // User Profile API (instagram-platform/instagram-api-with-instagram-login,
 // produto que o VEXO usa — não a família antiga do Messenger Platform):
 // busca o nome de exibição de quem mandou mensagem, dado o IGSID

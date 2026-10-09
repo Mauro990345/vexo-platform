@@ -667,6 +667,18 @@ model Message {
   // a frase final).
   pendingAttendanceStep String? @map("pendingAttendanceTip") @db.Text
 
+  // Preenchido só quando esta Message é o cartão de contato da clínica
+  // enviado ao lead que pediu humano (ver clinicContactContext/
+  // wantsHumanWithClinicWhatsapp, conversation-pipeline.ts) — JSON
+  // {clinicId, clinicName, whatsappE164} (ver ClinicContactCard/
+  // encodeClinicContactCard/decodeClinicContactCard) usado por
+  // dispatchOneMessage (src/lib/dispatch.ts) pra montar o Generic Template
+  // na hora de enviar. `content` desta Message já vem pronto com o texto
+  // de fallback (link /c/<id>, nunca o número cru) — se a Graph API
+  // rejeitar o cartão, dispatchOneMessage manda `content` como texto
+  // normal em vez do cartão, nunca os dois.
+  clinicContactCard String? @db.Text
+
   createdAt DateTime @default(now())
   // Usado só pra detectar uma mensagem presa em SENDING (processo do
   // worker derrubado no meio do envio, antes de conseguir marcar SENT ou
