@@ -181,4 +181,25 @@ describe("formatAppointmentConfirmationMessage", () => {
       expect(message).not.toContain("📍");
     }
   });
+
+  // Regra de produto: o WhatsApp da clínica serve SÓ pra esta confirmação
+  // — nenhum link (wa.me do pedido de humano, ou qualquer outro) pode
+  // vazar pra dentro dela. Trava explícita contra isso, com e sem
+  // endereço (que também não deve nunca virar um link).
+  it("nunca contém link nenhum (http ou wa.me) — nem com endereço, nem sem", () => {
+    const withAddress = formatAppointmentConfirmationMessage({
+      leadFirstName: "Maria",
+      scheduledAt: new Date("2026-09-19T12:00:00.000Z"),
+      clinicAddress: "Av. Paulista, 1000",
+    });
+    const withoutAddress = formatAppointmentConfirmationMessage({
+      leadFirstName: "Maria",
+      scheduledAt: new Date("2026-09-19T12:00:00.000Z"),
+    });
+
+    for (const message of [withAddress, withoutAddress]) {
+      expect(message.toLowerCase()).not.toContain("http");
+      expect(message.toLowerCase()).not.toContain("wa.me");
+    }
+  });
 });

@@ -6,7 +6,19 @@ import { sendWhatsappMessage, formatWeeklySummaryMessage } from "@/lib/whatsapp"
 // consultando o banco (sem custo relevante de IA) e enviado via WhatsApp
 // (Evolution API) para o número da clínica.
 
+// DESLIGADO (regra de produto: Clinic.clientWhatsappNumber serve SÓ pra
+// confirmação de agendamento ao lead — ver maybeSendWhatsappConfirmation,
+// conversation-pipeline.ts — nada mais sai por WhatsApp). `const` boolean,
+// não variável de ambiente, de propósito: religar é só virar isto pra
+// true, sem precisar de deploy de infra nem remover nada do resto da
+// função (métricas, WeeklySummary, loop por clínica) nem do cron em
+// worker/index.ts. Mesmo padrão já usado por STAGNATION_GUARD_SHADOW_MODE
+// em conversation-pipeline.ts.
+const WEEKLY_SUMMARY_WHATSAPP_ENABLED = false;
+
 export async function sendWeeklySummaries(): Promise<{ sent: number; failed: number }> {
+  if (!WEEKLY_SUMMARY_WHATSAPP_ENABLED) return { sent: 0, failed: 0 };
+
   const weekEnd = startOfDay(new Date());
   const weekStart = addDays(weekEnd, -7);
 

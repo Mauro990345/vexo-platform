@@ -1,11 +1,13 @@
 import { prisma } from "@/lib/prisma";
-import { sendWhatsappMessage, formatReminderMessage, applyReminderTemplate } from "@/lib/whatsapp";
+import { formatReminderMessage, applyReminderTemplate } from "@/lib/whatsapp";
 import { sendInstagramMessage } from "@/lib/instagram";
 
 // Lembretes de agendamento — horas configuráveis por clínica (padrão 24h e 3h
-// antes, ver ReminderConfig). Enviados via WhatsApp quando o lead informou
-// telefone durante a conversa; caso contrário, via Instagram (mesmo canal da
-// conversa) como fallback.
+// antes, ver ReminderConfig). SEMPRE por Instagram (mesmo canal da conversa)
+// — regra de produto: o WhatsApp da clínica serve só pra confirmação de
+// agendamento (ver maybeSendWhatsappConfirmation, conversation-pipeline.ts),
+// nunca pra lembrete. Sem Instagram conectado, pula o lembrete neste ciclo
+// (sem gravar ReminderLog) — o próximo ciclo tenta de novo, nunca descarta.
 
 export async function processReminders(): Promise<{ sent: number }> {
   const now = new Date();
@@ -53,32 +55,18 @@ export async function processReminders(): Promise<{ sent: number }> {
         ? applyReminderTemplate(customTemplate, { leadFirstName, scheduledAt: appt.scheduledAt })
         : formatReminderMessage({ leadFirstName: leadFirstName || "tudo bem", hoursBefore, scheduledAt: appt.scheduledAt });
 
-      // remindersWhatsappEnabled — interruptor por clínica (padrão
-      // desligado, ver schema.prisma), some ALÉM das duas condições de
-      // sempre (telefone do lead + WhatsApp conectado). Desligado, cai
-      // direto no fallback de sempre (Instagram, abaixo) — nunca pula o
-      // lembrete em silêncio por causa disso: só muda POR QUAL canal ele
-      // sai, exatamente como já acontecia quando faltava telefone/instância.
-      const canUseWhatsapp = Boolean(
-        appt.lead.phone && appt.clinic.whatsappInstanceName && appt.clinic.remindersWhatsappEnabled
-      );
+      if (!appt.clinic.instagramAccount) continue;
 
       try {
-        if (canUseWhatsapp) {
-          await sendWhatsappMessage(appt.clinic.whatsappInstanceName, appt.lead.phone!, text);
-        } else if (appt.clinic.instagramAccount) {
-          await sendInstagramMessage({
-            accessTokenEnc: appt.clinic.instagramAccount.accessTokenEnc,
-            igUserId: appt.clinic.instagramAccount.igUserId,
-            recipientIgScopedId: appt.lead.igScopedId,
-            text,
-          });
-        } else {
-          continue;
-        }
+        await sendInstagramMessage({
+          accessTokenEnc: appt.clinic.instagramAccount.accessTokenEnc,
+          igUserId: appt.clinic.instagramAccount.igUserId,
+          recipientIgScopedId: appt.lead.igScopedId,
+          text,
+        });
 
         await prisma.reminderLog.create({
-          data: { appointmentId: appt.id, hoursBefore, channel: canUseWhatsapp ? "whatsapp" : "instagram" },
+          data: { appointmentId: appt.id, hoursBefore, channel: "instagram" },
         });
         sent++;
       } catch (err) {

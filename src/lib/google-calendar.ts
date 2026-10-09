@@ -3,7 +3,6 @@ import { decryptToken, encryptToken } from "@/lib/crypto";
 import { prisma } from "@/lib/prisma";
 import { SAO_PAULO_UTC_OFFSET_HOURS } from "@/lib/timezone";
 import { withRetry, RetryableError } from "@/lib/retry";
-import { sendWhatsappMessage, formatGoogleCalendarReconnectAlert } from "@/lib/whatsapp";
 
 // Janela de funcionamento em horário de Brasília — usada só pra filtrar
 // quais slots de 1h checkAvailability oferece (ver loop abaixo). Derivada
@@ -57,42 +56,20 @@ function isInvalidGrantError(err: unknown): boolean {
 }
 
 // Grava que esta clínica precisa reconectar o Google Calendar — alimenta a
-// bolinha de status em Conexões (para de ficar verde, ver conexoes/page.tsx)
-// e dispara UM aviso por WhatsApp pra secretária (nunca repete a cada nova
-// falha enquanto o flag já estiver setado — sem isso, toda tentativa de
-// agendar/checar disponibilidade com o token morto mandaria um WhatsApp
-// novo). Reconectar de verdade (novo OAuth) é o único jeito de limpar isso
-// — ver o upsert em api/oauth/google-calendar/callback/route.ts.
+// bolinha de status em Conexões (para de ficar verde, ver conexoes/page.tsx
+// — some de volta sozinha assim que a clínica reconectar de verdade, novo
+// OAuth, que limpa needsReconnectAt no callback). Aviso por WhatsApp
+// REMOVIDO (regra de produto: o WhatsApp da clínica serve só pra
+// confirmação de agendamento ao lead) — a marcação em si (e a bolinha de
+// status) continuam normalmente, só o aviso em si saiu.
 export async function markGoogleCalendarNeedsReconnect(clinicId: string, reason: string): Promise<void> {
-  const account = await prisma.googleCalendarAccount.findUnique({
-    where: { clinicId },
-    select: {
-      needsReconnectAt: true,
-      clinic: { select: { name: true, notifyWhatsappNumber: true, whatsappInstanceName: true } },
-    },
-  });
+  const account = await prisma.googleCalendarAccount.findUnique({ where: { clinicId }, select: { clinicId: true } });
   if (!account) return; // clínica já desconectou por conta própria nesse meio tempo — nada a marcar
 
-  const alreadyFlagged = Boolean(account.needsReconnectAt);
   await prisma.googleCalendarAccount.update({
     where: { clinicId },
     data: { needsReconnectAt: new Date(), needsReconnectReason: reason },
   });
-
-  if (alreadyFlagged) return;
-
-  const { clinic } = account;
-  if (clinic.notifyWhatsappNumber && clinic.whatsappInstanceName) {
-    try {
-      await sendWhatsappMessage(
-        clinic.whatsappInstanceName,
-        clinic.notifyWhatsappNumber,
-        formatGoogleCalendarReconnectAlert({ clinicName: clinic.name, reason })
-      );
-    } catch (err) {
-      console.error("[vexo] Falha ao notificar reconexão necessária do Google Calendar via WhatsApp:", err);
-    }
-  }
 }
 
 // Envelope comum pra TODA chamada de verdade à API do Google Calendar
