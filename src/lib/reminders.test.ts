@@ -11,16 +11,16 @@ vi.mock("@/lib/prisma", () => ({
   },
 }));
 
-const sendWhatsappMessageMock = vi.fn();
 vi.mock("@/lib/whatsapp", async () => {
   const actual = await vi.importActual<typeof import("@/lib/whatsapp")>("@/lib/whatsapp");
   return {
     // formatReminderMessage/applyReminderTemplate são puras (sem I/O) —
     // mantidas reais, igual ao padrão já usado em dispatch.test.ts pras
-    // constantes de delay de conversation-pipeline.
+    // constantes de delay de conversation-pipeline. sendWhatsappMessage
+    // não é importada por reminders.ts (regra de produto: lembrete nunca
+    // sai por WhatsApp) — nem precisa de mock aqui.
     formatReminderMessage: actual.formatReminderMessage,
     applyReminderTemplate: actual.applyReminderTemplate,
-    sendWhatsappMessage: (...args: unknown[]) => sendWhatsappMessageMock(...args),
   };
 });
 
@@ -42,8 +42,6 @@ function buildAppointment(overrides: Partial<Record<string, unknown>> = {}) {
     scheduledAt: new Date(NOW.getTime() + 24 * 60 * 60 * 1000),
     lead: { name: "Maria Lima", phone: "21998223038", igScopedId: "ig-scoped-1" },
     clinic: {
-      whatsappInstanceName: "clinica-demo",
-      remindersWhatsappEnabled: false,
       reminderConfig: null,
       instagramAccount: { accessTokenEnc: "enc-token", igUserId: "ig-user-1" },
     },
@@ -52,17 +50,15 @@ function buildAppointment(overrides: Partial<Record<string, unknown>> = {}) {
   };
 }
 
-// Interruptor por clínica (Clinic.remindersWhatsappEnabled, padrão
-// desligado) — pedido explícito: desligado não pode pular o lembrete em
-// silêncio, só trocar o canal pro fallback de sempre (Instagram), igual
-// já acontecia quando faltava telefone/instância antes deste interruptor
-// existir.
-describe("processReminders — interruptor remindersWhatsappEnabled por clínica", () => {
+// Regra de produto: o WhatsApp da clínica serve só pra confirmação de
+// agendamento (ver maybeSendWhatsappConfirmation, conversation-pipeline.ts)
+// — lembrete SEMPRE por Instagram, nunca por WhatsApp, mesmo com telefone
+// do lead salvo.
+describe("processReminders — sempre por Instagram, nunca por WhatsApp", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers();
     vi.setSystemTime(NOW);
-    sendWhatsappMessageMock.mockResolvedValue(undefined);
     sendInstagramMessageMock.mockResolvedValue({ messageId: "ig-msg-1" });
     reminderLogCreateMock.mockResolvedValue({});
   });
@@ -71,21 +67,20 @@ describe("processReminders — interruptor remindersWhatsappEnabled por clínica
     vi.useRealTimers();
   });
 
-  it("desligado (padrão): mesmo com telefone e WhatsApp conectado, cai pro fallback do Instagram — não pula o lembrete em silêncio", async () => {
+  it("com telefone do lead salvo: ainda assim envia por Instagram, não por WhatsApp", async () => {
     const appt = buildAppointment();
     appointmentFindManyMock.mockResolvedValue([appt]);
 
     const result = await processReminders();
 
     expect(result.sent).toBe(1);
-    expect(sendWhatsappMessageMock).not.toHaveBeenCalled();
     expect(sendInstagramMessageMock).toHaveBeenCalledTimes(1);
     expect(reminderLogCreateMock).toHaveBeenCalledWith({
       data: { appointmentId: "appt-1", hoursBefore: 24, channel: "instagram" },
     });
   });
 
-  it("desligado e sem Instagram conectado: não envia nada e não registra (tentado de novo no próximo ciclo, sem reminderLog)", async () => {
+  it("sem Instagram conectado: não envia nada e não registra (tentado de novo no próximo ciclo, sem reminderLog)", async () => {
     const appt = buildAppointment({
       clinic: { ...buildAppointment().clinic, instagramAccount: null },
     });
@@ -94,51 +89,19 @@ describe("processReminders — interruptor remindersWhatsappEnabled por clínica
     const result = await processReminders();
 
     expect(result.sent).toBe(0);
-    expect(sendWhatsappMessageMock).not.toHaveBeenCalled();
     expect(sendInstagramMessageMock).not.toHaveBeenCalled();
     expect(reminderLogCreateMock).not.toHaveBeenCalled();
   });
 
-  it("ligado: com telefone e WhatsApp conectado, envia por WhatsApp (não Instagram)", async () => {
-    const appt = buildAppointment({
-      clinic: { ...buildAppointment().clinic, remindersWhatsappEnabled: true },
-    });
-    appointmentFindManyMock.mockResolvedValue([appt]);
-
-    const result = await processReminders();
-
-    expect(result.sent).toBe(1);
-    expect(sendWhatsappMessageMock).toHaveBeenCalledTimes(1);
-    expect(sendInstagramMessageMock).not.toHaveBeenCalled();
-    expect(reminderLogCreateMock).toHaveBeenCalledWith({
-      data: { appointmentId: "appt-1", hoursBefore: 24, channel: "whatsapp" },
-    });
-  });
-
-  it("ligado mas sem WhatsApp conectado (whatsappInstanceName null): cai pro Instagram mesmo assim", async () => {
-    const appt = buildAppointment({
-      clinic: { ...buildAppointment().clinic, remindersWhatsappEnabled: true, whatsappInstanceName: null },
-    });
-    appointmentFindManyMock.mockResolvedValue([appt]);
-
-    const result = await processReminders();
-
-    expect(result.sent).toBe(1);
-    expect(sendWhatsappMessageMock).not.toHaveBeenCalled();
-    expect(sendInstagramMessageMock).toHaveBeenCalledTimes(1);
-  });
-
-  it("ligado mas sem telefone do lead: cai pro Instagram mesmo assim", async () => {
+  it("sem telefone do lead: envia por Instagram mesmo assim (telefone nunca foi condição pro Instagram)", async () => {
     const appt = buildAppointment({
       lead: { ...buildAppointment().lead, phone: null },
-      clinic: { ...buildAppointment().clinic, remindersWhatsappEnabled: true },
     });
     appointmentFindManyMock.mockResolvedValue([appt]);
 
     const result = await processReminders();
 
     expect(result.sent).toBe(1);
-    expect(sendWhatsappMessageMock).not.toHaveBeenCalled();
     expect(sendInstagramMessageMock).toHaveBeenCalledTimes(1);
   });
 });

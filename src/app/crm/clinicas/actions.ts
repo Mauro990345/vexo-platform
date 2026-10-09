@@ -160,12 +160,13 @@ export async function updateClinicSettings(clinicId: string, formData: FormData)
   const address = String(formData.get("address") ?? "").trim() || null;
   const clientWhatsappNumberRaw = String(formData.get("clientWhatsappNumber") ?? "").trim() || null;
   // Mesma validação de Lead.phone (ver saveLeadPhone, conversation-pipeline.ts)
-  // — este número agora também alimenta o link wa.me mandado DIRETO ao
-  // lead (clinicContactContext), não só o resumo semanal interno, então um
-  // DDD faltando aqui quebraria um link que o lead vê de verdade. Só
-  // valida o que está sendo gravado AGORA (vazio continua permitido,
-  // limpa o campo); não reescreve nem apaga nada que já estava salvo —
-  // isso só acontece se a própria clínica resubmeter o formulário.
+  // — regra de produto: este é o ÚNICO uso de WhatsApp que resta (confirmação
+  // de agendamento ao lead + o link wa.me mandado quando ele pede pra falar
+  // com a clínica, ver clinicContactContext/maybeSendWhatsappConfirmation),
+  // então um DDD faltando aqui quebraria algo que o lead vê de verdade. Só
+  // valida o que está sendo gravado AGORA (vazio continua permitido, limpa
+  // o campo); não reescreve nem apaga nada que já estava salvo — isso só
+  // acontece se a própria clínica resubmeter o formulário.
   if (clientWhatsappNumberRaw) {
     const validation = validateBrazilianPhone(clientWhatsappNumberRaw);
     if (!validation.valid) {
@@ -173,9 +174,12 @@ export async function updateClinicSettings(clinicId: string, formData: FormData)
     }
   }
   const clientWhatsappNumber = clientWhatsappNumberRaw;
-  const notifyWhatsappNumber = String(formData.get("notifyWhatsappNumber") ?? "").trim() || null; // sem validação — fora do pedido atual (só clientWhatsappNumber, ver investigação)
-  const notifyWhatsappEnabled = formData.get("notifyWhatsappEnabled") === "on";
-  const remindersWhatsappEnabled = formData.get("remindersWhatsappEnabled") === "on";
+  // notifyWhatsappNumber/notifyWhatsappEnabled/remindersWhatsappEnabled:
+  // campos e interruptores REMOVIDOS da tela (regra de produto: o WhatsApp
+  // da clínica serve só pra confirmação de agendamento, nada mais sai por
+  // WhatsApp) — de propósito NÃO lidos nem escritos aqui, pra não apagar
+  // nenhum valor antigo ainda salvo no banco (as colunas continuam
+  // existindo, só pararam de ser usadas em qualquer lugar do código).
   const active = formData.get("active") === "on";
 
   const firstReminderHours = parseInt(String(formData.get("firstReminderHours") ?? ""), 10);
@@ -195,9 +199,6 @@ export async function updateClinicSettings(clinicId: string, formData: FormData)
     data: {
       address,
       clientWhatsappNumber,
-      notifyWhatsappNumber,
-      notifyWhatsappEnabled,
-      remindersWhatsappEnabled,
       active,
       reminderConfig: {
         upsert: {

@@ -28,8 +28,6 @@ import { decryptToken } from "@/lib/crypto";
 import { computeAdaptiveDelaySeconds, FAST_REPLY_DELAY_SECONDS } from "@/lib/scheduler";
 import { DEFAULT_CONVERSATION_SYSTEM_PROMPT } from "@/lib/default-prompt";
 import {
-  sendWhatsappMessage,
-  formatEscalationAlert,
   formatAppointmentConfirmationMessage,
   validateBrazilianPhone,
   formatBrazilianPhoneForDisplay,
@@ -797,27 +795,11 @@ export async function handleInboundInstagramMessage(
       where: { conversationId, status: { in: ["SCHEDULED", "CONFIRMED"] }, confirmationVideoSentAt: null },
       data: { attendancePromptSentAt: null },
     });
-    // notifyWhatsappEnabled — interruptor por clínica (padrão desligado,
-    // ver schema.prisma) — some além das duas condições de sempre (número
-    // configurado + WhatsApp conectado), nunca no lugar delas.
-    if (clinic.notifyWhatsappEnabled && clinic.notifyWhatsappNumber && clinic.whatsappInstanceName) {
-      try {
-        await sendWhatsappMessage(
-          clinic.whatsappInstanceName,
-          clinic.notifyWhatsappNumber,
-          formatEscalationAlert({
-            clinicName: clinic.name,
-            leadName: lead.name ?? lead.igUsername ?? "lead sem nome",
-            leadPhone: lead.phone,
-            leadIgUsername: lead.igUsername,
-            reason,
-            conversationUrl: `${process.env.APP_URL ?? ""}/crm/conversas/${conversationId}`,
-          })
-        );
-      } catch (err) {
-        console.error("[vexo] Falha ao notificar escalonamento (loop guard) via WhatsApp:", err);
-      }
-    }
+    // Aviso à secretária por WhatsApp REMOVIDO (regra de produto: o
+    // WhatsApp da clínica serve só pra confirmação de agendamento ao lead
+    // — ver maybeSendWhatsappConfirmation). Status NEEDS_HUMAN e o card
+    // "Humano" (NeedsHumanBanner) continuam exatamente como estavam —
+    // só o aviso por WhatsApp em si saiu.
   }
 
   const recentAiMessageCount = await prisma.message.count({
@@ -984,31 +966,12 @@ export async function handleInboundInstagramMessage(
       },
     });
 
-    // notifyWhatsappEnabled — interruptor por clínica (padrão desligado),
-    // ver schema.prisma — some além das condições de sempre, nunca no
-    // lugar delas.
-    if (clinic.notifyWhatsappEnabled && clinic.notifyWhatsappNumber) {
-      if (!clinic.whatsappInstanceName) {
-        console.warn(`[vexo] Clínica ${clinic.id} sem WhatsApp conectado — notificação de escalonamento pulada.`);
-      } else {
-        try {
-          await sendWhatsappMessage(
-            clinic.whatsappInstanceName,
-            clinic.notifyWhatsappNumber,
-            formatEscalationAlert({
-              clinicName: clinic.name,
-              leadName: lead.name ?? lead.igUsername ?? "lead sem nome",
-              leadPhone: lead.phone,
-              leadIgUsername: lead.igUsername,
-              reason: signal.needsHumanReason ?? "não especificado",
-              conversationUrl: `${process.env.APP_URL ?? ""}/crm/conversas/${conversation.id}`,
-            })
-          );
-        } catch (err) {
-          console.error("[vexo] Falha ao notificar escalonamento via WhatsApp:", err);
-        }
-      }
-    }
+    // Aviso à secretária por WhatsApp REMOVIDO (regra de produto: o
+    // WhatsApp da clínica serve só pra confirmação de agendamento ao lead
+    // — ver maybeSendWhatsappConfirmation). Status NEEDS_HUMAN, a mensagem
+    // "Entendi! Vou repassar..." ao lead (acima) e o card "Humano"
+    // continuam exatamente como estavam — só o aviso por WhatsApp em si
+    // saiu.
     return;
   }
 

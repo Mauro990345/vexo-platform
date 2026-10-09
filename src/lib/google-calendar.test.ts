@@ -11,13 +11,6 @@ vi.mock("@/lib/prisma", () => ({
   },
 }));
 
-const sendWhatsappMessageMock = vi.fn();
-vi.mock("@/lib/whatsapp", () => ({
-  sendWhatsappMessage: (...args: unknown[]) => sendWhatsappMessageMock(...args),
-  formatGoogleCalendarReconnectAlert: (params: { clinicName: string; reason: string }) =>
-    `alerta-reconexao:${params.clinicName}:${params.reason}`,
-}));
-
 vi.mock("@/lib/crypto", () => ({ decryptToken: (v: string) => v, encryptToken: (v: string) => v }));
 
 // google-calendar.ts importa googleapis no topo do arquivo (usado por
@@ -47,10 +40,12 @@ describe("withGoogleCalendarCall", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers();
-    googleCalendarAccountFindUniqueMock.mockResolvedValue({
-      needsReconnectAt: null,
-      clinic: { name: "Clínica Teste", notifyWhatsappNumber: "5511987654321", whatsappInstanceName: "clinica-teste" },
-    });
+    // markGoogleCalendarNeedsReconnect só usa isto pra confirmar que a
+    // linha ainda existe (ver describe dedicado abaixo pro caso null) —
+    // não lê mais nenhum outro campo (aviso por WhatsApp removido, regra
+    // de produto: o WhatsApp da clínica serve só pra confirmação de
+    // agendamento).
+    googleCalendarAccountFindUniqueMock.mockResolvedValue({ clinicId: "clinic-1" });
   });
 
   afterEach(() => {
@@ -94,7 +89,7 @@ describe("withGoogleCalendarCall", () => {
     expect(googleCalendarAccountUpdateMock).not.toHaveBeenCalled();
   });
 
-  it("invalid_grant marca a clínica pra reconectar e avisa a secretária (1ª vez que acontece)", async () => {
+  it("invalid_grant marca a clínica pra reconectar (alimenta a bolinha de status em Conexões)", async () => {
     const fn = vi.fn().mockRejectedValue(
       gaxiosLikeError({
         status: 400,
@@ -109,26 +104,17 @@ describe("withGoogleCalendarCall", () => {
       where: { clinicId: "clinic-1" },
       data: { needsReconnectAt: expect.any(Date), needsReconnectReason: expect.stringContaining("invalid_grant") },
     });
-    expect(sendWhatsappMessageMock).toHaveBeenCalledWith(
-      "clinica-teste",
-      "5511987654321",
-      expect.stringContaining("Clínica Teste")
-    );
   });
 
-  it("invalid_grant NÃO manda um segundo aviso por WhatsApp se a clínica já estava marcada (evita espamar a cada nova tentativa)", async () => {
-    googleCalendarAccountFindUniqueMock.mockResolvedValue({
-      needsReconnectAt: new Date("2026-01-01T00:00:00.000Z"),
-      clinic: { name: "Clínica Teste", notifyWhatsappNumber: "5511987654321", whatsappInstanceName: "clinica-teste" },
-    });
+  it("invalid_grant repetido continua atualizando o motivo/timestamp a cada vez (sem aviso nenhum pra suprimir)", async () => {
     const fn = vi.fn().mockRejectedValue(
       gaxiosLikeError({ status: 400, response: { data: { error: "invalid_grant" } }, message: "invalid_grant" })
     );
 
     await expect(withGoogleCalendarCall("clinic-1", "teste", fn)).rejects.toBeTruthy();
+    await expect(withGoogleCalendarCall("clinic-1", "teste", fn)).rejects.toBeTruthy();
 
-    expect(googleCalendarAccountUpdateMock).toHaveBeenCalled(); // atualiza o motivo/timestamp de novo
-    expect(sendWhatsappMessageMock).not.toHaveBeenCalled(); // mas não avisa de novo
+    expect(googleCalendarAccountUpdateMock).toHaveBeenCalledTimes(2);
   });
 
   it("não retenta um erro que já foi rejeitado por invalid_grant — é permanente por definição", async () => {
@@ -146,22 +132,22 @@ describe("markGoogleCalendarNeedsReconnect", () => {
     vi.clearAllMocks();
   });
 
-  it("não faz nada se a clínica já desconectou (linha não existe mais)", async () => {
+  it("não faz nada se a clínica já desconectou (linha não existe mais) — nunca lança", async () => {
     googleCalendarAccountFindUniqueMock.mockResolvedValue(null);
+
+    await expect(markGoogleCalendarNeedsReconnect("clinic-1", "algum motivo")).resolves.toBeUndefined();
+
+    expect(googleCalendarAccountUpdateMock).not.toHaveBeenCalled();
+  });
+
+  it("marca needsReconnectAt/needsReconnectReason quando a linha existe", async () => {
+    googleCalendarAccountFindUniqueMock.mockResolvedValue({ clinicId: "clinic-1" });
 
     await markGoogleCalendarNeedsReconnect("clinic-1", "algum motivo");
 
-    expect(googleCalendarAccountUpdateMock).not.toHaveBeenCalled();
-    expect(sendWhatsappMessageMock).not.toHaveBeenCalled();
-  });
-
-  it("não quebra (não lança) se a clínica não tiver WhatsApp configurado — só não avisa", async () => {
-    googleCalendarAccountFindUniqueMock.mockResolvedValue({
-      needsReconnectAt: null,
-      clinic: { name: "Clínica Teste", notifyWhatsappNumber: null, whatsappInstanceName: null },
+    expect(googleCalendarAccountUpdateMock).toHaveBeenCalledWith({
+      where: { clinicId: "clinic-1" },
+      data: { needsReconnectAt: expect.any(Date), needsReconnectReason: "algum motivo" },
     });
-
-    await expect(markGoogleCalendarNeedsReconnect("clinic-1", "algum motivo")).resolves.toBeUndefined();
-    expect(sendWhatsappMessageMock).not.toHaveBeenCalled();
   });
 });
