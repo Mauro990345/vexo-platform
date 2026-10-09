@@ -641,6 +641,16 @@ model Message {
   sentAt       DateTime?
   failReason   String?
 
+  // Marca a Message de confirmação de agendamento por WHATSAPP (ver
+  // maybeSendWhatsappConfirmation, conversation-pipeline.ts) — dispatchOneMessage
+  // (dispatch.ts) aplica até 3 tentativas com backoff crescente antes de
+  // desistir SÓ quando esta marca está presente; qualquer outra Message
+  // WHATSAPP (ex.: passo de Follow-up, ver FollowUpStep/dispatchFollowUpSteps)
+  // continua com uma única tentativa, sem retry, exatamente como sempre
+  // foi — default false preserva 100% o comportamento de toda linha já
+  // existente.
+  isAppointmentConfirmation Boolean @default(false)
+
   // Generalizado (era "pendingAttendanceTip", só o texto do cafezinho na
   // Message do vídeo) pra carregar TODA a cadeia de confirmação de
   // presença: intro -> vídeo -> cafezinho -> frase final (ver
@@ -678,6 +688,18 @@ model Message {
   // rejeitar o cartão, dispatchOneMessage manda `content` como texto
   // normal em vez do cartão, nunca os dois.
   clinicContactCard String? @db.Text
+
+  // Preenchido só quando esta Message é o cartão de confirmação de
+  // agendamento por Instagram (ver maybeSendInstagramConfirmationCard,
+  // conversation-pipeline.ts) — JSON {title, subtitle} (ver
+  // InstagramConfirmationCard/encodeInstagramConfirmationCard/
+  // decodeInstagramConfirmationCard) usado por dispatchOneMessage
+  // (src/lib/dispatch.ts) pra montar o Generic Template (sem botão) na
+  // hora de enviar. `content` desta Message já vem pronto com o MESMO
+  // texto da confirmação por WhatsApp (ver formatAppointmentConfirmationMessage,
+  // whatsapp.ts) — se a Graph API rejeitar o cartão, dispatchOneMessage
+  // manda `content` como texto normal em vez do cartão, nunca os dois.
+  instagramConfirmationCard String? @db.Text
 
   createdAt DateTime @default(now())
   // Usado só pra detectar uma mensagem presa em SENDING (processo do
@@ -764,6 +786,16 @@ model Appointment {
   // agendamento existe E Lead.phone está disponível, não uma janela fixa
   // antes do horário marcado.
   whatsappConfirmationSentAt DateTime?
+  // Mesmo instante de "enfileirado" que whatsappConfirmationSentAt acima,
+  // mas pro cartão de confirmação por INSTAGRAM (ver
+  // maybeSendInstagramConfirmationCard, conversation-pipeline.ts) — trava
+  // INDEPENDENTE da de WhatsApp de propósito: os dois canais são
+  // enfileirados e despachados sem nenhuma dependência entre si (pedido
+  // explícito — se um canal falhar, ou a clínica não tiver WhatsApp
+  // conectado, o outro sai normalmente). Evita confirmação duplicada no
+  // Instagram mesmo que maybeSendInstagramConfirmationCard seja chamada de
+  // novo num turno seguinte (mesmo padrão de whatsappConfirmationSentAt).
+  instagramConfirmationSentAt DateTime?
 
   reminderLogs ReminderLog[]
 

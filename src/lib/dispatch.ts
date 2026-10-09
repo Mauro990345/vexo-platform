@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { sendInstagramMessage, sendInstagramGenericTemplateCard } from "@/lib/instagram";
 import { sendWhatsappMessage } from "@/lib/whatsapp";
 import { toPublicUploadUrl } from "@/lib/uploads";
+import { withRetry, RetryableError } from "@/lib/retry";
 import {
   ATTENDANCE_VIDEO_DELAY_AFTER_INTRO_MS,
   ATTENDANCE_TIP_DELAY_AFTER_VIDEO_MS,
@@ -11,6 +12,7 @@ import {
   decodeClinicContactCard,
   CLINIC_CONTACT_CARD_SUBTITLE,
   CLINIC_CONTACT_CARD_BUTTON_TITLE,
+  decodeInstagramConfirmationCard,
 } from "@/lib/conversation-pipeline";
 
 // Despacha mensagens OUTBOUND com status PENDING cujo horário de envio
@@ -232,7 +234,33 @@ async function dispatchOneMessage(
         return { status: "failed", nextChainLink: null };
       }
 
-      await sendWhatsappMessage(instanceName, phone, message.content);
+      if (message.isAppointmentConfirmation) {
+        // Confirmação de agendamento por WhatsApp (ver
+        // maybeSendInstagramConfirmationCard/maybeSendWhatsappConfirmation,
+        // conversation-pipeline.ts) — até 3 tentativas com backoff
+        // crescente (withRetry, retry.ts) antes de desistir. QUALQUER erro
+        // conta como retryable aqui (a Evolution API, ao contrário da
+        // Graph API, não documenta um formato pra distinguir falha
+        // transitória de permanente) — depois da 3ª tentativa, o erro
+        // propaga pro catch de fora (mais abaixo neste arquivo), que marca
+        // FAILED e loga, SEM nenhum reenvio além desses 3 (nunca "em
+        // loop"). Passo WHATSAPP de follow-up (branch acima/below, mesmo
+        // canal) continua com o comportamento de sempre — zero retry, uma
+        // tentativa só — de propósito: pedido explícito foi não alterar
+        // Follow-up.
+        await withRetry(
+          async () => {
+            try {
+              await sendWhatsappMessage(instanceName, phone, message.content);
+            } catch (err) {
+              throw err instanceof RetryableError ? err : new RetryableError(err instanceof Error ? err.message : String(err));
+            }
+          },
+          { label: `confirmação de agendamento por WhatsApp (mensagem ${message.id})`, maxAttempts: 3 }
+        );
+      } else {
+        await sendWhatsappMessage(instanceName, phone, message.content);
+      }
 
       const sentAtWhatsapp = new Date();
       await prisma.$transaction([
@@ -267,6 +295,15 @@ async function dispatchOneMessage(
     // deixa a falha do cartão propagar e falhar o turno — só loga o erro
     // devolvido pela Meta pra conferir no App Dashboard depois.
     const clinicContactCard = message.clinicContactCard ? decodeClinicContactCard(message.clinicContactCard) : null;
+    // Cartão de confirmação de agendamento (ver Message.instagramConfirmationCard,
+    // schema, e maybeSendInstagramConfirmationCard, conversation-pipeline.ts)
+    // — mesmo princípio do cartão de contato acima, só que SEM botão
+    // (título = nome da clínica, subtítulo = dia/horário/endereço).
+    // Qualquer falha cai pro MESMO texto da confirmação por WhatsApp
+    // (`message.content`), nunca os dois juntos.
+    const instagramConfirmationCard = message.instagramConfirmationCard
+      ? decodeInstagramConfirmationCard(message.instagramConfirmationCard)
+      : null;
     let result: { messageId: string };
     if (clinicContactCard) {
       try {
@@ -276,13 +313,34 @@ async function dispatchOneMessage(
           recipientIgScopedId: message.conversation.lead.igScopedId,
           title: clinicContactCard.clinicName,
           subtitle: CLINIC_CONTACT_CARD_SUBTITLE,
-          buttonTitle: CLINIC_CONTACT_CARD_BUTTON_TITLE,
-          buttonUrl: `https://wa.me/${clinicContactCard.whatsappE164}`,
+          button: { title: CLINIC_CONTACT_CARD_BUTTON_TITLE, url: `https://wa.me/${clinicContactCard.whatsappE164}` },
         });
       } catch (cardErr) {
         console.error(
           `[vexo] Cartão de contato da clínica ${clinicContactCard.clinicId} rejeitado pela Graph API ` +
             `(mensagem ${message.id}) — caindo pro link de fallback /c/<id> em texto normal:`,
+          cardErr
+        );
+        result = await sendInstagramMessage({
+          accessTokenEnc: igAccount.accessTokenEnc,
+          igUserId: igAccount.igUserId,
+          recipientIgScopedId: message.conversation.lead.igScopedId,
+          text: message.content,
+        });
+      }
+    } else if (instagramConfirmationCard) {
+      try {
+        result = await sendInstagramGenericTemplateCard({
+          accessTokenEnc: igAccount.accessTokenEnc,
+          igUserId: igAccount.igUserId,
+          recipientIgScopedId: message.conversation.lead.igScopedId,
+          title: instagramConfirmationCard.title,
+          subtitle: instagramConfirmationCard.subtitle,
+        });
+      } catch (cardErr) {
+        console.error(
+          `[vexo] Cartão de confirmação de agendamento (mensagem ${message.id}) rejeitado pela Graph API — ` +
+            `caindo pro mesmo texto da confirmação por WhatsApp, em texto normal:`,
           cardErr
         );
         result = await sendInstagramMessage({

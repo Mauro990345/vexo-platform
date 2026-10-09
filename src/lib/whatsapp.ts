@@ -236,6 +236,7 @@ export function formatReminderMessage(params: {
 // por escrito de que o horário foi marcado.
 export function formatAppointmentConfirmationMessage(params: {
   leadFirstName: string;
+  clinicName: string;
   scheduledAt: Date;
   clinicAddress?: string | null;
 }): string {
@@ -243,7 +244,7 @@ export function formatAppointmentConfirmationMessage(params: {
   const addressLine = params.clinicAddress?.trim() ? `\n📍 ${params.clinicAddress.trim()}` : "";
 
   return (
-    `Oi, ${params.leadFirstName}! Seu horário está confirmado para ${dataHorario}.${addressLine}\n` +
+    `Oi, ${params.leadFirstName}! Seu horário na ${params.clinicName} está confirmado para ${dataHorario}.${addressLine}\n` +
     `Qualquer imprevisto, é só me chamar por aqui. Até lá! 💙`
   );
 }
