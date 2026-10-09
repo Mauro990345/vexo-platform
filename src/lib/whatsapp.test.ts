@@ -150,13 +150,15 @@ describe("formatBrazilianPhoneForDisplay", () => {
 });
 
 describe("formatAppointmentConfirmationMessage", () => {
-  it("inclui o primeiro nome e a data/horário formatados", () => {
+  it("inclui o primeiro nome, o nome da clínica e a data/horário formatados", () => {
     const message = formatAppointmentConfirmationMessage({
       leadFirstName: "Maria",
+      clinicName: "Clínica Bela Vida",
       scheduledAt: new Date("2026-09-19T12:00:00.000Z"), // 9h de Brasília
     });
 
     expect(message).toContain("Oi, Maria!");
+    expect(message).toContain("Clínica Bela Vida");
     expect(message).toContain("confirmado para");
     expect(message).toContain("9h");
   });
@@ -164,6 +166,7 @@ describe("formatAppointmentConfirmationMessage", () => {
   it("inclui o endereço da clínica quando informado", () => {
     const message = formatAppointmentConfirmationMessage({
       leadFirstName: "João",
+      clinicName: "Clínica Bela Vida",
       scheduledAt: new Date("2026-09-19T12:00:00.000Z"),
       clinicAddress: "Av. Paulista, 1000",
     });
@@ -175,6 +178,7 @@ describe("formatAppointmentConfirmationMessage", () => {
     for (const clinicAddress of [null, undefined, "   "]) {
       const message = formatAppointmentConfirmationMessage({
         leadFirstName: "João",
+        clinicName: "Clínica Bela Vida",
         scheduledAt: new Date("2026-09-19T12:00:00.000Z"),
         clinicAddress,
       });
@@ -189,11 +193,13 @@ describe("formatAppointmentConfirmationMessage", () => {
   it("nunca contém link nenhum (http ou wa.me) — nem com endereço, nem sem", () => {
     const withAddress = formatAppointmentConfirmationMessage({
       leadFirstName: "Maria",
+      clinicName: "Clínica Bela Vida",
       scheduledAt: new Date("2026-09-19T12:00:00.000Z"),
       clinicAddress: "Av. Paulista, 1000",
     });
     const withoutAddress = formatAppointmentConfirmationMessage({
       leadFirstName: "Maria",
+      clinicName: "Clínica Bela Vida",
       scheduledAt: new Date("2026-09-19T12:00:00.000Z"),
     });
 

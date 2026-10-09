@@ -85,6 +85,8 @@ vi.mock("@/lib/conversation-pipeline", async () => {
     decodeClinicContactCard: actual.decodeClinicContactCard,
     CLINIC_CONTACT_CARD_SUBTITLE: actual.CLINIC_CONTACT_CARD_SUBTITLE,
     CLINIC_CONTACT_CARD_BUTTON_TITLE: actual.CLINIC_CONTACT_CARD_BUTTON_TITLE,
+    encodeInstagramConfirmationCard: actual.encodeInstagramConfirmationCard,
+    decodeInstagramConfirmationCard: actual.decodeInstagramConfirmationCard,
   };
 });
 
@@ -97,6 +99,7 @@ import {
   encodeClinicContactCard,
   CLINIC_CONTACT_CARD_SUBTITLE,
   CLINIC_CONTACT_CARD_BUTTON_TITLE,
+  encodeInstagramConfirmationCard,
   type PendingAttendanceStep,
 } from "@/lib/conversation-pipeline";
 
@@ -653,8 +656,7 @@ describe("dispatchDueMessages — cartão de contato da clínica", () => {
         recipientIgScopedId: "ig-scoped-1",
         title: "Clínica Bela Vida",
         subtitle: CLINIC_CONTACT_CARD_SUBTITLE,
-        buttonTitle: CLINIC_CONTACT_CARD_BUTTON_TITLE,
-        buttonUrl: "https://wa.me/5511987654321",
+        button: { title: CLINIC_CONTACT_CARD_BUTTON_TITLE, url: "https://wa.me/5511987654321" },
       })
     );
     expect(sendInstagramMessageMock).not.toHaveBeenCalled();
@@ -700,5 +702,366 @@ describe("dispatchDueMessages — cartão de contato da clínica", () => {
     expect(result.failed).toBe(0);
     expect(sendInstagramGenericTemplateCardMock).not.toHaveBeenCalled();
     expect(sendInstagramMessageMock).toHaveBeenCalledWith(expect.objectContaining({ text: card.content }));
+  });
+});
+
+// Cartão de confirmação de agendamento por Instagram (ver
+// Message.instagramConfirmationCard/maybeSendInstagramConfirmationCard,
+// conversation-pipeline.ts) — mesmo princípio do cartão de contato acima,
+// só que SEM botão; qualquer rejeição cai pro MESMO texto da confirmação
+// por WhatsApp (formatAppointmentConfirmationMessage), nunca os dois
+// juntos.
+describe("dispatchDueMessages — cartão de confirmação de agendamento (Instagram)", () => {
+  let sendingClaims: Set<string>;
+
+  function buildConfirmationCardMessage(overrides: Partial<Record<string, unknown>> = {}) {
+    return {
+      id: "msg-confirm-card-1",
+      conversationId: "conv-1",
+      channel: "INSTAGRAM",
+      sender: "AI",
+      content:
+        "Oi, Maria! Seu horário na Clínica Bela Vida está confirmado para amanhã (05/09) às 15h.\n📍 Av. Paulista, 1000\nQualquer imprevisto, é só me chamar por aqui. Até lá! 💙",
+      mediaUrl: null,
+      pendingAttendanceStep: null,
+      clinicContactCard: null,
+      instagramConfirmationCard: encodeInstagramConfirmationCard({
+        title: "Clínica Bela Vida",
+        subtitle: "amanhã (05/09) às 15h · Av. Paulista, 1000",
+      }),
+      createdAt: new Date("2026-10-09T10:00:00.000Z"),
+      scheduledFor: new Date("2026-10-09T10:00:02.000Z"),
+      conversation: {
+        lead: { phone: null, igScopedId: "ig-scoped-1" },
+        clinic: {
+          whatsappInstanceName: null,
+          instagramAccount: { accessTokenEnc: "enc-token", igUserId: "ig-user-1" },
+        },
+      },
+      ...overrides,
+    };
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    sendingClaims = new Set();
+    messageUpdateManyMock.mockImplementation(async (args: { where?: { id?: string }; data?: Record<string, unknown> }) => {
+      const id = args?.where?.id;
+      if (args?.data?.status === "SENDING") {
+        if (!id || sendingClaims.has(id)) return { count: 0 };
+        sendingClaims.add(id);
+        return { count: 1 };
+      }
+      return { count: 1 };
+    });
+    messageUpdateMock.mockResolvedValue({});
+    conversationFindUniqueMock.mockResolvedValue({ status: "ACTIVE" });
+  });
+
+  it("Meta aceita o cartão: manda o Generic Template SEM botão (título = nome da clínica, subtítulo = dia/horário/endereço) e nunca chama sendInstagramMessage", async () => {
+    const card = buildConfirmationCardMessage();
+    messageFindManyMock.mockResolvedValueOnce([card]);
+    sendInstagramGenericTemplateCardMock.mockResolvedValue({ messageId: "ig-confirm-msg-1" });
+
+    const result = await dispatchDueMessages();
+
+    expect(result.sent).toBe(1);
+    expect(result.failed).toBe(0);
+    expect(sendInstagramGenericTemplateCardMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        recipientIgScopedId: "ig-scoped-1",
+        title: "Clínica Bela Vida",
+        subtitle: "amanhã (05/09) às 15h · Av. Paulista, 1000",
+      })
+    );
+    // Sem `button` nenhum passado — pedido explícito: cartão de
+    // confirmação nunca tem botão.
+    expect(sendInstagramGenericTemplateCardMock.mock.calls[0]![0].button).toBeUndefined();
+    expect(sendInstagramMessageMock).not.toHaveBeenCalled();
+  });
+
+  it("Meta rejeita o cartão: cai pro MESMO texto da confirmação por WhatsApp (message.content), em texto normal, sem falhar o turno", async () => {
+    const card = buildConfirmationCardMessage();
+    messageFindManyMock.mockResolvedValueOnce([card]);
+    sendInstagramGenericTemplateCardMock.mockRejectedValue(new Error("Falha ao enviar cartão no Instagram (400): feature desabilitada"));
+    sendInstagramMessageMock.mockResolvedValue({ messageId: "ig-confirm-fallback-1" });
+
+    const result = await dispatchDueMessages();
+
+    expect(result.sent).toBe(1);
+    expect(result.failed).toBe(0);
+    expect(sendInstagramMessageMock).toHaveBeenCalledWith(expect.objectContaining({ text: card.content }));
+    expect(sendInstagramMessageMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("instagramConfirmationCard corrompido (JSON inválido) também cai pro fallback em texto, sem lançar", async () => {
+    const card = buildConfirmationCardMessage({ instagramConfirmationCard: "{ json inválido" });
+    messageFindManyMock.mockResolvedValueOnce([card]);
+    sendInstagramMessageMock.mockResolvedValue({ messageId: "ig-confirm-fallback-2" });
+
+    const result = await dispatchDueMessages();
+
+    expect(result.sent).toBe(1);
+    expect(result.failed).toBe(0);
+    expect(sendInstagramGenericTemplateCardMock).not.toHaveBeenCalled();
+    expect(sendInstagramMessageMock).toHaveBeenCalledWith(expect.objectContaining({ text: card.content }));
+  });
+});
+
+// Confirmação de agendamento por WHATSAPP — ver
+// Message.isAppointmentConfirmation/maybeSendWhatsappConfirmation,
+// conversation-pipeline.ts: até 3 tentativas com backoff crescente antes
+// de desistir, nunca um reenvio além dessas 3 ("nunca em loop"). Follow-up
+// (mesmo canal WHATSAPP, SEM essa marca) precisa continuar com o
+// comportamento de sempre — uma tentativa só, sem retry — como prova de
+// que esta mudança não alterou Follow-up.
+describe("dispatchDueMessages — confirmação de agendamento por WhatsApp (retry)", () => {
+  let sendingClaims: Set<string>;
+
+  function buildWhatsappMessage(overrides: Partial<Record<string, unknown>> = {}) {
+    return {
+      id: "msg-whatsapp-confirm-1",
+      conversationId: "conv-1",
+      channel: "WHATSAPP",
+      sender: "AI",
+      content: "Oi, Maria! Seu horário na Clínica Bela Vida está confirmado para amanhã às 15h.",
+      mediaUrl: null,
+      pendingAttendanceStep: null,
+      clinicContactCard: null,
+      instagramConfirmationCard: null,
+      isAppointmentConfirmation: true,
+      createdAt: new Date("2026-10-09T10:00:00.000Z"),
+      scheduledFor: new Date("2026-10-09T10:00:00.000Z"),
+      conversation: {
+        lead: { phone: "5511987654321", igScopedId: "ig-scoped-1" },
+        clinic: {
+          whatsappInstanceName: "clinic-instance",
+          instagramAccount: { accessTokenEnc: "enc-token", igUserId: "ig-user-1" },
+        },
+      },
+      ...overrides,
+    };
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.useFakeTimers();
+    sendingClaims = new Set();
+    messageUpdateManyMock.mockImplementation(async (args: { where?: { id?: string }; data?: Record<string, unknown> }) => {
+      const id = args?.where?.id;
+      if (args?.data?.status === "SENDING") {
+        if (!id || sendingClaims.has(id)) return { count: 0 };
+        sendingClaims.add(id);
+        return { count: 1 };
+      }
+      return { count: 1 };
+    });
+    messageUpdateMock.mockResolvedValue({});
+    conversationUpdateMock.mockResolvedValue({});
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("falha 2x e sucede na 3ª tentativa — backoff crescente (500ms, depois 1000ms), termina SENT", async () => {
+    const message = buildWhatsappMessage();
+    messageFindManyMock.mockResolvedValueOnce([message]);
+    sendWhatsappMessageMock
+      .mockRejectedValueOnce(new Error("Evolution API: timeout"))
+      .mockRejectedValueOnce(new Error("Evolution API: timeout de novo"))
+      .mockResolvedValueOnce(undefined);
+
+    const promise = dispatchDueMessages();
+    await vi.advanceTimersByTimeAsync(2000);
+    const result = await promise;
+
+    expect(result.sent).toBe(1);
+    expect(result.failed).toBe(0);
+    expect(sendWhatsappMessageMock).toHaveBeenCalledTimes(3);
+    expect(messageUpdateMock).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: "SENT" }) }));
+  });
+
+  it("esgota as 3 tentativas: marca FAILED, loga o erro, sem nenhum reenvio além dessas 3 (nunca em loop)", async () => {
+    const message = buildWhatsappMessage();
+    messageFindManyMock.mockResolvedValueOnce([message]);
+    sendWhatsappMessageMock.mockRejectedValue(new Error("Evolution API: fora do ar"));
+
+    const promise = dispatchDueMessages();
+    await vi.advanceTimersByTimeAsync(5000);
+    const result = await promise;
+
+    expect(result.sent).toBe(0);
+    expect(result.failed).toBe(1);
+    expect(sendWhatsappMessageMock).toHaveBeenCalledTimes(3);
+    expect(messageUpdateMock).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ status: "FAILED", failReason: expect.stringContaining("fora do ar") }) })
+    );
+  });
+
+  it("Follow-up (mesmo canal WHATSAPP, sem isAppointmentConfirmation): continua falhando já na 1ª tentativa, SEM retry — comportamento de sempre, intocado", async () => {
+    const message = buildWhatsappMessage({ isAppointmentConfirmation: false, sender: "SYSTEM" });
+    messageFindManyMock.mockResolvedValueOnce([message]);
+    sendWhatsappMessageMock.mockRejectedValue(new Error("Evolution API: erro qualquer"));
+
+    const result = await dispatchDueMessages();
+
+    expect(result.sent).toBe(0);
+    expect(result.failed).toBe(1);
+    expect(sendWhatsappMessageMock).toHaveBeenCalledTimes(1);
+    expect(messageUpdateMock).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: "FAILED" }) }));
+  });
+});
+
+// Independência entre os dois canais da confirmação de agendamento (ver
+// comentário grande em handleInboundInstagramMessage, conversation-pipeline.ts:
+// "os dois envios são separados... falha em um não bloqueia nem cancela o
+// outro"). Prova isso no nível que importa de verdade — o despacho real:
+// as duas Messages (WHATSAPP e INSTAGRAM) processadas no MESMO ciclo de
+// dispatchDueMessages, uma falhando por completo, sem afetar o resultado
+// da outra.
+describe("dispatchDueMessages — independência entre WhatsApp e Instagram na confirmação de agendamento", () => {
+  let sendingClaims: Set<string>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.useFakeTimers();
+    sendingClaims = new Set();
+    messageUpdateManyMock.mockImplementation(async (args: { where?: { id?: string }; data?: Record<string, unknown> }) => {
+      const id = args?.where?.id;
+      if (args?.data?.status === "SENDING") {
+        if (!id || sendingClaims.has(id)) return { count: 0 };
+        sendingClaims.add(id);
+        return { count: 1 };
+      }
+      return { count: 1 };
+    });
+    messageUpdateMock.mockResolvedValue({});
+    conversationUpdateMock.mockResolvedValue({});
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("WhatsApp esgota as 3 tentativas e falha; a confirmação por Instagram (cartão) do MESMO agendamento sai normalmente, no mesmo ciclo", async () => {
+    const whatsappMessage = {
+      id: "msg-whatsapp-fail",
+      conversationId: "conv-1",
+      channel: "WHATSAPP",
+      sender: "AI",
+      content: "Oi, Maria! Seu horário na Clínica Bela Vida está confirmado para amanhã às 15h.",
+      mediaUrl: null,
+      pendingAttendanceStep: null,
+      clinicContactCard: null,
+      instagramConfirmationCard: null,
+      isAppointmentConfirmation: true,
+      createdAt: new Date("2026-10-09T10:00:00.000Z"),
+      scheduledFor: new Date("2026-10-09T10:00:00.000Z"),
+      conversation: {
+        lead: { phone: "5511987654321", igScopedId: "ig-scoped-1" },
+        clinic: {
+          whatsappInstanceName: "clinic-instance",
+          instagramAccount: { accessTokenEnc: "enc-token", igUserId: "ig-user-1" },
+        },
+      },
+    };
+    const instagramMessage = {
+      id: "msg-instagram-ok",
+      conversationId: "conv-1",
+      channel: "INSTAGRAM",
+      sender: "AI",
+      content: "Oi, Maria! Seu horário na Clínica Bela Vida está confirmado para amanhã às 15h.",
+      mediaUrl: null,
+      pendingAttendanceStep: null,
+      clinicContactCard: null,
+      instagramConfirmationCard: encodeInstagramConfirmationCard({
+        title: "Clínica Bela Vida",
+        subtitle: "amanhã (05/09) às 15h",
+      }),
+      createdAt: new Date("2026-10-09T10:00:00.000Z"),
+      scheduledFor: new Date("2026-10-09T10:00:02.000Z"),
+      conversation: {
+        lead: { phone: "5511987654321", igScopedId: "ig-scoped-1" },
+        clinic: {
+          whatsappInstanceName: "clinic-instance",
+          instagramAccount: { accessTokenEnc: "enc-token", igUserId: "ig-user-1" },
+        },
+      },
+    };
+    messageFindManyMock.mockResolvedValueOnce([whatsappMessage, instagramMessage]);
+    sendWhatsappMessageMock.mockRejectedValue(new Error("Evolution API: fora do ar"));
+    sendInstagramGenericTemplateCardMock.mockResolvedValue({ messageId: "ig-confirm-msg-ok" });
+
+    const promise = dispatchDueMessages();
+    await vi.advanceTimersByTimeAsync(5000);
+    const result = await promise;
+
+    expect(result.sent).toBe(1);
+    expect(result.failed).toBe(1);
+    expect(sendInstagramGenericTemplateCardMock).toHaveBeenCalledWith(
+      expect.objectContaining({ recipientIgScopedId: "ig-scoped-1", title: "Clínica Bela Vida" })
+    );
+    expect(messageUpdateMock).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: "msg-whatsapp-fail" }, data: expect.objectContaining({ status: "FAILED" }) })
+    );
+    expect(messageUpdateMock).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: "msg-instagram-ok" }, data: expect.objectContaining({ status: "SENT" }) })
+    );
+  });
+
+  it("clínica sem WhatsApp conectado: Instagram sai normalmente do mesmo jeito (o WHATSAPP falha imediatamente, sem retry, por não ter instância — nem chega a tentar enviar)", async () => {
+    const whatsappMessage = {
+      id: "msg-whatsapp-no-instance",
+      conversationId: "conv-1",
+      channel: "WHATSAPP",
+      sender: "AI",
+      content: "texto da confirmação",
+      mediaUrl: null,
+      pendingAttendanceStep: null,
+      clinicContactCard: null,
+      instagramConfirmationCard: null,
+      isAppointmentConfirmation: true,
+      createdAt: new Date("2026-10-09T10:00:00.000Z"),
+      scheduledFor: new Date("2026-10-09T10:00:00.000Z"),
+      conversation: {
+        lead: { phone: "5511987654321", igScopedId: "ig-scoped-1" },
+        clinic: { whatsappInstanceName: null, instagramAccount: { accessTokenEnc: "enc-token", igUserId: "ig-user-1" } },
+      },
+    };
+    const instagramMessage = {
+      id: "msg-instagram-ok-2",
+      conversationId: "conv-1",
+      channel: "INSTAGRAM",
+      sender: "AI",
+      content: "texto da confirmação",
+      mediaUrl: null,
+      pendingAttendanceStep: null,
+      clinicContactCard: null,
+      instagramConfirmationCard: encodeInstagramConfirmationCard({ title: "Clínica Bela Vida", subtitle: "amanhã às 15h" }),
+      createdAt: new Date("2026-10-09T10:00:00.000Z"),
+      scheduledFor: new Date("2026-10-09T10:00:02.000Z"),
+      conversation: {
+        lead: { phone: "5511987654321", igScopedId: "ig-scoped-1" },
+        clinic: { whatsappInstanceName: null, instagramAccount: { accessTokenEnc: "enc-token", igUserId: "ig-user-1" } },
+      },
+    };
+    messageFindManyMock.mockResolvedValueOnce([whatsappMessage, instagramMessage]);
+    sendInstagramGenericTemplateCardMock.mockResolvedValue({ messageId: "ig-confirm-msg-ok-2" });
+
+    const result = await dispatchDueMessages();
+
+    expect(result.sent).toBe(1);
+    expect(result.failed).toBe(1);
+    expect(sendWhatsappMessageMock).not.toHaveBeenCalled();
+    expect(messageUpdateMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "msg-whatsapp-no-instance" },
+        data: expect.objectContaining({ status: "FAILED", failReason: "Clínica sem WhatsApp conectado." }),
+      })
+    );
+    expect(messageUpdateMock).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: "msg-instagram-ok-2" }, data: expect.objectContaining({ status: "SENT" }) })
+    );
   });
 });

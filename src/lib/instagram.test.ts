@@ -123,8 +123,7 @@ describe("sendInstagramGenericTemplateCard", () => {
       recipientIgScopedId: "17841400000000000",
       title: "Clínica Bela Vida",
       subtitle: "Fale com a equipe pelo WhatsApp",
-      buttonTitle: "Abrir WhatsApp",
-      buttonUrl: "https://wa.me/5511987654321",
+      button: { title: "Abrir WhatsApp", url: "https://wa.me/5511987654321" },
     });
 
     expect(result).toEqual({ messageId: "mid.card.1" });
@@ -163,13 +162,38 @@ describe("sendInstagramGenericTemplateCard", () => {
         recipientIgScopedId: "17841400000000000",
         title: "Clínica Bela Vida",
         subtitle: "Fale com a equipe pelo WhatsApp",
-        buttonTitle: "Abrir WhatsApp",
-        buttonUrl: "https://wa.me/5511987654321",
+        button: { title: "Abrir WhatsApp", url: "https://wa.me/5511987654321" },
       })
     ).rejects.toThrow(/Template feature is not enabled/);
 
     // Uma única tentativa — nunca retry nem diagnóstico extra pra este
     // caminho (ver comentário grande na função).
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  // Cartão de confirmação de agendamento (ver maybeSendInstagramConfirmationCard,
+  // conversation-pipeline.ts) usa a mesma função SEM botão — `button` é
+  // opcional exatamente pra isso.
+  it("sem `button`: monta o elemento do card sem nenhum campo `buttons`", async () => {
+    const fetchMock = fetch as unknown as ReturnType<typeof vi.fn>;
+    fetchMock.mockResolvedValue(jsonResponse(200, { message_id: "mid.card.2" }));
+
+    const result = await sendInstagramGenericTemplateCard({
+      accessTokenEnc: encryptToken("fake-token"),
+      igUserId: "999",
+      recipientIgScopedId: "17841400000000000",
+      title: "Clínica Bela Vida",
+      subtitle: "amanhã (05/09) às 15h · Av. Paulista, 1000",
+    });
+
+    expect(result).toEqual({ messageId: "mid.card.2" });
+
+    const [, requestInit] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(requestInit.body as string);
+    const [element] = body.message.attachment.payload.elements;
+
+    expect(element.title).toBe("Clínica Bela Vida");
+    expect(element.subtitle).toBe("amanhã (05/09) às 15h · Av. Paulista, 1000");
+    expect(element.buttons).toBeUndefined();
   });
 });

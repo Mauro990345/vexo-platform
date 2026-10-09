@@ -67,6 +67,10 @@ vi.mock("@/lib/whatsapp", async () => {
     // resolveClinicWhatsappLink, testada abaixo — mesmo motivo de manter
     // formatBrazilianPhoneForDisplay real, acima.
     validateBrazilianPhone: actual.validateBrazilianPhone,
+    // formatDateTimeLabel é pura (sem I/O) e usada de verdade por
+    // buildInstagramConfirmationCardSubtitle, testada abaixo.
+    formatDateTimeLabel: actual.formatDateTimeLabel,
+    formatAppointmentConfirmationMessage: actual.formatAppointmentConfirmationMessage,
   };
 });
 const getFollowUpWindowSettingsMock = vi.fn();
@@ -90,6 +94,9 @@ import {
   encodeClinicContactCard,
   decodeClinicContactCard,
   buildClinicContactFallbackText,
+  encodeInstagramConfirmationCard,
+  decodeInstagramConfirmationCard,
+  buildInstagramConfirmationCardSubtitle,
 } from "@/lib/conversation-pipeline";
 
 // Bug real corrigido (ver comentário grande em buildAvailabilityCheck):
@@ -431,6 +438,55 @@ describe("buildClinicContactFallbackText", () => {
     expect(text).toContain("Clínica Bela Vida");
     expect(text).toContain("https://vexo-platform-production.up.railway.app/c/clinic-1");
     expect(text).not.toMatch(/\d{10,}/); // nenhum número de telefone cru
+  });
+});
+
+// Cartão de confirmação de agendamento por Instagram (ver
+// maybeSendInstagramConfirmationCard/dispatchOneMessage) — mesmo padrão de
+// ClinicContactCard, só que sem botão (título = nome da clínica, subtítulo
+// = dia/horário/endereço).
+describe("encodeInstagramConfirmationCard / decodeInstagramConfirmationCard", () => {
+  it("round-trip preserva title e subtitle", () => {
+    const card = { title: "Clínica Bela Vida", subtitle: "amanhã (05/09) às 15h · Av. Paulista, 1000" };
+    expect(decodeInstagramConfirmationCard(encodeInstagramConfirmationCard(card))).toEqual(card);
+  });
+
+  it("JSON inválido devolve null, nunca lança", () => {
+    expect(decodeInstagramConfirmationCard("não é json")).toBeNull();
+  });
+
+  it("JSON válido mas incompleto (faltando subtitle) devolve null", () => {
+    expect(decodeInstagramConfirmationCard(JSON.stringify({ title: "Clínica Bela Vida" }))).toBeNull();
+  });
+});
+
+describe("buildInstagramConfirmationCardSubtitle", () => {
+  it("inclui dia/horário e o endereço, separados por “·”, quando o endereço está preenchido", () => {
+    const subtitle = buildInstagramConfirmationCardSubtitle(
+      new Date("2026-09-19T12:00:00.000Z"), // 9h de Brasília
+      "Av. Paulista, 1000"
+    );
+
+    expect(subtitle).toContain("9h");
+    expect(subtitle).toContain("Av. Paulista, 1000");
+    expect(subtitle).toContain(" · ");
+  });
+
+  // Item explícito: endereço vazio é OMITIDO (nunca uma linha/separador
+  // vazio, nunca "endereço não informado").
+  it("omite o endereço por completo quando null, undefined ou string em branco", () => {
+    for (const clinicAddress of [null, undefined, "   "]) {
+      const subtitle = buildInstagramConfirmationCardSubtitle(new Date("2026-09-19T12:00:00.000Z"), clinicAddress);
+      expect(subtitle).not.toContain("·");
+      expect(subtitle).not.toContain("undefined");
+      expect(subtitle).not.toContain("null");
+    }
+  });
+
+  it("nunca contém link nenhum (http ou wa.me)", () => {
+    const subtitle = buildInstagramConfirmationCardSubtitle(new Date("2026-09-19T12:00:00.000Z"), "Av. Paulista, 1000");
+    expect(subtitle.toLowerCase()).not.toContain("http");
+    expect(subtitle.toLowerCase()).not.toContain("wa.me");
   });
 });
 

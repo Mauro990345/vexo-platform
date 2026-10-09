@@ -191,30 +191,30 @@ export async function sendInstagramMessage(params: {
   );
 }
 
-// Cartão de contato da clínica (Generic Template) mandado ao lead que pede
-// pra falar com um humano, no lugar do link cru de WhatsApp em texto (ver
-// clinicContactContext/buildClinicContactContext, conversation-pipeline.ts)
-// — mostra o NOME da clínica e um botão clicável "Abrir WhatsApp", sem o
-// número aparecer em nenhum texto visível (ele só existe dentro da URL do
-// botão, que o Instagram nunca mostra por extenso ao lead). Mesmo endpoint
-// de sendInstagramMessage (/me/messages), só muda o payload de `message`.
+// Cartão genérico (Generic Template) do Instagram — usado por dois fluxos
+// de conversation-pipeline.ts: o cartão de contato da clínica (lead pede
+// humano; title=nome da clínica, com botão "Abrir WhatsApp") e o cartão de
+// confirmação de agendamento (title=nome da clínica, subtitle=dia/horário/
+// endereço, SEM botão — ver maybeSendInstagramConfirmationCard). `button`
+// é opcional só por isso: quando omitido, o elemento do card sai sem
+// `buttons` nenhum. Mesmo endpoint de sendInstagramMessage (/me/messages),
+// só muda o payload de `message`.
 //
 // Sem withRetry/diagnóstico de debug_token de propósito: ao contrário de
 // sendInstagramMessage (onde uma falha definitiva precisa propagar pro
 // chamador decidir o que fazer), aqui QUALQUER rejeição da Graph API —
 // permissão ausente, feature "Generic Template" não habilitada pro App,
-// erro transitório — deve virar fallback imediato pro link /c/<id> em texto
-// normal (ver dispatchOneMessage, dispatch.ts), nunca uma segunda tentativa
-// automática. Uma única chamada; o erro (corpo cru da resposta) é só
-// propagado pra quem chama logar e decidir o fallback.
+// erro transitório — deve virar fallback imediato em texto normal (ver
+// dispatchOneMessage, dispatch.ts), nunca uma segunda tentativa automática.
+// Uma única chamada; o erro (corpo cru da resposta) é só propagado pra
+// quem chama logar e decidir o fallback.
 export async function sendInstagramGenericTemplateCard(params: {
   accessTokenEnc: string;
   igUserId: string;
   recipientIgScopedId: string;
   title: string;
   subtitle: string;
-  buttonTitle: string;
-  buttonUrl: string;
+  button?: { title: string; url: string };
 }): Promise<{ messageId: string }> {
   const accessToken = decryptToken(params.accessTokenEnc);
 
@@ -227,7 +227,9 @@ export async function sendInstagramGenericTemplateCard(params: {
           {
             title: params.title,
             subtitle: params.subtitle,
-            buttons: [{ type: "web_url", url: params.buttonUrl, title: params.buttonTitle }],
+            ...(params.button
+              ? { buttons: [{ type: "web_url", url: params.button.url, title: params.button.title }] }
+              : {}),
           },
         ],
       },
@@ -247,7 +249,7 @@ export async function sendInstagramGenericTemplateCard(params: {
   if (!res.ok) {
     const body = await res.text();
     throw new Error(
-      `Falha ao enviar cartão de contato da clínica no Instagram (${res.status}) para recipient=${params.recipientIgScopedId} (conta remetente igUserId=${params.igUserId}): ${body}`
+      `Falha ao enviar cartão no Instagram (${res.status}) para recipient=${params.recipientIgScopedId} (conta remetente igUserId=${params.igUserId}): ${body}`
     );
   }
 

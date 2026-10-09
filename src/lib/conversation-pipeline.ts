@@ -31,6 +31,7 @@ import {
   formatAppointmentConfirmationMessage,
   validateBrazilianPhone,
   formatBrazilianPhoneForDisplay,
+  formatDateTimeLabel,
 } from "@/lib/whatsapp";
 import { cancelPendingFollowUp, getSilenceHours, applyTemplateVariables, getFollowUpWindowSettings } from "@/lib/follow-up";
 import { nextValidSendTime } from "@/lib/follow-up-window";
@@ -1819,13 +1820,27 @@ export async function handleInboundInstagramMessage(
     });
   }
 
-  // Confirmação IMEDIATA do agendamento por WhatsApp — diferente da
-  // sequência acima (que só sai depois da resposta do lead à pergunta de
-  // presença, ou do timeout de 1h): esta é só "agendamento existe E
-  // telefone disponível", sem esperar mais nada. Mesmo padrão de chamada
-  // incondicional, mesma razão: a função tem suas próprias travas (ver
-  // maybeSendWhatsappConfirmation) e não faz nada quando ainda não bate.
-  await maybeSendWhatsappConfirmation({ clinicId: clinic.id, conversationId: conversation.id });
+  // Confirmação IMEDIATA do agendamento — diferente da sequência acima
+  // (que só sai depois da resposta do lead à pergunta de presença, ou do
+  // timeout de 1h): esta é só "agendamento existe", sem esperar mais
+  // nada. Dois canais INDEPENDENTES, cada um com sua própria trava e
+  // chamado incondicionalmente (mesmo padrão de sempre — cada função
+  // decide por conta própria se já tem o que mandar). try/catch separado
+  // pra cada: um erro ao ENFILEIRAR um dos dois (ex.: falha pontual de
+  // banco) nunca pode impedir a tentativa do outro — pedido explícito de
+  // independência entre os canais vale também aqui, não só na hora de
+  // efetivamente enviar (que já é isolada por natureza: Messages
+  // diferentes, despachadas e falhando cada uma por si em dispatch.ts).
+  try {
+    await maybeSendWhatsappConfirmation({ clinicId: clinic.id, conversationId: conversation.id });
+  } catch (err) {
+    console.error("[vexo] Falha ao enfileirar confirmação de agendamento por WhatsApp:", err);
+  }
+  try {
+    await maybeSendInstagramConfirmationCard({ clinicId: clinic.id, conversationId: conversation.id, scheduledFor });
+  } catch (err) {
+    console.error("[vexo] Falha ao enfileirar confirmação de agendamento por Instagram:", err);
+  }
 }
 
 // Descrição do evento do Google Calendar — separada do summary (que já
@@ -2123,12 +2138,25 @@ export async function processAttendanceConfirmationTimeouts(): Promise<{ fired: 
 // disponível, sem esperar a sequência de confirmação de presença nem uma
 // janela fixa antes da consulta.
 //
+// INDEPENDENTE de maybeSendInstagramConfirmationCard (mais abaixo), de
+// propósito: os dois canais são enfileirados e despachados sem nenhuma
+// dependência entre si — chamados do mesmo call site, mas cada um com sua
+// própria trava (Appointment.whatsappConfirmationSentAt /
+// instagramConfirmationSentAt). Se este (WhatsApp) não tiver o que mandar
+// (clínica sem WhatsApp conectado, telefone ainda não informado) ou
+// falhar depois de esgotar as tentativas (ver isAppointmentConfirmation,
+// dispatch.ts), o Instagram sai normalmente do mesmo jeito — e vice-versa.
+//
 // Mesma arquitetura de despacho de tudo mais no VEXO: NÃO chama
 // sendWhatsappMessage direto — só enfileira um Message (channel
 // WHATSAPP, status PENDING), despachado de fato por dispatchDueMessages
 // (src/lib/dispatch.ts), com o mesmo claim atômico contra envio em dobro
 // (ver PR do bug de mensagem duplicada) e a mesma resiliência a
-// crash/redeploy no meio do envio.
+// crash/redeploy no meio do envio. isAppointmentConfirmation: true marca
+// esta Message pra dispatchOneMessage aplicar até 3 tentativas com
+// backoff crescente antes de desistir (ver comentário grande lá) —
+// Follow-up (mesmo channel WHATSAPP, Message sem essa marca) continua com
+// uma tentativa só, sem retry, exatamente como sempre foi.
 //
 // Idempotente (Appointment.whatsappConfirmationSentAt) e silenciosa
 // quando ainda não há o que mandar (sem agendamento ativo, sem telefone,
@@ -2186,9 +2214,11 @@ async function maybeSendWhatsappConfirmation(params: { clinicId: string; convers
         channel: "WHATSAPP",
         content: formatAppointmentConfirmationMessage({
           leadFirstName,
+          clinicName: clinic.name,
           scheduledAt: appointment.scheduledAt,
           clinicAddress: clinic.address,
         }),
+        isAppointmentConfirmation: true,
         status: "PENDING",
         scheduledFor: new Date(),
       },
@@ -2196,6 +2226,127 @@ async function maybeSendWhatsappConfirmation(params: { clinicId: string; convers
     prisma.appointment.update({
       where: { id: appointment.id },
       data: { whatsappConfirmationSentAt: new Date() },
+    }),
+  ]);
+}
+
+// Dados do cartão de confirmação de agendamento por Instagram, guardados
+// em Message.instagramConfirmationCard (JSON) — mesmo padrão de
+// ClinicContactCard, acima: dispatchOneMessage (dispatch.ts) decodifica
+// isso na hora de enviar pra montar o Generic Template (sem botão, ao
+// contrário do cartão de contato).
+export type InstagramConfirmationCard = { title: string; subtitle: string };
+
+export function encodeInstagramConfirmationCard(card: InstagramConfirmationCard): string {
+  return JSON.stringify(card);
+}
+
+// null em qualquer JSON inválido/inesperado — mesmo espírito defensivo de
+// decodeClinicContactCard, acima: um valor corrompido não pode travar o
+// despacho da mensagem, só forçar o fallback em texto (ver
+// dispatchOneMessage, dispatch.ts).
+export function decodeInstagramConfirmationCard(raw: string): InstagramConfirmationCard | null {
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === "object" && typeof parsed.title === "string" && typeof parsed.subtitle === "string") {
+      return parsed as InstagramConfirmationCard;
+    }
+  } catch {
+    // ignora — JSON inválido cai no null abaixo
+  }
+  return null;
+}
+
+// Subtítulo do cartão de confirmação — dia/horário (ver formatDateTimeLabel,
+// whatsapp.ts) + endereço da clínica, só se preenchido (senão omite por
+// completo, nunca uma linha vazia ou "endereço não informado"). "·" em vez
+// de quebra de linha de propósito — o subtítulo de um Generic Template do
+// Instagram é um campo de UMA linha; diferente do texto corrido da
+// confirmação por WhatsApp (formatAppointmentConfirmationMessage), que usa
+// \n normalmente. Exportada só pra teste.
+export function buildInstagramConfirmationCardSubtitle(scheduledAt: Date, clinicAddress?: string | null): string {
+  const dataHorario = formatDateTimeLabel(scheduledAt, new Date());
+  const address = clinicAddress?.trim();
+  return address ? `${dataHorario} · ${address}` : dataHorario;
+}
+
+// Confirmação IMEDIATA do agendamento por INSTAGRAM, via cartão (Generic
+// Template, sem botão — ver sendInstagramGenericTemplateCard, instagram.ts)
+// — MESMO conteúdo da confirmação por WhatsApp, acima (nome da clínica,
+// dia/horário, endereço só se preenchido), só que como cartão (título =
+// nome da clínica, subtítulo = dia/horário/endereço) em vez de texto
+// corrido. Se a Graph API rejeitar o cartão, dispatchOneMessage (dispatch.ts)
+// manda o MESMO texto da confirmação por WhatsApp em texto normal — por
+// isso `content`, abaixo, já vem pronto com formatAppointmentConfirmationMessage,
+// nunca usado de verdade quando o cartão é aceito, mas sempre disponível
+// pro fallback. Nunca duas mensagens de confirmação no Instagram pro mesmo
+// agendamento: Appointment.instagramConfirmationSentAt trava isso (mesmo
+// padrão de whatsappConfirmationSentAt, acima).
+//
+// INDEPENDENTE de maybeSendWhatsappConfirmation de propósito (pedido
+// explícito, ver comentário grande lá): não olha pro telefone do lead nem
+// pro WhatsApp da clínica — só precisa do agendamento existir. Se o
+// WhatsApp da clínica estiver desconectado (ou o telefone do lead ainda
+// não tiver chegado), o Instagram sai normalmente do mesmo jeito.
+//
+// scheduledFor ANCORADO no scheduledFor da resposta principal deste turno
+// (+2s) — NUNCA "agora" (ao contrário da confirmação por WhatsApp, que é
+// outro canal/outra janela de chat e não tem esse risco): a resposta
+// principal da IA neste mesmo turno (que inclui "posso contar com sua
+// presença?", ver dateTimeContext) já está enfileirada com o delay
+// adaptativo normal, que pode ser bem maior que instantâneo — sem ancorar
+// nisso, o cartão de confirmação podia chegar ANTES da própria resposta
+// no mesmo chat do Instagram. Mesmo padrão de clinicContactCard, acima.
+// Nunca atrasa, duplica ou altera a sequência de confirmação de presença
+// (apresentação -> vídeo -> cafezinho -> frase final, ver
+// fireAttendanceConfirmationSequence): aquela só começa numa resposta
+// FUTURA do lead (depois de "posso contar com sua presença?"), sempre
+// depois desta Message já ter sido criada — mensagens independentes, sem
+// nenhum ponto de contato entre as duas cadeias.
+async function maybeSendInstagramConfirmationCard(params: {
+  clinicId: string;
+  conversationId: string;
+  scheduledFor: Date;
+}): Promise<void> {
+  const appointment = await prisma.appointment.findFirst({
+    where: { conversationId: params.conversationId, status: { in: ["SCHEDULED", "CONFIRMED"] } },
+    orderBy: { createdAt: "desc" },
+  });
+  if (!appointment || appointment.instagramConfirmationSentAt) return;
+
+  const [clinic, conversation] = await Promise.all([
+    prisma.clinic.findUnique({ where: { id: params.clinicId } }),
+    prisma.conversation.findUnique({ where: { id: params.conversationId }, include: { lead: true } }),
+  ]);
+  if (!clinic || !conversation) return;
+
+  // Mesmo fallback defensivo de maybeSendWhatsappConfirmation, acima — o
+  // nome em si já é garantido pela trava de scheduleAppointment.
+  const leadFirstName = conversation.lead.name?.trim().split(/\s+/)[0] || "tudo bem";
+
+  await prisma.$transaction([
+    prisma.message.create({
+      data: {
+        conversationId: params.conversationId,
+        direction: "OUTBOUND",
+        sender: "AI",
+        content: formatAppointmentConfirmationMessage({
+          leadFirstName,
+          clinicName: clinic.name,
+          scheduledAt: appointment.scheduledAt,
+          clinicAddress: clinic.address,
+        }),
+        instagramConfirmationCard: encodeInstagramConfirmationCard({
+          title: clinic.name,
+          subtitle: buildInstagramConfirmationCardSubtitle(appointment.scheduledAt, clinic.address),
+        }),
+        status: "PENDING",
+        scheduledFor: new Date(params.scheduledFor.getTime() + 2_000),
+      },
+    }),
+    prisma.appointment.update({
+      where: { id: appointment.id },
+      data: { instagramConfirmationSentAt: new Date() },
     }),
   ]);
 }
