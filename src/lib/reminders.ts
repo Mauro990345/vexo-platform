@@ -9,15 +9,14 @@ import { sendInstagramMessage } from "@/lib/instagram";
 // nunca pra lembrete. Sem Instagram conectado, pula o lembrete neste ciclo
 // (sem gravar ReminderLog) — o próximo ciclo tenta de novo, nunca descarta.
 //
-// DESLIGADO (pedido explícito do dono do produto — os campos "horas
-// antes"/"texto" nunca foram usados de propósito pela tela de Automações,
-// que os removeu; os lembretes em si também pararam de sair). `const`
-// boolean, não variável de ambiente, de propósito: religar é só virar
-// isto pra `true`, sem precisar de deploy de infra nem remover nada do
-// resto da função (query, ReminderConfig, ReminderLog) nem do cron em
-// worker/index.ts. Nenhuma coluna/tabela apagada, sem migration — mesmo
-// padrão já usado por WEEKLY_SUMMARY_WHATSAPP_ENABLED em weekly-summary.ts.
-const REMINDERS_ENABLED = false;
+// RELIGADO (decisão de produto — a desativação de ReminderConfig.hoursBefore
+// um pouco antes disto tinha sido por entendimento errado de que o campo na
+// tela de Automações nunca era usado; os lembretes voltam). `const` boolean,
+// não variável de ambiente, de propósito: desligar de novo é só virar isto
+// pra `false`, sem precisar de deploy de infra nem remover nada do resto
+// da função — mesmo padrão já usado por WEEKLY_SUMMARY_WHATSAPP_ENABLED em
+// weekly-summary.ts.
+const REMINDERS_ENABLED = true;
 
 export async function processReminders(): Promise<{ sent: number }> {
   if (!REMINDERS_ENABLED) return { sent: 0 };

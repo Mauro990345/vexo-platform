@@ -179,12 +179,13 @@ export async function updateClinicSettings(clinicId: string, formData: FormData)
   const active = formData.get("active") === "on";
 
   // firstReminderHours/secondReminderHours/firstMessageTemplate/
-  // secondMessageTemplate: campos REMOVIDOS da tela de Automações (os
-  // lembretes de agendamento em si também deixaram de ser enviados, ver
-  // reminders.ts) — de propósito NÃO lidos nem escritos aqui, mesmo
-  // motivo do bloco de WhatsApp acima: não apaga nenhum ReminderConfig já
-  // salvo, só para de gravar por este formulário (que nem manda mais
-  // esses campos).
+  // secondMessageTemplate NÃO são lidos aqui de propósito — ficam no
+  // próprio form/botão "Salvar lembretes" (updateClinicReminders, abaixo),
+  // separado deste. Se fossem lidos aqui também, salvar só os lembretes
+  // (sem reenviar address/clientWhatsappNumber/active, que não existem
+  // naquele form) faria este bloco calcular tudo como vazio/false e
+  // APAGAR endereço, WhatsApp e status da clínica por engano — exatamente
+  // o que não pode acontecer.
 
   await prisma.clinic.update({
     where: { id: clinicId },
@@ -197,6 +198,47 @@ export async function updateClinicSettings(clinicId: string, formData: FormData)
 
   revalidatePath(`/crm/clinicas/${clinicId}/automacoes`);
   revalidatePath(`/crm/clinicas/${clinicId}`);
+}
+
+// Formulário PRÓPRIO (botão "Salvar lembretes", separado de "Salvar
+// configuração" acima) — de propósito, pelo mesmo motivo explicado no
+// comentário logo acima: salvar os lembretes nunca pode arriscar apagar
+// endereço/WhatsApp/ativa por reenviar um form que não os contém.
+//
+// Decisão de produto: os lembretes de agendamento voltam (tinham sido
+// removidos por entendimento errado de que a tela nunca era usada — ver
+// histórico). Mesma validação/formato de antes: dois campos numéricos de
+// horas (não um texto livre "24,3" — digitação solta é sujeita a erro de
+// formatação) e dois textos opcionais (null = usa o texto padrão fixo,
+// ver formatReminderMessage/applyReminderTemplate em src/lib/whatsapp.ts).
+export async function updateClinicReminders(clinicId: string, formData: FormData) {
+  await requireInternalSession();
+
+  const firstReminderHours = parseInt(String(formData.get("firstReminderHours") ?? ""), 10);
+  const secondReminderHours = parseInt(String(formData.get("secondReminderHours") ?? ""), 10);
+  if (!Number.isFinite(firstReminderHours) || firstReminderHours <= 0) {
+    throw new Error("Informe um número de horas válido (maior que zero) para o 1º lembrete.");
+  }
+  if (!Number.isFinite(secondReminderHours) || secondReminderHours <= 0) {
+    throw new Error("Informe um número de horas válido (maior que zero) para o 2º lembrete.");
+  }
+  const hoursBefore = [firstReminderHours, secondReminderHours];
+  const firstMessageTemplate = String(formData.get("firstMessageTemplate") ?? "").trim() || null;
+  const secondMessageTemplate = String(formData.get("secondMessageTemplate") ?? "").trim() || null;
+
+  await prisma.clinic.update({
+    where: { id: clinicId },
+    data: {
+      reminderConfig: {
+        upsert: {
+          create: { hoursBefore, firstMessageTemplate, secondMessageTemplate },
+          update: { hoursBefore, firstMessageTemplate, secondMessageTemplate },
+        },
+      },
+    },
+  });
+
+  revalidatePath(`/crm/clinicas/${clinicId}/automacoes`);
 }
 
 export type ConnectionLinkChannel = "google-calendar" | "instagram";
