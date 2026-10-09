@@ -1823,14 +1823,12 @@ export async function handleInboundInstagramMessage(
   // Confirmação IMEDIATA do agendamento — diferente da sequência acima
   // (que só sai depois da resposta do lead à pergunta de presença, ou do
   // timeout de 1h): esta é só "agendamento existe", sem esperar mais
-  // nada. Dois canais INDEPENDENTES, cada um com sua própria trava e
-  // chamado incondicionalmente (mesmo padrão de sempre — cada função
-  // decide por conta própria se já tem o que mandar). try/catch separado
-  // pra cada: um erro ao ENFILEIRAR um dos dois (ex.: falha pontual de
-  // banco) nunca pode impedir a tentativa do outro — pedido explícito de
-  // independência entre os canais vale também aqui, não só na hora de
-  // efetivamente enviar (que já é isolada por natureza: Messages
-  // diferentes, despachadas e falhando cada uma por si em dispatch.ts).
+  // nada. SÓ por WhatsApp (decisão de produto, ver
+  // INSTAGRAM_CONFIRMATION_CARD_ENABLED acima de
+  // maybeSendInstagramConfirmationCard) — a chamada abaixo pro Instagram
+  // continua aqui só porque a função sai sozinha, sem fazer nada, antes
+  // de tocar no banco (mesmo padrão de REMINDERS_ENABLED); try/catch
+  // separado pra cada, mesmo assim, igual a antes.
   try {
     await maybeSendWhatsappConfirmation({ clinicId: clinic.id, conversationId: conversation.id });
   } catch (err) {
@@ -2270,6 +2268,21 @@ export function buildInstagramConfirmationCardSubtitle(scheduledAt: Date, clinic
   return address ? `${dataHorario} · ${address}` : dataHorario;
 }
 
+// Decisão de produto: a confirmação de agendamento sai SÓ por WhatsApp —
+// o lead que acabou de agendar já recebe a frase da IA confirmando o
+// horário na mesma conversa do Instagram (+ "posso contar com sua
+// presença?"), uma segunda confirmação em cartão ali seria redundante.
+// Desligada (não apagada), mesmo padrão de REMINDERS_ENABLED/
+// WEEKLY_SUMMARY_WHATSAPP_ENABLED (reminders.ts/weekly-summary.ts):
+// nenhuma coluna/tabela apagada, sem migration — Appointment.
+// instagramConfirmationSentAt e Message.instagramConfirmationCard ficam
+// no banco sem uso (isAppointmentConfirmation continua valendo, só pra
+// retentativa da confirmação por WhatsApp, ver dispatch.ts). Guard dentro
+// da própria função (abaixo) e em dispatchOneMessage (dispatch.ts, mesma
+// flag importada) — fácil reverter (= true) se o produto decidir trazer
+// o cartão de volta, sem precisar reescrever nada.
+export const INSTAGRAM_CONFIRMATION_CARD_ENABLED = false;
+
 // Confirmação IMEDIATA do agendamento por INSTAGRAM, via cartão (Generic
 // Template, sem botão — ver sendInstagramGenericTemplateCard, instagram.ts)
 // — MESMO conteúdo da confirmação por WhatsApp, acima (nome da clínica,
@@ -2303,11 +2316,16 @@ export function buildInstagramConfirmationCardSubtitle(scheduledAt: Date, clinic
 // FUTURA do lead (depois de "posso contar com sua presença?"), sempre
 // depois desta Message já ter sido criada — mensagens independentes, sem
 // nenhum ponto de contato entre as duas cadeias.
+//
+// DESLIGADA (ver INSTAGRAM_CONFIRMATION_CARD_ENABLED, acima) — sai antes
+// de tocar no banco, mesmo padrão de processReminders (reminders.ts).
 async function maybeSendInstagramConfirmationCard(params: {
   clinicId: string;
   conversationId: string;
   scheduledFor: Date;
 }): Promise<void> {
+  if (!INSTAGRAM_CONFIRMATION_CARD_ENABLED) return;
+
   const appointment = await prisma.appointment.findFirst({
     where: { conversationId: params.conversationId, status: { in: ["SCHEDULED", "CONFIRMED"] } },
     orderBy: { createdAt: "desc" },

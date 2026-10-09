@@ -13,6 +13,7 @@ import {
   CLINIC_CONTACT_CARD_SUBTITLE,
   CLINIC_CONTACT_CARD_BUTTON_TITLE,
   decodeInstagramConfirmationCard,
+  INSTAGRAM_CONFIRMATION_CARD_ENABLED,
 } from "@/lib/conversation-pipeline";
 
 // Despacha mensagens OUTBOUND com status PENDING cujo horário de envio
@@ -295,15 +296,20 @@ async function dispatchOneMessage(
     // deixa a falha do cartão propagar e falhar o turno — só loga o erro
     // devolvido pela Meta pra conferir no App Dashboard depois.
     const clinicContactCard = message.clinicContactCard ? decodeClinicContactCard(message.clinicContactCard) : null;
-    // Cartão de confirmação de agendamento (ver Message.instagramConfirmationCard,
-    // schema, e maybeSendInstagramConfirmationCard, conversation-pipeline.ts)
-    // — mesmo princípio do cartão de contato acima, só que SEM botão
-    // (título = nome da clínica, subtítulo = dia/horário/endereço).
-    // Qualquer falha cai pro MESMO texto da confirmação por WhatsApp
-    // (`message.content`), nunca os dois juntos.
-    const instagramConfirmationCard = message.instagramConfirmationCard
-      ? decodeInstagramConfirmationCard(message.instagramConfirmationCard)
-      : null;
+    // Cartão de confirmação de agendamento — DESLIGADO (ver
+    // INSTAGRAM_CONFIRMATION_CARD_ENABLED, conversation-pipeline.ts;
+    // decisão de produto: confirmação sai só por WhatsApp). Guard aqui
+    // garante que isso vale até pra uma Message LEGADA que porventura
+    // ainda tenha Message.instagramConfirmationCard preenchido (nenhuma
+    // nova é criada com esse campo desde que a flag foi desligada) — cai
+    // direto pro `else` de baixo (texto normal com message.content, que
+    // já tem o mesmo conteúdo da confirmação por WhatsApp), nunca tenta
+    // montar o cartão. Nenhuma coluna apagada, só parou de agir sobre
+    // esse campo.
+    const instagramConfirmationCard =
+      INSTAGRAM_CONFIRMATION_CARD_ENABLED && message.instagramConfirmationCard
+        ? decodeInstagramConfirmationCard(message.instagramConfirmationCard)
+        : null;
     let result: { messageId: string };
     if (clinicContactCard) {
       try {
