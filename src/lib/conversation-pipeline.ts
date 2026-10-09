@@ -46,11 +46,13 @@ export { toChatHistory } from "@/lib/chat-history";
 // /crm/clinicas/[id]/agente-ia) — ver a ferramenta scheduleAppointment mais abaixo.
 const DEFAULT_CONFIRMATION_VIDEO_CAPTION = "Vou te mandar um vídeo rápido mostrando como é o nosso atendimento 🙂";
 
-// Texto pré-preenchido do link wa.me mandado pro lead quando ele pede pra
-// falar com humano e a clínica tem WhatsApp próprio configurado (ver
-// clinicContactContext, mais abaixo) — identifica de onde o lead está vindo
-// pra quem atender na outra ponta, sem o lead precisar digitar nada.
-const CLINIC_WHATSAPP_PREFILLED_TEXT = "Olá! Vim pelo Instagram e gostaria de falar com a equipe.";
+// Textos fixos do cartão de contato da clínica (Generic Template, ver
+// sendInstagramGenericTemplateCard, instagram.ts) mandado ao lead que pede
+// pra falar com humano, no lugar do link cru de WhatsApp em texto — pedido
+// explícito: subtítulo e texto do botão sempre iguais, só o título (nome
+// da clínica) e a URL do botão mudam por clínica/conversa.
+export const CLINIC_CONTACT_CARD_SUBTITLE = "Fale com a equipe pelo WhatsApp";
+export const CLINIC_CONTACT_CARD_BUTTON_TITLE = "Abrir WhatsApp";
 
 // Mesma validação de Lead.phone (ver validateBrazilianPhone/saveLeadPhone)
 // aplicada a Clinic.clientWhatsappNumber — null/vazio/inválido (ex.:
@@ -63,17 +65,70 @@ export function resolveClinicWhatsappLink(clientWhatsappNumber: string | null | 
   return validation.valid ? validation.e164 : null;
 }
 
-// Monta o bloco de contexto com o link wa.me já pronto — a IA só repassa,
-// nunca monta nem codifica a URL sozinha (mesmo motivo de dateTimeContext
-// nunca deixar a IA fazer conta de fuso horário). encodeURIComponent cuida
-// de acentos/espaços no texto pré-preenchido. Exportada só pra teste.
-export function buildClinicContactContext(clinicWhatsappE164: string): string {
+// Monta o bloco de contexto pra IA quando o cartão de contato vai sair
+// neste mesmo turno (ver clinicContactContext/wantsHumanWithClinicWhatsapp,
+// mais abaixo) — ao contrário da versão anterior, a IA não recebe mais
+// nenhum link ou número pra repassar: o cartão (com o botão "Abrir
+// WhatsApp") é montado e enviado inteiramente pelo sistema, numa Message
+// separada (ver buildClinicContactCardMessage e o bloco logo depois de
+// generateLeadReply). Pedido explícito: a IA nunca deve escrever link nem
+// número nesta resposta — só responder normalmente ao pedido do lead.
+// Exportada só pra teste.
+export function buildClinicContactContext(clinicName: string): string {
   return (
-    `[O lead pediu para falar com a equipe/um humano. Aqui está o link direto do WhatsApp da ` +
-    `clínica, já pronto — repasse exatamente esse link ao lead nesta resposta, sem reescrevê-lo, ` +
-    `sem adicionar nem remover nada dele: https://wa.me/${clinicWhatsappE164}?text=` +
-    `${encodeURIComponent(CLINIC_WHATSAPP_PREFILLED_TEXT)}]`
+    `[O lead pediu para falar com a equipe/um humano. O sistema vai enviar, junto com esta sua ` +
+    `resposta, um cartão clicável com o contato da ${clinicName} pelo WhatsApp — você NÃO deve ` +
+    `escrever nenhum link, número de telefone ou instrução de como entrar em contato nesta ` +
+    `resposta; o cartão já resolve isso. Só responda normalmente ao lead (ex.: confirmando que vai ` +
+    `passar o contato da equipe), sem mencionar WhatsApp, número ou link nenhum.]`
   );
+}
+
+// Dados do cartão de contato guardados em Message.clinicContactCard (JSON)
+// — mesmo padrão de PendingAttendanceStep/encodePendingAttendanceStep, mais
+// abaixo: dispatchOneMessage (dispatch.ts) decodifica isso na hora de
+// enviar pra montar o Generic Template (sendInstagramGenericTemplateCard,
+// instagram.ts). clinicId só serve pra log/diagnóstico em caso de erro — a
+// URL do botão já vem pronta em whatsappE164.
+export type ClinicContactCard = { clinicId: string; clinicName: string; whatsappE164: string };
+
+export function encodeClinicContactCard(card: ClinicContactCard): string {
+  return JSON.stringify(card);
+}
+
+// null em qualquer JSON inválido/inesperado — mesmo espírito defensivo de
+// decodePendingAttendanceStep, mais abaixo: um valor corrompido não pode
+// travar o despacho da mensagem, só forçar o fallback em texto (ver
+// dispatchOneMessage, dispatch.ts).
+export function decodeClinicContactCard(raw: string): ClinicContactCard | null {
+  try {
+    const parsed = JSON.parse(raw);
+    if (
+      parsed &&
+      typeof parsed === "object" &&
+      typeof parsed.clinicId === "string" &&
+      typeof parsed.clinicName === "string" &&
+      typeof parsed.whatsappE164 === "string"
+    ) {
+      return parsed as ClinicContactCard;
+    }
+  } catch {
+    // ignora — JSON inválido cai no null abaixo
+  }
+  return null;
+}
+
+// Texto de fallback mandado como mensagem de texto normal no lugar do
+// cartão, só quando a Graph API rejeita o cartão (ver dispatchOneMessage,
+// dispatch.ts) — nunca mostra o número da clínica, só o link de redirect
+// do próprio VEXO (rota pública /c/[id], src/app/c/[id]/route.ts), que
+// resolve pra https://wa.me/<dígitos> sem expor nenhum outro dado da
+// clínica. Mesma convenção de process.env.APP_URL usada em
+// src/app/acesso/[token]/route.ts (nunca inferida da requisição). Exportada
+// só pra teste.
+export function buildClinicContactFallbackText(clinicName: string, clinicId: string): string {
+  const appUrl = process.env.APP_URL ?? "";
+  return `Pra falar direto com a equipe da ${clinicName} pelo WhatsApp, é só clicar aqui: ${appUrl}/c/${clinicId}`;
 }
 
 // Sequência de confirmação de presença (apresentação -> vídeo institucional
@@ -1174,8 +1229,7 @@ export async function handleInboundInstagramMessage(
   // a clínica tem um WhatsApp próprio válido configurado, então a
   // escalada pra NEEDS_HUMAN foi suprimida ali (ver o bloco logo depois
   // de classifyConversation) a favor deste link.
-  const clinicContactContext =
-    wantsHumanWithClinicWhatsapp && clinicWhatsappE164 ? buildClinicContactContext(clinicWhatsappE164) : null;
+  const clinicContactContext = wantsHumanWithClinicWhatsapp ? buildClinicContactContext(clinic.name) : null;
 
   const reply = await generateLeadReply({
     // Separados (não mais concatenados numa string só) pra permitir prompt
@@ -1610,6 +1664,34 @@ export async function handleInboundInstagramMessage(
       scheduledFor,
     },
   });
+
+  // Cartão de contato da clínica — Message SEPARADA da resposta em texto
+  // acima (ver clinicContactContext/buildClinicContactContext, mais acima:
+  // a IA foi instruída a não escrever link nem número nesta resposta
+  // porque o sistema cuida disso aqui). `content` já vem pronto com o
+  // texto de FALLBACK (link /c/<id>, nunca o número cru — ver
+  // buildClinicContactFallbackText) — dispatchOneMessage (dispatch.ts)
+  // tenta mandar o cartão (Generic Template) primeiro e só usa esse
+  // `content` como mensagem de texto normal se a Graph API rejeitar o
+  // cartão; nunca manda os dois. +2s pra chegar depois da resposta em
+  // texto, nunca antes/junto dela.
+  if (wantsHumanWithClinicWhatsapp && clinicWhatsappE164) {
+    await prisma.message.create({
+      data: {
+        conversationId: conversation.id,
+        direction: "OUTBOUND",
+        sender: "SYSTEM",
+        content: buildClinicContactFallbackText(clinic.name, clinic.id),
+        clinicContactCard: encodeClinicContactCard({
+          clinicId: clinic.id,
+          clinicName: clinic.name,
+          whatsappE164: clinicWhatsappE164,
+        }),
+        status: "PENDING",
+        scheduledFor: new Date(scheduledFor.getTime() + 2_000),
+      },
+    });
+  }
 
   // Mandar a mensagem de espera genérica como se fosse a resposta final
   // deixava a conversa "travada": o lead via essa frase e nunca recebia

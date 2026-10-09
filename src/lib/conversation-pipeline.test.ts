@@ -87,6 +87,9 @@ import {
   processAttendanceConfirmationTimeouts,
   resolveClinicWhatsappLink,
   buildClinicContactContext,
+  encodeClinicContactCard,
+  decodeClinicContactCard,
+  buildClinicContactFallbackText,
 } from "@/lib/conversation-pipeline";
 
 // Bug real corrigido (ver comentário grande em buildAvailabilityCheck):
@@ -375,25 +378,59 @@ describe("resolveClinicWhatsappLink", () => {
   });
 });
 
+// Cartão de contato (Generic Template) substituiu o link cru em texto — a
+// IA não recebe (e não deve escrever) nenhum link nem número nesta
+// resposta; o sistema manda o cartão numa Message separada (ver
+// clinicContactCard, mais abaixo, e o bloco logo depois de generateLeadReply
+// em handleInboundInstagramMessage).
 describe("buildClinicContactContext", () => {
-  it("monta o link wa.me com o número recebido e o texto pré-preenchido URL-encoded, acentos inclusive", () => {
-    const context = buildClinicContactContext("5511987654321");
+  it("nunca inclui link ou número — só avisa a IA que o sistema manda um cartão", () => {
+    const context = buildClinicContactContext("Clínica Bela Vida");
 
-    expect(context).toContain("https://wa.me/5511987654321?text=");
-    // "Olá! Vim pelo Instagram e gostaria de falar com a equipe." —
-    // encodeURIComponent escapa "á" (%C3%A1) e os espaços (%20); confere
-    // que não foi um texto cru colado na URL (quebraria o link em
-    // qualquer cliente que pare de ler no primeiro espaço/acento).
-    expect(context).toContain(encodeURIComponent("Olá! Vim pelo Instagram e gostaria de falar com a equipe."));
-    expect(context).toContain("%C3%A1"); // "á" codificado
-    expect(context).toContain("%20"); // espaço codificado
-    expect(context).not.toContain(" Olá"); // nunca o texto cru dentro da URL
+    expect(context).toContain("Clínica Bela Vida");
+    expect(context).not.toContain("wa.me");
+    expect(context).not.toMatch(/\d{10,}/); // nenhuma sequência longa de dígitos (telefone)
   });
 
-  it("nunca pede pra IA montar ou codificar a URL sozinha — devolve a URL já completa, pronta pra repassar", () => {
-    const context = buildClinicContactContext("5521998223038");
+  it("instrui explicitamente a IA a não escrever link/número na resposta", () => {
+    const context = buildClinicContactContext("Clínica Bela Vida");
 
-    expect(context).toMatch(/https:\/\/wa\.me\/5521998223038\?text=\S+/);
+    expect(context).toMatch(/não deve escrever nenhum link/i);
+  });
+});
+
+describe("encodeClinicContactCard / decodeClinicContactCard", () => {
+  it("round-trip preserva clinicId, clinicName e whatsappE164", () => {
+    const card = { clinicId: "clinic-1", clinicName: "Clínica Bela Vida", whatsappE164: "5511987654321" };
+    const decoded = decodeClinicContactCard(encodeClinicContactCard(card));
+
+    expect(decoded).toEqual(card);
+  });
+
+  it("JSON inválido devolve null, nunca lança", () => {
+    expect(decodeClinicContactCard("não é json")).toBeNull();
+  });
+
+  it("JSON válido mas incompleto (faltando campo) devolve null", () => {
+    expect(decodeClinicContactCard(JSON.stringify({ clinicId: "clinic-1" }))).toBeNull();
+  });
+});
+
+describe("buildClinicContactFallbackText", () => {
+  const ORIGINAL_APP_URL = process.env.APP_URL;
+
+  afterEach(() => {
+    process.env.APP_URL = ORIGINAL_APP_URL;
+  });
+
+  it("monta o link /c/<id> a partir de APP_URL, com o nome da clínica, nunca o número", () => {
+    process.env.APP_URL = "https://vexo-platform-production.up.railway.app";
+
+    const text = buildClinicContactFallbackText("Clínica Bela Vida", "clinic-1");
+
+    expect(text).toContain("Clínica Bela Vida");
+    expect(text).toContain("https://vexo-platform-production.up.railway.app/c/clinic-1");
+    expect(text).not.toMatch(/\d{10,}/); // nenhum número de telefone cru
   });
 });
 
