@@ -84,7 +84,16 @@ const ATTENDANCE_VIDEO_INTRO_DELAY_MS = 15_000;
 // construção, que dois elos consecutivos nunca saem no mesmo ciclo do
 // dispatch: a Message do próximo elo não existe ainda quando o `due` do
 // ciclo atual foi lido — só entra na consulta do ciclo seguinte).
-export const ATTENDANCE_VIDEO_DELAY_AFTER_INTRO_MS = 10_000;
+//
+// 10s -> 5s (ajuste pedido): investigação mostrou que o intervalo REAL
+// entre apresentação e vídeo chegava a ~30s, bem acima deste valor
+// nominal — não por ele estar errado, mas porque o elo criado aqui só era
+// pego pelo PRÓXIMO ciclo do cron de 15s (dispatchDueMessages), somando
+// até 15s de espera adicional + o próprio tempo de envio. A partir desta
+// mudança, dispatch.ts agenda um despacho antecipado (scheduleEagerDispatch)
+// pra este elo logo depois de criado, em vez de esperar o próximo ciclo —
+// o intervalo real passa a bater perto deste valor nominal.
+export const ATTENDANCE_VIDEO_DELAY_AFTER_INTRO_MS = 5_000;
 // Exportada pra dispatch.ts reaproveitar o mesmo número, sem duplicar a
 // constante. 20s -> 10s (ajuste pedido: toda a cadeia unificada em +10s
 // por elo).
