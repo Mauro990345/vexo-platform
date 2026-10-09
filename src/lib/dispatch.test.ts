@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 // Mocks minimalistas — mesmo padrão de conversation-pipeline.test.ts: só as
 // peças que dispatchDueMessages realmente usa recebem implementação de
@@ -172,20 +172,57 @@ function buildTipMessage(step: Partial<PendingAttendanceStep & { next: "final" }
 }
 
 describe("dispatchDueMessages — cadeia de confirmação de presença (apresentação -> vídeo -> cafezinho -> frase final)", () => {
+  // Rastreia claims por id de mensagem (status PENDING->SENDING e o claim
+  // de pendingAttendanceStep), igual ao comportamento real de um UPDATE
+  // condicional no Postgres: a MESMA mensagem só pode ser reivindicada uma
+  // vez — a segunda tentativa (reprocessamento, corrida com o despacho
+  // antecipado, ou com outro ciclo do cron) sempre vê count:0. Testes que
+  // precisam de outro comportamento sobrescrevem messageUpdateManyMock
+  // localmente (ver "nada duplica", mais abaixo).
+  let sendingClaims: Set<string>;
+  let stepClaims: Set<string>;
+
   beforeEach(() => {
     vi.clearAllMocks();
-    // claimMessage (updateMany PENDING -> SENDING) e o claim do
-    // pendingAttendanceStep (updateMany não-nulo -> null) sempre "ganham" a
-    // corrida por padrão — cada teste que precisa simular reprocessamento
-    // ou concorrência sobrescreve.
-    messageUpdateManyMock.mockResolvedValue({ count: 1 });
+    vi.useFakeTimers();
+
+    sendingClaims = new Set();
+    stepClaims = new Set();
+    messageUpdateManyMock.mockImplementation(
+      async (args: { where?: { id?: string }; data?: Record<string, unknown> }) => {
+        const id = args?.where?.id;
+        if (args?.data?.status === "SENDING") {
+          if (!id || sendingClaims.has(id)) return { count: 0 };
+          sendingClaims.add(id);
+          return { count: 1 };
+        }
+        if (args?.data && "pendingAttendanceStep" in args.data) {
+          if (!id || stepClaims.has(id)) return { count: 0 };
+          stepClaims.add(id);
+          return { count: 1 };
+        }
+        return { count: 1 };
+      }
+    );
+    // Mensagem criada carrega um id realista (como o banco geraria) —
+    // necessário pra reprocessar o próprio elo criado (claim, despacho
+    // antecipado) nos novos testes de timer, abaixo.
+    let createdIdCounter = 0;
+    messageCreateMock.mockImplementation(async (args: { data: Record<string, unknown> }) => ({
+      id: `created-${++createdIdCounter}`,
+      ...args.data,
+    }));
     conversationFindUniqueMock.mockResolvedValue({ status: "ACTIVE" });
     appointmentFindUniqueMock.mockResolvedValue({ status: "SCHEDULED", scheduledAt: new Date(SCHEDULED_AT_MS) });
     sendInstagramMessageMock.mockResolvedValue({ messageId: "ig-msg-1" });
     messageUpdateMock.mockResolvedValue({});
   });
 
-  it("apresentação enviada com sucesso cria o vídeo (próximo elo) com scheduledFor = sentAt + 15s, levando mediaUrl e o step 'tip'", async () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("apresentação enviada com sucesso cria o vídeo (próximo elo) com scheduledFor = sentAt + 5s, levando mediaUrl e o step 'tip'", async () => {
     const intro = buildIntroMessage();
     messageFindManyMock.mockResolvedValueOnce([intro]);
 
@@ -416,5 +453,127 @@ describe("dispatchDueMessages — cadeia de confirmação de presença (apresent
     await dispatchDueMessages();
 
     expect(messageCreateMock).toHaveBeenCalledTimes(1);
+  });
+
+  // Despacho antecipado (scheduleEagerDispatch/dispatchEagerly, dispatch.ts)
+  // — é o que faz o intervalo REAL entre elos bater perto do configurado,
+  // sem esperar o próximo ciclo de 15s do cron. Os quatro testes abaixo
+  // usam fake timers (vi.useFakeTimers, configurado no beforeEach) pra
+  // controlar exatamente quando o setTimeout agendado dispara.
+  describe("despacho antecipado (fire-and-forget, sem esperar o próximo ciclo de 15s)", () => {
+    it("elo enviado pelo timer com sucesso: vídeo criado pela apresentação é despachado ~5s depois, sem esperar outro ciclo, e encadeia o cafezinho", async () => {
+      const intro = buildIntroMessage();
+      messageFindManyMock.mockResolvedValueOnce([intro]);
+      await dispatchDueMessages();
+
+      // Só a apresentação foi enviada e o vídeo criado como PENDING —
+      // nenhum outro ciclo rodou ainda.
+      expect(sendInstagramMessageMock).toHaveBeenCalledTimes(1);
+      expect(messageCreateMock).toHaveBeenCalledTimes(1);
+
+      // Dispara o timer agendado pra ATTENDANCE_VIDEO_DELAY_AFTER_INTRO_MS
+      // (5s) — sem isso, dispatchOneMessage nunca roda pro vídeo.
+      await vi.advanceTimersByTimeAsync(ATTENDANCE_VIDEO_DELAY_AFTER_INTRO_MS);
+
+      // O vídeo foi enviado (pelo timer, não por um novo ciclo do cron —
+      // messageFindManyMock não foi chamado de novo) e já encadeou o
+      // cafezinho como o próximo PENDING.
+      expect(sendInstagramMessageMock).toHaveBeenCalledTimes(2);
+      expect(messageFindManyMock).toHaveBeenCalledTimes(1);
+      expect(messageCreateMock).toHaveBeenCalledTimes(2);
+      expect(messageCreateMock.mock.calls[1]![0].data.content).toBe(TIP_TEXT);
+    });
+
+    it("crash simulado: se o timer nunca disparar, a mensagem continua PENDING e o ciclo normal a processa sem duplicar — mesmo que o timer atrasado dispare depois", async () => {
+      const intro = buildIntroMessage();
+      messageFindManyMock.mockResolvedValueOnce([intro]);
+      await dispatchDueMessages();
+
+      // Timer agendado (5s) NUNCA é avançado aqui — simula o processo do
+      // worker morrendo antes dele disparar (num crash real, o setTimeout
+      // em memória simplesmente desaparece junto com o processo). A linha
+      // criada pelo create (id + campos) + a relação de conversa (igual a
+      // uma query real via fetchDueMessages, que sempre inclui essa
+      // relação) é o que um ciclo normal do cron encontraria no banco.
+      const videoRow = { ...(await messageCreateMock.mock.results[0]!.value), conversation: intro.conversation };
+
+      // Ciclo normal do cron, até 15s depois, encontra a MESMA linha
+      // (ainda PENDING no banco) e processa pelo caminho de sempre.
+      messageFindManyMock.mockResolvedValueOnce([videoRow]);
+      await dispatchDueMessages();
+
+      expect(sendInstagramMessageMock).toHaveBeenCalledTimes(2); // apresentação + vídeo, nenhum duplicado
+      expect(messageCreateMock).toHaveBeenCalledTimes(2); // vídeo + cafezinho, nenhum duplicado
+
+      // Mesmo que o timer "atrasado" do passo 1 acabe disparando MAIS
+      // TARDE (processo não morreu de verdade, só demorou) — o claim
+      // atômico (já consumido pelo ciclo normal acima) garante que ele não
+      // reenvia nem duplica o próximo elo.
+      await vi.advanceTimersByTimeAsync(ATTENDANCE_VIDEO_DELAY_AFTER_INTRO_MS);
+
+      expect(sendInstagramMessageMock).toHaveBeenCalledTimes(2);
+      expect(messageCreateMock).toHaveBeenCalledTimes(2);
+    });
+
+    it("corrida entre o timer e um ciclo normal processando a mesma mensagem: envia uma única vez, nunca duplica", async () => {
+      const intro = buildIntroMessage();
+      messageFindManyMock.mockResolvedValueOnce([intro]);
+      await dispatchDueMessages();
+
+      const videoRow = { ...(await messageCreateMock.mock.results[0]!.value), conversation: intro.conversation };
+
+      // Ciclo normal "vence a corrida": processa o vídeo ANTES do timer
+      // (ainda agendado pra daqui a 5s) disparar.
+      messageFindManyMock.mockResolvedValueOnce([videoRow]);
+      await dispatchDueMessages();
+
+      expect(sendInstagramMessageMock).toHaveBeenCalledTimes(2);
+      expect(messageCreateMock).toHaveBeenCalledTimes(2);
+
+      // Agora o timer dispara — tenta reivindicar a MESMA linha do vídeo,
+      // já SENT pelo ciclo normal; o claim atômico (status PENDING-only)
+      // garante count:0, então nada é reenviado nem recriado.
+      await vi.advanceTimersByTimeAsync(ATTENDANCE_VIDEO_DELAY_AFTER_INTRO_MS);
+
+      expect(sendInstagramMessageMock).toHaveBeenCalledTimes(2);
+      expect(messageCreateMock).toHaveBeenCalledTimes(2);
+    });
+
+    it("conversa virou NEEDS_HUMAN entre a criação do elo e o timer disparar: o timer não envia", async () => {
+      const intro = buildIntroMessage();
+      messageFindManyMock.mockResolvedValueOnce([intro]);
+      await dispatchDueMessages();
+
+      // Conversa escalou pra atendimento humano no intervalo entre a
+      // apresentação e o vídeo (ex.: o lead respondeu algo que precisou de
+      // uma pessoa).
+      conversationFindUniqueMock.mockResolvedValue({ status: "NEEDS_HUMAN" });
+
+      await vi.advanceTimersByTimeAsync(ATTENDANCE_VIDEO_DELAY_AFTER_INTRO_MS);
+
+      // O vídeo NUNCA foi enviado (nem reivindicado) e nada mais foi
+      // criado — só a apresentação, de antes. Só a apresentação está em
+      // sendingClaims (reivindicada pelo próprio ciclo normal, acima); o
+      // vídeo nunca chega a ser reivindicado porque dispatchEagerly
+      // retorna antes de chamar dispatchOneMessage.
+      expect(sendInstagramMessageMock).toHaveBeenCalledTimes(1);
+      expect(messageCreateMock).toHaveBeenCalledTimes(1);
+      expect(sendingClaims.size).toBe(1);
+    });
+
+    it("conversa virou LOST entre a criação do elo e o timer disparar: o timer não envia", async () => {
+      const video = buildVideoMessage();
+      messageFindManyMock.mockResolvedValueOnce([video]);
+      await dispatchDueMessages();
+
+      conversationFindUniqueMock.mockResolvedValue({ status: "LOST" });
+
+      await vi.advanceTimersByTimeAsync(ATTENDANCE_TIP_DELAY_AFTER_VIDEO_MS);
+
+      // Só o vídeo foi enviado (criando o cafezinho como PENDING) — o
+      // próprio cafezinho nunca foi despachado pelo timer.
+      expect(sendInstagramMessageMock).toHaveBeenCalledTimes(1);
+      expect(messageCreateMock).toHaveBeenCalledTimes(1);
+    });
   });
 });
