@@ -5,6 +5,7 @@ import { requireInternalSession } from "@/lib/session";
 import { getSilenceHours } from "@/lib/follow-up";
 import { LocalDateTime } from "@/components/LocalDateTime";
 import { closeStuckFollowUpLogForClinicAction } from "@/app/crm/(global)/dispatch-status/actions";
+import { runEvolutionDiagnostics } from "@/lib/evolution-diagnostics";
 
 export const dynamic = "force-dynamic";
 
@@ -35,13 +36,22 @@ export default async function ClinicStatusPage({ params }: { params: { id: strin
 
   const clinic = await prisma.clinic.findUnique({
     where: { id: params.id },
-    select: { id: true, instagramAccount: { select: { igUserId: true } } },
+    select: { id: true, whatsappInstanceName: true, instagramAccount: { select: { igUserId: true } } },
   });
   if (!clinic) notFound();
 
   const now = new Date();
   const silenceHours = await getSilenceHours();
   const silenceThreshold = new Date(now.getTime() - silenceHours * 60 * 60 * 1000);
+
+  // Diagnóstico da Evolution — roda a cada carregamento desta aba (ela já
+  // é force-dynamic, então um simples F5/voltar aqui já conta como
+  // "verificar agora"; o link no fim da seção só deixa isso explícito pra
+  // quem não sabe disso). Chamada isolada das outras (Promise.all abaixo)
+  // de propósito: é a única que depende de rede externa (a Evolution),
+  // então uma falha/demora nela nunca deve atrasar nem derrubar o resto
+  // da página — ver try/catch por chamada dentro da própria função.
+  const evolutionDiagnostics = await runEvolutionDiagnostics(clinic.whatsappInstanceName);
 
   const [
     stuckPending,
@@ -117,6 +127,121 @@ export default async function ClinicStatusPage({ params }: { params: { id: strin
           </Link>
         </div>
       </div>
+
+      {/* Diagnóstico da Evolution — SOMENTE LEITURA (ver evolution-diagnostics.ts):
+          nunca envia mensagem de teste, nunca grava nada no banco. Existe
+          pra investigar um caso real: envio falhando com 404 "instance
+          does not exist" enquanto a mesma instância aparece "Connected"
+          no manager da Evolution aberto direto no navegador — ou seja, o
+          servidor do VEXO e quem olha o manager podem estar vendo coisas
+          diferentes (URL/chave, ou nome salvo que não bate exatamente). */}
+      <section className="space-y-2 rounded-xl border border-vexo-border bg-vexo-surface p-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-sm font-semibold">Diagnóstico da Evolution</h2>
+          <Link
+            href={`/crm/clinicas/${clinic.id}/status`}
+            className="whitespace-nowrap text-card text-vexo-muted underline hover:text-vexo-fg"
+          >
+            Verificar agora
+          </Link>
+        </div>
+        <p className="text-xs text-vexo-muted">
+          Lê direto da Evolution, com a mesma URL/chave que o envio de mensagens usa. Nunca manda
+          mensagem de teste nem grava nada no banco.
+        </p>
+
+        {evolutionDiagnostics.apiUrlError ? (
+          <p className="rounded-lg border border-vexo-error/30 bg-vexo-error/10 p-2 text-xs text-vexo-error">
+            EVOLUTION_API_URL/EVOLUTION_API_KEY não configuradas neste ambiente: {evolutionDiagnostics.apiUrlError}
+          </p>
+        ) : (
+          <div className="space-y-2 text-xs">
+            <p>
+              <span className="text-vexo-muted">Host configurado (EVOLUTION_API_URL): </span>
+              <span className="font-mono text-vexo-fg">{evolutionDiagnostics.apiUrlHost}</span>
+            </p>
+
+            <p>
+              <span className="text-vexo-muted">Clinic.whatsappInstanceName salvo: </span>
+              {evolutionDiagnostics.savedInstanceName ? (
+                <span className="font-mono text-vexo-fg">
+                  &quot;{evolutionDiagnostics.savedInstanceName}&quot; ({evolutionDiagnostics.savedInstanceNameLength}{" "}
+                  caractere{evolutionDiagnostics.savedInstanceNameLength === 1 ? "" : "s"})
+                </span>
+              ) : (
+                <span className="text-vexo-warning">nenhum nome salvo (clínica nunca conectou o WhatsApp)</span>
+              )}
+            </p>
+
+            <div>
+              <p className="text-vexo-muted">
+                Instâncias retornadas por GET /instance/fetchInstances (chamado pelo servidor do VEXO):
+              </p>
+              {evolutionDiagnostics.fetchInstancesError ? (
+                <p className="mt-1 rounded-lg border border-vexo-error/30 bg-vexo-error/10 p-2 text-vexo-error">
+                  Falha ao listar instâncias
+                  {evolutionDiagnostics.fetchInstancesError.status !== null &&
+                    ` (HTTP ${evolutionDiagnostics.fetchInstancesError.status})`}
+                  {evolutionDiagnostics.fetchInstancesError.status === 401 ||
+                  evolutionDiagnostics.fetchInstancesError.status === 403 ? (
+                    <> — provável problema com EVOLUTION_API_KEY (chave rejeitada pela Evolution).</>
+                  ) : (
+                    "."
+                  )}
+                  <br />
+                  <span className="font-mono">{evolutionDiagnostics.fetchInstancesError.message}</span>
+                </p>
+              ) : evolutionDiagnostics.instances && evolutionDiagnostics.instances.length > 0 ? (
+                <ul className="mt-1 space-y-0.5 font-mono">
+                  {evolutionDiagnostics.instances.map((inst, idx) => (
+                    <li
+                      key={`${inst.name}-${idx}`}
+                      className={inst.name === evolutionDiagnostics.savedInstanceName ? "text-vexo-fg" : "text-vexo-muted"}
+                    >
+                      &quot;{inst.name}&quot; — {inst.state ?? "estado desconhecido"}
+                      {inst.name === evolutionDiagnostics.savedInstanceName && " ← nome salvo nesta clínica"}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="mt-1 text-vexo-muted">Nenhuma instância retornada.</p>
+              )}
+            </div>
+
+            {evolutionDiagnostics.nameMatchesList === false && (
+              <p className="rounded-lg border border-vexo-error/30 bg-vexo-error/10 p-2 font-medium text-vexo-error">
+                O nome salvo (&quot;{evolutionDiagnostics.savedInstanceName}&quot;) NÃO aparece na lista de
+                instâncias acima — é por isso que o envio falha com &quot;instance does not exist&quot;, mesmo que
+                uma instância parecida apareça Connected no manager. Confira espaço, maiúscula/minúscula ou
+                caractere invisível no nome salvo.
+              </p>
+            )}
+
+            <div>
+              <p className="text-vexo-muted">
+                GET /instance/connectionState/{evolutionDiagnostics.savedInstanceName ?? "(sem nome salvo)"}:
+              </p>
+              {evolutionDiagnostics.connectionStateError ? (
+                <p className="mt-1 rounded-lg border border-vexo-error/30 bg-vexo-error/10 p-2 text-vexo-error">
+                  {evolutionDiagnostics.connectionStateError}
+                </p>
+              ) : evolutionDiagnostics.connectionState ? (
+                <p
+                  className={`mt-1 rounded-lg border p-2 font-mono ${
+                    evolutionDiagnostics.connectionState.status >= 200 && evolutionDiagnostics.connectionState.status < 300
+                      ? "border-vexo-success/30 bg-vexo-success/10 text-vexo-success"
+                      : "border-vexo-error/30 bg-vexo-error/10 text-vexo-error"
+                  }`}
+                >
+                  HTTP {evolutionDiagnostics.connectionState.status}: {evolutionDiagnostics.connectionState.body}
+                </p>
+              ) : (
+                <p className="mt-1 text-vexo-muted">Não verificado (sem nome de instância salvo).</p>
+              )}
+            </div>
+          </div>
+        )}
+      </section>
 
       {/* Diagnóstico do WORKER (processo separado do web, ver README > Deploy)
           — global, não filtra por clínica: um ciclo falhando afeta o
