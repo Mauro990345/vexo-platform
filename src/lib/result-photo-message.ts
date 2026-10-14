@@ -17,6 +17,141 @@ export type ResultPhotoInput = {
   caption: string | null;
 };
 
+// Minúsculas + sem acento + sem espaço nas pontas — mesma normalização pros
+// dois lados da comparação (categoria cadastrada e categoria pedida pelo
+// modelo), senão "Botox"/"BOTOX"/"Botox " nunca bateriam com "botox".
+function normalizeCategoryText(text: string): string {
+  return text
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+// Bug real reportado: a busca antiga usava só "categoria cadastrada CONTÉM
+// o texto pedido" (ver histórico de sendResultPhoto) — então o modelo
+// precisava adivinhar a palavra EXATA cadastrada; "rugas" ou "toxina
+// botulínica" nunca batiam com a categoria "botox", mesmo sendo
+// claramente o mesmo procedimento. Este mapa é só uma AJUDA de casamento
+// (nunca substitui o cadastro — se a clínica não cadastrou nenhuma foto
+// de botox, nenhum sinônimo aqui faz uma foto aparecer do nada). Chaves e
+// valores já em minúsculas/sem acento, pra comparar direto com
+// normalizeCategoryText.
+const RESULT_PHOTO_CATEGORY_SYNONYMS: Record<string, string[]> = {
+  botox: ["toxina botulinica", "rugas", "linhas de expressao", "testa"],
+  "preenchimento labial": ["labial", "labios", "boca"],
+  "harmonizacao facial": ["harmonizacao"],
+};
+
+// Dado um termo já normalizado (categoria cadastrada OU categoria pedida
+// pelo modelo — ambos textos curtos, tipo rótulo), devolve ele mesmo mais
+// todo termo do grupo de sinônimos ao qual ele pertence (se pertencer a
+// algum) — "botox" expande pra incluir "rugas"/"toxina botulinica"/etc.,
+// e vice-versa.
+function expandCategoryGroup(normalizedTerm: string): string[] {
+  const variants = new Set<string>([normalizedTerm]);
+  for (const [canonical, synonyms] of Object.entries(RESULT_PHOTO_CATEGORY_SYNONYMS)) {
+    const groupTerms = [canonical, ...synonyms];
+    const belongsToGroup = groupTerms.some(
+      (term) => normalizedTerm.includes(term) || term.includes(normalizedTerm)
+    );
+    if (belongsToGroup) {
+      for (const term of groupTerms) variants.add(term);
+    }
+  }
+  return [...variants];
+}
+
+function wordsOf(normalizedText: string): Set<string> {
+  // >=3 caracteres só pra não deixar preposição/artigo ("de", "da", "o")
+  // contar como "palavra em comum" entre duas categorias que não têm nada
+  // a ver uma com a outra.
+  return new Set(normalizedText.split(/[^a-z0-9]+/).filter((word) => word.length >= 3));
+}
+
+function hasCommonWord(a: string, b: string): boolean {
+  const wordsA = wordsOf(a);
+  for (const word of wordsOf(b)) {
+    if (wordsA.has(word)) return true;
+  }
+  return false;
+}
+
+// 3 = igual (depois de normalizar/expandir sinônimo) · 2 = um contém o
+// outro · 1 = pelo menos uma palavra em comum · 0 = nada a ver.
+function categoryMatchScore(a: string, b: string): number {
+  if (!a || !b) return 0;
+  if (a === b) return 3;
+  if (a.includes(b) || b.includes(a)) return 2;
+  if (hasCommonWord(a, b)) return 1;
+  return 0;
+}
+
+export type ResultPhotoCandidate = {
+  category: string;
+  createdAt: Date;
+};
+
+// Busca tolerante — substitui o "contains" exato de antes. Casa a
+// categoria pedida pelo modelo com as cadastradas por, nessa ordem de
+// preferência: igual (já normalizado/expandido por sinônimo) > contém num
+// sentido ou no outro > palavra em comum > sinônimo cadastrado no mapa
+// acima. Em empate de pontuação, ganha a foto mais recente (mesmo
+// critério de antes, orderBy createdAt desc). Null quando nada bate —
+// quem chama decide o que fazer (ver sendResultPhoto,
+// conversation-pipeline.ts: devolve a lista de categorias cadastradas pro
+// modelo tentar de novo).
+export function findBestResultPhotoMatch<T extends ResultPhotoCandidate>(requestedCategory: string, candidates: T[]): T | null {
+  const normalizedQuery = normalizeCategoryText(requestedCategory);
+  if (!normalizedQuery || candidates.length === 0) return null;
+
+  const queryVariants = expandCategoryGroup(normalizedQuery);
+
+  let best: T | null = null;
+  let bestScore = 0;
+  for (const candidate of candidates) {
+    const candidateVariants = expandCategoryGroup(normalizeCategoryText(candidate.category));
+
+    let score = 0;
+    for (const queryVariant of queryVariants) {
+      for (const candidateVariant of candidateVariants) {
+        score = Math.max(score, categoryMatchScore(queryVariant, candidateVariant));
+      }
+    }
+
+    if (score === 0) continue;
+    if (score > bestScore || (score === bestScore && best && candidate.createdAt > best.createdAt)) {
+      bestScore = score;
+      best = candidate;
+    }
+  }
+  return best;
+}
+
+// Usado pra decidir se o LOTE do lead (debounce, pode ter várias mensagens
+// — ver conversation-pipeline.ts) já demonstrou interesse num procedimento
+// CADASTRADO, mesmo antes de qualquer resposta da IA — ver isFirstTurnEver
+// em canSendResultPhoto, abaixo: um lote que já cita um procedimento
+// cadastrado não deve ser tratado como "primeira mensagem de um lead
+// frio", mesmo que ainda não exista nenhuma Message de AI nesta conversa.
+// Direção única de propósito (texto SEMPRE contém o termo, nunca o
+// contrário — o texto livre do lead costuma ser bem mais longo que o
+// rótulo da categoria).
+export function textMentionsRegisteredCategory(freeText: string, registeredCategories: string[]): boolean {
+  const normalizedText = normalizeCategoryText(freeText);
+  if (!normalizedText) return false;
+
+  for (const category of registeredCategories) {
+    const normalizedCategory = normalizeCategoryText(category);
+    if (!normalizedCategory) continue;
+    for (const term of expandCategoryGroup(normalizedCategory)) {
+      if (normalizedText.includes(term)) return true;
+    }
+  }
+  return false;
+}
+
 // Regra nova (substitui o limite antigo de 1 por conversa/fôlego):
 // contando as já enviadas no fôlego atual (ver resultPhotoBreathStart,
 // conversation-pipeline.ts), no máximo esse número de fotos — a mesma foto

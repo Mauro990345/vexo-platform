@@ -36,7 +36,13 @@ import {
 import { cancelPendingFollowUp, getSilenceHours, applyTemplateVariables, getFollowUpWindowSettings } from "@/lib/follow-up";
 import { nextValidSendTime } from "@/lib/follow-up-window";
 import { toChatHistory } from "@/lib/chat-history";
-import { buildResultPhotoMessages, canSendResultPhoto, type ResultPhotoInput } from "@/lib/result-photo-message";
+import {
+  buildResultPhotoMessages,
+  canSendResultPhoto,
+  findBestResultPhotoMatch,
+  textMentionsRegisteredCategory,
+  type ResultPhotoInput,
+} from "@/lib/result-photo-message";
 import { detectStagnation, STAGNATION_SIMILARITY_THRESHOLD, STAGNATION_WINDOW_SIZE } from "@/lib/loop-guard";
 import { parseBrazilLocalDateTime, formatAsBrazilLocalDateTime, startOfBrazilDay } from "@/lib/timezone";
 import { resolveBatchTimestamps } from "@/lib/message-batch-timestamps";
@@ -1187,6 +1193,29 @@ export async function handleInboundInstagramMessage(
   const sentResultPhotoUrls = resultPhotosSentThisBreath.map((m) => m.mediaUrl as string);
   let resultPhotoSentThisTurn = false;
 
+  // Fotos cadastradas desta clínica — buscada UMA vez aqui, reaproveitada
+  // tanto pelo casamento tolerante de categoria (findBestResultPhotoMatch,
+  // dentro de sendResultPhoto) quanto pra decidir isFirstTurnEver, abaixo.
+  const clinicResultPhotos = await prisma.resultPhoto.findMany({ where: { clinicId: clinic.id } });
+
+  // Bug real reportado (lead "Leonardo da Silva", 14/10): o debounce (ver
+  // bufferForDebounce, inbound-debounce.ts) pode juntar VÁRIAS mensagens
+  // do lead num ÚNICO lote/turno — "Percebo rugas", "quero saber sobre
+  // botox" e "Vcs fazem esse procedimento?" todas chegando antes de
+  // qualquer resposta da IA caem no MESMO generateLeadReply. Se esse for o
+  // primeiro turno da conversa (previousAiMessage null), a regra antiga
+  // "nunca na primeira mensagem de um lead frio" bloqueava a foto pro lote
+  // INTEIRO, mesmo com interesse claríssimo em botox dentro dele. Isso
+  // mantém a regra (nunca manda pra quem só disse "oi"), mas deixa de
+  // tratar como "lead frio" um lote que já cita um procedimento CADASTRADO
+  // — ver textMentionsRegisteredCategory, result-photo-message.ts.
+  const leadBatchText = event.messages.map((m) => m.text).join("\n");
+  const batchMentionsRegisteredProcedure = textMentionsRegisteredCategory(
+    leadBatchText,
+    clinicResultPhotos.map((p) => p.category)
+  );
+  const isFirstTurnEver = !previousAiMessage && !batchMentionsRegisteredProcedure;
+
   // Captura ANTES do objeto `tools` (mesmo motivo de sempre — `conversation`
   // é `let`, closures abaixo não carregam narrowing). Ao contrário do nome
   // do lead (cuja trava em scheduleAppointment aceita `lead.name` de uma
@@ -1686,20 +1715,45 @@ export async function handleInboundInstagramMessage(
       async sendResultPhoto(args) {
         const category = args.category.trim();
         if (!category) return { error: "Categoria vazia." };
-        const photo = await prisma.resultPhoto.findFirst({
-          where: { clinicId: clinic.id, category: { contains: category, mode: "insensitive" } },
-          orderBy: { createdAt: "desc" },
-        });
+
+        // findBestResultPhotoMatch substitui o "contains" exato de antes
+        // (bug real: "rugas"/"toxina botulínica" nunca batiam com a
+        // categoria cadastrada "botox") — ver result-photo-message.ts pra
+        // a regra completa de casamento.
+        const photo = findBestResultPhotoMatch(category, clinicResultPhotos);
+
         if (!photo) {
-          return { error: `Nenhuma foto de resultado cadastrada para a categoria "${category}".` };
+          const reason =
+            clinicResultPhotos.length > 0
+              ? `Nenhuma foto de resultado cadastrada bate com a categoria "${category}". Categorias cadastradas nesta clínica: ${clinicResultPhotos
+                  .map((p) => p.category)
+                  .join(", ")}. Chame esta ferramenta de novo com uma categoria dessa lista, se fizer sentido, ou siga sem foto.`
+              : "Nenhuma foto de resultado cadastrada para esta clínica ainda.";
+          // Log de toda chamada (sem dados pessoais — só id interno da
+          // conversa, a categoria que o modelo pediu e a decisão final) —
+          // pra conseguir diagnosticar uma próxima vez sem precisar
+          // reconstruir tudo isso só pelo código, como aconteceu com o
+          // caso do Leonardo da Silva.
+          console.log(
+            `[vexo:result-photo] conversa=${conversation.id} categoriaPedida="${category}" ` +
+              `categoriaCadastradaCasada=nenhuma decisao=bloqueada (${reason})`
+          );
+          return { error: reason };
         }
 
         const decision = canSendResultPhoto({
-          isFirstTurnEver: !previousAiMessage,
+          isFirstTurnEver,
           alreadySentThisTurn: resultPhotoSentThisTurn,
           alreadySentImageUrls: sentResultPhotoUrls,
           candidateImageUrl: photo.imageUrl,
         });
+
+        console.log(
+          `[vexo:result-photo] conversa=${conversation.id} categoriaPedida="${category}" ` +
+            `categoriaCadastradaCasada="${photo.category}" ` +
+            `decisao=${decision.allowed ? "permitida" : `bloqueada (${decision.reason})`}`
+        );
+
         if (!decision.allowed) {
           return { error: decision.reason };
         }
