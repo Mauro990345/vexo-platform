@@ -434,7 +434,7 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
   {
     name: "send_result_photo",
     description:
-      "Envia uma foto de resultado (antes/depois) de um procedimento específico, quando o lead demonstrar interesse claro naquele procedimento durante a conversa. Use a categoria mais próxima do procedimento mencionado (ex: 'botox', 'preenchimento labial', 'harmonização facial'). NUNCA chame na primeira mensagem de um lead novo — espere ele demonstrar interesse primeiro. No máximo 2 fotos por conversa, nunca duas no mesmo turno, e nunca repita a mesma foto já enviada — o sistema aplica esses limites sozinho e devolve um erro explicando o motivo quando algum deles for violado; nesse caso, siga a conversa normalmente sem foto.",
+      "Envia uma foto de resultado (antes/depois) de um procedimento específico, quando o lead demonstrar interesse claro naquele procedimento durante a conversa. Use a categoria mais próxima do procedimento mencionado (ex: 'botox', 'preenchimento labial', 'harmonização facial') — o casamento é tolerante (sinônimos, minúsculas/acento não importam), não precisa ser a palavra exata cadastrada. Se a categoria não bater com nenhuma cadastrada, o erro devolvido lista as categorias que existem de verdade nesta clínica — chame de novo com uma delas se fizer sentido, ou siga sem foto se nenhuma servir. NUNCA chame na primeira mensagem de um lead novo — espere ele demonstrar interesse primeiro. No máximo 2 fotos por conversa, nunca duas no mesmo turno, e nunca repita a mesma foto já enviada — o sistema aplica esses limites sozinho e devolve um erro explicando o motivo quando algum deles for violado; nesse caso, siga a conversa normalmente sem foto.",
     inputSchema: {
       type: "object",
       properties: {
