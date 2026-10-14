@@ -310,7 +310,10 @@ export type AgentTools = {
   saveLeadName: (args: { name: string }) => Promise<{ saved: true } | { error: string }>;
   // Busca uma foto de resultado (antes/depois) cadastrada pra clínica na
   // categoria mais próxima do procedimento que o lead demonstrou interesse.
-  // Trava em no máximo 1 envio por conversa — ver resultPhotoSentAt em
+  // Trava em no máximo MAX_IMAGES_PER_CONVERSATION fotos por conversa,
+  // nunca repete a mesma foto, nunca na primeira mensagem de um lead frio e
+  // nunca duas no mesmo turno — ver canSendResultPhoto,
+  // result-photo-message.ts, e o uso dela em sendResultPhoto,
   // conversation-pipeline.ts.
   sendResultPhoto: (args: { category: string }) => Promise<{ sent: true } | { error: string }>;
 };
@@ -431,7 +434,7 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
   {
     name: "send_result_photo",
     description:
-      "Envia uma foto de resultado (antes/depois) de um procedimento específico, quando o lead demonstrar interesse claro naquele procedimento durante a conversa. Use a categoria mais próxima do procedimento mencionado (ex: 'botox', 'preenchimento labial', 'harmonização facial'). No máximo uma vez por conversa — não chame de novo se já tiver enviado antes.",
+      "Envia uma foto de resultado (antes/depois) de um procedimento específico, quando o lead demonstrar interesse claro naquele procedimento durante a conversa. Use a categoria mais próxima do procedimento mencionado (ex: 'botox', 'preenchimento labial', 'harmonização facial'). NUNCA chame na primeira mensagem de um lead novo — espere ele demonstrar interesse primeiro. No máximo 2 fotos por conversa, nunca duas no mesmo turno, e nunca repita a mesma foto já enviada — o sistema aplica esses limites sozinho e devolve um erro explicando o motivo quando algum deles for violado; nesse caso, siga a conversa normalmente sem foto.",
     inputSchema: {
       type: "object",
       properties: {

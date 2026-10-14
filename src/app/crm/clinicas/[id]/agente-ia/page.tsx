@@ -211,8 +211,9 @@ export default async function ClinicAiAgentPage({ params }: { params: { id: stri
               <section>
                 <p className="text-xs text-vexo-muted">
                   Fotos por procedimento, marcadas por categoria/tag. A IA busca a foto da categoria
-                  mais próxima do que o lead demonstrou interesse e anexa na resposta — no máximo uma
-                  por conversa.
+                  mais próxima do que o lead demonstrou interesse e anexa na resposta — no máximo 2
+                  por conversa, nunca repetindo a mesma foto, e nunca na primeira mensagem de um lead
+                  novo.
                 </p>
 
                 <div className="mt-5 space-y-2.5">

@@ -99,6 +99,90 @@ describe("retry em erro transitório da Graph API", () => {
   });
 });
 
+// Bug real corrigido: attachment.type ia SEMPRE "video", mesmo quando
+// mediaUrl era uma foto de resultado (ResultPhoto.imageUrl, JPG/PNG/WEBP/
+// GIF) — a Graph API rejeita uma imagem anunciada como vídeo, e a Message
+// correspondente ficava FAILED pra sempre (ver attachmentTypeForMediaUrl,
+// instagram.ts).
+describe("sendInstagramMessage — tipo do anexo por extensão de mediaUrl", () => {
+  beforeEach(() => {
+    process.env.TOKEN_ENCRYPTION_KEY = "test-key-para-os-testes-de-retry";
+    vi.stubGlobal("fetch", vi.fn());
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it.each(["jpg", "jpeg", "png", "webp", "gif"])(
+    "mediaUrl terminando em .%s vira attachment.type \"image\"",
+    async (extension) => {
+      const fetchMock = fetch as unknown as ReturnType<typeof vi.fn>;
+      fetchMock.mockResolvedValue(jsonResponse(200, { message_id: "mid.img" }));
+
+      await sendInstagramMessage({
+        accessTokenEnc: encryptToken("fake-token"),
+        igUserId: "999",
+        recipientIgScopedId: "17841400000000000",
+        mediaUrl: `https://app.vexo/uploads/result-photos/foto.${extension}`,
+      });
+
+      const [, requestInit] = fetchMock.mock.calls[0] as [string, RequestInit];
+      const body = JSON.parse(requestInit.body as string);
+      expect(body.message.attachment.type).toBe("image");
+      expect(body.message.attachment.payload.url).toBe(`https://app.vexo/uploads/result-photos/foto.${extension}`);
+    }
+  );
+
+  it.each(["mp4", "mov", "webm"])("mediaUrl terminando em .%s continua com attachment.type \"video\"", async (extension) => {
+    const fetchMock = fetch as unknown as ReturnType<typeof vi.fn>;
+    fetchMock.mockResolvedValue(jsonResponse(200, { message_id: "mid.vid" }));
+
+    await sendInstagramMessage({
+      accessTokenEnc: encryptToken("fake-token"),
+      igUserId: "999",
+      recipientIgScopedId: "17841400000000000",
+      mediaUrl: `https://app.vexo/uploads/confirmation-videos/video.${extension}`,
+    });
+
+    const [, requestInit] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(requestInit.body as string);
+    expect(body.message.attachment.type).toBe("video");
+  });
+
+  it("mediaUrl sem extensão reconhecível (ex.: URL externa colada à mão) cai no default \"video\" — comportamento de antes, preservado", async () => {
+    const fetchMock = fetch as unknown as ReturnType<typeof vi.fn>;
+    fetchMock.mockResolvedValue(jsonResponse(200, { message_id: "mid.default" }));
+
+    await sendInstagramMessage({
+      accessTokenEnc: encryptToken("fake-token"),
+      igUserId: "999",
+      recipientIgScopedId: "17841400000000000",
+      mediaUrl: "https://cdn.example.com/video-sem-extensao",
+    });
+
+    const [, requestInit] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(requestInit.body as string);
+    expect(body.message.attachment.type).toBe("video");
+  });
+
+  it("extensão em query string (?foo=bar.mp4) não engana a detecção — olha só o path", async () => {
+    const fetchMock = fetch as unknown as ReturnType<typeof vi.fn>;
+    fetchMock.mockResolvedValue(jsonResponse(200, { message_id: "mid.query" }));
+
+    await sendInstagramMessage({
+      accessTokenEnc: encryptToken("fake-token"),
+      igUserId: "999",
+      recipientIgScopedId: "17841400000000000",
+      mediaUrl: "https://app.vexo/uploads/result-photos/foto.jpg?v=video.mp4",
+    });
+
+    const [, requestInit] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(requestInit.body as string);
+    expect(body.message.attachment.type).toBe("image");
+  });
+});
+
 // Cartão de contato da clínica (Generic Template) — ver
 // clinicContactContext/buildClinicContactContext (conversation-pipeline.ts)
 // e dispatchOneMessage (dispatch.ts), que trata qualquer erro daqui como

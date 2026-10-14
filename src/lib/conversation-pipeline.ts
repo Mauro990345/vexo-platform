@@ -36,7 +36,7 @@ import {
 import { cancelPendingFollowUp, getSilenceHours, applyTemplateVariables, getFollowUpWindowSettings } from "@/lib/follow-up";
 import { nextValidSendTime } from "@/lib/follow-up-window";
 import { toChatHistory } from "@/lib/chat-history";
-import { buildResultPhotoMessages, type ResultPhotoInput } from "@/lib/result-photo-message";
+import { buildResultPhotoMessages, canSendResultPhoto, type ResultPhotoInput } from "@/lib/result-photo-message";
 import { detectStagnation, STAGNATION_SIMILARITY_THRESHOLD, STAGNATION_WINDOW_SIZE } from "@/lib/loop-guard";
 import { parseBrazilLocalDateTime, formatAsBrazilLocalDateTime, startOfBrazilDay } from "@/lib/timezone";
 import { resolveBatchTimestamps } from "@/lib/message-batch-timestamps";
@@ -790,10 +790,11 @@ export async function handleInboundInstagramMessage(
   // mesmo limiar que dispara o follow-up automático, ver silenceHours em
   // follow-up.ts, pra não ter dois números diferentes definindo "esfriou")
   // e voltou a interagir. Isso encerra o "fôlego" anterior da conversa —
-  // reseta a trava de resultPhotoSentAt logo abaixo, liberando a IA pra
-  // mandar outra foto de resultado se fizer sentido de novo, já que a trava
-  // de 1 foto só vale dentro do mesmo fôlego, não pra vida inteira da
-  // conversa.
+  // resultPhotoSentAt passa a marcar o INÍCIO do fôlego atual (não mais
+  // "já enviei uma foto" — ver canSendResultPhoto/resultPhotoBreathStart,
+  // mais abaixo), liberando a contagem do limite de fotos de resultado pra
+  // recomeçar do zero neste novo fôlego, já que o limite só vale dentro do
+  // mesmo fôlego, não pra vida inteira da conversa.
   const silenceHours = await getSilenceHours();
   const wentSilent =
     Boolean(conversation.lastLeadMessageAt) &&
@@ -835,7 +836,7 @@ export async function handleInboundInstagramMessage(
         lastLeadMessageAt: lastResolvedAt,
         lastMessageAt: lastResolvedAt,
         status: conversation.status === "NEW" || reopeningFromFollowUp ? "IN_CONVERSATION" : conversation.status,
-        ...(reengaged ? { resultPhotoSentAt: null } : {}),
+        ...(reengaged ? { resultPhotoSentAt: firstResolvedAt } : {}),
       },
     }),
   ]);
@@ -1156,7 +1157,35 @@ export async function handleInboundInstagramMessage(
   let capturedLeadPhone: string | undefined;
   let capturedLeadName: string | undefined;
   let capturedResultPhoto: ResultPhotoInput | undefined;
-  let resultPhotoAlreadySent = reengaged ? false : Boolean(conversation.resultPhotoSentAt);
+
+  // Início do fôlego atual pra contar o limite de fotos de resultado (ver
+  // MAX_IMAGES_PER_CONVERSATION, result-photo-message.ts) — null quando a
+  // conversa nunca reengajou ainda (conta desde o início dela mesma, só
+  // existiu um fôlego até agora). `conversation.resultPhotoSentAt` em
+  // memória está desatualizado se reengajou NESTE turno (a escrita que o
+  // reseta é a $transaction acima, que não atualiza o objeto local — mesmo
+  // motivo de sempre, ver reengaged) — por isso o `reengaged ?
+  // firstResolvedAt` explícito, igual ao resto do arquivo faz pra esse
+  // mesmo problema.
+  const resultPhotoBreathStart = reengaged ? firstResolvedAt : conversation.resultPhotoSentAt;
+  const resultPhotosSentThisBreath = await prisma.message.findMany({
+    where: {
+      conversationId: conversation.id,
+      sender: "AI",
+      content: "[foto de resultado]",
+      mediaUrl: { not: null },
+      ...(resultPhotoBreathStart ? { createdAt: { gte: resultPhotoBreathStart } } : {}),
+    },
+    select: { mediaUrl: true },
+  });
+  // Mutável de propósito: cresce a cada send_result_photo bem-sucedido
+  // DENTRO deste turno (ver sendResultPhoto, mais abaixo), pra que uma 2ª
+  // chamada no mesmo turno já veja a foto que a 1ª acabou de capturar —
+  // canSendResultPhoto não deixa passar da 2ª de qualquer forma (nunca duas
+  // no mesmo turno), mas o limite/repetição têm que valer mesmo dentro do
+  // mesmo turno, não só entre turnos.
+  const sentResultPhotoUrls = resultPhotosSentThisBreath.map((m) => m.mediaUrl as string);
+  let resultPhotoSentThisTurn = false;
 
   // Captura ANTES do objeto `tools` (mesmo motivo de sempre — `conversation`
   // é `let`, closures abaixo não carregam narrowing). Ao contrário do nome
@@ -1655,9 +1684,6 @@ export async function handleInboundInstagramMessage(
         return { saved: true };
       },
       async sendResultPhoto(args) {
-        if (resultPhotoAlreadySent) {
-          return { error: "Já foi enviada uma foto de resultado nesta conversa — não envie outra." };
-        }
         const category = args.category.trim();
         if (!category) return { error: "Categoria vazia." };
         const photo = await prisma.resultPhoto.findFirst({
@@ -1667,8 +1693,20 @@ export async function handleInboundInstagramMessage(
         if (!photo) {
           return { error: `Nenhuma foto de resultado cadastrada para a categoria "${category}".` };
         }
+
+        const decision = canSendResultPhoto({
+          isFirstTurnEver: !previousAiMessage,
+          alreadySentThisTurn: resultPhotoSentThisTurn,
+          alreadySentImageUrls: sentResultPhotoUrls,
+          candidateImageUrl: photo.imageUrl,
+        });
+        if (!decision.allowed) {
+          return { error: decision.reason };
+        }
+
         capturedResultPhoto = { imageUrl: photo.imageUrl, caption: photo.caption };
-        resultPhotoAlreadySent = true;
+        resultPhotoSentThisTurn = true;
+        sentResultPhotoUrls.push(photo.imageUrl);
         return { sent: true };
       },
     },
@@ -1871,9 +1909,18 @@ export async function handleInboundInstagramMessage(
     // ainda mais alguns segundos antes da própria foto (ver
     // buildResultPhotoMessages, src/lib/result-photo-message.ts); sem
     // legenda, comportamento idêntico ao de antes desse campo existir.
+    //
+    // Sem escrita em Conversation.resultPhotoSentAt aqui, de propósito —
+    // ela só marca o INÍCIO do fôlego atual (ver resultPhotoBreathStart,
+    // acima), nunca "a última foto enviada": sobrescrever com a hora
+    // atual a cada envio empurraria essa marca pra frente e faria o
+    // próprio Message que está sendo criado agora cair fora da janela de
+    // contagem da próxima chamada. O histórico de Message (content
+    // "[foto de resultado]") já é a fonte da verdade de quais fotos foram
+    // enviadas no fôlego atual.
     const photoMessages = buildResultPhotoMessages(capturedResultPhoto, new Date(scheduledFor.getTime() + 5_000));
-    await prisma.$transaction([
-      ...photoMessages.map((draft) =>
+    await prisma.$transaction(
+      photoMessages.map((draft) =>
         prisma.message.create({
           data: {
             conversationId: conversation.id,
@@ -1885,12 +1932,8 @@ export async function handleInboundInstagramMessage(
             scheduledFor: draft.scheduledFor,
           },
         })
-      ),
-      prisma.conversation.update({
-        where: { id: conversation.id },
-        data: { resultPhotoSentAt: new Date() },
-      }),
-    ]);
+      )
+    );
   }
 
   // Agendamento (criação/remarcação do evento no Google Calendar +

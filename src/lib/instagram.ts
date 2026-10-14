@@ -90,6 +90,29 @@ function isRetryableMetaError(status: number, bodyText: string): boolean {
   }
 }
 
+// Extensões de imagem salvas por saveUploadedAttachment (ver
+// ALLOWED_EXTENSION_BY_MIME, src/lib/uploads.ts) — qualquer outra extensão
+// (mp4/mov/webm, ou uma URL externa sem extensão reconhecível, ex. CDN de
+// vídeo colada à mão em Clinic.confirmationVideoUrl) continua caindo no
+// default "video", que é o único tipo que este parâmetro já tinha antes
+// das fotos de resultado existirem.
+const IMAGE_MEDIA_EXTENSIONS = new Set(["jpg", "jpeg", "png", "webp", "gif"]);
+
+// Bug real em produção: o payload de anexo SEMPRE declarava
+// `type: "video"`, mesmo quando mediaUrl era uma foto de resultado
+// (ResultPhoto.imageUrl, JPG/PNG/WEBP/GIF — ver send_result_photo,
+// anthropic.ts/conversation-pipeline.ts). A Graph API do Instagram valida o
+// conteúdo baixado da URL contra o `type` declarado — uma imagem anunciada
+// como vídeo é rejeitada (a Message correspondente fica FAILED, nunca sai
+// pro lead). Esse mediaUrl é usado também pelo vídeo de confirmação de
+// agendamento e pelo anexo de follow-up, por isso o default continua
+// "video" pra qualquer extensão não reconhecida como imagem.
+function attachmentTypeForMediaUrl(mediaUrl: string): "image" | "video" {
+  const withoutQueryOrFragment = mediaUrl.split(/[?#]/)[0] ?? mediaUrl;
+  const extension = withoutQueryOrFragment.split(".").pop()?.toLowerCase() ?? "";
+  return IMAGE_MEDIA_EXTENSIONS.has(extension) ? "image" : "video";
+}
+
 export async function sendInstagramMessage(params: {
   accessTokenEnc: string;
   igUserId: string;
@@ -100,7 +123,7 @@ export async function sendInstagramMessage(params: {
   const accessToken = decryptToken(params.accessTokenEnc);
 
   const message = params.mediaUrl
-    ? { attachment: { type: "video", payload: { url: params.mediaUrl, is_reusable: true } } }
+    ? { attachment: { type: attachmentTypeForMediaUrl(params.mediaUrl), payload: { url: params.mediaUrl, is_reusable: true } } }
     : { text: params.text ?? "" };
 
   return withRetry(
