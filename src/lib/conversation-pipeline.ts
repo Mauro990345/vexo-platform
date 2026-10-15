@@ -37,7 +37,8 @@ import { cancelPendingFollowUp, getSilenceHours, applyTemplateVariables, getFoll
 import { nextValidSendTime } from "@/lib/follow-up-window";
 import { toChatHistory } from "@/lib/chat-history";
 import {
-  buildResultPhotoMessages,
+  RESULT_PHOTO_MESSAGE_CONTENT,
+  planResultPhotoDispatch,
   canSendResultPhoto,
   findBestResultPhotoMatch,
   textMentionsRegisteredCategory,
@@ -257,6 +258,30 @@ export const ATTENDANCE_FINAL_DELAY_AFTER_TIP_MS = 10_000;
 // do follow-up (FollowUpSettings): se vencer fora da janela, adia pro
 // próximo ciclo em que a janela estiver aberta, nunca descarta.
 const ATTENDANCE_AUTO_SEND_AFTER_MS = 60 * 60 * 1000; // 1h
+
+// Legenda cadastrada -> foto de resultado (ver send_result_photo,
+// planResultPhotoDispatch em result-photo-message.ts). Quando a IA envia
+// uma foto, o texto livre do turno é DESCARTADO (ver o bloco de criação
+// da Message de resposta, mais abaixo) — a legenda (ou, sem legenda, a
+// própria foto) passa a ser a ÚNICA coisa que sai neste turno, então não
+// faz sentido herdar o delay adaptativo de uma resposta em texto normal
+// (computeAdaptiveDelaySeconds): sai rápido, igual à apresentação da
+// sequência de presença (ATTENDANCE_VIDEO_INTRO_DELAY_MS), só que bem mais
+// curto — aqui não há nada antes pra esperar, a prioridade é minimizar o
+// atraso total até a legenda/foto chegar.
+export const RESULT_PHOTO_CAPTION_DELAY_MS = 2_000;
+// Delay entre o ENVIO REAL (sentAt, confirmado por dispatchOneMessage) da
+// legenda e o scheduledFor da foto — nunca um relógio cego calculado no
+// momento em que a legenda foi criada. Mesmo motivo de sempre (ver
+// ATTENDANCE_VIDEO_DELAY_AFTER_INTRO_MS, acima): a Meta aceita o pedido de
+// enviar uma imagem rápido, mas processa a mídia de forma assíncrona do
+// lado deles — por isso a Message da foto só é CRIADA depois que
+// dispatch.ts confirma o SENT da legenda (ver PendingAttendanceStep
+// "resultPhoto" e o despacho antecipado — scheduleEagerDispatch,
+// dispatch.ts, mesmo mecanismo das PRs #99/#106/#107), nunca em lote junto
+// com ela — garante a ordem (foto nunca antes da legenda) por construção,
+// não só por scheduledFor/sentAt estarem na ordem certa.
+export const RESULT_PHOTO_DELAY_AFTER_CAPTION_MS = 2_000;
 // Usado quando Clinic.attendanceTipMessage está vazio (editável em
 // /crm/clinicas/[id]/agente-ia) — mesmo padrão de
 // DEFAULT_CONFIRMATION_VIDEO_CAPTION acima. Antes esse texto era escrito
@@ -307,10 +332,21 @@ function resolveAttendanceFinalMessage(clinicTemplate: string | null | undefined
 // scheduledAtMs/finalText viajam por toda a cadeia, não só pro elo
 // imediatamente seguinte). Ver dispatch.ts — só é consumido depois de
 // confirmar o SENT do elo atual.
+//
+// "resultPhoto" (abaixo) é um elo de um fluxo TOTALMENTE diferente —
+// legenda cadastrada -> foto de resultado (ver send_result_photo,
+// RESULT_PHOTO_DELAY_AFTER_CAPTION_MS) — sem nenhuma relação com
+// agendamento/presença. Reaproveita este mesmo campo/tipo/mecanismo de
+// despacho antecipado (scheduleEagerDispatch, dispatch.ts) só pra não
+// precisar de uma coluna nova (sem migration): o problema é idêntico —
+// a foto só pode ser CRIADA depois que a legenda foi confirmada SENT, e
+// precisa saber rápido depois disso, sem esperar o próximo ciclo do cron.
+// Nunca altera o comportamento dos outros elos (video/tip/final).
 export type PendingAttendanceStep =
   | { next: "video"; mediaUrl: string; tipText: string; finalText: string; appointmentId: string; scheduledAtMs: number }
   | { next: "tip"; tipText: string; finalText: string; appointmentId: string; scheduledAtMs: number }
-  | { next: "final"; finalText: string; appointmentId: string; scheduledAtMs: number };
+  | { next: "final"; finalText: string; appointmentId: string; scheduledAtMs: number }
+  | { next: "resultPhoto"; mediaUrl: string };
 
 export function encodePendingAttendanceStep(step: PendingAttendanceStep): string {
   return JSON.stringify(step);
@@ -327,7 +363,7 @@ export function decodePendingAttendanceStep(raw: string): PendingAttendanceStep 
     if (
       parsed &&
       typeof parsed === "object" &&
-      (parsed.next === "video" || parsed.next === "tip" || parsed.next === "final")
+      (parsed.next === "video" || parsed.next === "tip" || parsed.next === "final" || parsed.next === "resultPhoto")
     ) {
       return parsed as PendingAttendanceStep;
     }
@@ -810,10 +846,10 @@ export async function handleInboundInstagramMessage(
 
   // Desempate por id (ver resolveBatchTimestamps acima) — ties de createdAt
   // continuam possíveis entre mensagens de TURNOS diferentes desta mesma
-  // conversa (ex.: duas respostas da IA no mesmo $transaction, caso do
-  // envio de foto de resultado com legenda — buildResultPhotoMessages), não
-  // só dentro de um lote do lead. id é gerado no processo Node (cuid) na
-  // mesma ordem de criação, então serve como desempate estável.
+  // conversa (duas escritas bem próximas podem cair no mesmo instante de
+  // now() do Postgres), não só dentro de um lote do lead. id é gerado no
+  // processo Node (cuid) na mesma ordem de criação, então serve como
+  // desempate estável.
   const previousAiMessage = await prisma.message.findFirst({
     where: { conversationId: conversation.id, sender: "AI", direction: "OUTBOUND" },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
@@ -970,10 +1006,10 @@ export async function handleInboundInstagramMessage(
         mediaUrl: null,
       },
       // Desempate por id — ver comentário grande em resolveBatchTimestamps,
-      // message-batch-timestamps.ts: duas respostas da IA no MESMO
-      // $transaction (ex.: texto + foto de resultado com legenda) têm
-      // createdAt empatado, e sem desempate a ordem "mais recente primeiro"
-      // fica indefinida.
+      // message-batch-timestamps.ts: duas respostas da IA criadas bem
+      // próximas podem empatar em createdAt (mesmo instante de now() do
+      // Postgres), e sem desempate a ordem "mais recente primeiro" fica
+      // indefinida.
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       take: STAGNATION_WINDOW_SIZE,
       select: { content: true },
@@ -1179,7 +1215,7 @@ export async function handleInboundInstagramMessage(
     where: {
       conversationId: conversation.id,
       sender: "AI",
-      content: "[foto de resultado]",
+      content: RESULT_PHOTO_MESSAGE_CONTENT,
       mediaUrl: { not: null },
       ...(resultPhotoBreathStart ? { createdAt: { gte: resultPhotoBreathStart } } : {}),
     },
@@ -1858,20 +1894,31 @@ export async function handleInboundInstagramMessage(
   // de ferramentas ter esgotado.
   const isGoogleCalendarFailure = Boolean(googleCalendarFailureReason);
 
-  await prisma.message.create({
-    data: {
-      conversationId: conversation.id,
-      direction: "OUTBOUND",
-      sender: reply.truncated || isGoogleCalendarFailure ? "SYSTEM" : "AI",
-      content: isGoogleCalendarFailure
-        ? "Só um instante — vou confirmar esse horário direto com a nossa equipe e te aviso em seguida, tá bom? 🙂"
-        : reply.truncated
-          ? "Entendi! Vou repassar isso pra nossa equipe te dar mais detalhes por aqui, tá bom? 🙂"
-          : reply.text,
-      status: "PENDING",
-      scheduledFor,
-    },
-  });
+  // Pedido explícito: quando a IA envia foto de resultado neste turno, o
+  // lead recebe SOMENTE a legenda cadastrada + a foto — o texto livre que
+  // a IA escreveu (reply.text) é DESCARTADO por completo, nunca criado
+  // como Message. Mesmo princípio de "não confia no texto do modelo,
+  // decide no código" que reply.truncated/isGoogleCalendarFailure já
+  // usam — só que aqui o motivo não é um erro, é a decisão de produto de
+  // nunca misturar texto livre com uma foto de resultado no mesmo turno.
+  // Sem foto (bloqueio, categoria inexistente, limite atingido —
+  // capturedResultPhoto undefined), o texto sai exatamente como hoje.
+  if (!capturedResultPhoto) {
+    await prisma.message.create({
+      data: {
+        conversationId: conversation.id,
+        direction: "OUTBOUND",
+        sender: reply.truncated || isGoogleCalendarFailure ? "SYSTEM" : "AI",
+        content: isGoogleCalendarFailure
+          ? "Só um instante — vou confirmar esse horário direto com a nossa equipe e te aviso em seguida, tá bom? 🙂"
+          : reply.truncated
+            ? "Entendi! Vou repassar isso pra nossa equipe te dar mais detalhes por aqui, tá bom? 🙂"
+            : reply.text,
+        status: "PENDING",
+        scheduledFor,
+      },
+    });
+  }
 
   // Cartão de contato da clínica — Message SEPARADA da resposta em texto
   // acima (ver clinicContactContext/buildClinicContactContext, mais acima:
@@ -1987,36 +2034,55 @@ export async function handleInboundInstagramMessage(
   }
 
   if (capturedResultPhoto) {
-    // +5s pra chegar logo depois da resposta em texto, não junto/antes dela
-    // — a legenda cadastrada (ResultPhoto.caption), quando existe, sai
-    // ainda mais alguns segundos antes da própria foto (ver
-    // buildResultPhotoMessages, src/lib/result-photo-message.ts); sem
-    // legenda, comportamento idêntico ao de antes desse campo existir.
+    // Nunca cria legenda+foto juntas. Com legenda: cria SÓ a legenda agora
+    // (RESULT_PHOTO_CAPTION_DELAY_MS — bem mais rápido que o delay
+    // adaptativo de uma resposta em texto normal, já que reply.text deste
+    // turno foi descartado acima e não há nada mais pra esperar) e
+    // encadeia a foto nela via pendingAttendanceStep {next: "resultPhoto"}
+    // — dispatch.ts só CRIA a Message da foto depois de confirmar o SENT
+    // da legenda, e a despacha antecipadamente (scheduleEagerDispatch,
+    // RESULT_PHOTO_DELAY_AFTER_CAPTION_MS), sem esperar o próximo ciclo do
+    // cron — mesmo mecanismo da sequência de presença (PRs #99/#106/#107).
+    // Isso garante a ordem (foto nunca antes da legenda) por construção,
+    // não só por scheduledFor/sentAt estarem na ordem certa. Sem legenda:
+    // só a foto, como sempre foi, só que agora também saindo rápido
+    // (RESULT_PHOTO_CAPTION_DELAY_MS) em vez de herdar o delay adaptativo.
     //
     // Sem escrita em Conversation.resultPhotoSentAt aqui, de propósito —
     // ela só marca o INÍCIO do fôlego atual (ver resultPhotoBreathStart,
     // acima), nunca "a última foto enviada": sobrescrever com a hora
     // atual a cada envio empurraria essa marca pra frente e faria o
-    // próprio Message que está sendo criado agora cair fora da janela de
+    // próprio Message que está sendo criada agora cair fora da janela de
     // contagem da próxima chamada. O histórico de Message (content
-    // "[foto de resultado]") já é a fonte da verdade de quais fotos foram
-    // enviadas no fôlego atual.
-    const photoMessages = buildResultPhotoMessages(capturedResultPhoto, new Date(scheduledFor.getTime() + 5_000));
-    await prisma.$transaction(
-      photoMessages.map((draft) =>
-        prisma.message.create({
-          data: {
-            conversationId: conversation.id,
-            direction: "OUTBOUND",
-            sender: "AI",
-            content: draft.content,
-            mediaUrl: draft.mediaUrl,
-            status: "PENDING",
-            scheduledFor: draft.scheduledFor,
-          },
-        })
-      )
-    );
+    // RESULT_PHOTO_MESSAGE_CONTENT) já é a fonte da verdade de quais fotos
+    // foram enviadas no fôlego atual.
+    const plan = planResultPhotoDispatch(capturedResultPhoto);
+    const resultPhotoScheduledFor = new Date(Date.now() + RESULT_PHOTO_CAPTION_DELAY_MS);
+    if (plan.kind === "caption-then-photo") {
+      await prisma.message.create({
+        data: {
+          conversationId: conversation.id,
+          direction: "OUTBOUND",
+          sender: "AI",
+          content: plan.captionContent,
+          status: "PENDING",
+          scheduledFor: resultPhotoScheduledFor,
+          pendingAttendanceStep: encodePendingAttendanceStep({ next: "resultPhoto", mediaUrl: plan.imageUrl }),
+        },
+      });
+    } else {
+      await prisma.message.create({
+        data: {
+          conversationId: conversation.id,
+          direction: "OUTBOUND",
+          sender: "AI",
+          content: RESULT_PHOTO_MESSAGE_CONTENT,
+          mediaUrl: plan.imageUrl,
+          status: "PENDING",
+          scheduledFor: resultPhotoScheduledFor,
+        },
+      });
+    }
   }
 
   // Agendamento (criação/remarcação do evento no Google Calendar +

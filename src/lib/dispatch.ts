@@ -7,6 +7,7 @@ import {
   ATTENDANCE_VIDEO_DELAY_AFTER_INTRO_MS,
   ATTENDANCE_TIP_DELAY_AFTER_VIDEO_MS,
   ATTENDANCE_FINAL_DELAY_AFTER_TIP_MS,
+  RESULT_PHOTO_DELAY_AFTER_CAPTION_MS,
   decodePendingAttendanceStep,
   encodePendingAttendanceStep,
   decodeClinicContactCard,
@@ -15,6 +16,7 @@ import {
   decodeInstagramConfirmationCard,
   INSTAGRAM_CONFIRMATION_CARD_ENABLED,
 } from "@/lib/conversation-pipeline";
+import { RESULT_PHOTO_MESSAGE_CONTENT } from "@/lib/result-photo-message";
 
 // Despacha mensagens OUTBOUND com status PENDING cujo horário de envio
 // (timing adaptativo) já chegou. Chamado periodicamente pelo worker.
@@ -491,6 +493,29 @@ async function dispatchOneMessage(
           },
         });
         return { message: { ...created, conversation: message.conversation }, delayMs: ATTENDANCE_TIP_DELAY_AFTER_VIDEO_MS };
+      }
+
+      // Elo de um fluxo TOTALMENTE diferente (legenda cadastrada -> foto
+      // de resultado, ver send_result_photo/PendingAttendanceStep
+      // "resultPhoto", conversation-pipeline.ts) — reaproveita só o
+      // mecanismo de despacho antecipado desta cadeia, sem nenhuma
+      // relação com agendamento/presença. A foto só é CRIADA aqui, depois
+      // que a legenda (este `message`) já está confirmada SENT — garante
+      // a ordem por construção, não só por scheduledFor/sentAt. Último
+      // elo deste mini-fluxo: sem pendingAttendanceStep na foto.
+      if (step.next === "resultPhoto") {
+        const created = await tx.message.create({
+          data: {
+            conversationId: message.conversationId,
+            direction: "OUTBOUND",
+            sender: "AI",
+            content: RESULT_PHOTO_MESSAGE_CONTENT,
+            mediaUrl: step.mediaUrl,
+            status: "PENDING",
+            scheduledFor: new Date(now.getTime() + RESULT_PHOTO_DELAY_AFTER_CAPTION_MS),
+          },
+        });
+        return { message: { ...created, conversation: message.conversation }, delayMs: RESULT_PHOTO_DELAY_AFTER_CAPTION_MS };
       }
 
       // step.next === "final" — último elo: confere, além da conversa

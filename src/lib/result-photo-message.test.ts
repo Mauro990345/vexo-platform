@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
-  buildResultPhotoMessages,
-  CAPTION_TO_PHOTO_GAP_MS,
+  planResultPhotoDispatch,
+  RESULT_PHOTO_MESSAGE_CONTENT,
   canSendResultPhoto,
   findBestResultPhotoMatch,
   textMentionsRegisteredCategory,
@@ -12,51 +12,39 @@ import {
   type ResultPhotoHintCandidate,
 } from "./result-photo-message";
 
-const BASE = new Date("2026-09-18T12:00:00.000Z");
-
-describe("buildResultPhotoMessages", () => {
-  it("sem legenda: manda só a foto, no horário base — comportamento idêntico ao de antes desse campo existir", () => {
-    const messages = buildResultPhotoMessages({ imageUrl: "https://x/foto.jpg", caption: null }, BASE);
-
-    expect(messages).toEqual([{ content: "[foto de resultado]", mediaUrl: "https://x/foto.jpg", scheduledFor: BASE }]);
+describe("planResultPhotoDispatch", () => {
+  it("sem legenda: plano é photo-only — comportamento idêntico ao de antes desse campo existir", () => {
+    const plan = planResultPhotoDispatch({ imageUrl: "https://x/foto.jpg", caption: null });
+    expect(plan).toEqual({ kind: "photo-only", imageUrl: "https://x/foto.jpg" });
   });
 
   it("legenda vazia (string em branco) é tratada como sem legenda", () => {
-    const messages = buildResultPhotoMessages({ imageUrl: "https://x/foto.jpg", caption: "   " }, BASE);
-
-    expect(messages).toHaveLength(1);
-    expect(messages[0]?.content).toBe("[foto de resultado]");
+    const plan = planResultPhotoDispatch({ imageUrl: "https://x/foto.jpg", caption: "   " });
+    expect(plan.kind).toBe("photo-only");
   });
 
-  it("com legenda: manda a legenda primeiro, no horário base, e a foto alguns segundos depois", () => {
-    const messages = buildResultPhotoMessages(
-      { imageUrl: "https://x/foto.jpg", caption: "Separei um resultado real de um procedimento parecido com o que você quer" },
-      BASE
-    );
-
-    expect(messages).toHaveLength(2);
-    expect(messages[0]).toEqual({
-      content: "Separei um resultado real de um procedimento parecido com o que você quer",
-      scheduledFor: BASE,
+  it("com legenda: plano é caption-then-photo, nunca as duas Message juntas", () => {
+    const plan = planResultPhotoDispatch({
+      imageUrl: "https://x/foto.jpg",
+      caption: "Separei um resultado real de um procedimento parecido com o que você quer",
     });
-    expect(messages[1]).toEqual({
-      content: "[foto de resultado]",
-      mediaUrl: "https://x/foto.jpg",
-      scheduledFor: new Date(BASE.getTime() + CAPTION_TO_PHOTO_GAP_MS),
+    expect(plan).toEqual({
+      kind: "caption-then-photo",
+      captionContent: "Separei um resultado real de um procedimento parecido com o que você quer",
+      imageUrl: "https://x/foto.jpg",
     });
   });
 
   it("legenda com espaços nas pontas é enviada já sem eles", () => {
-    const messages = buildResultPhotoMessages({ imageUrl: "https://x/foto.jpg", caption: "  Olha só esse resultado!  " }, BASE);
-
-    expect(messages[0]?.content).toBe("Olha só esse resultado!");
+    const plan = planResultPhotoDispatch({ imageUrl: "https://x/foto.jpg", caption: "  Olha só esse resultado!  " });
+    expect(plan.kind).toBe("caption-then-photo");
+    expect((plan as { captionContent: string }).captionContent).toBe("Olha só esse resultado!");
   });
+});
 
-  it("a foto nunca sai antes da legenda", () => {
-    const messages = buildResultPhotoMessages({ imageUrl: "https://x/foto.jpg", caption: "Contexto antes da imagem" }, BASE);
-
-    const [captionMsg, photoMsg] = messages;
-    expect(captionMsg!.scheduledFor.getTime()).toBeLessThan(photoMsg!.scheduledFor.getTime());
+describe("RESULT_PHOTO_MESSAGE_CONTENT", () => {
+  it("é o literal fixo usado tanto na criação quanto na contagem do fôlego (conversation-pipeline.ts)", () => {
+    expect(RESULT_PHOTO_MESSAGE_CONTENT).toBe("[foto de resultado]");
   });
 });
 
