@@ -5,9 +5,11 @@ import {
   canSendResultPhoto,
   findBestResultPhotoMatch,
   textMentionsRegisteredCategory,
+  buildResultPhotoHintContext,
   MAX_IMAGES_PER_CONVERSATION,
   type ResultPhotoGateInput,
   type ResultPhotoCandidate,
+  type ResultPhotoHintCandidate,
 } from "./result-photo-message";
 
 const BASE = new Date("2026-09-18T12:00:00.000Z");
@@ -215,5 +217,74 @@ describe("textMentionsRegisteredCategory", () => {
 
   it("texto vazio nunca conta como menção", () => {
     expect(textMentionsRegisteredCategory("", categories)).toBe(false);
+  });
+});
+
+// Bug real reportado: mesmo com a categoria batendo e tudo liberado, o
+// modelo não chamava send_result_photo quando o lead citava um
+// procedimento — nada no prompt avisava que existe foto cadastrada pra
+// aquilo. Estes testes cobrem o item 6 do pedido.
+function hintInput(overrides: Partial<Parameters<typeof buildResultPhotoHintContext<ResultPhotoHintCandidate & { imageUrl: string }>>[0]> = {}) {
+  return {
+    leadBatchText: "Sim, percebo ruga e queria saber a respeito de botox",
+    candidates: CLINIC_DEMO_PHOTOS,
+    isFirstTurnEver: false,
+    alreadySentThisTurn: false,
+    alreadySentImageUrls: [] as string[],
+    ...overrides,
+  };
+}
+
+describe("buildResultPhotoHintContext", () => {
+  it("presente quando o lote cita um procedimento cadastrado E canSendResultPhoto permitiria o envio", () => {
+    const hint = buildResultPhotoHintContext(hintInput());
+    expect(hint).not.toBeNull();
+    expect(hint?.matchedCategory).toBe("botox");
+    expect(hint?.context).toContain('"botox"');
+    expect(hint?.context).toContain("send_result_photo");
+  });
+
+  it("nunca escreve a frase que a IA vai dizer ao lead — só a instrução interna", () => {
+    const hint = buildResultPhotoHintContext(hintInput());
+    // O conteúdo é uma instrução pro modelo, não uma mensagem pronta —
+    // nunca deve parecer um cumprimento ou frase de acolhimento redigida.
+    expect(hint?.context).not.toMatch(/ol[aá]|bom dia|boa tarde|boa noite/i);
+  });
+
+  it("ausente sem nenhuma menção a procedimento no lote", () => {
+    expect(buildResultPhotoHintContext(hintInput({ leadBatchText: "Boa noite, vi o perfil de vocês." }))).toBeNull();
+  });
+
+  it("ausente quando a categoria citada não tem foto cadastrada", () => {
+    expect(buildResultPhotoHintContext(hintInput({ leadBatchText: "Quero saber sobre peeling" }))).toBeNull();
+  });
+
+  it("ausente no primeiro turno de um lead frio, mesmo citando botox", () => {
+    expect(buildResultPhotoHintContext(hintInput({ isFirstTurnEver: true }))).toBeNull();
+  });
+
+  it("ausente quando já saiu uma foto neste turno", () => {
+    expect(buildResultPhotoHintContext(hintInput({ alreadySentThisTurn: true }))).toBeNull();
+  });
+
+  it("ausente quando a foto de botox específica já foi enviada antes (não repete)", () => {
+    const botoxPhoto = CLINIC_DEMO_PHOTOS.find((p) => p.category === "botox")!;
+    expect(buildResultPhotoHintContext(hintInput({ alreadySentImageUrls: [botoxPhoto.imageUrl] }))).toBeNull();
+  });
+
+  it("presente quando uma foto DIFERENTE (outra categoria) já foi enviada antes — ainda tem vaga", () => {
+    const labialPhoto = CLINIC_DEMO_PHOTOS.find((p) => p.category === "Labial")!;
+    const hint = buildResultPhotoHintContext(hintInput({ alreadySentImageUrls: [labialPhoto.imageUrl] }));
+    expect(hint?.matchedCategory).toBe("botox");
+  });
+
+  it("ausente quando o limite de MAX_IMAGES_PER_CONVERSATION já foi atingido", () => {
+    const alreadySentImageUrls = Array.from({ length: MAX_IMAGES_PER_CONVERSATION }, (_, i) => `https://x/outra-${i}.jpg`);
+    expect(buildResultPhotoHintContext(hintInput({ alreadySentImageUrls }))).toBeNull();
+  });
+
+  it("casa por sinônimo (rugas/botox) igual ao resto do casamento tolerante", () => {
+    const hint = buildResultPhotoHintContext(hintInput({ leadBatchText: "Percebo rugas na testa" }));
+    expect(hint?.matchedCategory).toBe("botox");
   });
 });

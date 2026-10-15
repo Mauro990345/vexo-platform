@@ -41,6 +41,7 @@ import {
   canSendResultPhoto,
   findBestResultPhotoMatch,
   textMentionsRegisteredCategory,
+  buildResultPhotoHintContext,
   type ResultPhotoInput,
 } from "@/lib/result-photo-message";
 import { detectStagnation, STAGNATION_SIMILARITY_THRESHOLD, STAGNATION_WINDOW_SIZE } from "@/lib/loop-guard";
@@ -1376,6 +1377,33 @@ export async function handleInboundInstagramMessage(
   // de classifyConversation) a favor deste link.
   const clinicContactContext = wantsHumanWithClinicWhatsapp ? buildClinicContactContext(clinic.name) : null;
 
+  // Bug real reportado: send_result_photo sempre oferecida, categoria
+  // batendo (ver PR do casamento tolerante), tudo liberado por
+  // canSendResultPhoto — e mesmo assim o modelo não chamava a ferramenta
+  // quando o lead citava um procedimento ("percebo ruga e queria saber a
+  // respeito de botox"). Nada no prompt avisava, turno a turno, que existe
+  // uma foto cadastrada pronta pra aquele procedimento específico. Este
+  // bloco avisa isso explicitamente — só quando findBestResultPhotoMatch
+  // acha uma foto pro lote E canSendResultPhoto permitiria o envio AGORA
+  // (ver buildResultPhotoHintContext, result-photo-message.ts, pra as 3
+  // condições completas). Fora desses casos (sem menção, categoria não
+  // cadastrada, limite atingido, foto repetida, primeiro turno de lead
+  // frio), fica null e NADA é dito sobre foto — nunca planta a ideia numa
+  // hora em que não devia. NUNCA edita aiSystemPrompt nem o prompt padrão.
+  const resultPhotoHint = buildResultPhotoHintContext({
+    leadBatchText,
+    candidates: clinicResultPhotos,
+    isFirstTurnEver,
+    alreadySentThisTurn: resultPhotoSentThisTurn,
+    alreadySentImageUrls: sentResultPhotoUrls,
+  });
+  if (resultPhotoHint) {
+    console.log(
+      `[vexo:result-photo] conversa=${conversation.id} hint incluído no contextNote categoria="${resultPhotoHint.matchedCategory}"`
+    );
+  }
+  const resultPhotoHintContext = resultPhotoHint?.context ?? null;
+
   const reply = await generateLeadReply({
     // Separados (não mais concatenados numa string só) pra permitir prompt
     // caching: basePrompt é estável por clínica, dateTimeContext muda a
@@ -1383,10 +1411,11 @@ export async function handleInboundInstagramMessage(
     systemPrompt: basePrompt,
     // interestGateContext vai DEPOIS de dateTimeContext de propósito — ver
     // comentário grande acima (tem prioridade sobre qualquer instrução de
-    // agendamento incondicional no prompt da clínica). attendanceConfirmedContext
-    // e clinicContactContext (quando existem) vão por último — as mais
-    // específicas/recentes.
-    contextNote: [dateTimeContext, interestGateContext, attendanceConfirmedContext, clinicContactContext]
+    // agendamento incondicional no prompt da clínica). resultPhotoHintContext
+    // vai logo depois dele (mesmo tema: pacing de quando oferecer algo ao
+    // lead). attendanceConfirmedContext e clinicContactContext (quando
+    // existem) vão por último — as mais específicas/recentes.
+    contextNote: [dateTimeContext, interestGateContext, resultPhotoHintContext, attendanceConfirmedContext, clinicContactContext]
       .filter(Boolean)
       .join("\n\n"),
     history: windowedHistory,
