@@ -213,6 +213,72 @@ export function canSendResultPhoto(input: ResultPhotoGateInput): ResultPhotoGate
   return { allowed: true };
 }
 
+export type ResultPhotoHintCandidate = ResultPhotoCandidate & { imageUrl: string };
+
+export type ResultPhotoHintInput<T extends ResultPhotoHintCandidate> = {
+  // Texto concatenado de event.messages (o lote inteiro do turno, não só a
+  // última mensagem) — mesmo texto usado por textMentionsRegisteredCategory
+  // em isFirstTurnEver, ver conversation-pipeline.ts.
+  leadBatchText: string;
+  // Fotos cadastradas da clínica (prisma.resultPhoto.findMany) — mesma
+  // lista usada por sendResultPhoto pra casar a categoria.
+  candidates: T[];
+  isFirstTurnEver: boolean;
+  alreadySentThisTurn: boolean;
+  alreadySentImageUrls: string[];
+};
+
+export type ResultPhotoHintResult = {
+  context: string;
+  matchedCategory: string;
+};
+
+// Bug real reportado: mesmo com a ferramenta send_result_photo sempre
+// oferecida e a categoria batendo (ver findBestResultPhotoMatch), o
+// modelo simplesmente não chamava a ferramenta quando o lead citava um
+// procedimento ("Sim, percebo ruga e queria saber a respeito de botox") —
+// nada no prompt avisava, turno a turno, que existe uma foto cadastrada
+// pronta pra aquele procedimento específico. Este bloco de contexto
+// (resultPhotoHintContext em conversation-pipeline.ts, junto de
+// dateTimeContext/interestGateContext no contextNote — NUNCA no
+// aiSystemPrompt) avisa isso explicitamente quando — e SÓ quando — as
+// três condições abaixo valem ao mesmo tempo:
+//   (a) o lote do lead cita um procedimento com foto cadastrada
+//       (findBestResultPhotoMatch não devolve null);
+//   (b) canSendResultPhoto permitiria o envio AGORA (limite de
+//       MAX_IMAGES_PER_CONVERSATION não atingido, foto não repetida, não é
+//       o primeiro turno de um lead frio);
+//   (c) nenhuma foto já saiu NESTE turno (alreadySentThisTurn) — calculado
+//       sempre antes de generateLeadReply rodar, então na prática é
+//       trivialmente verdade no momento em que este bloco é montado, mas
+//       entra no mesmo gate pra nunca divergir da regra real aplicada
+//       dentro de send_result_photo.
+// Null nos outros casos (sem menção, sem foto cadastrada pra categoria
+// citada, ou canSendResultPhoto bloquearia) — SEM mencionar foto nenhuma,
+// pra não plantar a ideia numa hora em que não devia.
+export function buildResultPhotoHintContext<T extends ResultPhotoHintCandidate>(
+  input: ResultPhotoHintInput<T>
+): ResultPhotoHintResult | null {
+  const matched = findBestResultPhotoMatch(input.leadBatchText, input.candidates);
+  if (!matched) return null;
+
+  const decision = canSendResultPhoto({
+    isFirstTurnEver: input.isFirstTurnEver,
+    alreadySentThisTurn: input.alreadySentThisTurn,
+    alreadySentImageUrls: input.alreadySentImageUrls,
+    candidateImageUrl: matched.imageUrl,
+  });
+  if (!decision.allowed) return null;
+
+  return {
+    matchedCategory: matched.category,
+    context:
+      `[Existe foto de resultado cadastrada para "${matched.category}" — chame a ferramenta send_result_photo ` +
+      `com essa categoria exata ainda neste turno, depois de acolher a mensagem do lead, com uma entrada natural ` +
+      `antes da foto.]`,
+  };
+}
+
 export type OutboundMessageDraft = {
   content: string;
   mediaUrl?: string;
