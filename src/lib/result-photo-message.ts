@@ -279,31 +279,26 @@ export function buildResultPhotoHintContext<T extends ResultPhotoHintCandidate>(
   };
 }
 
-export type OutboundMessageDraft = {
-  content: string;
-  mediaUrl?: string;
-  scheduledFor: Date;
-};
+// Conteúdo fixo da Message da foto em si — usado tanto na criação (ver
+// conversation-pipeline.ts/dispatch.ts) quanto na consulta de quantas
+// fotos já saíram no fôlego atual (resultPhotosSentThisBreath,
+// conversation-pipeline.ts). Exportada pra nunca duplicar esse literal.
+export const RESULT_PHOTO_MESSAGE_CONTENT = "[foto de resultado]";
 
-// Mesmo espaçamento de 5s já usado entre a resposta em texto da IA e a
-// foto (ver conversation-pipeline.ts) e entre texto+anexo de um mesmo
-// passo de follow-up (ver dispatchFollowUpSteps, src/lib/follow-up.ts) —
-// tempo suficiente pro lead perceber que são duas mensagens em sequência,
-// sem ficar um intervalo estranho entre elas.
-export const CAPTION_TO_PHOTO_GAP_MS = 5_000;
+// Decide o que CRIAR AGORA pra uma foto de resultado capturada — nunca as
+// DUAS mensagens de uma vez: com legenda, a foto só pode ser criada depois
+// que a legenda for confirmada SENT (ver PendingAttendanceStep
+// "resultPhoto", RESULT_PHOTO_DELAY_AFTER_CAPTION_MS, dispatch.ts — mesmo
+// despacho antecipado da sequência de presença, PRs #99/#106/#107), pra
+// garantir a ordem por construção. Pura/testável — a orquestração (criar
+// a Message, codificar o pendingAttendanceStep) fica em
+// conversation-pipeline.ts.
+export type ResultPhotoDispatchPlan =
+  | { kind: "caption-then-photo"; captionContent: string; imageUrl: string }
+  | { kind: "photo-only"; imageUrl: string };
 
-export function buildResultPhotoMessages(photo: ResultPhotoInput, baseScheduledFor: Date): OutboundMessageDraft[] {
+export function planResultPhotoDispatch(photo: ResultPhotoInput): ResultPhotoDispatchPlan {
   const caption = photo.caption?.trim();
-
-  const photoMessage: OutboundMessageDraft = {
-    content: "[foto de resultado]",
-    mediaUrl: photo.imageUrl,
-    scheduledFor: caption ? new Date(baseScheduledFor.getTime() + CAPTION_TO_PHOTO_GAP_MS) : baseScheduledFor,
-  };
-
-  if (!caption) {
-    return [photoMessage];
-  }
-
-  return [{ content: caption, scheduledFor: baseScheduledFor }, photoMessage];
+  if (!caption) return { kind: "photo-only", imageUrl: photo.imageUrl };
+  return { kind: "caption-then-photo", captionContent: caption, imageUrl: photo.imageUrl };
 }

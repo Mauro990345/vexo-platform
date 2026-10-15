@@ -79,6 +79,7 @@ vi.mock("@/lib/conversation-pipeline", async () => {
     ATTENDANCE_VIDEO_DELAY_AFTER_INTRO_MS: actual.ATTENDANCE_VIDEO_DELAY_AFTER_INTRO_MS,
     ATTENDANCE_TIP_DELAY_AFTER_VIDEO_MS: actual.ATTENDANCE_TIP_DELAY_AFTER_VIDEO_MS,
     ATTENDANCE_FINAL_DELAY_AFTER_TIP_MS: actual.ATTENDANCE_FINAL_DELAY_AFTER_TIP_MS,
+    RESULT_PHOTO_DELAY_AFTER_CAPTION_MS: actual.RESULT_PHOTO_DELAY_AFTER_CAPTION_MS,
     encodePendingAttendanceStep: actual.encodePendingAttendanceStep,
     decodePendingAttendanceStep: actual.decodePendingAttendanceStep,
     encodeClinicContactCard: actual.encodeClinicContactCard,
@@ -96,6 +97,7 @@ import {
   ATTENDANCE_VIDEO_DELAY_AFTER_INTRO_MS,
   ATTENDANCE_TIP_DELAY_AFTER_VIDEO_MS,
   ATTENDANCE_FINAL_DELAY_AFTER_TIP_MS,
+  RESULT_PHOTO_DELAY_AFTER_CAPTION_MS,
   encodePendingAttendanceStep,
   encodeClinicContactCard,
   CLINIC_CONTACT_CARD_SUBTITLE,
@@ -103,6 +105,7 @@ import {
   encodeInstagramConfirmationCard,
   type PendingAttendanceStep,
 } from "@/lib/conversation-pipeline";
+import { RESULT_PHOTO_MESSAGE_CONTENT } from "@/lib/result-photo-message";
 
 const APPOINTMENT_ID = "appt-1";
 const SCHEDULED_AT_MS = new Date("2026-10-09T12:00:00.000Z").getTime();
@@ -179,6 +182,25 @@ function buildTipMessage(step: Partial<PendingAttendanceStep & { next: "final" }
       finalText: FINAL_TEXT,
       appointmentId: APPOINTMENT_ID,
       scheduledAtMs: SCHEDULED_AT_MS,
+      ...step,
+    } as PendingAttendanceStep),
+  });
+}
+
+// Legenda de foto de resultado — elo de um fluxo TOTALMENTE diferente
+// (send_result_photo, conversation-pipeline.ts), reaproveitando o MESMO
+// mecanismo de despacho antecipado (ver comentário grande em dispatch.ts,
+// "resultPhoto"). Ao ser enviada, cria a Message da foto (último elo
+// deste mini-fluxo, sem novo pendingAttendanceStep).
+const RESULT_PHOTO_IMAGE_URL = "https://cdn/result-photos/botox.jpg";
+function buildResultPhotoCaptionMessage(step: Partial<PendingAttendanceStep & { next: "resultPhoto" }> = {}) {
+  return buildMessage({
+    id: "msg-result-photo-caption-1",
+    sender: "AI",
+    content: "Separei um resultado real de botox parecido com o que você quer",
+    pendingAttendanceStep: encodePendingAttendanceStep({
+      next: "resultPhoto",
+      mediaUrl: RESULT_PHOTO_IMAGE_URL,
       ...step,
     } as PendingAttendanceStep),
   });
@@ -314,6 +336,33 @@ describe("dispatchDueMessages — cadeia de confirmação de presença (apresent
 
     const sentAt: Date = messageUpdateMock.mock.calls[0]![0].data.sentAt;
     expect(createCall.data.scheduledFor.getTime()).toBe(sentAt.getTime() + ATTENDANCE_FINAL_DELAY_AFTER_TIP_MS);
+  });
+
+  // Elo de um fluxo TOTALMENTE diferente (legenda cadastrada -> foto de
+  // resultado), reaproveitando o MESMO mecanismo de despacho antecipado —
+  // ver comentário grande em dispatch.ts, "resultPhoto". Prova a garantia
+  // de ordem pedida: a Message da foto só é CRIADA aqui, depois que a
+  // legenda já está confirmada SENT — nunca em lote junto com ela.
+  it("legenda de foto de resultado enviada com sucesso cria a foto (último elo) com scheduledFor = sentAt + RESULT_PHOTO_DELAY_AFTER_CAPTION_MS, sem novo pendingAttendanceStep", async () => {
+    const caption = buildResultPhotoCaptionMessage();
+    messageFindManyMock.mockResolvedValueOnce([caption]);
+
+    const result = await dispatchDueMessages();
+
+    expect(result.sent).toBe(1);
+    expect(result.failed).toBe(0);
+    expect(messageCreateMock).toHaveBeenCalledTimes(1);
+
+    const createCall = messageCreateMock.mock.calls[0]![0];
+    expect(createCall.data.conversationId).toBe("conv-1");
+    expect(createCall.data.sender).toBe("AI");
+    expect(createCall.data.content).toBe(RESULT_PHOTO_MESSAGE_CONTENT);
+    expect(createCall.data.mediaUrl).toBe(RESULT_PHOTO_IMAGE_URL);
+    expect(createCall.data.status).toBe("PENDING");
+    expect(createCall.data.pendingAttendanceStep).toBeUndefined();
+
+    const sentAt: Date = messageUpdateMock.mock.calls[0]![0].data.sentAt;
+    expect(createCall.data.scheduledFor.getTime()).toBe(sentAt.getTime() + RESULT_PHOTO_DELAY_AFTER_CAPTION_MS);
   });
 
   it("remarcação entre elos corta a frase final: appointment.scheduledAt diferente do capturado na apresentação (scheduledAtMs) impede a criação do último elo", async () => {
