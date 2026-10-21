@@ -275,4 +275,59 @@ describe("buildResultPhotoHintContext", () => {
     const hint = buildResultPhotoHintContext(hintInput({ leadBatchText: "Percebo rugas na testa" }));
     expect(hint?.matchedCategory).toBe("botox");
   });
+
+  // Bug real reportado: um robô de ManyChat mandou uma saudação automática
+  // listando serviços cadastrados ("Nossos serviços: Depilação a Laser,
+  // Botox, Preenchimento Labial, Bioestimuladores...") e o hint instruiu a
+  // IA a enviar a foto como se fosse o lead pedindo. Estes testes cobrem
+  // os 4 casos pedidos: lista de serviços, negação, experiência passada, e
+  // interesse real que continua enviando a foto normalmente.
+  describe("entrada sutil — nunca por só achar o nome da categoria no texto", () => {
+    it("ausente: saudação automática de robô listando serviços (frase de saudação reconhecida)", () => {
+      const batch =
+        "Olá! Seja bem-vindo à Clínica Demo 😊 Nossos serviços: Depilação a Laser, Botox, " +
+        "Preenchimento Labial, Bioestimuladores. Em que podemos ajudar?";
+      expect(buildResultPhotoHintContext(hintInput({ leadBatchText: batch }))).toBeNull();
+    });
+
+    it("ausente: 3+ procedimentos cadastrados distintos citados na mesma mensagem, mesmo sem frase de saudação reconhecida", () => {
+      const batch = "Vocês fazem botox, preenchimento labial e harmonização facial?";
+      expect(buildResultPhotoHintContext(hintInput({ leadBatchText: batch }))).toBeNull();
+    });
+
+    it("presente: só 2 categorias citadas juntas, sem frase de saudação — não conta como lista", () => {
+      const hint = buildResultPhotoHintContext(hintInput({ leadBatchText: "Quero saber sobre botox e preenchimento labial" }));
+      expect(hint).not.toBeNull();
+    });
+
+    it.each(["Não quero fazer botox, obrigado.", "Nao quero botox, só queria saber outra coisa."])(
+      "ausente: negação explícita (\"%s\")",
+      (batch) => {
+        expect(buildResultPhotoHintContext(hintInput({ leadBatchText: batch }))).toBeNull();
+      }
+    );
+
+    it("ausente: experiência passada ruim (\"já fiz botox e não gostei do resultado\")", () => {
+      const batch = "Já fiz botox antes e não gostei do resultado, foi horrível.";
+      expect(buildResultPhotoHintContext(hintInput({ leadBatchText: batch }))).toBeNull();
+    });
+
+    it("ausente: medo explícito (\"tenho medo de fazer botox\")", () => {
+      expect(buildResultPhotoHintContext(hintInput({ leadBatchText: "Tenho medo de fazer botox, é perigoso?" }))).toBeNull();
+    });
+
+    it("presente: repetir o procedimento NÃO é negação por si só (\"já fiz e adorei, quero de novo\")", () => {
+      const hint = buildResultPhotoHintContext(hintInput({ leadBatchText: "Já fiz botox antes e adorei, quero fazer de novo" }));
+      expect(hint?.matchedCategory).toBe("botox");
+    });
+
+    it("presente: interesse pessoal real continua enviando a foto normalmente", () => {
+      const hint = buildResultPhotoHintContext(
+        hintInput({ leadBatchText: "Sim, percebo ruga e queria saber a respeito de botox" })
+      );
+      expect(hint?.matchedCategory).toBe("botox");
+      expect(hint?.context).toContain("interesse pessoal real");
+      expect(hint?.context).toContain("Em caso de dúvida, não chame");
+    });
+  });
 });

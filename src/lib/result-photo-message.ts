@@ -213,7 +213,79 @@ export function canSendResultPhoto(input: ResultPhotoGateInput): ResultPhotoGate
   return { allowed: true };
 }
 
+// Bug real reportado: o hint disparava só por achar o NOME de uma
+// categoria no texto do lote — sem olhar se era interesse pessoal de
+// verdade. Caso real: um robô de ManyChat mandou uma saudação automática
+// ("Nossos serviços: Depilação a Laser, Botox, Preenchimento Labial,
+// Bioestimuladores...") e o hint instruiu a IA a enviar a foto como se o
+// LEAD tivesse pedido. Estas duas listas (mesmo espírito do mapa de
+// sinônimos acima — pequenas, best-effort, documentadas como não
+// exaustivas) pegam os casos ÓBVIOS e mecânicos; o texto do hint em si
+// (buildResultPhotoHintContext, mais abaixo) pede pra IA usar o próprio
+// julgamento nos casos mais sutis que estas listas não cobrem.
+
+// Frases comuns de saudação automática/lista de serviços (robô de
+// atendimento, ManyChat, etc.) — presença de qualquer uma já basta pra
+// nunca tratar como interesse pessoal, independente de quantas
+// categorias a mensagem cita.
+const RESULT_PHOTO_LISTING_MARKERS = [
+  "nossos servicos",
+  "nossos tratamentos",
+  "nossos procedimentos",
+  "conheca nossos",
+  "confira nossos",
+  "conheca nossa clinica",
+];
+
+// 3+ procedimentos DIFERENTES citados na mesma mensagem é quase sempre
+// uma lista/saudação, nunca o lead pedindo pessoalmente por um
+// procedimento específico (pedido explícito, item 1 do problema
+// reportado) — mesmo sem nenhuma das frases de saudação acima.
+const MIN_DISTINCT_CATEGORIES_FOR_LISTING = 3;
+
+// Negação, medo ou experiência passada ruim — citar o procedimento aqui
+// nunca é um pedido pra ver um resultado parecido. "já fiz" sozinho fica
+// de fora de propósito (é ambíguo — "já fiz e adorei, quero de novo" é
+// interesse real); só entra combinado com uma negação/insatisfação
+// explícita.
+const RESULT_PHOTO_DISINTEREST_MARKERS = [
+  "não quero",
+  "nao quero",
+  "não gostei",
+  "nao gostei",
+  "não gostaria",
+  "nao gostaria",
+  "tenho medo",
+  "com medo",
+  "não tenho interesse",
+  "nao tenho interesse",
+  "sem interesse",
+  "não é pra mim",
+  "nao e pra mim",
+];
+
 export type ResultPhotoHintCandidate = ResultPhotoCandidate & { imageUrl: string };
+
+// Categorias cadastradas DISTINTAS mencionadas no texto (mesmo casamento
+// tolerante de findBestResultPhotoMatch/textMentionsRegisteredCategory,
+// mas por candidata, não só a melhor) — usado só pra contar quantos
+// procedimentos diferentes a mensagem cita de uma vez (ver
+// MIN_DISTINCT_CATEGORIES_FOR_LISTING, acima).
+function categoriesMentionedIn<T extends ResultPhotoCandidate>(normalizedText: string, candidates: T[]): Set<string> {
+  const mentioned = new Set<string>();
+  if (!normalizedText) return mentioned;
+  for (const candidate of candidates) {
+    const normalizedCategory = normalizeCategoryText(candidate.category);
+    if (!normalizedCategory) continue;
+    for (const term of expandCategoryGroup(normalizedCategory)) {
+      if (normalizedText.includes(term)) {
+        mentioned.add(candidate.category);
+        break;
+      }
+    }
+  }
+  return mentioned;
+}
 
 export type ResultPhotoHintInput<T extends ResultPhotoHintCandidate> = {
   // Texto concatenado de event.messages (o lote inteiro do turno, não só a
@@ -241,24 +313,44 @@ export type ResultPhotoHintResult = {
 // pronta pra aquele procedimento específico. Este bloco de contexto
 // (resultPhotoHintContext em conversation-pipeline.ts, junto de
 // dateTimeContext/interestGateContext no contextNote — NUNCA no
-// aiSystemPrompt) avisa isso explicitamente quando — e SÓ quando — as
-// três condições abaixo valem ao mesmo tempo:
+// aiSystemPrompt) avisa isso explicitamente quando — e SÓ quando — TODAS
+// as condições abaixo valem ao mesmo tempo:
 //   (a) o lote do lead cita um procedimento com foto cadastrada
 //       (findBestResultPhotoMatch não devolve null);
-//   (b) canSendResultPhoto permitiria o envio AGORA (limite de
+//   (b) a menção não tem cara de lista de serviços/saudação automática
+//       (RESULT_PHOTO_LISTING_MARKERS ou 3+ categorias distintas na
+//       mesma mensagem) nem de negação/medo/experiência passada ruim
+//       (RESULT_PHOTO_DISINTEREST_MARKERS) — bug real reportado: um robô
+//       de ManyChat mandou uma saudação automática listando vários
+//       procedimentos cadastrados, e o hint instruiu a IA a enviar a
+//       foto como se fosse o lead pedindo;
+//   (c) canSendResultPhoto permitiria o envio AGORA (limite de
 //       MAX_IMAGES_PER_CONVERSATION não atingido, foto não repetida, não é
 //       o primeiro turno de um lead frio);
-//   (c) nenhuma foto já saiu NESTE turno (alreadySentThisTurn) — calculado
+//   (d) nenhuma foto já saiu NESTE turno (alreadySentThisTurn) — calculado
 //       sempre antes de generateLeadReply rodar, então na prática é
 //       trivialmente verdade no momento em que este bloco é montado, mas
 //       entra no mesmo gate pra nunca divergir da regra real aplicada
 //       dentro de send_result_photo.
-// Null nos outros casos (sem menção, sem foto cadastrada pra categoria
-// citada, ou canSendResultPhoto bloquearia) — SEM mencionar foto nenhuma,
-// pra não plantar a ideia numa hora em que não devia.
+// Null nos outros casos — SEM mencionar foto nenhuma, pra não plantar a
+// ideia numa hora em que não devia. As listas de marcadores (b) são só
+// ajuda pros casos ÓBVIOS e mecânicos (mesmo espírito do mapa de
+// sinônimos, nunca exaustivas) — pra qualquer caso mais sutil que elas
+// não cubram, o texto do hint abaixo pede EXPLICITAMENTE pra IA usar o
+// próprio julgamento e não chamar a ferramenta em caso de dúvida.
 export function buildResultPhotoHintContext<T extends ResultPhotoHintCandidate>(
   input: ResultPhotoHintInput<T>
 ): ResultPhotoHintResult | null {
+  const normalizedBatchText = normalizeCategoryText(input.leadBatchText);
+
+  const mentionedCategories = categoriesMentionedIn(normalizedBatchText, input.candidates);
+  const looksLikeListingOrGreeting =
+    mentionedCategories.size >= MIN_DISTINCT_CATEGORIES_FOR_LISTING ||
+    RESULT_PHOTO_LISTING_MARKERS.some((marker) => normalizedBatchText.includes(marker));
+  if (looksLikeListingOrGreeting) return null;
+
+  if (RESULT_PHOTO_DISINTEREST_MARKERS.some((marker) => normalizedBatchText.includes(marker))) return null;
+
   const matched = findBestResultPhotoMatch(input.leadBatchText, input.candidates);
   if (!matched) return null;
 
@@ -273,9 +365,13 @@ export function buildResultPhotoHintContext<T extends ResultPhotoHintCandidate>(
   return {
     matchedCategory: matched.category,
     context:
-      `[Existe foto de resultado cadastrada para "${matched.category}" — chame a ferramenta send_result_photo ` +
-      `com essa categoria exata ainda neste turno, depois de acolher a mensagem do lead, com uma entrada natural ` +
-      `antes da foto.]`,
+      `[Existe foto de resultado cadastrada para "${matched.category}". SÓ chame a ferramenta send_result_photo ` +
+      `com essa categoria se a PRÓPRIA mensagem do lead demonstrar interesse pessoal real nesse procedimento ` +
+      `(pergunta sobre ele, quer saber mais, quer fazer, pede preço ou resultado) — depois de acolher a ` +
+      `mensagem, com uma entrada natural antes da foto. NÃO chame se a menção vier de negação, medo ou ` +
+      `experiência passada (ex.: "não quero", "já fiz e não gostei", "tenho medo"), de uma lista de serviços ou ` +
+      `saudação genérica/automática, ou de um texto que pareça vir de outra empresa/robô — nesses casos, siga a ` +
+      `conversa normalmente, sem foto. Em caso de dúvida, não chame.]`,
   };
 }
 
