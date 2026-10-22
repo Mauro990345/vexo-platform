@@ -4,7 +4,8 @@ import { useState } from "react";
 import { PanelMetricCard } from "@/components/PanelMetricCard";
 
 type PeriodMetrics = { approached: number; responded: number; scheduled: number };
-export type PeriodOption = { days: number; label: string; metrics: PeriodMetrics };
+type AttendanceMetrics = { attended: number; pastDue: number };
+export type PeriodOption = { days: number; label: string; metrics: PeriodMetrics; attendance: AttendanceMetrics };
 
 // Substitui os dois blocos empilhados "Hoje" / "Últimos 7 dias" (mesmos 3
 // cards repetidos duas vezes) por um só, com um SELETOR pra trocar qual
@@ -42,10 +43,15 @@ export function ApproachMetricsToggle({ periods }: { periods: PeriodOption[] }) 
         </select>
       </div>
 
-      <div className="grid grid-cols-3 gap-2.5">
+      <div className="grid grid-cols-2 gap-2.5">
         <PanelMetricCard label="Abordados" value={String(current.metrics.approached)} />
         <PanelMetricCard label="Em conversa" value={String(current.metrics.responded)} />
         <PanelMetricCard label="Agendaram" value={String(current.metrics.scheduled)} highlight />
+        <PanelMetricCard
+          label="Compareceram"
+          value={String(current.attendance.attended)}
+          helper={`${current.attendance.attended} de ${current.attendance.pastDue} agendados`}
+        />
       </div>
     </div>
   );

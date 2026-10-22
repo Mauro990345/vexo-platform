@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Calendar, Phone } from "lucide-react";
 import { prisma } from "@/lib/prisma";
-import { getClinicMetrics, getDailyApproachCounts, startOfDay, addDays } from "@/lib/metrics";
+import { getClinicMetrics, getAttendanceMetrics, appointmentDisplayStatus, getDailyApproachCounts, startOfDay, addDays } from "@/lib/metrics";
 import { ApproachChart } from "@/components/ApproachChart";
 import { ApproachMetricsToggle } from "@/components/ApproachMetricsToggle";
 import { AppointmentStatusBadge } from "@/components/AppointmentStatusBadge";
@@ -94,10 +94,15 @@ export async function ClientPanelView({
     // continuam alinhadas depois de passar por Promise.all, então preferia
     // marcar periodMetrics[i] como possivelmente undefined.
     Promise.all(
-      PANEL_PERIODS.map(async (p) => ({
-        ...p,
-        metrics: await getClinicMetrics(clinicId, addDays(todayStart, -(p.days - 1)), addDays(todayStart, 1)),
-      }))
+      PANEL_PERIODS.map(async (p) => {
+        const from = addDays(todayStart, -(p.days - 1));
+        const to = addDays(todayStart, 1);
+        const [metrics, attendance] = await Promise.all([
+          getClinicMetrics(clinicId, from, to),
+          getAttendanceMetrics(clinicId, from, to, now),
+        ]);
+        return { ...p, metrics, attendance };
+      })
     ),
     prisma.appointment.findMany({
       where: { clinicId },
@@ -252,7 +257,7 @@ export async function ClientPanelView({
                             minute: "2-digit",
                           })}
                         </span>
-                        <AppointmentStatusBadge status={a.status} compact />
+                        <AppointmentStatusBadge status={appointmentDisplayStatus(a, now)} compact />
                       </div>
                       {/* WhatsApp do lead — sem isso a secretária não tinha como
                           contatar em caso de atraso/imprevisto a partir do

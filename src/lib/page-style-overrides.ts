@@ -160,11 +160,19 @@ export const PAGE_STYLE_SECTIONS: {
         description: "Cor de fundo (tingida, baixa opacidade) do badge de status \"Agendado\"/\"Confirmado\" na lista de Agendamentos do Painel.",
       },
       {
+        // Era azul (#2c4f74) de um tempo em que esse badge correspondia ao
+        // status literal COMPLETED do banco — nunca chegou a ser usado na
+        // prática (nenhuma ação grava COMPLETED, ver setAppointmentAttendance
+        // em appointments.ts: só alterna entre SCHEDULED/CONFIRMED e
+        // NO_SHOW). Agora é o badge "Compareceu" DERIVADO (horário já
+        // passou e não foi marcado "Não compareceu", ver
+        // appointmentDisplayStatus em metrics.ts) — trocado pra verde,
+        // pedido explícito ("verde preenchido") pra esse estado.
         key: "painel.status.completed.background",
         cssVar: "--vexo-painel-status-completed-bg",
-        defaultHex: "#2c4f74",
+        defaultHex: "#1f7a4d",
         label: "Status \"Compareceu\" — fundo do badge",
-        description: "Cor de fundo (tingida, baixa opacidade) do badge de status \"Compareceu\" na lista de Agendamentos do Painel.",
+        description: "Cor de fundo (tingida, baixa opacidade) do badge de status \"Compareceu\" na lista de Agendamentos do Painel — aparece quando o horário do agendamento já passou e ele não foi marcado como \"Não compareceu\".",
       },
       {
         // Mesma cor usada pelo badge de status "Faltou" e pelo botão

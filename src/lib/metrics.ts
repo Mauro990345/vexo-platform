@@ -56,6 +56,81 @@ export async function getClinicMetrics(clinicId: string, from: Date, to: Date) {
 // local do processo (Railway roda em UTC) — ver startOfBrazilDay em
 // timezone.ts pro bug real que isso corrige (contadores do Painel
 // mostrando 0 pra atividade genuinamente de hoje, testando à noite).
+export type AttendanceSourceAppointment = {
+  conversationId: string | null;
+  scheduledAt: Date;
+  status: string;
+};
+
+export type AttendanceMetrics = { attended: number; pastDue: number };
+
+// Lógica pura da métrica "Compareceram" do Painel (ver ClientPanelView) —
+// separada de getAttendanceMetrics abaixo pra poder ser testada sem Prisma,
+// mesmo padrão de computeReportPeriod/summarizeByDay em
+// report-conversations-logic.ts.
+//
+// Só conta agendamento vindo da IA (conversationId preenchido — importado
+// do Google Calendar sem Lead nunca tem conversationId, ver schema.prisma).
+// "Compareceu" é o PADRÃO quando nada foi marcado (igual à tag do card,
+// ver appointmentDisplayStatus abaixo): não exige status === "COMPLETED"
+// (nunca escrito no banco hoje — ver setAppointmentAttendance, só alterna
+// entre SCHEDULED/CONFIRMED e NO_SHOW), só exige que o horário já tenha
+// passado e não tenha sido marcado "Não compareceu".
+//
+// CANCELLED é excluído de propósito (do numerador E do denominador): um
+// evento cancelado no Google Calendar (ver google-calendar-sync.ts) pode
+// cair num agendamento com conversationId também, e nunca deveria contar
+// como "agendado que já passou" nem como comparecimento — o agendamento
+// simplesmente deixou de existir.
+export function computeAttendanceMetrics(
+  appointments: AttendanceSourceAppointment[],
+  from: Date,
+  to: Date,
+  now: Date
+): AttendanceMetrics {
+  let attended = 0;
+  let pastDue = 0;
+  for (const a of appointments) {
+    if (!a.conversationId) continue;
+    if (a.status === "CANCELLED") continue;
+    if (a.scheduledAt < from || a.scheduledAt >= to) continue;
+    if (a.scheduledAt >= now) continue;
+    pastDue++;
+    if (a.status !== "NO_SHOW") attended++;
+  }
+  return { attended, pastDue };
+}
+
+export async function getAttendanceMetrics(
+  clinicId: string,
+  from: Date,
+  to: Date,
+  now: Date = new Date()
+): Promise<AttendanceMetrics> {
+  const appointments = await prisma.appointment.findMany({
+    where: { clinicId, scheduledAt: { gte: from, lt: to } },
+    select: { conversationId: true, scheduledAt: true, status: true },
+  });
+  return computeAttendanceMetrics(appointments, from, to, now);
+}
+
+// Status derivado pra exibição no card de Agendamento (ver
+// AppointmentStatusBadge, usado via ClientPanelView) — nunca escreve no
+// banco, só decide o que MOSTRAR. Reaproveita o rótulo/cor "COMPLETED" já
+// existentes no badge (ver STATUS_LABELS/statusTint) só pra exibição;
+// a.status no banco continua intocado (SCHEDULED/CONFIRMED), então o botão
+// "Não compareceu" e o Pipeline continuam vendo o status real, nunca este
+// derivado. NO_SHOW e CANCELLED nunca são sobrescritos por este cálculo.
+export function appointmentDisplayStatus(
+  appointment: { status: string; scheduledAt: Date },
+  now: Date
+): string {
+  if (appointment.status === "SCHEDULED" || appointment.status === "CONFIRMED") {
+    return appointment.scheduledAt < now ? "COMPLETED" : appointment.status;
+  }
+  return appointment.status;
+}
+
 export function startOfDay(d: Date): Date {
   return startOfBrazilDay(d);
 }
