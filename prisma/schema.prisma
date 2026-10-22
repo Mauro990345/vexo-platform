@@ -111,6 +111,7 @@ model Clinic {
   firstBandDelaySeconds Int @default(45)
 
   reminderConfig        ReminderConfig?
+  reactivationConfig    ReactivationConfig?
   instagramAccount      InstagramAccount?
   googleCalendarAccount GoogleCalendarAccount?
   connectionLinks       ConnectionLink[]
@@ -810,6 +811,17 @@ model Appointment {
   // novo num turno seguinte (mesmo padrão de whatsappConfirmationSentAt).
   instagramConfirmationSentAt DateTime?
 
+  // Qual das até 5 mensagens de Reativação (ver ReactivationConfig) foi
+  // atribuída a este agendamento quando o card dele entrou na faixa
+  // "Reativação" do Painel (ver assignNextReactivationSlot, reactivation.ts)
+  // — 1 a 5, nulo enquanto o card nunca entrou na faixa. Gravado UMA vez,
+  // na primeira vez que o card aparece, e nunca mais trocado depois disso:
+  // é o que garante a variação ficar fixa pro card (pedido explícito),
+  // mesmo que a configuração da clínica mude depois ou o card saia e volte
+  // a ser consultado (ele não volta — a janela de 5 dias úteis só acontece
+  // uma vez por agendamento).
+  reactivationMessageSlot Int?
+
   reminderLogs ReminderLog[]
 
   createdAt DateTime @default(now())
@@ -834,6 +846,36 @@ model ReminderConfig {
   // clínicas que nunca personalizaram.
   firstMessageTemplate  String? @db.Text
   secondMessageTemplate String? @db.Text
+
+  updatedAt DateTime @updatedAt
+}
+
+// Configuração da faixa "Reativação" do Painel do cliente (ver
+// ClientPanelView.tsx / reactivation.ts) — por clínica, mesmo padrão 1:1
+// de ReminderConfig acima. thresholdDays: quantos dias sem retorno depois
+// do agendamento da IA disparam o card (90/120/150, padrão 150). As 5
+// mensagens são TODAS opcionais — com todas vazias, reactivation.ts usa um
+// conjunto padrão fixo (DEFAULT_REACTIVATION_MESSAGES). Nenhuma variável de
+// nome do lead nos textos (pedido explícito).
+model ReactivationConfig {
+  id       String @id @default(cuid())
+  clinicId String @unique
+  clinic   Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  thresholdDays Int @default(150)
+
+  message1 String? @db.Text
+  message2 String? @db.Text
+  message3 String? @db.Text
+  message4 String? @db.Text
+  message5 String? @db.Text
+
+  // Só decide a PRÓXIMA posição na rotação em sequência (ver
+  // assignNextReactivationSlot, reactivation.ts) — nunca é lido de volta
+  // pra decidir o texto de um card já existente (isso vem de
+  // Appointment.reactivationMessageSlot, que fica fixo por card desde o
+  // momento em que ele entra na faixa).
+  sequenceCounter Int @default(0)
 
   updatedAt DateTime @updatedAt
 }
