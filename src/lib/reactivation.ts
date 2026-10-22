@@ -8,9 +8,14 @@ import { normalizeBrazilianWhatsappNumber } from "@/lib/whatsapp";
 // mesmo padrão de report-conversations-logic.ts/metrics.ts), wrapper com
 // Prisma embaixo.
 
-export const REACTIVATION_THRESHOLD_OPTIONS = [90, 120, 150] as const;
+// 30/60 são rótulados "(teste)" na tela (ver automacoes/page.tsx) — mesma
+// lógica de período pra todos, só o rótulo muda.
+export const REACTIVATION_THRESHOLD_OPTIONS = [30, 60, 90, 120, 150] as const;
 export type ReactivationThresholdDays = (typeof REACTIVATION_THRESHOLD_OPTIONS)[number];
-export const DEFAULT_REACTIVATION_THRESHOLD_DAYS: ReactivationThresholdDays = 150;
+export const REACTIVATION_TEST_THRESHOLDS: readonly ReactivationThresholdDays[] = [30, 60];
+// Padrão: só 150 marcado. Lista VAZIA = Reativação desligada pra essa
+// clínica (pedido explícito) — nenhum período, nenhum card.
+export const DEFAULT_REACTIVATION_THRESHOLD_DAYS_LIST: ReactivationThresholdDays[] = [150];
 
 // Estilo de acompanhamento genérico ("como você está desde o seu
 // atendimento"), sem citar nenhum serviço/procedimento — pedido explícito.
@@ -104,6 +109,48 @@ export function selectReactivationCandidates(appointments: ReactivationSourceApp
   return candidates;
 }
 
+export type ReactivationCardCandidate = ReactivationCandidate & {
+  thresholdDays: number;
+  window: ReactivationWindow;
+};
+
+// Cada período marcado (ver ReactivationConfig.thresholdDaysList) funciona
+// de forma INDEPENDENTE: o mesmo candidato (já filtrado por lead/voltou/
+// faltou/cancelado em selectReactivationCandidates) pode gerar um card por
+// período, cada um na janela daquele período específico — o mesmo
+// agendamento pode aparecer duas vezes, em momentos diferentes (pedido
+// explícito: "o mesmo paciente pode ter dois cards se completar dois
+// períodos marcados em momentos diferentes"). Lista de períodos vazia =
+// nenhum card, nenhuma iteração (Reativação desligada pra essa clínica).
+//
+// Ordenado GLOBALMENTE por quem completou primeiro, entre TODOS os
+// períodos juntos — a rotação de mensagens é uma sequência ÚNICA por
+// clínica (ver ReactivationConfig.sequenceCounter), independente do
+// período, então a ordem de atribuição de slot precisa ser essa ordem
+// global, não uma ordem separada por período.
+export function buildReactivationCardCandidates(
+  candidates: ReactivationCandidate[],
+  thresholdDaysList: number[],
+  now: Date
+): ReactivationCardCandidate[] {
+  const result: ReactivationCardCandidate[] = [];
+  for (const thresholdDays of thresholdDaysList) {
+    for (const candidate of candidates) {
+      const window = computeReactivationWindow(candidate.scheduledAt, thresholdDays);
+      if (isWithinReactivationWindow(window, now)) {
+        result.push({ ...candidate, thresholdDays, window });
+      }
+    }
+  }
+  return result.sort(
+    (a, b) =>
+      a.window.start.getTime() - b.window.start.getTime() ||
+      a.scheduledAt.getTime() - b.scheduledAt.getTime() ||
+      a.appointmentId.localeCompare(b.appointmentId) ||
+      a.thresholdDays - b.thresholdDays
+  );
+}
+
 // Slots (1-5) com texto configurado; sem nenhum, usa os 5 defaults
 // (DEFAULT_REACTIVATION_MESSAGES) como se fossem os 5 slots.
 export function resolveAvailableReactivationSlots(messages: (string | null | undefined)[]): number[] {
@@ -128,7 +175,7 @@ export function assignNextReactivationSlot(
 
 // Texto final de um slot já atribuído — slot (1-5) indexa messages[]
 // (mesma posição) com fallback pro texto padrão correspondente. O slot em
-// si fica fixo por card (ver Appointment.reactivationMessageSlot); só o
+// si fica fixo por card (ver ReactivationCardSlot, schema.prisma); só o
 // TEXTO pode mudar depois se a clínica editar aquela mensagem específica.
 export function resolveReactivationMessageText(slot: number, messages: (string | null | undefined)[]): string {
   const custom = messages[slot - 1];
@@ -156,82 +203,117 @@ export type ReactivationCard = {
   message: string;
   whatsappLink: string | null;
   completionDate: Date;
+  thresholdDays: number;
 };
+
+// Chave composta (agendamento + período) — o mesmo agendamento pode ter um
+// card por período marcado, então um Map por appointmentId sozinho não
+// basta mais (ver ReactivationCardSlot, schema.prisma).
+export function cardSlotKey(appointmentId: string, thresholdDays: number): string {
+  return `${appointmentId}:${thresholdDays}`;
+}
+
+export type AssignedReactivationCard = ReactivationCardCandidate & { slot: number };
+export type ReactivationSlotAssignment = { appointmentId: string; thresholdDays: number; slot: number };
+
+// Atribui slot a cada card da lista (já ordenada por buildReactivationCardCandidates
+// — ordem global de "quem completou primeiro", entre todos os períodos
+// juntos), reusando o que já estiver em existingSlots (chave
+// appointmentId+thresholdDays, ver cardSlotKey) e preenchendo os que
+// faltam EM SEQUÊNCIA a partir de initialSequenceCounter. Pura — getReactivationCards
+// usa isto pra decidir o que persistir (newlyAssigned) sem acoplar a regra
+// de atribuição ao Prisma, e é o que permite testar "mesmo paciente com
+// cards em períodos diferentes" e "rotação fixa por card e por período"
+// sem precisar de banco.
+export function assignReactivationCardSlots(
+  cardCandidates: ReactivationCardCandidate[],
+  availableSlots: number[],
+  initialSequenceCounter: number,
+  existingSlots: Map<string, number>
+): { cards: AssignedReactivationCard[]; finalSequenceCounter: number; newlyAssigned: ReactivationSlotAssignment[] } {
+  let sequenceCounter = initialSequenceCounter;
+  const cards: AssignedReactivationCard[] = [];
+  const newlyAssigned: ReactivationSlotAssignment[] = [];
+
+  for (const candidate of cardCandidates) {
+    const key = cardSlotKey(candidate.appointmentId, candidate.thresholdDays);
+    let slot = existingSlots.get(key);
+    if (slot === undefined) {
+      const assigned = assignNextReactivationSlot(availableSlots, sequenceCounter);
+      slot = assigned.slot;
+      sequenceCounter = assigned.nextSequenceCounter;
+      newlyAssigned.push({ appointmentId: candidate.appointmentId, thresholdDays: candidate.thresholdDays, slot });
+    }
+    cards.push({ ...candidate, slot });
+  }
+
+  return { cards, finalSequenceCounter: sequenceCounter, newlyAssigned };
+}
 
 export async function getReactivationCards(clinicId: string, now: Date = new Date()): Promise<ReactivationCard[]> {
   const config = await prisma.reactivationConfig.findUnique({ where: { clinicId } });
-  const thresholdDays = config?.thresholdDays ?? DEFAULT_REACTIVATION_THRESHOLD_DAYS;
+  // Lista vazia (ou clínica sem nenhuma ReactivationConfig ainda) = nenhum
+  // período marcado = Reativação desligada pra essa clínica (pedido
+  // explícito) — nem vale a pena buscar agendamento nenhum.
+  const thresholdDaysList = config?.thresholdDaysList ?? [];
+  if (thresholdDaysList.length === 0) return [];
+
   const messages = [config?.message1, config?.message2, config?.message3, config?.message4, config?.message5];
   const availableSlots = resolveAvailableReactivationSlots(messages);
 
   const appointments = await prisma.appointment.findMany({
     where: { clinicId, conversationId: { not: null } },
-    select: {
-      id: true,
-      leadId: true,
-      conversationId: true,
-      scheduledAt: true,
-      status: true,
-      reactivationMessageSlot: true,
-    },
+    select: { id: true, leadId: true, conversationId: true, scheduledAt: true, status: true },
   });
 
-  const candidates = selectReactivationCandidates(appointments)
-    .map((c) => ({ ...c, window: computeReactivationWindow(c.scheduledAt, thresholdDays) }))
-    .filter((c) => isWithinReactivationWindow(c.window, now))
-    // "Ordenada por quem completou primeiro" — desempate estável por
-    // scheduledAt/id pra ordem determinística em caso de mesma data.
-    .sort(
-      (a, b) =>
-        a.window.start.getTime() - b.window.start.getTime() ||
-        a.scheduledAt.getTime() - b.scheduledAt.getTime() ||
-        a.appointmentId.localeCompare(b.appointmentId)
-    );
+  const baseCandidates = selectReactivationCandidates(appointments);
+  const cardCandidates = buildReactivationCardCandidates(baseCandidates, thresholdDaysList, now);
+  if (cardCandidates.length === 0) return [];
 
-  if (candidates.length === 0) return [];
+  const existingSlotRows = await prisma.reactivationCardSlot.findMany({
+    where: { appointmentId: { in: cardCandidates.map((c) => c.appointmentId) } },
+  });
+  const existingSlots = new Map(existingSlotRows.map((s) => [cardSlotKey(s.appointmentId, s.thresholdDays), s.slot]));
 
-  const slotByAppointmentId = new Map(appointments.map((a) => [a.id, a.reactivationMessageSlot]));
+  const initialSequenceCounter = config?.sequenceCounter ?? 0;
+  const { cards, finalSequenceCounter, newlyAssigned } = assignReactivationCardSlots(
+    cardCandidates,
+    availableSlots,
+    initialSequenceCounter,
+    existingSlots
+  );
 
-  let sequenceCounter = config?.sequenceCounter ?? 0;
-  const initialSequenceCounter = sequenceCounter;
-  const assignedSlots = new Map<string, number>();
-
-  // Sequencial de propósito (não Promise.all): precisa processar na ordem
-  // de "quem completou primeiro" pra garantir 1º card = variação 1, 2º =
-  // variação 2 etc. — paralelizar quebraria essa ordem de atribuição.
-  for (const candidate of candidates) {
-    const existingSlot = slotByAppointmentId.get(candidate.appointmentId);
-    if (existingSlot) {
-      assignedSlots.set(candidate.appointmentId, existingSlot);
-      continue;
-    }
-    const { slot, nextSequenceCounter } = assignNextReactivationSlot(availableSlots, sequenceCounter);
-    assignedSlots.set(candidate.appointmentId, slot);
-    sequenceCounter = nextSequenceCounter;
-    await prisma.appointment.update({
-      where: { id: candidate.appointmentId },
-      data: { reactivationMessageSlot: slot },
+  // Sequencial de propósito (não Promise.all): preserva a mesma ordem de
+  // atribuição decidida por assignReactivationCardSlots ao persistir — não
+  // que a ordem de escrita em si importe aqui, mas evita qualquer surpresa
+  // de concorrência entre upserts da mesma clínica.
+  for (const assignment of newlyAssigned) {
+    await prisma.reactivationCardSlot.upsert({
+      where: {
+        appointmentId_thresholdDays: { appointmentId: assignment.appointmentId, thresholdDays: assignment.thresholdDays },
+      },
+      create: assignment,
+      update: {},
     });
   }
 
-  if (sequenceCounter !== initialSequenceCounter) {
+  if (finalSequenceCounter !== initialSequenceCounter) {
     await prisma.reactivationConfig.upsert({
       where: { clinicId },
-      create: { clinicId, thresholdDays: DEFAULT_REACTIVATION_THRESHOLD_DAYS, sequenceCounter },
-      update: { sequenceCounter },
+      create: { clinicId, thresholdDaysList: DEFAULT_REACTIVATION_THRESHOLD_DAYS_LIST, sequenceCounter: finalSequenceCounter },
+      update: { sequenceCounter: finalSequenceCounter },
     });
   }
 
   const leads = await prisma.lead.findMany({
-    where: { id: { in: candidates.map((c) => c.leadId) } },
+    where: { id: { in: cardCandidates.map((c) => c.leadId) } },
     select: { id: true, name: true, igUsername: true, profilePictureUrl: true, phone: true },
   });
   const leadById = new Map(leads.map((l) => [l.id, l]));
 
-  return candidates.map((c) => {
+  return cards.map((c) => {
     const lead = leadById.get(c.leadId);
-    const slot = assignedSlots.get(c.appointmentId)!;
-    const message = resolveReactivationMessageText(slot, messages);
+    const message = resolveReactivationMessageText(c.slot, messages);
     const phone = lead?.phone ?? null;
     return {
       appointmentId: c.appointmentId,
@@ -242,6 +324,7 @@ export async function getReactivationCards(clinicId: string, now: Date = new Dat
       message,
       whatsappLink: phone ? buildReactivationWhatsAppLink(phone, message) : null,
       completionDate: c.window.start,
+      thresholdDays: c.thresholdDays,
     };
   });
 }

@@ -28,12 +28,13 @@ export function ReactivationRail({ cards }: { cards: ReactivationCard[] }) {
       <div className="flex gap-2.5 overflow-x-auto pb-1">
         {cards.map((card) => (
           <div
-            key={card.appointmentId}
+            key={`${card.appointmentId}-${card.thresholdDays}`}
             className="flex w-36 shrink-0 flex-col items-center gap-1.5 rounded-lg border border-vexo-border bg-vexo-surface p-2.5 text-center"
           >
             <LeadAvatar profilePictureUrl={card.profilePictureUrl} name={card.name} size="md" />
             <p className="w-full truncate text-xs font-medium">{card.name}</p>
             {card.igUsername && <p className="w-full truncate text-caption text-vexo-muted">@{card.igUsername}</p>}
+            <p className="w-full truncate text-caption text-vexo-muted">{card.thresholdDays} dias</p>
             {card.whatsappLink ? (
               <a
                 href={card.whatsappLink}

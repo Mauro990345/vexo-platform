@@ -5,7 +5,11 @@ import { requireInternalSession } from "@/lib/session";
 import { Tabs } from "@/components/Tabs";
 import { TemplateMessageField } from "@/components/TemplateMessageField";
 import { updateClinicSettings, updateClinicReminders, updateClinicReactivation, logApproach } from "../../actions";
-import { REACTIVATION_THRESHOLD_OPTIONS, DEFAULT_REACTIVATION_THRESHOLD_DAYS } from "@/lib/reactivation";
+import {
+  REACTIVATION_THRESHOLD_OPTIONS,
+  REACTIVATION_TEST_THRESHOLDS,
+  DEFAULT_REACTIVATION_THRESHOLD_DAYS_LIST,
+} from "@/lib/reactivation";
 
 const REMINDER_VARIABLES = [
   { token: "{{primeiro_nome}}", label: "+ Nome do lead" },
@@ -34,6 +38,19 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
 
   const firstReminderHours = clinic.reminderConfig?.hoursBefore?.[0] ?? 24;
   const secondReminderHours = clinic.reminderConfig?.hoursBefore?.[1] ?? 3;
+
+  const reactivationThresholdSet = new Set(
+    clinic.reactivationConfig?.thresholdDaysList ?? DEFAULT_REACTIVATION_THRESHOLD_DAYS_LIST
+  );
+  const reactivationMessages = [
+    clinic.reactivationConfig?.message1,
+    clinic.reactivationConfig?.message2,
+    clinic.reactivationConfig?.message3,
+    clinic.reactivationConfig?.message4,
+    clinic.reactivationConfig?.message5,
+  ];
+  const reactivationFilledCount = reactivationMessages.filter((m) => m?.trim()).length;
+  const reactivationSummary = `${reactivationFilledCount} de 5 preenchidas · ${reminderPreview(reactivationMessages[0])}`;
 
   return (
     <div className="max-w-3xl space-y-4">
@@ -222,85 +239,103 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
                 {/* Faixa "Reativação" do Painel do cliente (ver
                     ClientPanelView.tsx/ReactivationRail.tsx) — interna, só
                     aparece aqui em Automações (nunca pro cliente nem no
-                    Painel dele). Compacta, mesmo estilo de card das seções
-                    acima (sem <details>/colapsável — é um bloco só, não dois
-                    lembretes independentes pra justificar isso). */}
+                    Painel dele). Layout compacto, mesmo padrão visual da
+                    seção de Lembretes acima: chips de período numa linha só
+                    (sem <details> — são poucos, cabem direto) + UMA linha
+                    <details> pras 5 mensagens (resumo fechado, abre pra
+                    editar), não 5 campos grandes sempre visíveis. */}
                 <div className="mt-5">
                   <h2 className="text-xs font-semibold">Reativação</h2>
                   <p className="mt-1 text-caption text-vexo-muted">
-                    Cards de pacientes cujo agendamento da IA completou o prazo abaixo sem um
-                    retorno — aparecem só no Painel do cliente, com uma mensagem de
-                    acompanhamento sugerida pra enviar por WhatsApp. Nada é enviado
-                    automaticamente, a secretária decide clicar.
+                    Cards de pacientes cujo agendamento da IA completou algum dos prazos
+                    marcados sem um retorno — aparecem só no Painel do cliente, com uma
+                    mensagem de acompanhamento sugerida pra enviar por WhatsApp (nada é
+                    enviado automaticamente). Sem nenhum prazo marcado, a faixa fica desligada.
                   </p>
 
                   <form
                     action={updateClinicReactivation.bind(null, clinic.id)}
-                    className="mt-2 space-y-2.5 rounded-xl border border-vexo-border bg-vexo-surface p-3.5"
+                    className="mt-2 space-y-2 rounded-xl border border-vexo-border bg-vexo-surface p-3"
                   >
                     <div>
-                      <label className="mb-1 block text-xs text-vexo-muted" htmlFor="thresholdDays">
-                        Prazo sem retorno
-                      </label>
-                      <select
-                        id="thresholdDays"
-                        name="thresholdDays"
-                        defaultValue={clinic.reactivationConfig?.thresholdDays ?? DEFAULT_REACTIVATION_THRESHOLD_DAYS}
-                        className="w-32 rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5 text-xs outline-none focus:border-vexo-accent"
-                      >
+                      <p className="mb-1.5 text-xs text-vexo-muted">Prazos sem retorno</p>
+                      <div className="flex flex-wrap items-center gap-1.5">
                         {REACTIVATION_THRESHOLD_OPTIONS.map((days) => (
-                          <option key={days} value={days}>
-                            {days} dias
-                          </option>
+                          <label key={days} className="cursor-pointer">
+                            <input
+                              type="checkbox"
+                              name="thresholdDays"
+                              value={days}
+                              defaultChecked={reactivationThresholdSet.has(days)}
+                              className="peer sr-only"
+                            />
+                            <span className="inline-flex items-center gap-1 rounded-full border border-vexo-border px-2.5 py-1 text-caption font-medium text-vexo-muted transition peer-checked:border-vexo-accent peer-checked:bg-vexo-accent/15 peer-checked:text-vexo-accent">
+                              {days} dias
+                              {REACTIVATION_TEST_THRESHOLDS.includes(days) && (
+                                <span className="opacity-70">(teste)</span>
+                              )}
+                            </span>
+                          </label>
                         ))}
-                      </select>
+                      </div>
                     </div>
 
-                    <TemplateMessageField
-                      name="message1"
-                      label="Mensagem 1"
-                      required={false}
-                      rows={2}
-                      variables={[]}
-                      defaultValue={clinic.reactivationConfig?.message1 ?? ""}
-                      placeholder="Vazio usa um texto padrão de acompanhamento, sem citar nenhum serviço/procedimento."
-                    />
-                    <TemplateMessageField
-                      name="message2"
-                      label="Mensagem 2"
-                      required={false}
-                      rows={2}
-                      variables={[]}
-                      defaultValue={clinic.reactivationConfig?.message2 ?? ""}
-                      placeholder="Vazio usa um texto padrão de acompanhamento, sem citar nenhum serviço/procedimento."
-                    />
-                    <TemplateMessageField
-                      name="message3"
-                      label="Mensagem 3"
-                      required={false}
-                      rows={2}
-                      variables={[]}
-                      defaultValue={clinic.reactivationConfig?.message3 ?? ""}
-                      placeholder="Vazio usa um texto padrão de acompanhamento, sem citar nenhum serviço/procedimento."
-                    />
-                    <TemplateMessageField
-                      name="message4"
-                      label="Mensagem 4"
-                      required={false}
-                      rows={2}
-                      variables={[]}
-                      defaultValue={clinic.reactivationConfig?.message4 ?? ""}
-                      placeholder="Vazio usa um texto padrão de acompanhamento, sem citar nenhum serviço/procedimento."
-                    />
-                    <TemplateMessageField
-                      name="message5"
-                      label="Mensagem 5"
-                      required={false}
-                      rows={2}
-                      variables={[]}
-                      defaultValue={clinic.reactivationConfig?.message5 ?? ""}
-                      placeholder="Vazio usa um texto padrão de acompanhamento, sem citar nenhum serviço/procedimento."
-                    />
+                    <details className="group rounded-lg border border-vexo-border bg-vexo-surface2">
+                      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2">
+                        <div className="flex min-w-0 items-center gap-2.5">
+                          <span className="shrink-0 text-card text-vexo-muted">Mensagens</span>
+                          <span className="truncate text-xs">{reactivationSummary}</span>
+                        </div>
+                        <span className="shrink-0 text-card text-vexo-muted transition group-open:rotate-180">▾</span>
+                      </summary>
+                      <div className="space-y-2 border-t border-vexo-border px-3 pb-3 pt-2.5">
+                        <TemplateMessageField
+                          name="message1"
+                          label="Mensagem 1"
+                          required={false}
+                          rows={2}
+                          variables={[]}
+                          defaultValue={clinic.reactivationConfig?.message1 ?? ""}
+                          placeholder="Vazio usa um texto padrão de acompanhamento, sem citar serviço/procedimento."
+                        />
+                        <TemplateMessageField
+                          name="message2"
+                          label="Mensagem 2"
+                          required={false}
+                          rows={2}
+                          variables={[]}
+                          defaultValue={clinic.reactivationConfig?.message2 ?? ""}
+                          placeholder="Vazio usa um texto padrão de acompanhamento, sem citar serviço/procedimento."
+                        />
+                        <TemplateMessageField
+                          name="message3"
+                          label="Mensagem 3"
+                          required={false}
+                          rows={2}
+                          variables={[]}
+                          defaultValue={clinic.reactivationConfig?.message3 ?? ""}
+                          placeholder="Vazio usa um texto padrão de acompanhamento, sem citar serviço/procedimento."
+                        />
+                        <TemplateMessageField
+                          name="message4"
+                          label="Mensagem 4"
+                          required={false}
+                          rows={2}
+                          variables={[]}
+                          defaultValue={clinic.reactivationConfig?.message4 ?? ""}
+                          placeholder="Vazio usa um texto padrão de acompanhamento, sem citar serviço/procedimento."
+                        />
+                        <TemplateMessageField
+                          name="message5"
+                          label="Mensagem 5"
+                          required={false}
+                          rows={2}
+                          variables={[]}
+                          defaultValue={clinic.reactivationConfig?.message5 ?? ""}
+                          placeholder="Vazio usa um texto padrão de acompanhamento, sem citar serviço/procedimento."
+                        />
+                      </div>
+                    </details>
 
                     <button
                       type="submit"

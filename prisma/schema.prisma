@@ -811,16 +811,13 @@ model Appointment {
   // novo num turno seguinte (mesmo padrão de whatsappConfirmationSentAt).
   instagramConfirmationSentAt DateTime?
 
-  // Qual das até 5 mensagens de Reativação (ver ReactivationConfig) foi
-  // atribuída a este agendamento quando o card dele entrou na faixa
-  // "Reativação" do Painel (ver assignNextReactivationSlot, reactivation.ts)
-  // — 1 a 5, nulo enquanto o card nunca entrou na faixa. Gravado UMA vez,
-  // na primeira vez que o card aparece, e nunca mais trocado depois disso:
-  // é o que garante a variação ficar fixa pro card (pedido explícito),
-  // mesmo que a configuração da clínica mude depois ou o card saia e volte
-  // a ser consultado (ele não volta — a janela de 5 dias úteis só acontece
-  // uma vez por agendamento).
-  reactivationMessageSlot Int?
+  // Variação de mensagem de Reativação atribuída a este agendamento, por
+  // período completado — ver ReactivationCardSlot acima (substituiu um
+  // campo Int único aqui, reactivationMessageSlot, que só suportava um
+  // período por agendamento; removido na mesma migration que criou essa
+  // tabela, sem dado real perdido — Reativação ainda não tinha sido usada
+  // em produção).
+  reactivationCardSlots ReactivationCardSlot[]
 
   reminderLogs ReminderLog[]
 
@@ -852,17 +849,25 @@ model ReminderConfig {
 
 // Configuração da faixa "Reativação" do Painel do cliente (ver
 // ClientPanelView.tsx / reactivation.ts) — por clínica, mesmo padrão 1:1
-// de ReminderConfig acima. thresholdDays: quantos dias sem retorno depois
-// do agendamento da IA disparam o card (90/120/150, padrão 150). As 5
-// mensagens são TODAS opcionais — com todas vazias, reactivation.ts usa um
-// conjunto padrão fixo (DEFAULT_REACTIVATION_MESSAGES). Nenhuma variável de
-// nome do lead nos textos (pedido explícito).
+// de ReminderConfig acima. thresholdDaysList: quais prazos sem retorno
+// (30/60/120/90/150 dias) disparam card — CADA um marcado funciona de
+// forma independente (o mesmo agendamento pode gerar um card por período
+// marcado, em momentos diferentes). Vazio = Reativação desligada pra essa
+// clínica (nenhum card em nenhum período). Era um Int único (thresholdDays)
+// até vários períodos simultâneos passarem a ser suportados (ver migration
+// 20261023010000_reactivation_multi_period) — mesmo padrão Int[] já usado
+// em ReminderConfig.hoursBefore acima.
+//
+// As 5 mensagens são TODAS opcionais, válidas pra TODOS os períodos
+// marcados (uma sequência só, não uma por período) — com todas vazias,
+// reactivation.ts usa um conjunto padrão fixo (DEFAULT_REACTIVATION_MESSAGES).
+// Nenhuma variável de nome do lead nos textos (pedido explícito).
 model ReactivationConfig {
   id       String @id @default(cuid())
   clinicId String @unique
   clinic   Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
 
-  thresholdDays Int @default(150)
+  thresholdDaysList Int[] @default([150])
 
   message1 String? @db.Text
   message2 String? @db.Text
@@ -873,11 +878,36 @@ model ReactivationConfig {
   // Só decide a PRÓXIMA posição na rotação em sequência (ver
   // assignNextReactivationSlot, reactivation.ts) — nunca é lido de volta
   // pra decidir o texto de um card já existente (isso vem de
-  // Appointment.reactivationMessageSlot, que fica fixo por card desde o
-  // momento em que ele entra na faixa).
+  // ReactivationCardSlot, abaixo, fixo por agendamento+período desde o
+  // momento em que aquele card entra na faixa). ÚNICO contador mesmo com
+  // vários períodos marcados — a sequência é por clínica, não por período
+  // (pedido explícito: "a sequência continua por clínica, independente do
+  // período").
   sequenceCounter Int @default(0)
 
   updatedAt DateTime @updatedAt
+}
+
+// Variação de mensagem atribuída a um card de Reativação — um agendamento
+// pode ter um card POR PERÍODO marcado (ver ReactivationConfig.thresholdDaysList),
+// então um Int único em Appointment (como era antes) não bastava mais: a
+// chave precisa ser (agendamento, período). Gravado UMA vez, na primeira
+// vez que aquele card (desse agendamento, desse período) entra na faixa —
+// nunca mais trocado depois (garante a variação fixa por card, mesmo que a
+// clínica mude a configuração ou o card saia/volte a ser consultado — ele
+// não volta de verdade, a janela de 5 dias úteis só acontece uma vez por
+// agendamento+período).
+model ReactivationCardSlot {
+  id            String      @id @default(cuid())
+  appointmentId String
+  appointment   Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+
+  thresholdDays Int
+  slot          Int
+
+  createdAt DateTime @default(now())
+
+  @@unique([appointmentId, thresholdDays])
 }
 
 model ReminderLog {

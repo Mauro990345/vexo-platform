@@ -3,13 +3,18 @@ import {
   computeReactivationWindow,
   isWithinReactivationWindow,
   selectReactivationCandidates,
+  buildReactivationCardCandidates,
+  assignReactivationCardSlots,
+  cardSlotKey,
   resolveAvailableReactivationSlots,
   assignNextReactivationSlot,
   resolveReactivationMessageText,
   buildReactivationWhatsAppLink,
   DEFAULT_REACTIVATION_MESSAGES,
   REACTIVATION_THRESHOLD_OPTIONS,
+  REACTIVATION_TEST_THRESHOLDS,
   type ReactivationSourceAppointment,
+  type ReactivationCandidate,
 } from "./reactivation";
 
 function appt(overrides: Partial<ReactivationSourceAppointment> = {}): ReactivationSourceAppointment {
@@ -61,26 +66,18 @@ describe("computeReactivationWindow / isWithinReactivationWindow — janela de 5
   });
 });
 
-describe("computeReactivationWindow — os 3 prazos (90/120/150 dias)", () => {
-  it("90 dias", () => {
-    expect(REACTIVATION_THRESHOLD_OPTIONS).toContain(90);
-    const window = computeReactivationWindow(new Date("2026-01-01T12:00:00.000Z"), 90);
-    expect(window.start.getTime()).toBeGreaterThan(new Date("2026-01-01T12:00:00.000Z").getTime());
+describe("computeReactivationWindow — os 5 prazos (30/60/90/120/150 dias)", () => {
+  it("todos os 5 prazos existem, com 30 e 60 marcados como teste", () => {
+    expect(REACTIVATION_THRESHOLD_OPTIONS).toEqual([30, 60, 90, 120, 150]);
+    expect(REACTIVATION_TEST_THRESHOLDS).toEqual([30, 60]);
   });
 
-  it("120 dias gera uma janela mais tarde que 90 dias pro mesmo agendamento", () => {
+  it("cada prazo seguinte gera uma janela mais tarde pro mesmo agendamento", () => {
     const scheduledAt = new Date("2026-01-01T12:00:00.000Z");
-    const w90 = computeReactivationWindow(scheduledAt, 90);
-    const w120 = computeReactivationWindow(scheduledAt, 120);
-    expect(w120.start.getTime()).toBeGreaterThan(w90.start.getTime());
-  });
-
-  it("150 dias (padrão) gera uma janela mais tarde que 120 dias pro mesmo agendamento", () => {
-    expect(REACTIVATION_THRESHOLD_OPTIONS).toContain(150);
-    const scheduledAt = new Date("2026-01-01T12:00:00.000Z");
-    const w120 = computeReactivationWindow(scheduledAt, 120);
-    const w150 = computeReactivationWindow(scheduledAt, 150);
-    expect(w150.start.getTime()).toBeGreaterThan(w120.start.getTime());
+    const windows = REACTIVATION_THRESHOLD_OPTIONS.map((days) => computeReactivationWindow(scheduledAt, days));
+    for (let i = 1; i < windows.length; i++) {
+      expect(windows[i]!.start.getTime()).toBeGreaterThan(windows[i - 1]!.start.getTime());
+    }
   });
 });
 
@@ -118,6 +115,133 @@ describe("selectReactivationCandidates", () => {
   it("exclui agendamento cancelado no Google Calendar", () => {
     const candidates = selectReactivationCandidates([appt({ status: "CANCELLED" })]);
     expect(candidates).toEqual([]);
+  });
+});
+
+describe("buildReactivationCardCandidates — vários períodos marcados", () => {
+  function candidate(overrides: Partial<ReactivationCandidate> = {}): ReactivationCandidate {
+    return {
+      appointmentId: "appt-1",
+      leadId: "lead-1",
+      scheduledAt: new Date("2026-01-01T12:00:00.000Z"),
+      ...overrides,
+    };
+  }
+
+  it("nenhum período marcado (lista vazia) = Reativação desligada, nenhum card", () => {
+    const now = new Date("2027-01-01T12:00:00.000Z"); // bem depois de qualquer prazo, só pra garantir que não é a janela que está zerando
+    const cards = buildReactivationCardCandidates([candidate()], [], now);
+    expect(cards).toEqual([]);
+  });
+
+  it("cada período marcado funciona de forma independente — só entra na faixa quem está dentro da janela DAQUELE período", () => {
+    const scheduledAt = new Date("2026-01-01T12:00:00.000Z");
+    const window90 = computeReactivationWindow(scheduledAt, 90);
+    const now = window90.start; // dentro da janela de 90 dias, mas bem antes da janela de 150
+
+    const cards = buildReactivationCardCandidates([candidate({ scheduledAt })], [90, 150], now);
+    expect(cards).toHaveLength(1);
+    expect(cards[0]!.thresholdDays).toBe(90);
+  });
+
+  it("o mesmo paciente pode ter dois cards se completar dois períodos marcados em momentos diferentes", () => {
+    const scheduledAt = new Date("2026-01-01T12:00:00.000Z");
+    const window90 = computeReactivationWindow(scheduledAt, 90);
+    const window150 = computeReactivationWindow(scheduledAt, 150);
+
+    const candidates = [candidate({ scheduledAt })];
+    const cardsAt90 = buildReactivationCardCandidates(candidates, [90, 150], window90.start);
+    const cardsAt150 = buildReactivationCardCandidates(candidates, [90, 150], window150.start);
+
+    expect(cardsAt90.map((c) => c.thresholdDays)).toEqual([90]);
+    expect(cardsAt150.map((c) => c.thresholdDays)).toEqual([150]);
+    // As duas janelas nunca se sobrepõem — por isso em cada momento só um
+    // dos dois cards (90 ou 150) existe, nunca os dois ao mesmo tempo, mas
+    // o MESMO agendamento gera um card em cada momento.
+    expect(window90.end.getTime()).toBeLessThan(window150.start.getTime());
+  });
+
+  it("ordena globalmente por quem completou primeiro, entre todos os períodos juntos", () => {
+    const scheduledAtA = new Date("2026-01-01T12:00:00.000Z");
+    const scheduledAtB = new Date("2026-01-10T12:00:00.000Z");
+    // B (agendado depois) com prazo de 30 dias completa ANTES de A (agendado
+    // antes) com prazo de 150 dias — a ordem global precisa respeitar isso.
+    const windowB30 = computeReactivationWindow(scheduledAtB, 30);
+    const now = windowB30.start;
+
+    const cards = buildReactivationCardCandidates(
+      [candidate({ appointmentId: "appt-a", scheduledAt: scheduledAtA }), candidate({ appointmentId: "appt-b", scheduledAt: scheduledAtB })],
+      [30, 150],
+      now
+    );
+    expect(cards).toHaveLength(1);
+    expect(cards[0]!.appointmentId).toBe("appt-b");
+    expect(cards[0]!.thresholdDays).toBe(30);
+  });
+
+  it("exclusões continuam valendo (vêm de selectReactivationCandidates, aplicadas antes)", () => {
+    const appointments: ReactivationSourceAppointment[] = [
+      appt({ id: "voltou-antigo", scheduledAt: new Date("2026-01-01T12:00:00.000Z") }),
+      appt({ id: "voltou-novo", scheduledAt: new Date("2026-06-01T12:00:00.000Z") }),
+    ];
+    const candidates = selectReactivationCandidates(appointments);
+    const now = computeReactivationWindow(new Date("2026-06-01T12:00:00.000Z"), 30).start;
+    const cards = buildReactivationCardCandidates(candidates, [30], now);
+    expect(cards.map((c) => c.appointmentId)).toEqual(["voltou-novo"]);
+  });
+});
+
+describe("assignReactivationCardSlots — fixa por card E por período", () => {
+  function cardCandidate(appointmentId: string, thresholdDays: number): ReturnType<typeof buildReactivationCardCandidates>[number] {
+    return {
+      appointmentId,
+      leadId: "lead-1",
+      scheduledAt: new Date("2026-01-01T12:00:00.000Z"),
+      thresholdDays,
+      window: { start: new Date("2026-04-01T00:00:00.000Z"), end: new Date("2026-04-07T00:00:00.000Z") },
+    };
+  }
+
+  it("1º card usa a variação 1, 2º usa a 2, em sequência", () => {
+    const { cards, finalSequenceCounter } = assignReactivationCardSlots(
+      [cardCandidate("appt-1", 90), cardCandidate("appt-2", 90)],
+      [1, 2, 3, 4, 5],
+      0,
+      new Map()
+    );
+    expect(cards.map((c) => c.slot)).toEqual([1, 2]);
+    expect(finalSequenceCounter).toBe(2);
+  });
+
+  it("o mesmo agendamento em dois períodos diferentes recebe slots INDEPENDENTES (chave appointmentId+thresholdDays)", () => {
+    const { cards } = assignReactivationCardSlots(
+      [cardCandidate("appt-1", 30), cardCandidate("appt-1", 150)],
+      [1, 2, 3],
+      0,
+      new Map()
+    );
+    expect(cards[0]!.slot).toBe(1); // appt-1 + 30 dias
+    expect(cards[1]!.slot).toBe(2); // appt-1 + 150 dias — slot DIFERENTE, mesmo agendamento
+  });
+
+  it("reusa o slot já existente (persistido) em vez de reatribuir, e não avança o contador por isso", () => {
+    const existing = new Map([[cardSlotKey("appt-1", 90), 4]]);
+    const { cards, finalSequenceCounter, newlyAssigned } = assignReactivationCardSlots(
+      [cardCandidate("appt-1", 90)],
+      [1, 2, 3, 4, 5],
+      7,
+      existing
+    );
+    expect(cards[0]!.slot).toBe(4);
+    expect(finalSequenceCounter).toBe(7); // não avançou — nada novo pra atribuir
+    expect(newlyAssigned).toEqual([]);
+  });
+
+  it("recarregar a página (mesmo existingSlots) devolve exatamente o mesmo slot — fica fixo", () => {
+    const first = assignReactivationCardSlots([cardCandidate("appt-1", 90)], [1, 2, 3], 0, new Map());
+    const existing = new Map(first.newlyAssigned.map((a) => [cardSlotKey(a.appointmentId, a.thresholdDays), a.slot]));
+    const second = assignReactivationCardSlots([cardCandidate("appt-1", 90)], [1, 2, 3], first.finalSequenceCounter, existing);
+    expect(second.cards[0]!.slot).toBe(first.cards[0]!.slot);
   });
 });
 
