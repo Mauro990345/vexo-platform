@@ -12,7 +12,8 @@ import {
   buildReactivationWhatsAppLink,
   DEFAULT_REACTIVATION_MESSAGES,
   REACTIVATION_THRESHOLD_OPTIONS,
-  REACTIVATION_TEST_THRESHOLDS,
+  TEST_PERIOD_DAYS,
+  isValidReactivationThresholdDays,
   type ReactivationSourceAppointment,
   type ReactivationCandidate,
 } from "./reactivation";
@@ -66,10 +67,29 @@ describe("computeReactivationWindow / isWithinReactivationWindow — janela de 5
   });
 });
 
-describe("computeReactivationWindow — os 5 prazos (30/60/90/120/150 dias)", () => {
-  it("todos os 5 prazos existem, com 30 e 60 marcados como teste", () => {
-    expect(REACTIVATION_THRESHOLD_OPTIONS).toEqual([30, 60, 90, 120, 150]);
-    expect(REACTIVATION_TEST_THRESHOLDS).toEqual([30, 60]);
+describe("computeReactivationWindow — os 7 prazos (7/10/30/60/90/120/150 dias)", () => {
+  it("todos os 7 prazos existem, na ordem certa, com 7/10/30/60 marcados como teste", () => {
+    expect(REACTIVATION_THRESHOLD_OPTIONS).toEqual([7, 10, 30, 60, 90, 120, 150]);
+    expect(TEST_PERIOD_DAYS).toEqual([7, 10, 30, 60]);
+  });
+
+  it("REACTIVATION_THRESHOLD_OPTIONS sempre inclui todo item de TEST_PERIOD_DAYS — removê-los da constante basta pra tirar o chip e a validação", () => {
+    for (const days of TEST_PERIOD_DAYS) {
+      expect(REACTIVATION_THRESHOLD_OPTIONS).toContain(days);
+    }
+  });
+
+  it("isValidReactivationThresholdDays: aceita todos os valores válidos (teste e normais)", () => {
+    for (const days of REACTIVATION_THRESHOLD_OPTIONS) {
+      expect(isValidReactivationThresholdDays(days)).toBe(true);
+    }
+  });
+
+  it("isValidReactivationThresholdDays: rejeita valor inválido", () => {
+    expect(isValidReactivationThresholdDays(45)).toBe(false);
+    expect(isValidReactivationThresholdDays(0)).toBe(false);
+    expect(isValidReactivationThresholdDays(-30)).toBe(false);
+    expect(isValidReactivationThresholdDays(200)).toBe(false);
   });
 
   it("cada prazo seguinte gera uma janela mais tarde pro mesmo agendamento", () => {
