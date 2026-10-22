@@ -248,16 +248,22 @@ export async function updateClinicReminders(clinicId: string, formData: FormData
 // apagar endereço/WhatsApp/ativa/lembretes por reenviar um form que não os
 // contém. sequenceCounter NUNCA é lido/escrito aqui — fica intocado pelo
 // upsert parcial (ver getReactivationCards, reactivation.ts), preservando
-// a posição da rotação em sequência mesmo quando a clínica edita as
-// mensagens ou o prazo.
+// a posição da rotação em sequência mesmo quando a clínica edita os
+// períodos marcados ou as mensagens.
+//
+// "thresholdDays" agora é um grupo de checkboxes (ver automacoes/page.tsx),
+// não um <select> único — formData.getAll devolve só os marcados. Lista
+// vazia é um valor VÁLIDO de propósito (pedido explícito: nenhum marcado =
+// Reativação desligada pra essa clínica), nunca lança erro por estar vazia.
 export async function updateClinicReactivation(clinicId: string, formData: FormData) {
   await requireInternalSession();
 
-  const thresholdDaysRaw = parseInt(String(formData.get("thresholdDays") ?? ""), 10);
-  if (!REACTIVATION_THRESHOLD_OPTIONS.includes(thresholdDaysRaw as ReactivationThresholdDays)) {
-    throw new Error("Prazo inválido — escolha 90, 120 ou 150 dias.");
-  }
-  const thresholdDays = thresholdDaysRaw as ReactivationThresholdDays;
+  const thresholdDaysList = formData
+    .getAll("thresholdDays")
+    .map((v) => parseInt(String(v), 10))
+    .filter((days): days is ReactivationThresholdDays =>
+      REACTIVATION_THRESHOLD_OPTIONS.includes(days as ReactivationThresholdDays)
+    );
 
   const message1 = String(formData.get("message1") ?? "").trim() || null;
   const message2 = String(formData.get("message2") ?? "").trim() || null;
@@ -267,8 +273,8 @@ export async function updateClinicReactivation(clinicId: string, formData: FormD
 
   await prisma.reactivationConfig.upsert({
     where: { clinicId },
-    create: { clinicId, thresholdDays, message1, message2, message3, message4, message5 },
-    update: { thresholdDays, message1, message2, message3, message4, message5 },
+    create: { clinicId, thresholdDaysList, message1, message2, message3, message4, message5 },
+    update: { thresholdDaysList, message1, message2, message3, message4, message5 },
   });
 
   revalidatePath(`/crm/clinicas/${clinicId}/automacoes`);
