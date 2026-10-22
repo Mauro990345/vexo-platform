@@ -7,7 +7,7 @@ import { TemplateMessageField } from "@/components/TemplateMessageField";
 import { updateClinicSettings, updateClinicReminders, updateClinicReactivation, logApproach } from "../../actions";
 import {
   REACTIVATION_THRESHOLD_OPTIONS,
-  REACTIVATION_TEST_THRESHOLDS,
+  TEST_PERIOD_DAYS,
   DEFAULT_REACTIVATION_THRESHOLD_DAYS_LIST,
 } from "@/lib/reactivation";
 
@@ -271,7 +271,7 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
                             />
                             <span className="inline-flex items-center gap-1 rounded-full border border-vexo-border px-2.5 py-1 text-caption font-medium text-vexo-muted transition peer-checked:border-vexo-accent peer-checked:bg-vexo-accent/15 peer-checked:text-vexo-accent">
                               {days} dias
-                              {REACTIVATION_TEST_THRESHOLDS.includes(days) && (
+                              {(TEST_PERIOD_DAYS as readonly number[]).includes(days) && (
                                 <span className="opacity-70">(teste)</span>
                               )}
                             </span>

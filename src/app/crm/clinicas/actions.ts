@@ -19,7 +19,7 @@ import {
 import { decryptToken } from "@/lib/crypto";
 import { saveUploadedAttachment, deleteUploadedAttachment } from "@/lib/uploads";
 import { validateBrazilianPhone } from "@/lib/whatsapp";
-import { REACTIVATION_THRESHOLD_OPTIONS, type ReactivationThresholdDays } from "@/lib/reactivation";
+import { isValidReactivationThresholdDays } from "@/lib/reactivation";
 
 const CONNECTION_LINK_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 dias
 
@@ -261,9 +261,7 @@ export async function updateClinicReactivation(clinicId: string, formData: FormD
   const thresholdDaysList = formData
     .getAll("thresholdDays")
     .map((v) => parseInt(String(v), 10))
-    .filter((days): days is ReactivationThresholdDays =>
-      REACTIVATION_THRESHOLD_OPTIONS.includes(days as ReactivationThresholdDays)
-    );
+    .filter(isValidReactivationThresholdDays);
 
   const message1 = String(formData.get("message1") ?? "").trim() || null;
   const message2 = String(formData.get("message2") ?? "").trim() || null;

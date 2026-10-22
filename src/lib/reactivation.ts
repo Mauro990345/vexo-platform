@@ -8,14 +8,27 @@ import { normalizeBrazilianWhatsappNumber } from "@/lib/whatsapp";
 // mesmo padrão de report-conversations-logic.ts/metrics.ts), wrapper com
 // Prisma embaixo.
 
-// 30/60 são rótulados "(teste)" na tela (ver automacoes/page.tsx) — mesma
-// lógica de período pra todos, só o rótulo muda.
-export const REACTIVATION_THRESHOLD_OPTIONS = [30, 60, 90, 120, 150] as const;
+// Períodos só de TESTE — isolados nesta constante de propósito, pra poder
+// ser removidos depois mexendo numa linha só (esvaziar o array, ver pedido
+// explícito do usuário). REACTIVATION_THRESHOLD_OPTIONS espalha esta lista
+// na frente dos períodos "de verdade" (90/120/150) — tirar algo daqui tira
+// o chip da tela e da validação automaticamente, sem precisar editar mais
+// nada. Mesma lógica de período pra todos, só o rótulo "(teste)" muda (ver
+// automacoes/page.tsx).
+export const TEST_PERIOD_DAYS = [7, 10, 30, 60] as const;
+export const REACTIVATION_THRESHOLD_OPTIONS = [...TEST_PERIOD_DAYS, 90, 120, 150] as const;
 export type ReactivationThresholdDays = (typeof REACTIVATION_THRESHOLD_OPTIONS)[number];
-export const REACTIVATION_TEST_THRESHOLDS: readonly ReactivationThresholdDays[] = [30, 60];
 // Padrão: só 150 marcado. Lista VAZIA = Reativação desligada pra essa
 // clínica (pedido explícito) — nenhum período, nenhum card.
 export const DEFAULT_REACTIVATION_THRESHOLD_DAYS_LIST: ReactivationThresholdDays[] = [150];
+
+// Validação pura (sem Prisma) usada por updateClinicReactivation
+// (src/app/crm/clinicas/actions.ts) pra filtrar os valores marcados nos
+// checkboxes — extraída pra poder testar "aceita os valores válidos,
+// rejeita valor inválido" sem precisar simular form/sessão/banco.
+export function isValidReactivationThresholdDays(value: number): value is ReactivationThresholdDays {
+  return (REACTIVATION_THRESHOLD_OPTIONS as readonly number[]).includes(value);
+}
 
 // Estilo de acompanhamento genérico ("como você está desde o seu
 // atendimento"), sem citar nenhum serviço/procedimento — pedido explícito.
