@@ -14,10 +14,12 @@ export function PanelMetricCard({
   label,
   value,
   highlight = false,
+  helper,
 }: {
   label: string;
   value: string;
   highlight?: boolean;
+  helper?: string;
 }) {
   return (
     <div className="rounded-xl border border-vexo-border bg-vexo-surface2 px-3 py-3">
@@ -29,6 +31,10 @@ export function PanelMetricCard({
       >
         {value}
       </p>
+      {/* Taxa sobre os agendados que já passaram do horário (ex.: "8 de 10
+          agendados") — só a métrica "Compareceram" usa, ver
+          ApproachMetricsToggle. */}
+      {helper && <p className="mt-1 truncate text-caption text-vexo-muted">{helper}</p>}
     </div>
   );
 }
