@@ -12,6 +12,8 @@ import { leadDisplayParts } from "@/lib/lead-display";
 import { LeadAvatar } from "@/components/LeadAvatar";
 import { InstagramGlyphIcon, WhatsAppGlyphIcon } from "@/components/BrandIcons";
 import { NeedsHumanBanner, type NeedsHumanLead } from "@/components/NeedsHumanBanner";
+import { ReactivationRail } from "@/components/ReactivationRail";
+import { getReactivationCards } from "@/lib/reactivation";
 
 // Marcar "Não compareceu" só faz sentido pra agendamento ainda em aberto —
 // já compareceu ou já foi cancelado não tem o que alternar aqui.
@@ -78,7 +80,7 @@ export async function ClientPanelView({
   const parsedRef = week ? new Date(week) : now;
   const weekStart = startOfWeek(Number.isNaN(parsedRef.getTime()) ? now : parsedRef);
 
-  const [clinic, periods, appointments, dailyApproached, needsHumanConversations] = await Promise.all([
+  const [clinic, periods, appointments, dailyApproached, needsHumanConversations, reactivationCards] = await Promise.all([
     prisma.clinic.findUniqueOrThrow({
       where: { id: clinicId },
       select: {
@@ -128,6 +130,7 @@ export async function ClientPanelView({
       orderBy: [{ lastMessageAt: "desc" }, { updatedAt: "desc" }],
       take: 50,
     }),
+    getReactivationCards(clinicId, now),
   ]);
 
   const needsHumanLeads: NeedsHumanLead[] = needsHumanConversations.map((conv) => {
@@ -298,6 +301,10 @@ export async function ClientPanelView({
               )}
             </div>
           </div>
+        </div>
+
+        <div className="mt-6">
+          <ReactivationRail cards={reactivationCards} />
         </div>
       </div>
     </div>

@@ -4,7 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { requireInternalSession } from "@/lib/session";
 import { Tabs } from "@/components/Tabs";
 import { TemplateMessageField } from "@/components/TemplateMessageField";
-import { updateClinicSettings, updateClinicReminders, logApproach } from "../../actions";
+import { updateClinicSettings, updateClinicReminders, updateClinicReactivation, logApproach } from "../../actions";
+import { REACTIVATION_THRESHOLD_OPTIONS, DEFAULT_REACTIVATION_THRESHOLD_DAYS } from "@/lib/reactivation";
 
 const REMINDER_VARIABLES = [
   { token: "{{primeiro_nome}}", label: "+ Nome do lead" },
@@ -27,7 +28,7 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
 
   const clinic = await prisma.clinic.findUnique({
     where: { id: params.id },
-    include: { reminderConfig: true },
+    include: { reminderConfig: true, reactivationConfig: true },
   });
   if (!clinic) notFound();
 
@@ -214,6 +215,98 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
                       className="rounded-lg border border-vexo-accent px-2.5 py-1.5 text-xs font-medium text-vexo-accent hover:bg-vexo-accent/10"
                     >
                       Salvar lembretes
+                    </button>
+                  </form>
+                </div>
+
+                {/* Faixa "Reativação" do Painel do cliente (ver
+                    ClientPanelView.tsx/ReactivationRail.tsx) — interna, só
+                    aparece aqui em Automações (nunca pro cliente nem no
+                    Painel dele). Compacta, mesmo estilo de card das seções
+                    acima (sem <details>/colapsável — é um bloco só, não dois
+                    lembretes independentes pra justificar isso). */}
+                <div className="mt-5">
+                  <h2 className="text-xs font-semibold">Reativação</h2>
+                  <p className="mt-1 text-caption text-vexo-muted">
+                    Cards de pacientes cujo agendamento da IA completou o prazo abaixo sem um
+                    retorno — aparecem só no Painel do cliente, com uma mensagem de
+                    acompanhamento sugerida pra enviar por WhatsApp. Nada é enviado
+                    automaticamente, a secretária decide clicar.
+                  </p>
+
+                  <form
+                    action={updateClinicReactivation.bind(null, clinic.id)}
+                    className="mt-2 space-y-2.5 rounded-xl border border-vexo-border bg-vexo-surface p-3.5"
+                  >
+                    <div>
+                      <label className="mb-1 block text-xs text-vexo-muted" htmlFor="thresholdDays">
+                        Prazo sem retorno
+                      </label>
+                      <select
+                        id="thresholdDays"
+                        name="thresholdDays"
+                        defaultValue={clinic.reactivationConfig?.thresholdDays ?? DEFAULT_REACTIVATION_THRESHOLD_DAYS}
+                        className="w-32 rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5 text-xs outline-none focus:border-vexo-accent"
+                      >
+                        {REACTIVATION_THRESHOLD_OPTIONS.map((days) => (
+                          <option key={days} value={days}>
+                            {days} dias
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <TemplateMessageField
+                      name="message1"
+                      label="Mensagem 1"
+                      required={false}
+                      rows={2}
+                      variables={[]}
+                      defaultValue={clinic.reactivationConfig?.message1 ?? ""}
+                      placeholder="Vazio usa um texto padrão de acompanhamento, sem citar nenhum serviço/procedimento."
+                    />
+                    <TemplateMessageField
+                      name="message2"
+                      label="Mensagem 2"
+                      required={false}
+                      rows={2}
+                      variables={[]}
+                      defaultValue={clinic.reactivationConfig?.message2 ?? ""}
+                      placeholder="Vazio usa um texto padrão de acompanhamento, sem citar nenhum serviço/procedimento."
+                    />
+                    <TemplateMessageField
+                      name="message3"
+                      label="Mensagem 3"
+                      required={false}
+                      rows={2}
+                      variables={[]}
+                      defaultValue={clinic.reactivationConfig?.message3 ?? ""}
+                      placeholder="Vazio usa um texto padrão de acompanhamento, sem citar nenhum serviço/procedimento."
+                    />
+                    <TemplateMessageField
+                      name="message4"
+                      label="Mensagem 4"
+                      required={false}
+                      rows={2}
+                      variables={[]}
+                      defaultValue={clinic.reactivationConfig?.message4 ?? ""}
+                      placeholder="Vazio usa um texto padrão de acompanhamento, sem citar nenhum serviço/procedimento."
+                    />
+                    <TemplateMessageField
+                      name="message5"
+                      label="Mensagem 5"
+                      required={false}
+                      rows={2}
+                      variables={[]}
+                      defaultValue={clinic.reactivationConfig?.message5 ?? ""}
+                      placeholder="Vazio usa um texto padrão de acompanhamento, sem citar nenhum serviço/procedimento."
+                    />
+
+                    <button
+                      type="submit"
+                      className="rounded-lg border border-vexo-accent px-2.5 py-1.5 text-xs font-medium text-vexo-accent hover:bg-vexo-accent/10"
+                    >
+                      Salvar reativação
                     </button>
                   </form>
                 </div>
