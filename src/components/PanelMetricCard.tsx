@@ -10,16 +10,19 @@
 // highlight aplica o tom de destaque próprio do Painel (painel.highlight,
 // ver page-style-overrides.ts) só no VALOR — usado com moderação, hoje só
 // na métrica "Agendaram" (ver ApproachMetricsToggle).
+//
+// Sem texto auxiliar embaixo do valor (existia um "helper" com a taxa de
+// comparecimento — removido de propósito: os 4 cards da grade precisam
+// ficar com a mesma altura/largura, e um texto extra só na métrica
+// "Compareceram" desalinhava a grade 2x2).
 export function PanelMetricCard({
   label,
   value,
   highlight = false,
-  helper,
 }: {
   label: string;
   value: string;
   highlight?: boolean;
-  helper?: string;
 }) {
   return (
     <div className="rounded-xl border border-vexo-border bg-vexo-surface2 px-3 py-3">
@@ -31,10 +34,6 @@ export function PanelMetricCard({
       >
         {value}
       </p>
-      {/* Taxa sobre os agendados que já passaram do horário (ex.: "8 de 10
-          agendados") — só a métrica "Compareceram" usa, ver
-          ApproachMetricsToggle. */}
-      {helper && <p className="mt-1 truncate text-caption text-vexo-muted">{helper}</p>}
     </div>
   );
 }

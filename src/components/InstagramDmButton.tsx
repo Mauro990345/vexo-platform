@@ -1,7 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { InstagramGlyphIcon } from "@/components/BrandIcons";
+import { InstagramMonoIcon } from "@/components/BrandIcons";
+import { REACTIVATION_ACTION_BUTTON_CLASS, INSTAGRAM_ACTION_GRADIENT } from "@/components/ReactivationActionButtonStyle";
+
+const LABEL_RESET_DELAY_MS = 2000;
+const TOAST_DURATION_MS = 2500;
 
 // Fallback de clipboard: navigator.clipboard.writeText pode falhar (sem
 // permissão, contexto não-seguro, navegador antigo) — document.execCommand
@@ -41,13 +45,24 @@ async function copyToClipboard(text: string): Promise<boolean> {
 // secretária, igual ao botão de WhatsApp (que também só abre o wa.me já
 // preenchido). Sem @ do lead, dmLink vem null (ver resolveInstagramDmLink,
 // reactivation.ts) e o botão fica desativado.
+//
+// Dois avisos do mesmo clique, de propósito: o toast flutuante (mensagem
+// completa, "Mensagem copiada"/"Não foi possível copiar") E o próprio
+// rótulo do botão virando "Copiado ✓" por 2s (pedido explícito) — o toast
+// pode passar batido se o olho já saiu da linha depois de abrir a aba nova
+// do Instagram; o rótulo do botão fica ali, no lugar que o olho já estava.
 export function InstagramDmButton({ message, dmLink }: { message: string; dmLink: string | null }) {
   const [toast, setToast] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   async function handleClick() {
-    const copied = await copyToClipboard(message);
-    setToast(copied ? "Mensagem copiada" : "Não foi possível copiar");
-    window.setTimeout(() => setToast(null), 2500);
+    const ok = await copyToClipboard(message);
+    setToast(ok ? "Mensagem copiada" : "Não foi possível copiar");
+    window.setTimeout(() => setToast(null), TOAST_DURATION_MS);
+    if (ok) {
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), LABEL_RESET_DELAY_MS);
+    }
     if (dmLink) window.open(dmLink, "_blank", "noopener,noreferrer");
   }
 
@@ -57,10 +72,11 @@ export function InstagramDmButton({ message, dmLink }: { message: string; dmLink
         type="button"
         onClick={handleClick}
         disabled={!dmLink}
-        className="inline-flex items-center gap-1 rounded-lg border border-pink-400/40 bg-gradient-to-r from-pink-500/10 to-purple-500/10 px-2 py-1 text-caption font-semibold text-pink-300 transition hover:border-pink-400/60 hover:from-pink-500/20 hover:to-purple-500/20 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:from-pink-500/10 disabled:hover:to-purple-500/10"
+        style={{ background: INSTAGRAM_ACTION_GRADIENT }}
+        className={REACTIVATION_ACTION_BUTTON_CLASS}
       >
-        <InstagramGlyphIcon className="h-3 w-3" />
-        Instagram
+        <InstagramMonoIcon className="h-3 w-3" />
+        {copied ? "Copiado ✓" : "Instagram"}
       </button>
       {toast && (
         <span className="absolute -top-7 right-0 whitespace-nowrap rounded-md bg-vexo-surface2 px-2 py-1 text-caption text-vexo-fg shadow-card">

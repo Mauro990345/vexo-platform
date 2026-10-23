@@ -1,6 +1,7 @@
 import { LeadAvatar } from "@/components/LeadAvatar";
-import { WhatsAppGlyphIcon } from "@/components/BrandIcons";
+import { WhatsAppMonoIcon } from "@/components/BrandIcons";
 import { InstagramDmButton } from "@/components/InstagramDmButton";
+import { REACTIVATION_ACTION_BUTTON_CLASS, WHATSAPP_ACTION_GRADIENT } from "@/components/ReactivationActionButtonStyle";
 import type { ReactivationCard } from "@/lib/reactivation";
 
 function patientsCountLabel(n: number): string {
@@ -28,7 +29,10 @@ export function ReactivationRail({ cards }: { cards: ReactivationCard[] }) {
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-2">
-        <h2 className="text-caption font-medium uppercase tracking-wide text-vexo-muted">Reativação</h2>
+        <div className="flex items-center gap-2">
+          <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-vexo-success" />
+          <h2 className="text-xs font-semibold text-vexo-fg">Reativação</h2>
+        </div>
         <span className="text-caption text-vexo-muted">{patientsCountLabel(cards.length)}</span>
       </div>
       <div className={`space-y-1.5 ${needsScroll ? "max-h-72 overflow-y-auto pr-1" : ""}`}>
@@ -64,9 +68,10 @@ export function ReactivationRail({ cards }: { cards: ReactivationCard[] }) {
                   href={card.whatsappLink}
                   target="_blank"
                   rel="noreferrer"
-                  className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-vexo-success px-2 py-1 text-caption font-semibold text-vexo-bg hover:opacity-90"
+                  style={{ background: WHATSAPP_ACTION_GRADIENT }}
+                  className={REACTIVATION_ACTION_BUTTON_CLASS}
                 >
-                  <WhatsAppGlyphIcon className="h-3 w-3" />
+                  <WhatsAppMonoIcon className="h-3 w-3" />
                   WhatsApp
                 </a>
               ) : (

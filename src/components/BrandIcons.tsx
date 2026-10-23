@@ -47,6 +47,23 @@ export function InstagramGlyphIcon({ className }: { className?: string }) {
   );
 }
 
+// Versão MONOCROMÁTICA do glifo do Instagram acima — mesmos traços
+// (quadrado da câmera + lente + flash), só sem o squircle/gradiente de
+// fundo: pensada pra ir DENTRO de um botão que já tem a própria cor de
+// fundo (ver ReactivationRail.tsx), onde o ícone colorido por cima do
+// botão colorido ficaria dois fundos empilhados. currentColor (não
+// "white" fixo) pra herdar exatamente a cor de texto do botão (text-vexo-fg),
+// sem introduzir um tom novo fora da paleta.
+export function InstagramMonoIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
+      <rect x="3.2" y="3.2" width="17.6" height="17.6" rx="5" fill="none" stroke="currentColor" strokeWidth="1.8" />
+      <circle cx="12" cy="12" r="4.6" fill="none" stroke="currentColor" strokeWidth="1.8" />
+      <circle cx="16.3" cy="7.7" r="1.15" fill="currentColor" />
+    </svg>
+  );
+}
+
 // Glifo do WhatsApp: squircle com gradiente verde (mais claro em cima, mais
 // escuro embaixo), círculo branco vazado GRANDE (quase tocando as bordas)
 // com um "rabinho" de balão de conversa saindo do canto inferior esquerdo
@@ -74,6 +91,28 @@ export function WhatsAppGlyphIcon({ className }: { className?: string }) {
       <path
         d="M9.1 7.9c-.22-.5-.38-.5-.58-.5-.15 0-.32 0-.5.02-.17.02-.45.08-.68.36-.24.28-.9.9-.9 2.2 0 1.3.93 2.56 1.06 2.74.13.18 1.84 2.94 4.53 4.03 2.24.9 2.7.72 3.19.68.5-.04 1.6-.65 1.83-1.29.22-.63.22-1.17.15-1.29-.06-.11-.24-.18-.5-.32-.27-.13-1.58-.78-1.82-.87-.25-.09-.43-.14-.61.13-.18.27-.7.87-.85 1.05-.16.18-.32.2-.59.07-.27-.13-1.13-.42-2.16-1.33-.8-.71-1.34-1.6-1.5-1.87-.15-.27-.01-.42.12-.55.12-.12.27-.32.4-.48.13-.16.18-.27.26-.45.09-.18.04-.35-.02-.48-.07-.14-.6-1.5-.83-2.06Z"
         fill="white"
+      />
+    </svg>
+  );
+}
+
+// Versão MONOCROMÁTICA do glifo do WhatsApp acima (mesmo motivo de
+// InstagramMonoIcon) — mesmos dois traços (balão + fone), sem o
+// squircle/gradiente de fundo, currentColor em vez de "white" fixo.
+export function WhatsAppMonoIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
+      <path
+        d="M12 3.6a8.4 8.4 0 0 0-7.15 12.8L3.6 20.4l4.15-1.2A8.4 8.4 0 1 0 12 3.6Z"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinejoin="round"
+        strokeLinecap="round"
+      />
+      <path
+        d="M9.1 7.9c-.22-.5-.38-.5-.58-.5-.15 0-.32 0-.5.02-.17.02-.45.08-.68.36-.24.28-.9.9-.9 2.2 0 1.3.93 2.56 1.06 2.74.13.18 1.84 2.94 4.53 4.03 2.24.9 2.7.72 3.19.68.5-.04 1.6-.65 1.83-1.29.22-.63.22-1.17.15-1.29-.06-.11-.24-.18-.5-.32-.27-.13-1.58-.78-1.82-.87-.25-.09-.43-.14-.61.13-.18.27-.7.87-.85 1.05-.16.18-.32.2-.59.07-.27-.13-1.13-.42-2.16-1.33-.8-.71-1.34-1.6-1.5-1.87-.15-.27-.01-.42.12-.55.12-.12.27-.32.4-.48.13-.16.18-.27.26-.45.09-.18.04-.35-.02-.48-.07-.14-.6-1.5-.83-2.06Z"
+        fill="currentColor"
       />
     </svg>
   );
