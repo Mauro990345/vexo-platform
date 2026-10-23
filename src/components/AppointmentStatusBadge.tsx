@@ -44,13 +44,24 @@ const STATUS_CLASSES: Record<string, string> = {
 // bg do "Faltou" (NO_SHOW) é a MESMA cor usada pelo botão "Não compareceu"
 // já marcado (ver NoShowButton, também em /80 e rounded-sm) — os dois
 // aparecem lado a lado na mesma linha da lista, precisam ficar na mesma
-// família de cor E forma. Nenhum dos dois tem borda — pedido explícito: só
-// o fundo dessaturado, sem contorno.
-function statusTint(status: string): { bg: string; text: string } {
+// família de cor E forma. "Faltou" não tem borda — pedido explícito: só o
+// fundo dessaturado, sem contorno (igual sempre foi).
+//
+// "Agendado"/"Confirmado" (ajuste de 2026-10): virou cinza neutro, SEM
+// preenchimento, só contorno fino — pedido explícito pra não ter azul nem
+// verde aqui (evita confundir com "Compareceu" à primeira vista). Por
+// isso não usa mais vexo-panelStatusScheduledBg (ver nota em
+// page-style-overrides.ts) — border/text fixos nos tokens neutros já
+// usados em toda a tela (vexo-border, vexo-muted).
+//
+// "Compareceu" ficou um verde um pouco mais vivo (ver defaultHex em
+// page-style-overrides.ts) pra se diferenciar claramente do cinza de
+// "Agendado" — ganhou também o "✓" antes do texto (ver render abaixo).
+function statusTint(status: string): { bg: string; text: string; border?: string } {
   switch (status) {
     case "SCHEDULED":
     case "CONFIRMED":
-      return { bg: "bg-vexo-panelStatusScheduledBg/80", text: "text-vexo-fg" };
+      return { bg: "", text: "text-vexo-muted", border: "border border-vexo-border" };
     case "COMPLETED":
       return { bg: "bg-vexo-panelStatusCompletedBg/80", text: "text-vexo-fg" };
     case "NO_SHOW":
@@ -66,7 +77,10 @@ export function AppointmentStatusBadge({ status, compact }: { status: string; co
   if (compact) {
     const tint = statusTint(status);
     return (
-      <span className={`inline-flex items-center rounded-sm px-1.5 py-0.5 text-caption font-medium leading-none ${tint.bg} ${tint.text}`}>
+      <span
+        className={`inline-flex items-center gap-0.5 rounded-sm px-1.5 py-0.5 text-caption font-medium leading-none ${tint.bg} ${tint.text} ${tint.border ?? ""}`}
+      >
+        {status === "COMPLETED" && <span aria-hidden="true">✓</span>}
         {label}
       </span>
     );
