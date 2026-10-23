@@ -153,6 +153,14 @@ export const PAGE_STYLE_SECTIONS: {
         // tom já escuro/dessaturado, texto claro por cima, sem borda).
         // Cobre "Agendado" e "Confirmado" (mesmo grupo semântico: "ainda
         // vai acontecer").
+        //
+        // ATENÇÃO (ajuste de 2026-10): o badge "Agendado/Confirmado" virou
+        // cinza neutro, só contorno, SEM preenchimento (pedido explícito:
+        // não podia mais ter azul nem verde, pra não se confundir com
+        // "Compareceu") — statusTint não usa mais esta variável pra esse
+        // badge. Este campo (e um eventual valor personalizado por
+        // clínica) ficou sem efeito visual nesse badge especificamente;
+        // mantido aqui sem remover dado salvo, caso volte a ser usado.
         key: "painel.status.scheduled.background",
         cssVar: "--vexo-painel-status-scheduled-bg",
         defaultHex: "#2b644c",
@@ -167,10 +175,17 @@ export const PAGE_STYLE_SECTIONS: {
         // NO_SHOW). Agora é o badge "Compareceu" DERIVADO (horário já
         // passou e não foi marcado "Não compareceu", ver
         // appointmentDisplayStatus em metrics.ts) — trocado pra verde,
-        // pedido explícito ("verde preenchido") pra esse estado.
+        // pedido explícito ("verde preenchido") pra esse estado. Ajuste de
+        // 2026-10: verde um pouco mais vivo (#1f7a4d -> #238c5c, mesma
+        // família, ~20% mais próximo de vexo-success) pra ficar nitidamente
+        // diferente do badge "Agendado" (agora cinza neutro, sem preenchimento
+        // — ver statusTint em AppointmentStatusBadge.tsx). O botão WhatsApp da
+        // Reativação usava esse MESMO token pra borda — passou a usar um
+        // valor próprio e fixo (vexo-whatsappActionBorder, ver globals.css)
+        // pra não ser afetado por esta mudança nem por personalização futura.
         key: "painel.status.completed.background",
         cssVar: "--vexo-painel-status-completed-bg",
-        defaultHex: "#1f7a4d",
+        defaultHex: "#238c5c",
         label: "Status \"Compareceu\" — fundo do badge",
         description: "Cor de fundo (tingida, baixa opacidade) do badge de status \"Compareceu\" na lista de Agendamentos do Painel — aparece quando o horário do agendamento já passou e ele não foi marcado como \"Não compareceu\".",
       },

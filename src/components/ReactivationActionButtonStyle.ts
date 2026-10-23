@@ -9,16 +9,17 @@
 export const REACTIVATION_ACTION_BUTTON_BASE_CLASS =
   "inline-flex h-[23px] shrink-0 items-center justify-center gap-1 rounded-lg px-1.5 text-card font-semibold leading-none transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-vexo-accent focus-visible:ring-offset-1 focus-visible:ring-offset-vexo-surface disabled:cursor-not-allowed disabled:opacity-40";
 
-// WhatsApp: borda no MESMO token/cor do verde da tag "Compareceu" do
-// Painel — vexo-panelStatusCompletedBg (ver statusTint em
-// AppointmentStatusBadge.tsx). Texto/ícone num tom MAIS CLARO da mesma
-// família de verde, pra legibilidade (pedido explícito) — vexo-success
-// (#34d399, token já existente, usado em todo o produto pra "sucesso/
-// positivo") é visivelmente mais claro que o verde escuro da borda
-// (default #1f7a4d, ver page-style-overrides.ts), sem precisar inventar
-// nenhum tom novo fora da paleta. Hover continua no tom da BORDA a 10%
-// de opacidade (pedido explícito — não muda).
-export const WHATSAPP_ACTION_BUTTON_CLASS = `${REACTIVATION_ACTION_BUTTON_BASE_CLASS} border border-vexo-panelStatusCompletedBg text-vexo-success hover:bg-vexo-panelStatusCompletedBg/10`;
+// WhatsApp: borda num token PRÓPRIO e fixo (vexo-whatsappActionBorder,
+// ver globals.css) — não mais o mesmo token do badge "Compareceu"
+// (vexo-panelStatusCompletedBg). Motivo (ajuste de 2026-10): o badge
+// "Compareceu" passou a usar um verde mais vivo, e esse badge também pode
+// ser personalizado por clínica em Configurações — o botão NÃO pode
+// acompanhar nenhuma dessas mudanças (pedido explícito, aparência
+// idêntica), por isso um valor travado, igual ao que o badge usava antes
+// desse ajuste (#1f7a4d). Texto/ícone continuam em vexo-success (token já
+// existente, inalterado por este ajuste). Hover continua no tom da BORDA
+// a 10% de opacidade (pedido explícito — não muda).
+export const WHATSAPP_ACTION_BUTTON_CLASS = `${REACTIVATION_ACTION_BUTTON_BASE_CLASS} border border-vexo-whatsappActionBorder text-vexo-success hover:bg-vexo-whatsappActionBorder/10`;
 
 // Instagram: CSS não tem "borda em degradê" direto — sem token/cor nova
 // pra resolver isso, a forma mais simples e robusta é o truque do wrapper

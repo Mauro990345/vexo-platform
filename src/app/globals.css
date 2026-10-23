@@ -52,6 +52,14 @@
   --vexo-success: 52 211 153; /* #34d399 — sucesso/positivo (conectado, compareceu, agendado) */
   --vexo-error: 248 113 113; /* #f87171 — erro/negativo (falha, faltou, precisa de humano) */
   --vexo-warning: 251 191 36; /* #fbbf24 — alerta/atenção (conectando, pendente) */
+
+  /* Botão WhatsApp da Reativação (ver ReactivationActionButtonStyle.ts) —
+     valor FIXO, travado no verde que o badge "Compareceu" usava antes do
+     ajuste de 2026-10 (ver painel.status.completed.background em
+     page-style-overrides.ts, que foi deixado mais vivo nesse ajuste).
+     Token próprio de propósito: o botão não pode mudar de aparência
+     quando a cor do badge mudar ou for personalizada por clínica. */
+  --vexo-whatsapp-action-border: 31 122 77; /* #1f7a4d */
 }
 
 body {

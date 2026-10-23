@@ -56,6 +56,9 @@ const config: Config = {
           panelStatusScheduledBg: "rgb(var(--vexo-painel-status-scheduled-bg) / <alpha-value>)",
           panelStatusCompletedBg: "rgb(var(--vexo-painel-status-completed-bg) / <alpha-value>)",
           panelStatusNegativeBg: "rgb(var(--vexo-painel-status-negative-bg) / <alpha-value>)",
+          // Token fixo e independente do badge "Compareceu" acima — usado só
+          // pelo botão WhatsApp da Reativação, ver globals.css.
+          whatsappActionBorder: "rgb(var(--vexo-whatsapp-action-border) / <alpha-value>)",
         },
       },
       fontFamily: {
