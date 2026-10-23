@@ -4,12 +4,16 @@ import { prisma } from "@/lib/prisma";
 import { requireInternalSession } from "@/lib/session";
 import { Tabs } from "@/components/Tabs";
 import { TemplateMessageField } from "@/components/TemplateMessageField";
-import { updateClinicSettings, updateClinicReminders, updateClinicReactivation, logApproach } from "../../actions";
 import {
-  REACTIVATION_THRESHOLD_OPTIONS,
-  TEST_PERIOD_DAYS,
-  DEFAULT_REACTIVATION_THRESHOLD_DAYS_LIST,
-} from "@/lib/reactivation";
+  updateClinicSettings,
+  updateClinicReminders,
+  updateClinicReactivationThresholds,
+  updateClinicReactivationWhatsappMessages,
+  updateClinicReactivationInstagramMessages,
+  logApproach,
+} from "../../actions";
+import { DEFAULT_REACTIVATION_THRESHOLD_DAYS_LIST } from "@/lib/reactivation";
+import { ReactivationThresholdsForm, ReactivationMessageBlockForm } from "@/components/ReactivationConfigForms";
 
 const REMINDER_VARIABLES = [
   { token: "{{primeiro_nome}}", label: "+ Nome do lead" },
@@ -250,11 +254,15 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
                 {/* Faixa "Reativação" do Painel do cliente (ver
                     ClientPanelView.tsx/ReactivationRail.tsx) — interna, só
                     aparece aqui em Automações (nunca pro cliente nem no
-                    Painel dele). Layout compacto, mesmo padrão visual da
-                    seção de Lembretes acima: chips de período numa linha só
-                    (sem <details> — são poucos, cabem direto) + UMA linha
-                    <details> pras 5 mensagens (resumo fechado, abre pra
-                    editar), não 5 campos grandes sempre visíveis. */}
+                    Painel dele). TRÊS salvamentos INDEPENDENTES (pedido
+                    explícito — era um form só, um botão gravava tudo):
+                    períodos (ReactivationThresholdsForm) e cada bloco de
+                    mensagens (ReactivationMessageBlockForm, um pro WhatsApp
+                    e outro pro Instagram) têm a própria ação/botão/"Salvo
+                    ✓", nunca um sobrescrevendo o outro. Componentes client
+                    próprios (ReactivationConfigForms.tsx) só por causa
+                    desse feedback — um <form action={fn}> puro não dá
+                    gancho de "terminou com sucesso" pra mostrar o check. */}
                 <div className="mt-5">
                   <h2 className="text-xs font-semibold">Reativação</h2>
                   <p className="mt-1 text-caption text-vexo-muted">
@@ -265,154 +273,28 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
                     nenhum prazo marcado, a faixa fica desligada.
                   </p>
 
-                  <form
-                    action={updateClinicReactivation.bind(null, clinic.id)}
-                    className="mt-2 space-y-2 rounded-xl border border-vexo-border bg-vexo-surface p-3"
-                  >
-                    <div>
-                      <p className="mb-1.5 text-xs text-vexo-muted">Prazos sem retorno</p>
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        {REACTIVATION_THRESHOLD_OPTIONS.map((days) => (
-                          <label key={days} className="cursor-pointer">
-                            <input
-                              type="checkbox"
-                              name="thresholdDays"
-                              value={days}
-                              defaultChecked={reactivationThresholdSet.has(days)}
-                              className="peer sr-only"
-                            />
-                            <span className="inline-flex items-center gap-1 rounded-full border border-vexo-border px-2.5 py-1 text-caption font-medium text-vexo-muted transition peer-checked:border-vexo-accent peer-checked:bg-vexo-accent/15 peer-checked:text-vexo-accent">
-                              {days} dias
-                              {(TEST_PERIOD_DAYS as readonly number[]).includes(days) && (
-                                <span className="opacity-70">(teste)</span>
-                              )}
-                            </span>
-                          </label>
-                        ))}
-                      </div>
-                    </div>
+                  <div className="mt-2 space-y-2 rounded-xl border border-vexo-border bg-vexo-surface p-3">
+                    <ReactivationThresholdsForm
+                      action={updateClinicReactivationThresholds.bind(null, clinic.id)}
+                      defaultSelected={reactivationThresholdSet}
+                    />
 
-                    <details className="group rounded-lg border border-vexo-border bg-vexo-surface2">
-                      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2">
-                        <div className="flex min-w-0 items-center gap-2.5">
-                          <span className="shrink-0 text-card text-vexo-muted">Mensagens WhatsApp</span>
-                          <span className="truncate text-xs">{reactivationWhatsappSummary}</span>
-                        </div>
-                        <span className="shrink-0 text-card text-vexo-muted transition group-open:rotate-180">▾</span>
-                      </summary>
-                      <div className="space-y-2 border-t border-vexo-border px-3 pb-3 pt-2.5">
-                        <TemplateMessageField
-                          name="message1"
-                          label="Mensagem 1"
-                          required={false}
-                          rows={2}
-                          variables={[]}
-                          defaultValue={clinic.reactivationConfig?.message1 ?? ""}
-                          placeholder="Vazio usa um texto padrão de acompanhamento, sem citar serviço/procedimento."
-                        />
-                        <TemplateMessageField
-                          name="message2"
-                          label="Mensagem 2"
-                          required={false}
-                          rows={2}
-                          variables={[]}
-                          defaultValue={clinic.reactivationConfig?.message2 ?? ""}
-                          placeholder="Vazio usa um texto padrão de acompanhamento, sem citar serviço/procedimento."
-                        />
-                        <TemplateMessageField
-                          name="message3"
-                          label="Mensagem 3"
-                          required={false}
-                          rows={2}
-                          variables={[]}
-                          defaultValue={clinic.reactivationConfig?.message3 ?? ""}
-                          placeholder="Vazio usa um texto padrão de acompanhamento, sem citar serviço/procedimento."
-                        />
-                        <TemplateMessageField
-                          name="message4"
-                          label="Mensagem 4"
-                          required={false}
-                          rows={2}
-                          variables={[]}
-                          defaultValue={clinic.reactivationConfig?.message4 ?? ""}
-                          placeholder="Vazio usa um texto padrão de acompanhamento, sem citar serviço/procedimento."
-                        />
-                        <TemplateMessageField
-                          name="message5"
-                          label="Mensagem 5"
-                          required={false}
-                          rows={2}
-                          variables={[]}
-                          defaultValue={clinic.reactivationConfig?.message5 ?? ""}
-                          placeholder="Vazio usa um texto padrão de acompanhamento, sem citar serviço/procedimento."
-                        />
-                      </div>
-                    </details>
+                    <ReactivationMessageBlockForm
+                      action={updateClinicReactivationWhatsappMessages.bind(null, clinic.id)}
+                      title="Mensagens WhatsApp"
+                      summary={reactivationWhatsappSummary}
+                      fieldNamePrefix="message"
+                      defaultValues={reactivationWhatsappMessages}
+                    />
 
-                    <details className="group rounded-lg border border-vexo-border bg-vexo-surface2">
-                      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2">
-                        <div className="flex min-w-0 items-center gap-2.5">
-                          <span className="shrink-0 text-card text-vexo-muted">Mensagens Instagram</span>
-                          <span className="truncate text-xs">{reactivationInstagramSummary}</span>
-                        </div>
-                        <span className="shrink-0 text-card text-vexo-muted transition group-open:rotate-180">▾</span>
-                      </summary>
-                      <div className="space-y-2 border-t border-vexo-border px-3 pb-3 pt-2.5">
-                        <TemplateMessageField
-                          name="instagramMessage1"
-                          label="Mensagem 1"
-                          required={false}
-                          rows={2}
-                          variables={[]}
-                          defaultValue={clinic.reactivationConfig?.instagramMessage1 ?? ""}
-                          placeholder="Vazio usa um texto padrão de acompanhamento, sem citar serviço/procedimento."
-                        />
-                        <TemplateMessageField
-                          name="instagramMessage2"
-                          label="Mensagem 2"
-                          required={false}
-                          rows={2}
-                          variables={[]}
-                          defaultValue={clinic.reactivationConfig?.instagramMessage2 ?? ""}
-                          placeholder="Vazio usa um texto padrão de acompanhamento, sem citar serviço/procedimento."
-                        />
-                        <TemplateMessageField
-                          name="instagramMessage3"
-                          label="Mensagem 3"
-                          required={false}
-                          rows={2}
-                          variables={[]}
-                          defaultValue={clinic.reactivationConfig?.instagramMessage3 ?? ""}
-                          placeholder="Vazio usa um texto padrão de acompanhamento, sem citar serviço/procedimento."
-                        />
-                        <TemplateMessageField
-                          name="instagramMessage4"
-                          label="Mensagem 4"
-                          required={false}
-                          rows={2}
-                          variables={[]}
-                          defaultValue={clinic.reactivationConfig?.instagramMessage4 ?? ""}
-                          placeholder="Vazio usa um texto padrão de acompanhamento, sem citar serviço/procedimento."
-                        />
-                        <TemplateMessageField
-                          name="instagramMessage5"
-                          label="Mensagem 5"
-                          required={false}
-                          rows={2}
-                          variables={[]}
-                          defaultValue={clinic.reactivationConfig?.instagramMessage5 ?? ""}
-                          placeholder="Vazio usa um texto padrão de acompanhamento, sem citar serviço/procedimento."
-                        />
-                      </div>
-                    </details>
-
-                    <button
-                      type="submit"
-                      className="rounded-lg border border-vexo-accent px-2.5 py-1.5 text-xs font-medium text-vexo-accent hover:bg-vexo-accent/10"
-                    >
-                      Salvar reativação
-                    </button>
-                  </form>
+                    <ReactivationMessageBlockForm
+                      action={updateClinicReactivationInstagramMessages.bind(null, clinic.id)}
+                      title="Mensagens Instagram"
+                      summary={reactivationInstagramSummary}
+                      fieldNamePrefix="instagramMessage"
+                      defaultValues={reactivationInstagramMessages}
+                    />
+                  </div>
                 </div>
               </section>
             ),

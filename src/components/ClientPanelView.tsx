@@ -225,7 +225,10 @@ export async function ClientPanelView({
 
           {/* Coluna direita: agendamentos */}
           <div className="space-y-3">
-            <h2 className="text-caption font-medium uppercase tracking-wide text-vexo-muted">Agendamentos</h2>
+            <div className="flex items-center gap-2">
+              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-vexo-accent" />
+              <h2 className="text-xs font-semibold text-vexo-fg">Agendamentos</h2>
+            </div>
             <NeedsHumanBanner leads={needsHumanLeads} />
             <div className="space-y-2">
               {appointments.map((a) => {

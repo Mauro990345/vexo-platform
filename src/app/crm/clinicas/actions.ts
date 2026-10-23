@@ -243,19 +243,22 @@ export async function updateClinicReminders(clinicId: string, formData: FormData
 }
 
 // Seção "Reativação" de Automações — interna (só Mauro vê, nunca aparece
-// pro cliente nem no Painel dele, ver automacoes/page.tsx). Formulário
-// PRÓPRIO, mesmo motivo de updateClinicReminders acima: nunca arriscar
-// apagar endereço/WhatsApp/ativa/lembretes por reenviar um form que não os
-// contém. sequenceCounter NUNCA é lido/escrito aqui — fica intocado pelo
-// upsert parcial (ver getReactivationCards, reactivation.ts), preservando
-// a posição da rotação em sequência mesmo quando a clínica edita os
-// períodos marcados ou as mensagens.
+// pro cliente nem no Painel dele, ver automacoes/page.tsx). TRÊS ações
+// independentes (pedido explícito — eram uma só, um botão gravava tudo):
+// cada uma grava SÓ o próprio bloco (períodos / mensagens de WhatsApp /
+// mensagens de Instagram) via um upsert PARCIAL — nunca inclui os campos
+// dos outros dois blocos no `update`, então salvar um nunca sobrescreve
+// (ou apaga) os outros, mesmo que o form deles nunca tenha sido reenviado
+// nesta visita à página. sequenceCounter/instagramSequenceCounter NUNCA
+// são lidos/escritos aqui — ficam intocados pelo upsert parcial (ver
+// getReactivationCards, reactivation.ts), preservando a posição da
+// rotação em sequência mesmo quando a clínica edita períodos ou mensagens.
 //
-// "thresholdDays" agora é um grupo de checkboxes (ver automacoes/page.tsx),
-// não um <select> único — formData.getAll devolve só os marcados. Lista
-// vazia é um valor VÁLIDO de propósito (pedido explícito: nenhum marcado =
+// "thresholdDays" é um grupo de checkboxes (ver automacoes/page.tsx), não
+// um <select> único — formData.getAll devolve só os marcados. Lista vazia
+// é um valor VÁLIDO de propósito (pedido explícito: nenhum marcado =
 // Reativação desligada pra essa clínica), nunca lança erro por estar vazia.
-export async function updateClinicReactivation(clinicId: string, formData: FormData) {
+export async function updateClinicReactivationThresholds(clinicId: string, formData: FormData) {
   await requireInternalSession();
 
   const thresholdDaysList = formData
@@ -263,15 +266,39 @@ export async function updateClinicReactivation(clinicId: string, formData: FormD
     .map((v) => parseInt(String(v), 10))
     .filter(isValidReactivationThresholdDays);
 
+  await prisma.reactivationConfig.upsert({
+    where: { clinicId },
+    create: { clinicId, thresholdDaysList },
+    update: { thresholdDaysList },
+  });
+
+  revalidatePath(`/crm/clinicas/${clinicId}/automacoes`);
+}
+
+export async function updateClinicReactivationWhatsappMessages(clinicId: string, formData: FormData) {
+  await requireInternalSession();
+
   const message1 = String(formData.get("message1") ?? "").trim() || null;
   const message2 = String(formData.get("message2") ?? "").trim() || null;
   const message3 = String(formData.get("message3") ?? "").trim() || null;
   const message4 = String(formData.get("message4") ?? "").trim() || null;
   const message5 = String(formData.get("message5") ?? "").trim() || null;
 
-  // Conjunto SEPARADO de mensagens do Instagram (pedido explícito: "o
-  // Instagram tem as suas próprias 5 mensagens, separadas das do
-  // WhatsApp") — mesmo formulário, campos com nome próprio.
+  await prisma.reactivationConfig.upsert({
+    where: { clinicId },
+    create: { clinicId, message1, message2, message3, message4, message5 },
+    update: { message1, message2, message3, message4, message5 },
+  });
+
+  revalidatePath(`/crm/clinicas/${clinicId}/automacoes`);
+}
+
+// Conjunto SEPARADO de mensagens do Instagram (pedido explícito: "o
+// Instagram tem as suas próprias 5 mensagens, separadas das do WhatsApp")
+// — campos com nome próprio, form próprio, ação própria.
+export async function updateClinicReactivationInstagramMessages(clinicId: string, formData: FormData) {
+  await requireInternalSession();
+
   const instagramMessage1 = String(formData.get("instagramMessage1") ?? "").trim() || null;
   const instagramMessage2 = String(formData.get("instagramMessage2") ?? "").trim() || null;
   const instagramMessage3 = String(formData.get("instagramMessage3") ?? "").trim() || null;
@@ -280,33 +307,8 @@ export async function updateClinicReactivation(clinicId: string, formData: FormD
 
   await prisma.reactivationConfig.upsert({
     where: { clinicId },
-    create: {
-      clinicId,
-      thresholdDaysList,
-      message1,
-      message2,
-      message3,
-      message4,
-      message5,
-      instagramMessage1,
-      instagramMessage2,
-      instagramMessage3,
-      instagramMessage4,
-      instagramMessage5,
-    },
-    update: {
-      thresholdDaysList,
-      message1,
-      message2,
-      message3,
-      message4,
-      message5,
-      instagramMessage1,
-      instagramMessage2,
-      instagramMessage3,
-      instagramMessage4,
-      instagramMessage5,
-    },
+    create: { clinicId, instagramMessage1, instagramMessage2, instagramMessage3, instagramMessage4, instagramMessage5 },
+    update: { instagramMessage1, instagramMessage2, instagramMessage3, instagramMessage4, instagramMessage5 },
   });
 
   revalidatePath(`/crm/clinicas/${clinicId}/automacoes`);

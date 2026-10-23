@@ -47,11 +47,7 @@ export function ApproachMetricsToggle({ periods }: { periods: PeriodOption[] }) 
         <PanelMetricCard label="Abordados" value={String(current.metrics.approached)} />
         <PanelMetricCard label="Em conversa" value={String(current.metrics.responded)} />
         <PanelMetricCard label="Agendaram" value={String(current.metrics.scheduled)} highlight />
-        <PanelMetricCard
-          label="Compareceram"
-          value={String(current.attendance.attended)}
-          helper={`${current.attendance.attended} de ${current.attendance.pastDue} agendados`}
-        />
+        <PanelMetricCard label="Compareceram" value={String(current.attendance.attended)} />
       </div>
     </div>
   );
