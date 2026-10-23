@@ -50,6 +50,7 @@ import {
   type ResultPhotoInput,
 } from "@/lib/result-photo-message";
 import { detectStagnation, STAGNATION_SIMILARITY_THRESHOLD, STAGNATION_WINDOW_SIZE } from "@/lib/loop-guard";
+import { findMostRecentAttendedAppointment, buildReturningPatientContext } from "@/lib/returning-patient-context";
 import { parseBrazilLocalDateTime, formatAsBrazilLocalDateTime, startOfBrazilDay } from "@/lib/timezone";
 import { resolveBatchTimestamps } from "@/lib/message-batch-timestamps";
 
@@ -1404,6 +1405,23 @@ export async function handleInboundInstagramMessage(
     `dor/queixa/objetivo a conversa pode seguir normalmente pro agendamento, como o resto ` +
     `deste prompt já orienta.]`;
 
+  // Irmão de interestGateContext (acima), não dentro dele — pedido
+  // explícito. Busca por Lead.id (não por conversation.id): funciona
+  // mesmo quando a conversa antiga foi marcada "Perdido" e esta aqui é
+  // uma Conversation NOVA (ver a busca por status lá no topo desta
+  // função) — o vínculo que sobra é só o Lead. Reaproveita `reengaged`
+  // (calculado bem acima, reopeningFromFollowUp || wentSilent) — mesmo
+  // sinal já usado pra decidir reengajamento em outro lugar, sem duplicar
+  // lógica nova de "o lead voltou depois de um intervalo". Ver
+  // returning-patient-context.ts pro porquê e pros critérios exatos de
+  // "já foi atendido".
+  const leadPastAppointments = await prisma.appointment.findMany({
+    where: { leadId: lead.id },
+    select: { scheduledAt: true, status: true },
+  });
+  const mostRecentAttendedAppointment = findMostRecentAttendedAppointment(leadPastAppointments, now);
+  const returningPatientContext = buildReturningPatientContext({ mostRecentAttendedAppointment, reengaged });
+
   // Só existe quando pendingAttendanceCheck (acima, calculado ANTES desta
   // chamada) classificou a resposta deste turno como NAO_REMARCA — ou seja,
   // a sequência de confirmação de presença (apresentação + vídeo +
@@ -1466,11 +1484,22 @@ export async function handleInboundInstagramMessage(
     systemPrompt: basePrompt,
     // interestGateContext vai DEPOIS de dateTimeContext de propósito — ver
     // comentário grande acima (tem prioridade sobre qualquer instrução de
-    // agendamento incondicional no prompt da clínica). resultPhotoHintContext
-    // vai logo depois dele (mesmo tema: pacing de quando oferecer algo ao
-    // lead). attendanceConfirmedContext e clinicContactContext (quando
-    // existem) vão por último — as mais específicas/recentes.
-    contextNote: [dateTimeContext, interestGateContext, resultPhotoHintContext, attendanceConfirmedContext, clinicContactContext]
+    // agendamento incondicional no prompt da clínica). returningPatientContext
+    // vai logo depois dele, de propósito (pedido explícito: precisa ter
+    // PRIORIDADE sobre o exemplo de pergunta de abertura de lead frio de
+    // interestGateContext, sem remover a cautela de não empurrar agendamento
+    // sem interesse — ver returning-patient-context.ts). resultPhotoHintContext
+    // continua depois (mesmo tema: pacing de quando oferecer algo ao lead).
+    // attendanceConfirmedContext e clinicContactContext (quando existem) vão
+    // por último — as mais específicas/recentes.
+    contextNote: [
+      dateTimeContext,
+      interestGateContext,
+      returningPatientContext,
+      resultPhotoHintContext,
+      attendanceConfirmedContext,
+      clinicContactContext,
+    ]
       .filter(Boolean)
       .join("\n\n"),
     history: windowedHistory,
