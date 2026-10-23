@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { toChatHistory } from "./chat-history";
+import { toChatHistory, toLabeledChatHistory } from "./chat-history";
 
 describe("toChatHistory", () => {
   it("converte mensagens alternadas normalmente, sem juntar nada", () => {
@@ -54,5 +54,70 @@ describe("toChatHistory", () => {
 
   it("devolve lista vazia pra histórico vazio", () => {
     expect(toChatHistory([])).toEqual([]);
+  });
+});
+
+// Bug real reportado (lead "Leonardo da Silva"): a IA respondeu a um lead
+// que retornava depois de uma sequência de follow-up como se fosse o
+// primeiro contato — o histórico cru (toChatHistory, acima) não dava
+// nenhuma pista de autor/tempo pro modelo distinguir isso. Esta variante
+// rotula cada mensagem; os testes abaixo cobrem exatamente essa distinção.
+describe("toLabeledChatHistory", () => {
+  it("rotula cada mensagem com autor e data/hora em Brasília, sem alterar o texto original", () => {
+    const turns = toLabeledChatHistory([
+      { sender: "LEAD", content: "Percebo rugas, queria saber sobre botox", createdAt: new Date("2026-10-14T12:00:00Z") },
+      { sender: "AI", content: "Claro! Podemos agendar uma avaliação.", createdAt: new Date("2026-10-14T12:05:00Z") },
+    ]);
+    expect(turns).toEqual([
+      { role: "user", content: "[14/10/2026 09:00 — Lead] Percebo rugas, queria saber sobre botox" },
+      { role: "assistant", content: "[14/10/2026 09:05 — IA] Claro! Podemos agendar uma avaliação." },
+    ]);
+  });
+
+  it('rotula mensagem AI marcada isFollowUp como "Follow-up automático", não "IA"', () => {
+    const turns = toLabeledChatHistory([
+      {
+        sender: "AI",
+        content: "Essa é a última vez que vou te escrever sobre isso :)",
+        createdAt: new Date("2026-10-20T12:00:00Z"),
+        isFollowUp: true,
+      },
+    ]);
+    expect(turns).toEqual([
+      { role: "assistant", content: "[20/10/2026 09:00 — Follow-up automático] Essa é a última vez que vou te escrever sobre isso :)" },
+    ]);
+  });
+
+  it("rotula HUMAN como Atendente humano (papel assistant, igual AI)", () => {
+    const turns = toLabeledChatHistory([
+      { sender: "HUMAN", content: "Posso te ajudar por aqui", createdAt: new Date("2026-10-14T12:00:00Z") },
+    ]);
+    expect(turns[0]!.role).toBe("assistant");
+    expect(turns[0]!.content).toContain("Atendente humano");
+  });
+
+  it("junta mensagens consecutivas do mesmo papel em linhas separadas, cada uma com seu próprio rótulo", () => {
+    const turns = toLabeledChatHistory([
+      { sender: "LEAD", content: "Oi", createdAt: new Date("2026-10-14T12:00:00Z") },
+      { sender: "LEAD", content: "tudo bem?", createdAt: new Date("2026-10-14T12:00:05Z") },
+    ]);
+    expect(turns).toHaveLength(1);
+    expect(turns[0]!.content).toBe(
+      "[14/10/2026 09:00 — Lead] Oi\n[14/10/2026 09:00 — Lead] tudo bem?"
+    );
+  });
+
+  it("ignora mensagens SYSTEM, igual toChatHistory", () => {
+    const turns = toLabeledChatHistory([
+      { sender: "LEAD", content: "Oi", createdAt: new Date("2026-10-14T12:00:00Z") },
+      { sender: "SYSTEM", content: "[vídeo]", createdAt: new Date("2026-10-14T12:01:00Z") },
+      { sender: "LEAD", content: "recebi o vídeo", createdAt: new Date("2026-10-14T12:02:00Z") },
+    ]);
+    expect(turns).toHaveLength(1);
+    expect(turns[0]!.role).toBe("user");
+  });
+
+  it("devolve lista vazia pra histórico vazio", () => {
+    expect(toLabeledChatHistory([])).toEqual([]);
   });
 });

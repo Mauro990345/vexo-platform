@@ -88,6 +88,26 @@ export function formatAsBrazilLocalDateTime(date: Date): string {
   );
 }
 
+// Rótulo de data/hora em Brasília pra uso DENTRO do histórico mandado à IA
+// (ver toLabeledChatHistory, chat-history.ts) — formato legível por humano
+// (ex.: "23/10/2026 20:03"), nunca o "AAAA-MM-DDTHH:mm" de máquina de
+// formatAsBrazilLocalDateTime acima (esse outro precisa ser reversível por
+// parseBrazilLocalDateTime; este aqui só precisa ser lido, nunca reparseado).
+// Usa Intl (não a aritmética fixa acima) de propósito: é só exibição, sem
+// nenhum round-trip pra garantir.
+export function formatBrazilDateTimeLabel(date: Date): string {
+  return date
+    .toLocaleString("pt-BR", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      timeZone: "America/Sao_Paulo",
+    })
+    .replace(",", "");
+}
+
 // Início do dia em Brasília (00:00 BRT), devolvido como o instante UTC
 // correspondente — mesmo deslocamento fixo de formatAsBrazilLocalDateTime,
 // só que devolvendo o Date "cortado" em vez de uma string.
