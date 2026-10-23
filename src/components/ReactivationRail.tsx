@@ -1,7 +1,7 @@
 import { LeadAvatar } from "@/components/LeadAvatar";
 import { WhatsAppMonoIcon } from "@/components/BrandIcons";
 import { InstagramDmButton } from "@/components/InstagramDmButton";
-import { REACTIVATION_ACTION_BUTTON_CLASS, WHATSAPP_ACTION_GRADIENT } from "@/components/ReactivationActionButtonStyle";
+import { WHATSAPP_ACTION_BUTTON_CLASS } from "@/components/ReactivationActionButtonStyle";
 import type { ReactivationCard } from "@/lib/reactivation";
 
 function patientsCountLabel(n: number): string {
@@ -39,9 +39,9 @@ export function ReactivationRail({ cards }: { cards: ReactivationCard[] }) {
         {cards.map((card) => (
           <div
             key={`${card.appointmentId}-${card.thresholdDays}`}
-            className="flex items-center gap-2 rounded-lg border border-vexo-border bg-vexo-surface px-2 py-1.5"
+            className="flex items-center gap-2 rounded-lg border border-vexo-border bg-vexo-surface p-2"
           >
-            <LeadAvatar profilePictureUrl={card.profilePictureUrl} name={card.name} size="sm" />
+            <LeadAvatar profilePictureUrl={card.profilePictureUrl} name={card.name} size="md" />
             <div className="min-w-0 flex-1">
               <div className="flex min-w-0 items-baseline gap-1">
                 <p className="min-w-0 shrink truncate text-xs font-medium">{card.name}</p>
@@ -64,14 +64,8 @@ export function ReactivationRail({ cards }: { cards: ReactivationCard[] }) {
 
             {card.channel === "WHATSAPP" ? (
               card.whatsappLink ? (
-                <a
-                  href={card.whatsappLink}
-                  target="_blank"
-                  rel="noreferrer"
-                  style={{ background: WHATSAPP_ACTION_GRADIENT }}
-                  className={REACTIVATION_ACTION_BUTTON_CLASS}
-                >
-                  <WhatsAppMonoIcon className="h-3 w-3" />
+                <a href={card.whatsappLink} target="_blank" rel="noreferrer" className={WHATSAPP_ACTION_BUTTON_CLASS}>
+                  <WhatsAppMonoIcon className="h-3.5 w-3.5" />
                   WhatsApp
                 </a>
               ) : (

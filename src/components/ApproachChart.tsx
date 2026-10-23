@@ -17,18 +17,18 @@ export function ApproachChart({ counts }: { counts: number[] }) {
 
   if (allZero) {
     return (
-      <div className="flex flex-col items-center justify-center gap-1.5 rounded-lg border border-dashed border-vexo-border/60 py-7">
-        <p className="text-caption text-vexo-muted">Sem abordagens registradas essa semana</p>
+      <div className="flex items-center justify-center rounded-lg border border-dashed border-vexo-border/60 py-1.5">
+        <p className="text-caption leading-none text-vexo-muted">Sem abordagens registradas essa semana</p>
       </div>
     );
   }
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-1">
       {counts.map((count, i) => (
         <div key={i} className="flex items-center gap-2">
           <span className="w-7 shrink-0 text-caption leading-none text-vexo-muted">{WEEKDAY_LABELS[i]}</span>
-          <div className="h-1.5 flex-1 overflow-hidden rounded-sm bg-vexo-surface2">
+          <div className="h-1 flex-1 overflow-hidden rounded-sm bg-vexo-surface2">
             <div
               className="h-full origin-left animate-bar-grow rounded-sm bg-vexo-accent"
               style={{ width: `${(count / max) * 100}%` }}

@@ -25,10 +25,10 @@ export function PanelMetricCard({
   highlight?: boolean;
 }) {
   return (
-    <div className="rounded-xl border border-vexo-border bg-vexo-surface2 px-3 py-3">
+    <div className="rounded-xl border border-vexo-border bg-vexo-surface2 px-2.5 py-2">
       <p className="truncate text-caption font-medium uppercase tracking-wide text-vexo-muted">{label}</p>
       <p
-        className={`mt-1.5 text-3xl font-light leading-none tracking-tight ${
+        className={`mt-1 text-2xl font-light leading-none tracking-tight ${
           highlight ? "text-vexo-panelHighlight" : "text-vexo-fg"
         }`}
       >

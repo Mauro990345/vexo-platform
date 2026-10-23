@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Calendar, Phone } from "lucide-react";
+import { Calendar } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { getClinicMetrics, getAttendanceMetrics, appointmentDisplayStatus, getDailyApproachCounts, startOfDay, addDays } from "@/lib/metrics";
 import { ApproachChart } from "@/components/ApproachChart";
@@ -230,23 +230,16 @@ export async function ClientPanelView({
               <h2 className="text-xs font-semibold text-vexo-fg">Agendamentos</h2>
             </div>
             <NeedsHumanBanner leads={needsHumanLeads} />
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               {appointments.map((a) => {
                 const { primary, handle } = leadDisplayParts(a.lead, a.manualTitle);
                 return (
                 <div
                   key={a.id}
-                  className="flex items-center gap-2.5 justify-between rounded-lg border border-vexo-border bg-vexo-surface p-2.5"
+                  className="flex items-center gap-2 justify-between rounded-lg border border-vexo-border bg-vexo-surface p-2"
                 >
-                  {/* Avatar de volta (automação de foto formalizada — ver
-                      instagram.ts, getInstagramProfilePicture) — alinhado no
-                      TOPO do bloco de texto (items-start neste wrapper
-                      interno), não centralizado com o card inteiro: o
-                      container externo continua items-center (só afeta o
-                      NoShowButton à direita, que fica centralizado com a
-                      altura toda do card normalmente). */}
-                  <div className="flex min-w-0 flex-1 items-start gap-2.5">
-                    <LeadAvatar profilePictureUrl={a.lead?.profilePictureUrl} name={primary} size="lg" />
+                  <div className="flex min-w-0 flex-1 items-center gap-2">
+                    <LeadAvatar profilePictureUrl={a.lead?.profilePictureUrl} name={primary} size="md" />
                     <div className="min-w-0 flex-1">
                       {/* Nome como elemento principal, @ do Instagram como
                           secundário ao lado (cor discreta, fonte menor, sem
@@ -256,8 +249,18 @@ export async function ClientPanelView({
                         <p className="min-w-0 shrink truncate text-sm font-medium">{primary}</p>
                         {handle && <span className="shrink-0 truncate text-caption text-vexo-muted">@{handle}</span>}
                       </div>
-                      <div className="mt-1 flex items-center gap-2 text-caption text-vexo-muted">
-                        <span>
+                      {/* Data, tag e telefone na MESMA linha (pedido
+                          explícito — eram 2-3 linhas separadas), com
+                          flex-wrap: no celular/tela estreita, se não
+                          couber, só o telefone quebra pra linha de baixo
+                          sozinho (ele é o último item da linha). Link
+                          wa.me do telefone inalterado (mesmo comportamento
+                          de antes, só reposicionado) — ver BUG REAL
+                          corrigido historicamente: "inline" aqui (não um
+                          <div> de bloco) já limita a área clicável ao
+                          próprio texto, sem precisar de inline-flex. */}
+                      <div className="mt-0.5 flex flex-wrap items-center gap-1 text-caption text-vexo-muted">
+                        <span className="shrink-0">
                           {a.scheduledAt.toLocaleString("pt-BR", {
                             day: "2-digit",
                             month: "2-digit",
@@ -265,31 +268,22 @@ export async function ClientPanelView({
                             minute: "2-digit",
                           })}
                         </span>
+                        <span className="shrink-0">·</span>
                         <AppointmentStatusBadge status={appointmentDisplayStatus(a, now)} compact />
+                        {a.lead?.phone && (
+                          <>
+                            <span className="shrink-0">·</span>
+                            <a
+                              href={`https://wa.me/${normalizeBrazilianWhatsappNumber(a.lead.phone)}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="shrink-0 text-vexo-accent hover:underline"
+                            >
+                              {a.lead.phone}
+                            </a>
+                          </>
+                        )}
                       </div>
-                      {/* WhatsApp do lead — sem isso a secretária não tinha como
-                          contatar em caso de atraso/imprevisto a partir do
-                          Painel (única tela que ela de fato usa; o card
-                          equivalente em /crm/conversas/[id] é do CRM interno,
-                          sem acesso dela). Link wa.me abre a conversa direto.
-                          BUG REAL corrigido: "flex" (não "inline-flex") faz um
-                          elemento de bloco esticar pra largura TOTAL do pai
-                          (min-w-0 flex-1, quase a largura inteira do card) —
-                          mesmo com o conteúdo visual (ícone + telefone)
-                          concentrado à esquerda, a área clicável/hover do
-                          link ficava do tamanho da linha inteira. "inline-flex"
-                          limita a área ao tamanho do próprio conteúdo. */}
-                      {a.lead?.phone && (
-                        <a
-                          href={`https://wa.me/${normalizeBrazilianWhatsappNumber(a.lead.phone)}`}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="mt-1 inline-flex items-center gap-1 text-caption text-vexo-accent hover:underline"
-                        >
-                          <Phone className="h-3 w-3 shrink-0" strokeWidth={2} />
-                          {a.lead.phone}
-                        </a>
-                      )}
                     </div>
                   </div>
                   {ACTIONABLE_STATUSES.includes(a.status) && (
