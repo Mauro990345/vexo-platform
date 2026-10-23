@@ -262,6 +262,24 @@ export async function processSilentConversations(): Promise<number> {
   return triggered;
 }
 
+// Identifica se uma Message (sender AI) foi enviada DENTRO de uma sequência
+// de follow-up automático, sem precisar de nenhuma coluna nova em Message
+// (nenhuma migration) — correlaciona pelo próprio intervalo [triggeredAt,
+// respondedAt] de cada FollowUpLog da conversa (ver triggerFollowUp/
+// cancelPendingFollowUp acima): toda Message criada por dispatchFollowUpSteps
+// cai dentro de um desses intervalos; respondedAt null significa sequência
+// ainda aberta (vale até agora). Usado só pra ROTULAR o histórico mandado
+// à IA de conversação (ver toLabeledChatHistory em chat-history.ts, e o uso
+// em conversation-pipeline.ts) — nunca muda nenhuma regra de follow-up em
+// si, só ajuda o modelo a distinguir "respondi isso de verdade" de "isso
+// foi um template automático da sequência".
+export function isFollowUpMessage(
+  createdAt: Date,
+  followUpWindows: { triggeredAt: Date; respondedAt: Date | null }[]
+): boolean {
+  return followUpWindows.some((w) => createdAt >= w.triggeredAt && (w.respondedAt === null || createdAt <= w.respondedAt));
+}
+
 function addHours(date: Date, hours: number): Date {
   return new Date(date.getTime() + hours * 60 * 60 * 1000);
 }

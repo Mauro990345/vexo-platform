@@ -3,12 +3,10 @@ import {
   classifyConversation,
   classifyAttendanceReply,
   generateLeadReply,
-  summarizeOlderTurns,
   type AgentTools,
   type ChatTurn,
   type AttendanceReplyDecision,
 } from "@/lib/anthropic";
-import { buildConversationContext, withOlderSummary } from "@/lib/conversation-context";
 import {
   checkAvailability,
   createCalendarEvent,
@@ -33,9 +31,15 @@ import {
   formatBrazilianPhoneForDisplay,
   formatDateTimeLabel,
 } from "@/lib/whatsapp";
-import { cancelPendingFollowUp, getSilenceHours, applyTemplateVariables, getFollowUpWindowSettings } from "@/lib/follow-up";
+import {
+  cancelPendingFollowUp,
+  getSilenceHours,
+  applyTemplateVariables,
+  getFollowUpWindowSettings,
+  isFollowUpMessage,
+} from "@/lib/follow-up";
 import { nextValidSendTime } from "@/lib/follow-up-window";
-import { toChatHistory } from "@/lib/chat-history";
+import { toChatHistory, toLabeledChatHistory } from "@/lib/chat-history";
 import {
   RESULT_PHOTO_MESSAGE_CONTENT,
   planResultPhotoDispatch,
@@ -1173,20 +1177,35 @@ export async function handleInboundInstagramMessage(
     recentHistory: chatHistory.slice(-6),
   });
 
-  // Janela de mensagens recentes mandadas por inteiro pra IA de
-  // conversação (generateLeadReply, mais abaixo) — o que ficar de fora
-  // vira um resumo curto (ver buildConversationContext/withOlderSummary em
-  // conversation-context.ts, e summarizeOlderTurns em anthropic.ts). Bug
-  // real de custo: sem isso, `chatHistory` (a conversa INTEIRA desde o
-  // primeiro dia) ia por completo pro Sonnet em toda mensagem nova, pra
-  // sempre — sem nenhum teto, o custo de input só cresce numa conversa
-  // longa. Calculado só aqui (depois do "return" de needsHuman acima) pra
-  // não gastar a chamada de resumo (Haiku) à toa quando a conversa
-  // escalona antes de gerar qualquer resposta. Só afeta a geração da
-  // resposta; o classificador acima continua vendo o histórico completo
-  // (classifierHistory), sem mudança nenhuma.
-  const conversationContext = await buildConversationContext(history, summarizeOlderTurns);
-  const windowedHistory = withOlderSummary(conversationContext);
+  // Bug real reportado (lead "Leonardo da Silva"): a IA respondeu ao
+  // retorno de um lead como se fosse o primeiro contato, ignorando uma
+  // conversa inteira anterior (incluindo uma sequência de follow-up já
+  // concluída). Pedido explícito pra corrigir: a IA de conversação
+  // (generateLeadReply, mais abaixo) SEMPRE recebe `history` (a conversa
+  // INTEIRA desta conversationId, já em ordem cronológica — ver a query
+  // acima) por completo, sem nenhuma janela/corte nem resumo substituindo
+  // mensagens antigas (removeu-se aqui o corte por buildConversationContext/
+  // withOlderSummary, conversation-context.ts, que existia só por custo —
+  // módulos mantidos intactos, sem uso, caso o custo volte a importar com
+  // usuários reais). Cada item vai rotulado com autor e data/hora (ver
+  // toLabeledChatHistory, chat-history.ts) — "Lead", "IA" (resposta viva) ou
+  // "Follow-up automático" (mensagem da sequência de follow-up, identificada
+  // pelo intervalo de FollowUpLog, sem precisar de coluna nova em Message —
+  // ver isFollowUpMessage, follow-up.ts), nunca mais um bloco de texto cru
+  // sem nenhuma pista de tempo ou de quem disse o quê. Só afeta a geração
+  // da resposta; o classificador acima continua vendo chatHistory/
+  // classifierHistory sem rótulo, sem mudar nada do comportamento calibrado
+  // dele.
+  const followUpWindows = await prisma.followUpLog.findMany({
+    where: { conversationId: conversation.id },
+    select: { triggeredAt: true, respondedAt: true },
+  });
+  const windowedHistory = toLabeledChatHistory(
+    history.map((m) => ({
+      ...m,
+      isFollowUp: m.sender === "AI" && isFollowUpMessage(m.createdAt, followUpWindows),
+    }))
+  );
 
   // Preenchido dentro de scheduleAppointment/checkAvailability (ferramentas
   // abaixo) quando uma chamada de verdade ao Google Calendar falha (não

@@ -33,7 +33,13 @@ vi.mock("@/lib/anthropic", () => ({
   classifyConversation: (...args: unknown[]) => classifyConversationMock(...args),
 }));
 
-import { leadFirstName, applyTemplateVariables, dispatchFollowUpSteps, processSilentConversations } from "@/lib/follow-up";
+import {
+  leadFirstName,
+  applyTemplateVariables,
+  dispatchFollowUpSteps,
+  processSilentConversations,
+  isFollowUpMessage,
+} from "@/lib/follow-up";
 
 // Bug real corrigido: ao cair pro igUsername (Lead.name ausente), o nome
 // saía com o @ inteiro sempre que ele tinha ponto (ex.: "mauro.iphone") —
@@ -72,6 +78,40 @@ describe("applyTemplateVariables", () => {
   it("substitui {{primeiro_nome}} pelo nome derivado do @ quando não há Lead.name", () => {
     const result = applyTemplateVariables("Oi, {{primeiro_nome}}! Tudo bem?", { name: null, igUsername: "mauro.iphone" });
     expect(result).toBe("Oi, mauro! Tudo bem?");
+  });
+});
+
+// Usada pra rotular o histórico mandado à IA de conversação (ver
+// toLabeledChatHistory, chat-history.ts, e o uso em
+// conversation-pipeline.ts) — identifica uma Message de follow-up sem
+// nenhuma coluna nova em Message (sem migration), só pelo intervalo
+// [triggeredAt, respondedAt] de cada FollowUpLog da conversa.
+describe("isFollowUpMessage", () => {
+  it("createdAt dentro de [triggeredAt, respondedAt] conta como follow-up", () => {
+    const windows = [{ triggeredAt: new Date("2026-10-17T10:00:00Z"), respondedAt: new Date("2026-10-20T18:00:00Z") }];
+    expect(isFollowUpMessage(new Date("2026-10-18T12:00:00Z"), windows)).toBe(true);
+  });
+
+  it("createdAt fora de qualquer janela não conta como follow-up", () => {
+    const windows = [{ triggeredAt: new Date("2026-10-17T10:00:00Z"), respondedAt: new Date("2026-10-20T18:00:00Z") }];
+    expect(isFollowUpMessage(new Date("2026-10-14T12:00:00Z"), windows)).toBe(false);
+  });
+
+  it("respondedAt null (sequência ainda aberta) vale do triggeredAt até agora, sem limite superior", () => {
+    const windows = [{ triggeredAt: new Date("2026-10-17T10:00:00Z"), respondedAt: null }];
+    expect(isFollowUpMessage(new Date("2026-10-25T09:00:00Z"), windows)).toBe(true);
+  });
+
+  it("createdAt EXATAMENTE igual a triggeredAt ou respondedAt conta como follow-up (limites inclusivos)", () => {
+    const triggeredAt = new Date("2026-10-17T10:00:00Z");
+    const respondedAt = new Date("2026-10-20T18:00:00Z");
+    const windows = [{ triggeredAt, respondedAt }];
+    expect(isFollowUpMessage(triggeredAt, windows)).toBe(true);
+    expect(isFollowUpMessage(respondedAt, windows)).toBe(true);
+  });
+
+  it("sem nenhuma janela (conversa nunca entrou em follow-up), nada conta como follow-up", () => {
+    expect(isFollowUpMessage(new Date("2026-10-18T12:00:00Z"), [])).toBe(false);
   });
 });
 
