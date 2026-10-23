@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { InstagramMonoIcon } from "@/components/BrandIcons";
-import { REACTIVATION_ACTION_BUTTON_CLASS, INSTAGRAM_ACTION_GRADIENT } from "@/components/ReactivationActionButtonStyle";
+import { INSTAGRAM_ACTION_BUTTON_CLASS, INSTAGRAM_ACTION_GRADIENT } from "@/components/ReactivationActionButtonStyle";
 
 const LABEL_RESET_DELAY_MS = 2000;
 const TOAST_DURATION_MS = 2500;
@@ -67,17 +67,28 @@ export function InstagramDmButton({ message, dmLink }: { message: string; dmLink
   }
 
   return (
-    <div className="relative shrink-0">
-      <button
-        type="button"
-        onClick={handleClick}
-        disabled={!dmLink}
-        style={{ background: INSTAGRAM_ACTION_GRADIENT }}
-        className={REACTIVATION_ACTION_BUTTON_CLASS}
-      >
-        <InstagramMonoIcon className="h-3 w-3" />
-        {copied ? "Copiado ✓" : "Instagram"}
-      </button>
+    <div className={`group relative shrink-0 ${dmLink ? "" : "opacity-40"}`}>
+      {/* Borda em degradê: CSS não tem isso direto — wrapper com 1px de
+          padding preenchido pelo degradê + "miolo" com a cor de fundo do
+          card por dentro (bg-vexo-surface, a mesma da linha da lista) —
+          sobra só 1px visível do degradê, como uma borda. */}
+      <div className="rounded-lg p-px" style={{ background: INSTAGRAM_ACTION_GRADIENT }}>
+        <div className="relative overflow-hidden rounded-[7px] bg-vexo-surface">
+          {/* Tingimento do hover: o mesmo degradê a 10% de opacidade,
+              numa camada própria (não dá pra fazer hover:bg com um
+              gradiente via inline style) — group-hover porque o elemento
+              hover-ável de verdade é o <button>, não esta camada. */}
+          <span
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 opacity-0 transition-opacity duration-150 group-hover:opacity-10"
+            style={{ background: INSTAGRAM_ACTION_GRADIENT }}
+          />
+          <button type="button" onClick={handleClick} disabled={!dmLink} className={INSTAGRAM_ACTION_BUTTON_CLASS}>
+            <InstagramMonoIcon className="h-3.5 w-3.5" />
+            {copied ? "Copiado ✓" : "Instagram"}
+          </button>
+        </div>
+      </div>
       {toast && (
         <span className="absolute -top-7 right-0 whitespace-nowrap rounded-md bg-vexo-surface2 px-2 py-1 text-caption text-vexo-fg shadow-card">
           {toast}
