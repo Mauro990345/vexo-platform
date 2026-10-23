@@ -269,10 +269,44 @@ export async function updateClinicReactivation(clinicId: string, formData: FormD
   const message4 = String(formData.get("message4") ?? "").trim() || null;
   const message5 = String(formData.get("message5") ?? "").trim() || null;
 
+  // Conjunto SEPARADO de mensagens do Instagram (pedido explícito: "o
+  // Instagram tem as suas próprias 5 mensagens, separadas das do
+  // WhatsApp") — mesmo formulário, campos com nome próprio.
+  const instagramMessage1 = String(formData.get("instagramMessage1") ?? "").trim() || null;
+  const instagramMessage2 = String(formData.get("instagramMessage2") ?? "").trim() || null;
+  const instagramMessage3 = String(formData.get("instagramMessage3") ?? "").trim() || null;
+  const instagramMessage4 = String(formData.get("instagramMessage4") ?? "").trim() || null;
+  const instagramMessage5 = String(formData.get("instagramMessage5") ?? "").trim() || null;
+
   await prisma.reactivationConfig.upsert({
     where: { clinicId },
-    create: { clinicId, thresholdDaysList, message1, message2, message3, message4, message5 },
-    update: { thresholdDaysList, message1, message2, message3, message4, message5 },
+    create: {
+      clinicId,
+      thresholdDaysList,
+      message1,
+      message2,
+      message3,
+      message4,
+      message5,
+      instagramMessage1,
+      instagramMessage2,
+      instagramMessage3,
+      instagramMessage4,
+      instagramMessage5,
+    },
+    update: {
+      thresholdDaysList,
+      message1,
+      message2,
+      message3,
+      message4,
+      message5,
+      instagramMessage1,
+      instagramMessage2,
+      instagramMessage3,
+      instagramMessage4,
+      instagramMessage5,
+    },
   });
 
   revalidatePath(`/crm/clinicas/${clinicId}/automacoes`);

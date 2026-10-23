@@ -869,21 +869,35 @@ model ReactivationConfig {
 
   thresholdDaysList Int[] @default([150])
 
+  // Mensagens de WHATSAPP — nome dos campos mantido como estava antes dos
+  // dois canais existirem (só o RÓTULO na tela virou "Mensagens WhatsApp",
+  // ver automacoes/page.tsx); o Instagram ganhou seu próprio conjunto
+  // separado abaixo.
   message1 String? @db.Text
   message2 String? @db.Text
   message3 String? @db.Text
   message4 String? @db.Text
   message5 String? @db.Text
 
-  // Só decide a PRÓXIMA posição na rotação em sequência (ver
-  // assignNextReactivationSlot, reactivation.ts) — nunca é lido de volta
-  // pra decidir o texto de um card já existente (isso vem de
-  // ReactivationCardSlot, abaixo, fixo por agendamento+período desde o
-  // momento em que aquele card entra na faixa). ÚNICO contador mesmo com
-  // vários períodos marcados — a sequência é por clínica, não por período
-  // (pedido explícito: "a sequência continua por clínica, independente do
-  // período").
-  sequenceCounter Int @default(0)
+  // Mensagens de INSTAGRAM — conjunto PRÓPRIO, separado do WhatsApp acima
+  // (pedido explícito: "o Instagram tem as suas próprias 5 mensagens").
+  instagramMessage1 String? @db.Text
+  instagramMessage2 String? @db.Text
+  instagramMessage3 String? @db.Text
+  instagramMessage4 String? @db.Text
+  instagramMessage5 String? @db.Text
+
+  // Só decidem a PRÓXIMA posição na rotação em sequência (ver
+  // assignReactivationCardSlotsByChannel, reactivation.ts) — nunca são
+  // lidos de volta pra decidir o texto de um card já existente (isso vem
+  // de ReactivationCardSlot, abaixo, fixo por agendamento+período desde o
+  // momento em que aquele card entra na faixa). DOIS contadores — um por
+  // CANAL (pedido explícito: "contador SEPARADO por canal") — porque cada
+  // canal tem seu próprio conjunto de 5 mensagens e sua própria sequência;
+  // sequenceCounter é o do WhatsApp (nome mantido de antes dos dois
+  // canais existirem), instagramSequenceCounter é o novo, do Instagram.
+  sequenceCounter          Int @default(0)
+  instagramSequenceCounter Int @default(0)
 
   updatedAt DateTime @updatedAt
 }

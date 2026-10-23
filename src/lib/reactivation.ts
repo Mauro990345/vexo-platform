@@ -30,15 +30,48 @@ export function isValidReactivationThresholdDays(value: number): value is Reacti
   return (REACTIVATION_THRESHOLD_OPTIONS as readonly number[]).includes(value);
 }
 
+export type ReactivationChannel = "INSTAGRAM" | "WHATSAPP";
+
+// Qual canal cada período usa — isolado NUM SÓ LUGAR (pedido explícito),
+// fácil de ajustar sem tocar em nenhuma outra lógica. 7/30/60 = Instagram;
+// 10/90/120/150 = WhatsApp (7 e 10 são período de teste, só pra dar pra ver
+// os dois botões na tela).
+export const REACTIVATION_CHANNEL_BY_THRESHOLD: Record<ReactivationThresholdDays, ReactivationChannel> = {
+  7: "INSTAGRAM",
+  10: "WHATSAPP",
+  30: "INSTAGRAM",
+  60: "INSTAGRAM",
+  90: "WHATSAPP",
+  120: "WHATSAPP",
+  150: "WHATSAPP",
+};
+
+export function reactivationChannelForThreshold(thresholdDays: number): ReactivationChannel {
+  return REACTIVATION_CHANNEL_BY_THRESHOLD[thresholdDays as ReactivationThresholdDays] ?? "WHATSAPP";
+}
+
 // Estilo de acompanhamento genérico ("como você está desde o seu
 // atendimento"), sem citar nenhum serviço/procedimento — pedido explícito.
-// Usado quando a clínica não personalizou nenhuma das 5 mensagens.
-export const DEFAULT_REACTIVATION_MESSAGES: readonly string[] = [
+// Usado quando a clínica não personalizou nenhuma das 5 mensagens de
+// WHATSAPP (ver DEFAULT_INSTAGRAM_REACTIVATION_MESSAGES abaixo pro
+// conjunto, separado, do Instagram).
+export const DEFAULT_WHATSAPP_REACTIVATION_MESSAGES: readonly string[] = [
   "Oi! Passando aqui só pra saber como você está desde o seu atendimento. Se precisar de algo, é só chamar. 💙",
   "Oi! Faz um tempinho que a gente não se fala por aqui — como você está desde o seu atendimento?",
   "Oi! Lembramos de você 💙 Como você está desde o seu atendimento? Se quiser conversar, é só responder.",
   "Oi! Passando pra deixar um alô e saber como você está desde o seu atendimento. Pode contar com a gente.",
   "Oi! Ficamos pensando em você — como está desde o seu atendimento? Estamos à disposição por aqui.",
+];
+
+// Mesmo espírito (acompanhamento genérico, sem citar serviço/procedimento,
+// sem variável de nome), em tom de DM — mais curtas que as de WhatsApp de
+// propósito, como uma mensagem direta do Instagram costuma ser.
+export const DEFAULT_INSTAGRAM_REACTIVATION_MESSAGES: readonly string[] = [
+  "Oi! 💙 Passando aqui pra saber como você está desde o seu atendimento.",
+  "Oi! Faz um tempo que a gente não se fala por aqui — tudo bem com você?",
+  "Oi! Lembramos de você 💙 Como você está desde o seu atendimento?",
+  "Oi! Só passando pra dar um alô e saber como você está.",
+  "Oi! Ficamos pensando em você — como você está?",
 ];
 
 function isWeekend(brazilDay: Date): boolean {
@@ -164,8 +197,9 @@ export function buildReactivationCardCandidates(
   );
 }
 
-// Slots (1-5) com texto configurado; sem nenhum, usa os 5 defaults
-// (DEFAULT_REACTIVATION_MESSAGES) como se fossem os 5 slots.
+// Slots (1-5) com texto configurado; sem nenhum, usa os 5 defaults do
+// canal (DEFAULT_WHATSAPP_REACTIVATION_MESSAGES ou
+// DEFAULT_INSTAGRAM_REACTIVATION_MESSAGES) como se fossem os 5 slots.
 export function resolveAvailableReactivationSlots(messages: (string | null | undefined)[]): number[] {
   const slots: number[] = [];
   messages.forEach((msg, idx) => {
@@ -187,13 +221,19 @@ export function assignNextReactivationSlot(
 }
 
 // Texto final de um slot já atribuído — slot (1-5) indexa messages[]
-// (mesma posição) com fallback pro texto padrão correspondente. O slot em
-// si fica fixo por card (ver ReactivationCardSlot, schema.prisma); só o
-// TEXTO pode mudar depois se a clínica editar aquela mensagem específica.
-export function resolveReactivationMessageText(slot: number, messages: (string | null | undefined)[]): string {
+// (mesma posição) com fallback pro texto padrão do CANAL correspondente
+// (defaults recebido por parâmetro — WhatsApp e Instagram têm conjuntos
+// diferentes). O slot em si fica fixo por card (ver ReactivationCardSlot,
+// schema.prisma); só o TEXTO pode mudar depois se a clínica editar aquela
+// mensagem específica.
+export function resolveReactivationMessageText(
+  slot: number,
+  messages: (string | null | undefined)[],
+  defaults: readonly string[]
+): string {
   const custom = messages[slot - 1];
   if (custom && custom.trim()) return custom.trim();
-  return DEFAULT_REACTIVATION_MESSAGES[slot - 1] ?? DEFAULT_REACTIVATION_MESSAGES[0]!;
+  return defaults[slot - 1] ?? defaults[0]!;
 }
 
 // wa.me com a mensagem já preenchida (não enviada — a secretária decide
@@ -207,6 +247,30 @@ export function buildReactivationWhatsAppLink(phone: string, message: string): s
   return `https://wa.me/${normalized}?text=${encodeURIComponent(message)}`;
 }
 
+// ig.me abre a conversa no Instagram direto (sem precisar já ter o
+// contato salvo, diferente do wa.me que precisa de telefone) — a mensagem
+// NUNCA vai colada na URL (a Meta não expõe esse parâmetro pro Direct):
+// o texto é copiado pra área de transferência separadamente (ver
+// InstagramDmButton.tsx), a secretária cola e envia manualmente.
+export function buildInstagramDmLink(igUsername: string): string {
+  return `https://ig.me/m/${igUsername}`;
+}
+
+// Perfil público — mesmo formato já usado em NeedsHumanBanner.tsx, só pro
+// @ virar link nas linhas de Instagram (pedido explícito; nas linhas de
+// WhatsApp o @ continua texto puro, sem link).
+export function buildInstagramProfileLink(igUsername: string): string {
+  return `https://www.instagram.com/${igUsername}/`;
+}
+
+// Decide se o botão "Instagram" do card tem o que fazer — null sem @
+// (pedido explícito: "se o lead não tiver @ do Instagram, o botão fica
+// desativado"), é exatamente o que InstagramDmButton.tsx usa como
+// `disabled={!dmLink}`.
+export function resolveInstagramDmLink(igUsername: string | null): string | null {
+  return igUsername ? buildInstagramDmLink(igUsername) : null;
+}
+
 export type ReactivationCard = {
   appointmentId: string;
   leadId: string;
@@ -214,7 +278,10 @@ export type ReactivationCard = {
   igUsername: string | null;
   profilePictureUrl: string | null;
   message: string;
+  channel: ReactivationChannel;
   whatsappLink: string | null;
+  instagramDmLink: string | null;
+  instagramProfileLink: string | null;
   completionDate: Date;
   thresholdDays: number;
 };
@@ -263,6 +330,44 @@ export function assignReactivationCardSlots(
   return { cards, finalSequenceCounter: sequenceCounter, newlyAssigned };
 }
 
+export type ReactivationChannelCounters = { whatsapp: number; instagram: number };
+
+// Particiona cardCandidates (já na ordem global de "quem completou
+// primeiro", ver buildReactivationCardCandidates) por CANAL — filter
+// preserva a ordem relativa, então cada grupo já sai na ordem certa de
+// "quem completou primeiro DENTRO daquele canal" — e roda
+// assignReactivationCardSlots separadamente pra cada um, com seu próprio
+// conjunto de slots disponíveis e seu próprio contador (pedido explícito:
+// "as mensagens do Instagram rodam entre si e as do WhatsApp entre si").
+// O resultado final (`cards`) sai na mesma ordem global de ENTRADA
+// (cardCandidates), só com o slot de cada um já resolvido — a atribuição
+// em si acontece por canal, a exibição continua ordenada globalmente.
+export function assignReactivationCardSlotsByChannel(
+  cardCandidates: ReactivationCardCandidate[],
+  whatsappAvailableSlots: number[],
+  instagramAvailableSlots: number[],
+  initialCounters: ReactivationChannelCounters,
+  existingSlots: Map<string, number>
+): { cards: AssignedReactivationCard[]; finalCounters: ReactivationChannelCounters; newlyAssigned: ReactivationSlotAssignment[] } {
+  const whatsappCandidates = cardCandidates.filter((c) => reactivationChannelForThreshold(c.thresholdDays) === "WHATSAPP");
+  const instagramCandidates = cardCandidates.filter((c) => reactivationChannelForThreshold(c.thresholdDays) === "INSTAGRAM");
+
+  const whatsappResult = assignReactivationCardSlots(whatsappCandidates, whatsappAvailableSlots, initialCounters.whatsapp, existingSlots);
+  const instagramResult = assignReactivationCardSlots(instagramCandidates, instagramAvailableSlots, initialCounters.instagram, existingSlots);
+
+  const slotByKey = new Map<string, number>();
+  for (const c of whatsappResult.cards) slotByKey.set(cardSlotKey(c.appointmentId, c.thresholdDays), c.slot);
+  for (const c of instagramResult.cards) slotByKey.set(cardSlotKey(c.appointmentId, c.thresholdDays), c.slot);
+
+  const cards = cardCandidates.map((c) => ({ ...c, slot: slotByKey.get(cardSlotKey(c.appointmentId, c.thresholdDays))! }));
+
+  return {
+    cards,
+    finalCounters: { whatsapp: whatsappResult.finalSequenceCounter, instagram: instagramResult.finalSequenceCounter },
+    newlyAssigned: [...whatsappResult.newlyAssigned, ...instagramResult.newlyAssigned],
+  };
+}
+
 export async function getReactivationCards(clinicId: string, now: Date = new Date()): Promise<ReactivationCard[]> {
   const config = await prisma.reactivationConfig.findUnique({ where: { clinicId } });
   // Lista vazia (ou clínica sem nenhuma ReactivationConfig ainda) = nenhum
@@ -271,8 +376,16 @@ export async function getReactivationCards(clinicId: string, now: Date = new Dat
   const thresholdDaysList = config?.thresholdDaysList ?? [];
   if (thresholdDaysList.length === 0) return [];
 
-  const messages = [config?.message1, config?.message2, config?.message3, config?.message4, config?.message5];
-  const availableSlots = resolveAvailableReactivationSlots(messages);
+  const whatsappMessages = [config?.message1, config?.message2, config?.message3, config?.message4, config?.message5];
+  const instagramMessages = [
+    config?.instagramMessage1,
+    config?.instagramMessage2,
+    config?.instagramMessage3,
+    config?.instagramMessage4,
+    config?.instagramMessage5,
+  ];
+  const whatsappAvailableSlots = resolveAvailableReactivationSlots(whatsappMessages);
+  const instagramAvailableSlots = resolveAvailableReactivationSlots(instagramMessages);
 
   const appointments = await prisma.appointment.findMany({
     where: { clinicId, conversationId: { not: null } },
@@ -288,18 +401,20 @@ export async function getReactivationCards(clinicId: string, now: Date = new Dat
   });
   const existingSlots = new Map(existingSlotRows.map((s) => [cardSlotKey(s.appointmentId, s.thresholdDays), s.slot]));
 
-  const initialSequenceCounter = config?.sequenceCounter ?? 0;
-  const { cards, finalSequenceCounter, newlyAssigned } = assignReactivationCardSlots(
+  const initialCounters: ReactivationChannelCounters = {
+    whatsapp: config?.sequenceCounter ?? 0,
+    instagram: config?.instagramSequenceCounter ?? 0,
+  };
+  const { cards, finalCounters, newlyAssigned } = assignReactivationCardSlotsByChannel(
     cardCandidates,
-    availableSlots,
-    initialSequenceCounter,
+    whatsappAvailableSlots,
+    instagramAvailableSlots,
+    initialCounters,
     existingSlots
   );
 
-  // Sequencial de propósito (não Promise.all): preserva a mesma ordem de
-  // atribuição decidida por assignReactivationCardSlots ao persistir — não
-  // que a ordem de escrita em si importe aqui, mas evita qualquer surpresa
-  // de concorrência entre upserts da mesma clínica.
+  // Sequencial de propósito (não Promise.all): evita qualquer surpresa de
+  // concorrência entre upserts da mesma clínica.
   for (const assignment of newlyAssigned) {
     await prisma.reactivationCardSlot.upsert({
       where: {
@@ -310,11 +425,16 @@ export async function getReactivationCards(clinicId: string, now: Date = new Dat
     });
   }
 
-  if (finalSequenceCounter !== initialSequenceCounter) {
+  if (finalCounters.whatsapp !== initialCounters.whatsapp || finalCounters.instagram !== initialCounters.instagram) {
     await prisma.reactivationConfig.upsert({
       where: { clinicId },
-      create: { clinicId, thresholdDaysList: DEFAULT_REACTIVATION_THRESHOLD_DAYS_LIST, sequenceCounter: finalSequenceCounter },
-      update: { sequenceCounter: finalSequenceCounter },
+      create: {
+        clinicId,
+        thresholdDaysList: DEFAULT_REACTIVATION_THRESHOLD_DAYS_LIST,
+        sequenceCounter: finalCounters.whatsapp,
+        instagramSequenceCounter: finalCounters.instagram,
+      },
+      update: { sequenceCounter: finalCounters.whatsapp, instagramSequenceCounter: finalCounters.instagram },
     });
   }
 
@@ -326,16 +446,26 @@ export async function getReactivationCards(clinicId: string, now: Date = new Dat
 
   return cards.map((c) => {
     const lead = leadById.get(c.leadId);
-    const message = resolveReactivationMessageText(c.slot, messages);
+    const channel = reactivationChannelForThreshold(c.thresholdDays);
+    const message =
+      channel === "INSTAGRAM"
+        ? resolveReactivationMessageText(c.slot, instagramMessages, DEFAULT_INSTAGRAM_REACTIVATION_MESSAGES)
+        : resolveReactivationMessageText(c.slot, whatsappMessages, DEFAULT_WHATSAPP_REACTIVATION_MESSAGES);
     const phone = lead?.phone ?? null;
+    const igUsername = lead?.igUsername ?? null;
     return {
       appointmentId: c.appointmentId,
       leadId: c.leadId,
       name: lead?.name ?? lead?.igUsername ?? "Paciente",
-      igUsername: lead?.igUsername ?? null,
+      igUsername,
       profilePictureUrl: lead?.profilePictureUrl ?? null,
       message,
-      whatsappLink: phone ? buildReactivationWhatsAppLink(phone, message) : null,
+      channel,
+      whatsappLink: channel === "WHATSAPP" && phone ? buildReactivationWhatsAppLink(phone, message) : null,
+      instagramDmLink: channel === "INSTAGRAM" ? resolveInstagramDmLink(igUsername) : null,
+      // @ só vira link de perfil nas linhas de Instagram (pedido
+      // explícito) — nas de WhatsApp continua texto puro.
+      instagramProfileLink: channel === "INSTAGRAM" && igUsername ? buildInstagramProfileLink(igUsername) : null,
       completionDate: c.window.start,
       thresholdDays: c.thresholdDays,
     };
