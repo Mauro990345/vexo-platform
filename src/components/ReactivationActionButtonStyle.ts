@@ -9,13 +9,16 @@
 export const REACTIVATION_ACTION_BUTTON_BASE_CLASS =
   "inline-flex h-[23px] shrink-0 items-center justify-center gap-1 rounded-lg px-1.5 text-card font-semibold leading-none transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-vexo-accent focus-visible:ring-offset-1 focus-visible:ring-offset-vexo-surface disabled:cursor-not-allowed disabled:opacity-40";
 
-// WhatsApp: contorno + texto no MESMO token/cor do verde da tag
-// "Compareceu" do Painel (pedido explícito) — vexo-panelStatusCompletedBg,
-// ver statusTint em AppointmentStatusBadge.tsx (bg-vexo-panelStatusCompletedBg/80
-// é o fundo daquela tag) — não vexo-success, que é um verde DIFERENTE
-// (o "sucesso" genérico do produto). Hover: o mesmo tom a 10% de
-// opacidade no fundo — pedido exato, bg-vexo-panelStatusCompletedBg/10.
-export const WHATSAPP_ACTION_BUTTON_CLASS = `${REACTIVATION_ACTION_BUTTON_BASE_CLASS} border border-vexo-panelStatusCompletedBg text-vexo-panelStatusCompletedBg hover:bg-vexo-panelStatusCompletedBg/10`;
+// WhatsApp: borda no MESMO token/cor do verde da tag "Compareceu" do
+// Painel — vexo-panelStatusCompletedBg (ver statusTint em
+// AppointmentStatusBadge.tsx). Texto/ícone num tom MAIS CLARO da mesma
+// família de verde, pra legibilidade (pedido explícito) — vexo-success
+// (#34d399, token já existente, usado em todo o produto pra "sucesso/
+// positivo") é visivelmente mais claro que o verde escuro da borda
+// (default #1f7a4d, ver page-style-overrides.ts), sem precisar inventar
+// nenhum tom novo fora da paleta. Hover continua no tom da BORDA a 10%
+// de opacidade (pedido explícito — não muda).
+export const WHATSAPP_ACTION_BUTTON_CLASS = `${REACTIVATION_ACTION_BUTTON_BASE_CLASS} border border-vexo-panelStatusCompletedBg text-vexo-success hover:bg-vexo-panelStatusCompletedBg/10`;
 
 // Instagram: CSS não tem "borda em degradê" direto — sem token/cor nova
 // pra resolver isso, a forma mais simples e robusta é o truque do wrapper
