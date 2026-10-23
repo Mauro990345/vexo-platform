@@ -84,7 +84,7 @@ export function InstagramDmButton({ message, dmLink }: { message: string; dmLink
             style={{ background: INSTAGRAM_ACTION_GRADIENT }}
           />
           <button type="button" onClick={handleClick} disabled={!dmLink} className={INSTAGRAM_ACTION_BUTTON_CLASS}>
-            <InstagramMonoIcon className="h-3.5 w-3.5" />
+            <InstagramMonoIcon className="h-3 w-3" />
             {copied ? "Copiado ✓" : "Instagram"}
           </button>
         </div>

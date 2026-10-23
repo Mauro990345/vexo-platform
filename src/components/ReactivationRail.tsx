@@ -65,7 +65,7 @@ export function ReactivationRail({ cards }: { cards: ReactivationCard[] }) {
             {card.channel === "WHATSAPP" ? (
               card.whatsappLink ? (
                 <a href={card.whatsappLink} target="_blank" rel="noreferrer" className={WHATSAPP_ACTION_BUTTON_CLASS}>
-                  <WhatsAppMonoIcon className="h-3.5 w-3.5" />
+                  <WhatsAppMonoIcon className="h-3 w-3" />
                   WhatsApp
                 </a>
               ) : (
