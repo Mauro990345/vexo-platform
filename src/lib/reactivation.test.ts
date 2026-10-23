@@ -5,12 +5,19 @@ import {
   selectReactivationCandidates,
   buildReactivationCardCandidates,
   assignReactivationCardSlots,
+  assignReactivationCardSlotsByChannel,
   cardSlotKey,
   resolveAvailableReactivationSlots,
   assignNextReactivationSlot,
   resolveReactivationMessageText,
   buildReactivationWhatsAppLink,
-  DEFAULT_REACTIVATION_MESSAGES,
+  buildInstagramDmLink,
+  buildInstagramProfileLink,
+  resolveInstagramDmLink,
+  reactivationChannelForThreshold,
+  REACTIVATION_CHANNEL_BY_THRESHOLD,
+  DEFAULT_WHATSAPP_REACTIVATION_MESSAGES,
+  DEFAULT_INSTAGRAM_REACTIVATION_MESSAGES,
   REACTIVATION_THRESHOLD_OPTIONS,
   TEST_PERIOD_DAYS,
   isValidReactivationThresholdDays,
@@ -318,19 +325,118 @@ describe("rotação em sequência das mensagens", () => {
 
   it("resolveReactivationMessageText: usa o texto customizado do slot quando existe", () => {
     const messages = [null, "Mensagem customizada", null, null, null];
-    expect(resolveReactivationMessageText(2, messages)).toBe("Mensagem customizada");
+    expect(resolveReactivationMessageText(2, messages, DEFAULT_WHATSAPP_REACTIVATION_MESSAGES)).toBe("Mensagem customizada");
   });
 
-  it("resolveReactivationMessageText: sem customização nesse slot, cai pro texto padrão correspondente", () => {
+  it("resolveReactivationMessageText: sem customização nesse slot, cai pro texto padrão do canal (WhatsApp)", () => {
     const messages = [null, null, null, null, null];
-    expect(resolveReactivationMessageText(3, messages)).toBe(DEFAULT_REACTIVATION_MESSAGES[2]);
+    expect(resolveReactivationMessageText(3, messages, DEFAULT_WHATSAPP_REACTIVATION_MESSAGES)).toBe(
+      DEFAULT_WHATSAPP_REACTIVATION_MESSAGES[2]
+    );
   });
 
-  it("DEFAULT_REACTIVATION_MESSAGES: 5 textos, nenhum citando serviço/procedimento, sem variável de nome", () => {
-    expect(DEFAULT_REACTIVATION_MESSAGES).toHaveLength(5);
-    for (const msg of DEFAULT_REACTIVATION_MESSAGES) {
-      expect(msg).not.toMatch(/\{\{/);
+  it("resolveReactivationMessageText: sem customização nesse slot, cai pro texto padrão do canal (Instagram) — conjunto DIFERENTE do WhatsApp", () => {
+    const messages = [null, null, null, null, null];
+    const result = resolveReactivationMessageText(3, messages, DEFAULT_INSTAGRAM_REACTIVATION_MESSAGES);
+    expect(result).toBe(DEFAULT_INSTAGRAM_REACTIVATION_MESSAGES[2]);
+    expect(result).not.toBe(DEFAULT_WHATSAPP_REACTIVATION_MESSAGES[2]);
+  });
+
+  it("DEFAULT_WHATSAPP_REACTIVATION_MESSAGES e DEFAULT_INSTAGRAM_REACTIVATION_MESSAGES: 5 textos cada, nenhum citando serviço/procedimento, sem variável de nome", () => {
+    for (const set of [DEFAULT_WHATSAPP_REACTIVATION_MESSAGES, DEFAULT_INSTAGRAM_REACTIVATION_MESSAGES]) {
+      expect(set).toHaveLength(5);
+      for (const msg of set) {
+        expect(msg).not.toMatch(/\{\{/);
+      }
     }
+  });
+});
+
+describe("canal por período (Instagram vs. WhatsApp)", () => {
+  it("7, 30 e 60 dias são Instagram; 10, 90, 120 e 150 são WhatsApp", () => {
+    expect(reactivationChannelForThreshold(7)).toBe("INSTAGRAM");
+    expect(reactivationChannelForThreshold(30)).toBe("INSTAGRAM");
+    expect(reactivationChannelForThreshold(60)).toBe("INSTAGRAM");
+    expect(reactivationChannelForThreshold(10)).toBe("WHATSAPP");
+    expect(reactivationChannelForThreshold(90)).toBe("WHATSAPP");
+    expect(reactivationChannelForThreshold(120)).toBe("WHATSAPP");
+    expect(reactivationChannelForThreshold(150)).toBe("WHATSAPP");
+  });
+
+  it("todo período em REACTIVATION_THRESHOLD_OPTIONS tem um canal mapeado em REACTIVATION_CHANNEL_BY_THRESHOLD", () => {
+    for (const days of REACTIVATION_THRESHOLD_OPTIONS) {
+      expect(["INSTAGRAM", "WHATSAPP"]).toContain(REACTIVATION_CHANNEL_BY_THRESHOLD[days]);
+    }
+  });
+});
+
+describe("assignReactivationCardSlotsByChannel — contador SEPARADO por canal", () => {
+  function cardCandidate(appointmentId: string, thresholdDays: number): ReturnType<typeof buildReactivationCardCandidates>[number] {
+    return {
+      appointmentId,
+      leadId: "lead-1",
+      scheduledAt: new Date("2026-01-01T12:00:00.000Z"),
+      thresholdDays,
+      window: { start: new Date("2026-04-01T00:00:00.000Z"), end: new Date("2026-04-07T00:00:00.000Z") },
+    };
+  }
+
+  it("as mensagens do Instagram rodam entre si e as do WhatsApp entre si — contadores não se misturam", () => {
+    // 2 cards de Instagram (7 dias) + 2 cards de WhatsApp (90 dias), nessa
+    // ordem — cada canal deveria recomeçar sua própria sequência do zero.
+    const { cards, finalCounters } = assignReactivationCardSlotsByChannel(
+      [cardCandidate("appt-ig-1", 7), cardCandidate("appt-ig-2", 30), cardCandidate("appt-wa-1", 90), cardCandidate("appt-wa-2", 120)],
+      [1, 2, 3, 4, 5],
+      [1, 2, 3, 4, 5],
+      { whatsapp: 0, instagram: 0 },
+      new Map()
+    );
+    const slotFor = (appointmentId: string) => cards.find((c) => c.appointmentId === appointmentId)!.slot;
+    expect(slotFor("appt-ig-1")).toBe(1);
+    expect(slotFor("appt-ig-2")).toBe(2);
+    expect(slotFor("appt-wa-1")).toBe(1); // recomeça do slot 1 — contador do WhatsApp é outro
+    expect(slotFor("appt-wa-2")).toBe(2);
+    expect(finalCounters).toEqual({ whatsapp: 2, instagram: 2 });
+  });
+
+  it("contador de um canal avançando não afeta o contador do outro", () => {
+    const { finalCounters } = assignReactivationCardSlotsByChannel(
+      [cardCandidate("appt-ig-1", 7)],
+      [1, 2, 3],
+      [1, 2, 3],
+      { whatsapp: 5, instagram: 0 },
+      new Map()
+    );
+    expect(finalCounters).toEqual({ whatsapp: 5, instagram: 1 }); // whatsapp intocado
+  });
+
+  it("devolve os cards na ordem global original (não agrupados por canal)", () => {
+    const { cards } = assignReactivationCardSlotsByChannel(
+      [cardCandidate("appt-wa-1", 90), cardCandidate("appt-ig-1", 7), cardCandidate("appt-wa-2", 120)],
+      [1, 2, 3],
+      [1, 2, 3],
+      { whatsapp: 0, instagram: 0 },
+      new Map()
+    );
+    expect(cards.map((c) => c.appointmentId)).toEqual(["appt-wa-1", "appt-ig-1", "appt-wa-2"]);
+  });
+});
+
+describe("Instagram — links e botão desativado sem @", () => {
+  it("buildInstagramDmLink: gera o link ig.me/m/<@>", () => {
+    expect(buildInstagramDmLink("fulano.silva")).toBe("https://ig.me/m/fulano.silva");
+  });
+
+  it("buildInstagramProfileLink: mesmo formato do perfil público usado em NeedsHumanBanner", () => {
+    expect(buildInstagramProfileLink("fulano.silva")).toBe("https://www.instagram.com/fulano.silva/");
+  });
+
+  it("resolveInstagramDmLink: devolve o link quando há @", () => {
+    expect(resolveInstagramDmLink("fulano.silva")).toBe("https://ig.me/m/fulano.silva");
+  });
+
+  it("resolveInstagramDmLink: null sem @ — é o que deixa o botão Instagram desativado", () => {
+    expect(resolveInstagramDmLink(null)).toBeNull();
   });
 });
 

@@ -42,15 +42,26 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
   const reactivationThresholdSet = new Set(
     clinic.reactivationConfig?.thresholdDaysList ?? DEFAULT_REACTIVATION_THRESHOLD_DAYS_LIST
   );
-  const reactivationMessages = [
+  const reactivationWhatsappMessages = [
     clinic.reactivationConfig?.message1,
     clinic.reactivationConfig?.message2,
     clinic.reactivationConfig?.message3,
     clinic.reactivationConfig?.message4,
     clinic.reactivationConfig?.message5,
   ];
-  const reactivationFilledCount = reactivationMessages.filter((m) => m?.trim()).length;
-  const reactivationSummary = `${reactivationFilledCount} de 5 preenchidas · ${reminderPreview(reactivationMessages[0])}`;
+  const reactivationInstagramMessages = [
+    clinic.reactivationConfig?.instagramMessage1,
+    clinic.reactivationConfig?.instagramMessage2,
+    clinic.reactivationConfig?.instagramMessage3,
+    clinic.reactivationConfig?.instagramMessage4,
+    clinic.reactivationConfig?.instagramMessage5,
+  ];
+  const reactivationWhatsappSummary = `${reactivationWhatsappMessages.filter((m) => m?.trim()).length} de 5 preenchidas · ${reminderPreview(
+    reactivationWhatsappMessages[0]
+  )}`;
+  const reactivationInstagramSummary = `${reactivationInstagramMessages.filter((m) => m?.trim()).length} de 5 preenchidas · ${reminderPreview(
+    reactivationInstagramMessages[0]
+  )}`;
 
   return (
     <div className="max-w-3xl space-y-4">
@@ -249,8 +260,9 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
                   <p className="mt-1 text-caption text-vexo-muted">
                     Cards de pacientes cujo agendamento da IA completou algum dos prazos
                     marcados sem um retorno — aparecem só no Painel do cliente, com uma
-                    mensagem de acompanhamento sugerida pra enviar por WhatsApp (nada é
-                    enviado automaticamente). Sem nenhum prazo marcado, a faixa fica desligada.
+                    mensagem de acompanhamento sugerida pra enviar por WhatsApp ou Instagram
+                    (ver canal de cada prazo abaixo; nada é enviado automaticamente). Sem
+                    nenhum prazo marcado, a faixa fica desligada.
                   </p>
 
                   <form
@@ -283,8 +295,8 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
                     <details className="group rounded-lg border border-vexo-border bg-vexo-surface2">
                       <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2">
                         <div className="flex min-w-0 items-center gap-2.5">
-                          <span className="shrink-0 text-card text-vexo-muted">Mensagens</span>
-                          <span className="truncate text-xs">{reactivationSummary}</span>
+                          <span className="shrink-0 text-card text-vexo-muted">Mensagens WhatsApp</span>
+                          <span className="truncate text-xs">{reactivationWhatsappSummary}</span>
                         </div>
                         <span className="shrink-0 text-card text-vexo-muted transition group-open:rotate-180">▾</span>
                       </summary>
@@ -332,6 +344,63 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
                           rows={2}
                           variables={[]}
                           defaultValue={clinic.reactivationConfig?.message5 ?? ""}
+                          placeholder="Vazio usa um texto padrão de acompanhamento, sem citar serviço/procedimento."
+                        />
+                      </div>
+                    </details>
+
+                    <details className="group rounded-lg border border-vexo-border bg-vexo-surface2">
+                      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2">
+                        <div className="flex min-w-0 items-center gap-2.5">
+                          <span className="shrink-0 text-card text-vexo-muted">Mensagens Instagram</span>
+                          <span className="truncate text-xs">{reactivationInstagramSummary}</span>
+                        </div>
+                        <span className="shrink-0 text-card text-vexo-muted transition group-open:rotate-180">▾</span>
+                      </summary>
+                      <div className="space-y-2 border-t border-vexo-border px-3 pb-3 pt-2.5">
+                        <TemplateMessageField
+                          name="instagramMessage1"
+                          label="Mensagem 1"
+                          required={false}
+                          rows={2}
+                          variables={[]}
+                          defaultValue={clinic.reactivationConfig?.instagramMessage1 ?? ""}
+                          placeholder="Vazio usa um texto padrão de acompanhamento, sem citar serviço/procedimento."
+                        />
+                        <TemplateMessageField
+                          name="instagramMessage2"
+                          label="Mensagem 2"
+                          required={false}
+                          rows={2}
+                          variables={[]}
+                          defaultValue={clinic.reactivationConfig?.instagramMessage2 ?? ""}
+                          placeholder="Vazio usa um texto padrão de acompanhamento, sem citar serviço/procedimento."
+                        />
+                        <TemplateMessageField
+                          name="instagramMessage3"
+                          label="Mensagem 3"
+                          required={false}
+                          rows={2}
+                          variables={[]}
+                          defaultValue={clinic.reactivationConfig?.instagramMessage3 ?? ""}
+                          placeholder="Vazio usa um texto padrão de acompanhamento, sem citar serviço/procedimento."
+                        />
+                        <TemplateMessageField
+                          name="instagramMessage4"
+                          label="Mensagem 4"
+                          required={false}
+                          rows={2}
+                          variables={[]}
+                          defaultValue={clinic.reactivationConfig?.instagramMessage4 ?? ""}
+                          placeholder="Vazio usa um texto padrão de acompanhamento, sem citar serviço/procedimento."
+                        />
+                        <TemplateMessageField
+                          name="instagramMessage5"
+                          label="Mensagem 5"
+                          required={false}
+                          rows={2}
+                          variables={[]}
+                          defaultValue={clinic.reactivationConfig?.instagramMessage5 ?? ""}
                           placeholder="Vazio usa um texto padrão de acompanhamento, sem citar serviço/procedimento."
                         />
                       </div>

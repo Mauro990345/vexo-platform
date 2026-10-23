@@ -1,23 +1,29 @@
 import { LeadAvatar } from "@/components/LeadAvatar";
 import { WhatsAppGlyphIcon } from "@/components/BrandIcons";
+import { InstagramDmButton } from "@/components/InstagramDmButton";
 import type { ReactivationCard } from "@/lib/reactivation";
 
 function patientsCountLabel(n: number): string {
   return n === 1 ? "1 paciente esta semana" : `${n} pacientes esta semana`;
 }
 
-// Faixa "Reativação", abaixo das métricas/lista de Agendamentos do Painel
-// (ver ClientPanelView.tsx) — pacientes cujo agendamento da IA completou o
-// prazo configurado (Automações, ver ReactivationConfig) sem retorno. Sem
-// limite de cards: rolável horizontalmente (nunca empilha/quebra linha,
-// diferente de NeedsHumanBanner — aqui não existe conceito de "+N"/expandir).
-//
-// Botão "WhatsApp" abre o wa.me com a mensagem já preenchida — a secretária
-// decide se envia; nada aqui dispara mensagem sozinho. Sem o @ como LINK
-// pro Instagram (diferente do mini card de NeedsHumanBanner, que este se
-// inspira no estilo): aqui o contato é sempre pelo botão de WhatsApp.
+// Acima de ~6 linhas a lista ganha rolagem INTERNA (nunca horizontal) —
+// mesma altura aproximada de 6 linhas compactas + espaçamento.
+const SCROLL_THRESHOLD = 6;
+
+// Faixa "Reativação" — coluna ESQUERDA do Painel, logo abaixo das métricas
+// (ver ClientPanelView.tsx; no celular, uma coluna só, aparece depois das
+// métricas e antes da lista de Agendamentos, por estar ANTES dela no JSX
+// da coluna esquerda). Lista vertical compacta (trocou o carrossel
+// horizontal de cards — ficavam pequenos/cortados) — uma linha enxuta por
+// paciente: avatar pequeno, nome, @ (link pro perfil só nas linhas de
+// Instagram — pedido explícito; nas de WhatsApp fica texto puro) e o botão
+// de ação alinhado à direita, de acordo com o CANAL daquele período (ver
+// REACTIVATION_CHANNEL_BY_THRESHOLD em reactivation.ts).
 export function ReactivationRail({ cards }: { cards: ReactivationCard[] }) {
   if (cards.length === 0) return null;
+
+  const needsScroll = cards.length > SCROLL_THRESHOLD;
 
   return (
     <div className="space-y-2">
@@ -25,28 +31,49 @@ export function ReactivationRail({ cards }: { cards: ReactivationCard[] }) {
         <h2 className="text-caption font-medium uppercase tracking-wide text-vexo-muted">Reativação</h2>
         <span className="text-caption text-vexo-muted">{patientsCountLabel(cards.length)}</span>
       </div>
-      <div className="flex gap-2.5 overflow-x-auto pb-1">
+      <div className={`space-y-1.5 ${needsScroll ? "max-h-72 overflow-y-auto pr-1" : ""}`}>
         {cards.map((card) => (
           <div
             key={`${card.appointmentId}-${card.thresholdDays}`}
-            className="flex w-36 shrink-0 flex-col items-center gap-1.5 rounded-lg border border-vexo-border bg-vexo-surface p-2.5 text-center"
+            className="flex items-center gap-2 rounded-lg border border-vexo-border bg-vexo-surface px-2 py-1.5"
           >
-            <LeadAvatar profilePictureUrl={card.profilePictureUrl} name={card.name} size="md" />
-            <p className="w-full truncate text-xs font-medium">{card.name}</p>
-            {card.igUsername && <p className="w-full truncate text-caption text-vexo-muted">@{card.igUsername}</p>}
-            <p className="w-full truncate text-caption text-vexo-muted">{card.thresholdDays} dias</p>
-            {card.whatsappLink ? (
-              <a
-                href={card.whatsappLink}
-                target="_blank"
-                rel="noreferrer"
-                className="mt-1 inline-flex w-full items-center justify-center gap-1 rounded-lg bg-vexo-success px-2 py-1.5 text-caption font-semibold text-vexo-bg hover:opacity-90"
-              >
-                <WhatsAppGlyphIcon className="h-3.5 w-3.5" />
-                WhatsApp
-              </a>
+            <LeadAvatar profilePictureUrl={card.profilePictureUrl} name={card.name} size="sm" />
+            <div className="min-w-0 flex-1">
+              <div className="flex min-w-0 items-baseline gap-1">
+                <p className="min-w-0 shrink truncate text-xs font-medium">{card.name}</p>
+                {card.igUsername &&
+                  (card.instagramProfileLink ? (
+                    <a
+                      href={card.instagramProfileLink}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="shrink-0 truncate text-caption text-vexo-muted hover:text-vexo-accent hover:underline"
+                    >
+                      @{card.igUsername}
+                    </a>
+                  ) : (
+                    <span className="shrink-0 truncate text-caption text-vexo-muted">@{card.igUsername}</span>
+                  ))}
+              </div>
+              <p className="truncate text-caption text-vexo-muted">{card.thresholdDays} dias</p>
+            </div>
+
+            {card.channel === "WHATSAPP" ? (
+              card.whatsappLink ? (
+                <a
+                  href={card.whatsappLink}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-vexo-success px-2 py-1 text-caption font-semibold text-vexo-bg hover:opacity-90"
+                >
+                  <WhatsAppGlyphIcon className="h-3 w-3" />
+                  WhatsApp
+                </a>
+              ) : (
+                <span className="shrink-0 text-caption text-vexo-muted">Sem WhatsApp</span>
+              )
             ) : (
-              <p className="mt-1 text-caption text-vexo-muted">Sem WhatsApp salvo</p>
+              <InstagramDmButton message={card.message} dmLink={card.instagramDmLink} />
             )}
           </div>
         ))}

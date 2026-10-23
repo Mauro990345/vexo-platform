@@ -219,6 +219,8 @@ export async function ClientPanelView({
             </div>
 
             <ApproachMetricsToggle periods={periods} />
+
+            <ReactivationRail cards={reactivationCards} />
           </div>
 
           {/* Coluna direita: agendamentos */}
@@ -301,10 +303,6 @@ export async function ClientPanelView({
               )}
             </div>
           </div>
-        </div>
-
-        <div className="mt-6">
-          <ReactivationRail cards={reactivationCards} />
         </div>
       </div>
     </div>
