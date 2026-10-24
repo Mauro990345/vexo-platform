@@ -4,6 +4,9 @@ const reactivationConfigFindUniqueMock = vi.fn();
 const appointmentFindManyMock = vi.fn();
 const reactivationCardSlotFindManyMock = vi.fn();
 const reactivationCardSlotUpsertMock = vi.fn();
+const reactivationCardSlotFindUniqueMock = vi.fn();
+const reactivationCardSlotUpdateManyMock = vi.fn();
+const reactivationCardSlotUpdateMock = vi.fn();
 const reactivationConfigUpsertMock = vi.fn();
 const leadFindManyMock = vi.fn();
 vi.mock("@/lib/prisma", () => ({
@@ -16,10 +19,26 @@ vi.mock("@/lib/prisma", () => ({
     reactivationCardSlot: {
       findMany: (...args: unknown[]) => reactivationCardSlotFindManyMock(...args),
       upsert: (...args: unknown[]) => reactivationCardSlotUpsertMock(...args),
+      findUnique: (...args: unknown[]) => reactivationCardSlotFindUniqueMock(...args),
+      updateMany: (...args: unknown[]) => reactivationCardSlotUpdateManyMock(...args),
+      update: (...args: unknown[]) => reactivationCardSlotUpdateMock(...args),
     },
     lead: { findMany: (...args: unknown[]) => leadFindManyMock(...args) },
   },
 }));
+
+// Partial mock (importOriginal) — normalizeBrazilianWhatsappNumber/
+// validateBrazilianPhone continuam com a implementação REAL (usadas pelos
+// testes de buildReactivationWhatsAppLink já existentes mais abaixo, e
+// pelos novos testes de sendReactivationWhatsAppMessage, que precisam da
+// validação de telefone de verdade pra testar o caso "telefone inválido"
+// de forma realista); só sendWhatsappMessage (a chamada de rede de
+// verdade, Evolution API) é mockada.
+const sendWhatsappMessageMock = vi.fn();
+vi.mock("@/lib/whatsapp", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/whatsapp")>();
+  return { ...actual, sendWhatsappMessage: (...args: unknown[]) => sendWhatsappMessageMock(...args) };
+});
 
 import {
   computeReactivationWindow,
@@ -47,6 +66,9 @@ import {
   getReactivationCards,
   sortReactivationCardsForDisplay,
   countPendingReactivationCards,
+  isReactivationWhatsAppRateLimited,
+  sendReactivationWhatsAppMessage,
+  REACTIVATION_WHATSAPP_MIN_INTERVAL_MS,
   type ReactivationSourceAppointment,
   type ReactivationCandidate,
 } from "./reactivation";
@@ -617,5 +639,192 @@ describe("countPendingReactivationCards — título da faixa mostra só os pende
 
   it("lista vazia: zero pendentes", () => {
     expect(countPendingReactivationCards([])).toBe(0);
+  });
+});
+
+// Proteção do chip (pedido explícito): ~10s entre envios de WhatsApp da
+// MESMA clínica. Pura — quem chama (sendReactivationWhatsAppMessage,
+// abaixo) acha o sentAt mais recente só entre slots de canal WHATSAPP.
+describe("isReactivationWhatsAppRateLimited", () => {
+  it("sem nenhum envio anterior (null): nunca limitado", () => {
+    expect(isReactivationWhatsAppRateLimited(null, new Date())).toBe(false);
+  });
+
+  it("último envio há menos do que o intervalo mínimo: limitado", () => {
+    const lastSent = new Date("2026-05-20T12:00:00.000Z");
+    const now = new Date(lastSent.getTime() + REACTIVATION_WHATSAPP_MIN_INTERVAL_MS - 1);
+    expect(isReactivationWhatsAppRateLimited(lastSent, now)).toBe(true);
+  });
+
+  it("último envio há mais do que o intervalo mínimo: não limitado", () => {
+    const lastSent = new Date("2026-05-20T12:00:00.000Z");
+    const now = new Date(lastSent.getTime() + REACTIVATION_WHATSAPP_MIN_INTERVAL_MS + 1);
+    expect(isReactivationWhatsAppRateLimited(lastSent, now)).toBe(false);
+  });
+});
+
+describe("sendReactivationWhatsAppMessage — envio direto pelo VEXO (canal WhatsApp)", () => {
+  function fakeSlot(overrides: Record<string, unknown> = {}) {
+    return {
+      id: "slot-1",
+      appointmentId: "appt-1",
+      thresholdDays: 90, // WHATSAPP (ver REACTIVATION_CHANNEL_BY_THRESHOLD)
+      slot: 2,
+      sentAt: null,
+      appointment: {
+        clinicId: "clinic-1",
+        lead: { phone: "11987654321" },
+        clinic: {
+          whatsappInstanceName: "clinic-1-instance",
+          reactivationConfig: {
+            message1: null,
+            message2: "Mensagem customizada da clínica",
+            message3: null,
+            message4: null,
+            message5: null,
+          },
+        },
+      },
+      ...overrides,
+    };
+  }
+
+  beforeEach(() => {
+    reactivationCardSlotFindUniqueMock.mockReset();
+    reactivationCardSlotFindManyMock.mockReset();
+    reactivationCardSlotUpdateManyMock.mockReset();
+    reactivationCardSlotUpdateMock.mockReset();
+    sendWhatsappMessageMock.mockReset();
+    reactivationCardSlotFindManyMock.mockResolvedValue([]); // sem envio anterior = sem rate limit, por padrão
+    reactivationCardSlotUpdateManyMock.mockResolvedValue({ count: 1 }); // claim ganho, por padrão
+  });
+
+  it("sucesso: reserva, manda o texto certo (da config+slot, nunca do cliente) e marca enviado", async () => {
+    reactivationCardSlotFindUniqueMock.mockResolvedValue(fakeSlot());
+    sendWhatsappMessageMock.mockResolvedValue(undefined);
+
+    const result = await sendReactivationWhatsAppMessage("appt-1", 90, new Date());
+
+    expect(result).toEqual({ ok: true, alreadySent: false, clinicId: "clinic-1" });
+    expect(reactivationCardSlotUpdateManyMock).toHaveBeenCalledWith({
+      where: { id: "slot-1", sentAt: null },
+      data: { sentAt: expect.any(Date) },
+    });
+    // Texto remontado a partir de ReactivationConfig.message2 (slot=2) —
+    // é exatamente o que getReactivationCards também usaria pra esse
+    // card; nunca um texto vindo de fora.
+    expect(sendWhatsappMessageMock).toHaveBeenCalledWith("clinic-1-instance", "5511987654321", "Mensagem customizada da clínica");
+    expect(reactivationCardSlotUpdateMock).not.toHaveBeenCalled(); // nenhuma liberação de reserva
+  });
+
+  it("falha no envio (Evolution API): libera a reserva (sentAt volta a null), nunca fica marcado", async () => {
+    reactivationCardSlotFindUniqueMock.mockResolvedValue(fakeSlot());
+    sendWhatsappMessageMock.mockRejectedValue(new Error("Evolution API fora do ar"));
+
+    const result = await sendReactivationWhatsAppMessage("appt-1", 90, new Date());
+
+    expect(result).toEqual({ ok: false, reason: "send_failed", clinicId: "clinic-1" });
+    expect(reactivationCardSlotUpdateMock).toHaveBeenCalledWith({ where: { id: "slot-1" }, data: { sentAt: null } });
+  });
+
+  it('card já marcado como enviado: não reenvia (idempotente) — nem chega a checar rate limit ou reservar', async () => {
+    reactivationCardSlotFindUniqueMock.mockResolvedValue(fakeSlot({ sentAt: new Date("2026-05-01T00:00:00Z") }));
+
+    const result = await sendReactivationWhatsAppMessage("appt-1", 90, new Date());
+
+    expect(result).toEqual({ ok: true, alreadySent: true, clinicId: "clinic-1" });
+    expect(sendWhatsappMessageMock).not.toHaveBeenCalled();
+    expect(reactivationCardSlotUpdateManyMock).not.toHaveBeenCalled();
+  });
+
+  it("anti duplo clique: perde a corrida do claim atômico (count=0) — trata como já enviado, nunca manda de novo", async () => {
+    reactivationCardSlotFindUniqueMock.mockResolvedValue(fakeSlot());
+    reactivationCardSlotUpdateManyMock.mockResolvedValue({ count: 0 });
+
+    const result = await sendReactivationWhatsAppMessage("appt-1", 90, new Date());
+
+    expect(result).toEqual({ ok: true, alreadySent: true, clinicId: "clinic-1" });
+    expect(sendWhatsappMessageMock).not.toHaveBeenCalled();
+  });
+
+  it("intervalo mínimo entre envios da mesma clínica: rejeita sem mandar nada, nem reserva o card", async () => {
+    reactivationCardSlotFindUniqueMock.mockResolvedValue(fakeSlot());
+    const now = new Date("2026-05-20T12:00:30.000Z");
+    reactivationCardSlotFindManyMock.mockResolvedValue([
+      { thresholdDays: 90, sentAt: new Date(now.getTime() - 5_000) }, // 5s atrás, canal WHATSAPP — dentro do limite
+    ]);
+
+    const result = await sendReactivationWhatsAppMessage("appt-1", 90, now);
+
+    expect(result).toEqual({ ok: false, reason: "rate_limited", clinicId: "clinic-1" });
+    expect(reactivationCardSlotUpdateManyMock).not.toHaveBeenCalled();
+    expect(sendWhatsappMessageMock).not.toHaveBeenCalled();
+  });
+
+  it("envio recente só de card de Instagram (canal diferente) não conta pro limite do WhatsApp", async () => {
+    reactivationCardSlotFindUniqueMock.mockResolvedValue(fakeSlot());
+    const now = new Date("2026-05-20T12:00:30.000Z");
+    reactivationCardSlotFindManyMock.mockResolvedValue([
+      { thresholdDays: 30, sentAt: new Date(now.getTime() - 1_000) }, // 1s atrás, mas canal INSTAGRAM
+    ]);
+    sendWhatsappMessageMock.mockResolvedValue(undefined);
+
+    const result = await sendReactivationWhatsAppMessage("appt-1", 90, now);
+
+    expect(result.ok).toBe(true);
+    expect(sendWhatsappMessageMock).toHaveBeenCalled();
+  });
+
+  it('telefone inválido: NÃO manda, libera a reserva, nunca marca como enviado', async () => {
+    reactivationCardSlotFindUniqueMock.mockResolvedValue(
+      fakeSlot({ appointment: { ...fakeSlot().appointment, lead: { phone: "123" } } })
+    );
+
+    const result = await sendReactivationWhatsAppMessage("appt-1", 90, new Date());
+
+    expect(result).toEqual({ ok: false, reason: "invalid_phone", clinicId: "clinic-1" });
+    expect(sendWhatsappMessageMock).not.toHaveBeenCalled();
+    expect(reactivationCardSlotUpdateMock).toHaveBeenCalledWith({ where: { id: "slot-1" }, data: { sentAt: null } });
+  });
+
+  it("lead sem telefone cadastrado: mesmo tratamento de telefone inválido", async () => {
+    reactivationCardSlotFindUniqueMock.mockResolvedValue(
+      fakeSlot({ appointment: { ...fakeSlot().appointment, lead: null } })
+    );
+
+    const result = await sendReactivationWhatsAppMessage("appt-1", 90, new Date());
+
+    expect(result).toEqual({ ok: false, reason: "invalid_phone", clinicId: "clinic-1" });
+    expect(sendWhatsappMessageMock).not.toHaveBeenCalled();
+  });
+
+  it('clínica com WhatsApp desconectado (sem instância): fallback — libera a reserva, nunca marca como enviado', async () => {
+    reactivationCardSlotFindUniqueMock.mockResolvedValue(
+      fakeSlot({ appointment: { ...fakeSlot().appointment, clinic: { ...fakeSlot().appointment.clinic, whatsappInstanceName: null } } })
+    );
+
+    const result = await sendReactivationWhatsAppMessage("appt-1", 90, new Date());
+
+    expect(result).toEqual({ ok: false, reason: "disconnected", clinicId: "clinic-1" });
+    expect(sendWhatsappMessageMock).not.toHaveBeenCalled();
+    expect(reactivationCardSlotUpdateMock).toHaveBeenCalledWith({ where: { id: "slot-1" }, data: { sentAt: null } });
+  });
+
+  it("card inexistente: not_found, sem tocar em nada", async () => {
+    reactivationCardSlotFindUniqueMock.mockResolvedValue(null);
+
+    const result = await sendReactivationWhatsAppMessage("appt-inexistente", 90, new Date());
+
+    expect(result).toEqual({ ok: false, reason: "not_found" });
+    expect(sendWhatsappMessageMock).not.toHaveBeenCalled();
+  });
+
+  it("defesa em profundidade: período de canal Instagram nunca manda WhatsApp, mesmo se chamado diretamente", async () => {
+    reactivationCardSlotFindUniqueMock.mockResolvedValue(fakeSlot({ thresholdDays: 30 })); // 30 = INSTAGRAM
+
+    const result = await sendReactivationWhatsAppMessage("appt-1", 30, new Date());
+
+    expect(result).toEqual({ ok: false, reason: "wrong_channel", clinicId: "clinic-1" });
+    expect(sendWhatsappMessageMock).not.toHaveBeenCalled();
   });
 });

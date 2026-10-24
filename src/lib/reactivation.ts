@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { startOfDay, addDays } from "@/lib/metrics";
-import { normalizeBrazilianWhatsappNumber } from "@/lib/whatsapp";
+import { normalizeBrazilianWhatsappNumber, validateBrazilianPhone, sendWhatsappMessage } from "@/lib/whatsapp";
 
 // Faixa "Reativação" do Painel do cliente (ver ClientPanelView.tsx /
 // ReactivationRail.tsx) — pacientes cujo agendamento da IA completou o
@@ -533,4 +533,150 @@ export async function toggleReactivationCardSent(
   await prisma.reactivationCardSlot.update({ where: { id: slot.id }, data: { sentAt } });
 
   return { clinicId: slot.appointment.clinicId, sentAt };
+}
+
+// -----------------------------------------------------------------------
+// Envio direto do WhatsApp pelo VEXO (decisão explícita: SÓ WhatsApp — o
+// Instagram continua copiar + abrir, envio manual, sem mudança nenhuma).
+// Um clique = uma mensagem, nunca em lote, nunca automático — a reação ao
+// clique é sempre uma chamada humana, uma por vez, nunca um gatilho de
+// tempo/worker como o follow-up.
+// -----------------------------------------------------------------------
+
+// "Cerca de 10 segundos" (pedido explícito) — proteção contra o chip da
+// clínica mandando rajadas de mensagem: qualquer clique que caia dentro
+// desse intervalo desde o ÚLTIMO envio de WhatsApp da Reativação da MESMA
+// clínica (qualquer card, não só este) é rejeitado, sem mandar nada.
+export const REACTIVATION_WHATSAPP_MIN_INTERVAL_MS = 10_000;
+
+// Pura — decide só com base no sentAt mais recente já conhecido; quem
+// chama é responsável por achar esse valor (ver
+// sendReactivationWhatsAppMessage, mais abaixo, que busca só entre os
+// slots cujo canal resolve pra WHATSAPP).
+export function isReactivationWhatsAppRateLimited(mostRecentWhatsappSentAt: Date | null, now: Date): boolean {
+  if (!mostRecentWhatsappSentAt) return false;
+  return now.getTime() - mostRecentWhatsappSentAt.getTime() < REACTIVATION_WHATSAPP_MIN_INTERVAL_MS;
+}
+
+export type SendReactivationWhatsAppResult =
+  | { ok: true; alreadySent: boolean }
+  | { ok: false; reason: "not_found" | "wrong_channel" | "rate_limited" | "invalid_phone" | "disconnected" | "send_failed" };
+
+// Orquestração completa do clique no botão WhatsApp de um card — validação
+// de clínica fica nas duas server actions que chamam esta função (mesmo
+// padrão de toggleReactivationCardSent, acima), não aqui.
+//
+// Nunca confia em texto vindo do cliente (pedido explícito): o texto é
+// SEMPRE remontado aqui, a partir de ReactivationConfig (mensagens da
+// clínica) + slot.slot (a variação já atribuída a ESTE card desde que ele
+// entrou na faixa, ver assignReactivationCardSlots acima) — exatamente a
+// mesma fonte que getReactivationCards usa pra montar `card.message`,
+// nunca o que a requisição mandou.
+//
+// Reserva ATÔMICA antes de mandar (updateMany condicionado em
+// sentAt: null — mesmo padrão de claimMessage, dispatch.ts): só UMA
+// chamada concorrente pra este mesmo card ganha o claim; a(s) outra(s)
+// contam count=0 e tratam como "já enviado", sem mandar de novo (anti
+// duplo clique). Qualquer falha DEPOIS do claim (telefone inválido,
+// clínica desconectada, erro na Evolution API) libera a reserva
+// (sentAt -> null de novo) — só fica marcado como enviado se o envio for
+// bem-sucedido de verdade.
+export async function sendReactivationWhatsAppMessage(
+  appointmentId: string,
+  thresholdDays: number,
+  now: Date = new Date()
+): Promise<SendReactivationWhatsAppResult & { clinicId?: string }> {
+  const slot = await prisma.reactivationCardSlot.findUnique({
+    where: { appointmentId_thresholdDays: { appointmentId, thresholdDays } },
+    include: {
+      appointment: {
+        select: {
+          clinicId: true,
+          lead: { select: { phone: true } },
+          clinic: {
+            select: {
+              whatsappInstanceName: true,
+              reactivationConfig: {
+                select: { message1: true, message2: true, message3: true, message4: true, message5: true },
+              },
+            },
+          },
+        },
+      },
+    },
+  });
+  if (!slot) return { ok: false, reason: "not_found" };
+
+  const clinicId = slot.appointment.clinicId;
+
+  // Defesa em profundidade — a UI nunca deveria chamar isto pra um
+  // período de canal Instagram, mas o servidor nunca confia só na tela
+  // pra decidir isso.
+  if (reactivationChannelForThreshold(thresholdDays) !== "WHATSAPP") {
+    return { ok: false, reason: "wrong_channel", clinicId };
+  }
+
+  // Idempotência (pedido explícito): card já marcado, não manda de novo —
+  // nem chega a checar rate limit pra um card que não vai gerar envio
+  // nenhum.
+  if (slot.sentAt) return { ok: true, alreadySent: true, clinicId };
+
+  const recentSentSlots = await prisma.reactivationCardSlot.findMany({
+    where: { sentAt: { not: null }, appointment: { clinicId } },
+    orderBy: { sentAt: "desc" },
+    take: 20,
+    select: { thresholdDays: true, sentAt: true },
+  });
+  const mostRecentWhatsappSentAt =
+    recentSentSlots.find((s) => reactivationChannelForThreshold(s.thresholdDays) === "WHATSAPP")?.sentAt ?? null;
+  if (isReactivationWhatsAppRateLimited(mostRecentWhatsappSentAt, now)) {
+    return { ok: false, reason: "rate_limited", clinicId };
+  }
+
+  const claim = await prisma.reactivationCardSlot.updateMany({
+    where: { id: slot.id, sentAt: null },
+    data: { sentAt: now },
+  });
+  if (claim.count === 0) {
+    // Outra chamada concorrente pra ESTE card já ganhou o claim entre a
+    // leitura acima e aqui — trata como já enviado, nunca manda de novo.
+    return { ok: true, alreadySent: true, clinicId };
+  }
+
+  // Capturado numa const antes do closure abaixo — `slot` já está non-null
+  // aqui (early return lá no topo), mas o TypeScript não carrega esse
+  // narrowing pra dentro de uma função aninhada (mesmo padrão de sempre
+  // neste arquivo/projeto).
+  const slotId = slot.id;
+  async function releaseClaim() {
+    await prisma.reactivationCardSlot.update({ where: { id: slotId }, data: { sentAt: null } });
+  }
+
+  const phone = slot.appointment.lead?.phone ?? null;
+  const phoneCheck = phone ? validateBrazilianPhone(phone) : { valid: false as const, reason: "Lead sem telefone cadastrado." };
+  if (!phoneCheck.valid) {
+    await releaseClaim();
+    console.error(`[vexo:reactivation] Telefone inválido pra envio de WhatsApp (appointmentId=${appointmentId}): ${phoneCheck.reason}`);
+    return { ok: false, reason: "invalid_phone", clinicId };
+  }
+
+  const instanceName = slot.appointment.clinic.whatsappInstanceName;
+  if (!instanceName) {
+    await releaseClaim();
+    return { ok: false, reason: "disconnected", clinicId };
+  }
+
+  const config = slot.appointment.clinic.reactivationConfig;
+  const whatsappMessages = [config?.message1, config?.message2, config?.message3, config?.message4, config?.message5];
+  const text = resolveReactivationMessageText(slot.slot, whatsappMessages, DEFAULT_WHATSAPP_REACTIVATION_MESSAGES);
+
+  try {
+    await sendWhatsappMessage(instanceName, phoneCheck.e164, text);
+  } catch (err) {
+    await releaseClaim();
+    console.error(`[vexo:reactivation] Falha ao enviar WhatsApp da Reativação (appointmentId=${appointmentId}, thresholdDays=${thresholdDays}):`, err);
+    return { ok: false, reason: "send_failed", clinicId };
+  }
+
+  return { ok: true, alreadySent: false, clinicId };
 }

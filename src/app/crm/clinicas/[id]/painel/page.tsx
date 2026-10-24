@@ -1,7 +1,11 @@
 import { prisma } from "@/lib/prisma";
 import { ClientPanelView } from "@/components/ClientPanelView";
 import { ClientAccessModal } from "@/components/ClientAccessModal";
-import { setAppointmentAttendanceAction, toggleReactivationCardSentAction } from "@/app/crm/clinicas/actions";
+import {
+  setAppointmentAttendanceAction,
+  toggleReactivationCardSentAction,
+  sendReactivationWhatsAppMessageAction,
+} from "@/app/crm/clinicas/actions";
 
 export const dynamic = "force-dynamic";
 
@@ -46,6 +50,7 @@ export default async function ClinicPainelPage({
       base={`/crm/clinicas/${params.id}/painel`}
       noShowAction={setAppointmentAttendanceAction}
       reactivationSentAction={toggleReactivationCardSentAction}
+      reactivationSendWhatsappAction={sendReactivationWhatsAppMessageAction}
       standalone={false}
       headerAction={<ClientAccessModal clinicId={params.id} initialLink={initialLink} />}
     />
