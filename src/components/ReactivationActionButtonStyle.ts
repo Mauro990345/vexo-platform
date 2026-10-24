@@ -34,3 +34,17 @@ export const WHATSAPP_ACTION_BUTTON_CLASS = `${REACTIVATION_ACTION_BUTTON_BASE_C
 // que respeita o pedido de só usar cor que já existe.
 export const INSTAGRAM_ACTION_GRADIENT = "linear-gradient(135deg, #F47133 0%, #BC3081 55%, #4F5BD5 100%)";
 export const INSTAGRAM_ACTION_BUTTON_CLASS = `${REACTIVATION_ACTION_BUTTON_BASE_CLASS} relative z-10 w-full border-none bg-transparent text-vexo-fg`;
+
+// Substitui o botão de ação (WhatsApp OU Instagram, mesmo lugar na linha)
+// quando o card já foi marcado como enviado (ver ReactivationRail) — só um
+// "✓", sem contorno/fundo, bem mais discreto que os botões acima de
+// propósito (a linha inteira já está apagada a 50% de opacidade; este
+// elemento não precisa chamar atenção, só precisa existir pra desfazer).
+// Mesma altura/base dos outros dois (REACTIVATION_ACTION_BUTTON_BASE_CLASS)
+// pra linha não mudar de altura ao trocar de estado — largura fixa igual à
+// altura (ícone quadrado) em vez do padding horizontal dos outros dois, que
+// têm texto do canal ao lado. vexo-success (mesmo token de "concluído" já
+// usado no "✓" do badge "Compareceu", ver AppointmentStatusBadge.tsx) —
+// hover em vexo-muted, só pra indicar que é clicável, sem outra cor nova.
+export const REACTIVATION_UNDO_BUTTON_CLASS =
+  "inline-flex h-[23px] w-[23px] shrink-0 items-center justify-center rounded-lg text-card font-semibold leading-none text-vexo-success transition-colors duration-150 hover:text-vexo-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-vexo-accent focus-visible:ring-offset-1 focus-visible:ring-offset-vexo-surface";

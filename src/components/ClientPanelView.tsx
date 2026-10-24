@@ -64,6 +64,7 @@ export async function ClientPanelView({
   week,
   base,
   noShowAction,
+  reactivationSentAction,
   standalone = true,
   headerAction,
 }: {
@@ -71,6 +72,11 @@ export async function ClientPanelView({
   week?: string;
   base: string;
   noShowAction?: (appointmentId: string, status: "COMPLETED" | "NO_SHOW") => Promise<unknown>;
+  // Mesmo motivo de noShowAction acima (comentário grande logo abaixo) —
+  // marcar/desmarcar um card da Reativação como enviado (ver
+  // ReactivationRail) também precisa rodar sob uma sessão diferente em
+  // cada contexto.
+  reactivationSentAction?: (appointmentId: string, thresholdDays: number) => Promise<unknown>;
   standalone?: boolean;
   headerAction?: React.ReactNode;
 }) {
@@ -220,7 +226,7 @@ export async function ClientPanelView({
 
             <ApproachMetricsToggle periods={periods} />
 
-            <ReactivationRail cards={reactivationCards} />
+            <ReactivationRail cards={reactivationCards} action={reactivationSentAction} />
           </div>
 
           {/* Coluna direita: agendamentos */}

@@ -1,4 +1,26 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+
+const reactivationConfigFindUniqueMock = vi.fn();
+const appointmentFindManyMock = vi.fn();
+const reactivationCardSlotFindManyMock = vi.fn();
+const reactivationCardSlotUpsertMock = vi.fn();
+const reactivationConfigUpsertMock = vi.fn();
+const leadFindManyMock = vi.fn();
+vi.mock("@/lib/prisma", () => ({
+  prisma: {
+    reactivationConfig: {
+      findUnique: (...args: unknown[]) => reactivationConfigFindUniqueMock(...args),
+      upsert: (...args: unknown[]) => reactivationConfigUpsertMock(...args),
+    },
+    appointment: { findMany: (...args: unknown[]) => appointmentFindManyMock(...args) },
+    reactivationCardSlot: {
+      findMany: (...args: unknown[]) => reactivationCardSlotFindManyMock(...args),
+      upsert: (...args: unknown[]) => reactivationCardSlotUpsertMock(...args),
+    },
+    lead: { findMany: (...args: unknown[]) => leadFindManyMock(...args) },
+  },
+}));
+
 import {
   computeReactivationWindow,
   isWithinReactivationWindow,
@@ -21,6 +43,10 @@ import {
   REACTIVATION_THRESHOLD_OPTIONS,
   TEST_PERIOD_DAYS,
   isValidReactivationThresholdDays,
+  toggleReactivationSentAt,
+  getReactivationCards,
+  sortReactivationCardsForDisplay,
+  countPendingReactivationCards,
   type ReactivationSourceAppointment,
   type ReactivationCandidate,
 } from "./reactivation";
@@ -456,5 +482,140 @@ describe("buildReactivationWhatsAppLink", () => {
     const queryText = link.split("?text=")[1]!;
     expect(queryText).not.toMatch(/[ áéíóúãõ💙]/);
     expect(decodeURIComponent(queryText)).toBe("Oi! Tudo bem? 💙");
+  });
+});
+
+// Clique no botão de ação (WhatsApp/Instagram) marca o card como enviado;
+// clicar de novo (no "✓") desfaz — mesma semântica de toggle já usada por
+// setAppointmentAttendance (appointments.ts).
+describe("toggleReactivationSentAt", () => {
+  const now = new Date("2026-05-20T12:00:00.000Z");
+
+  it("pendente (null) -> marca com a data/hora do clique", () => {
+    expect(toggleReactivationSentAt(null, now)).toBe(now);
+  });
+
+  it("já enviado -> desfaz (volta a null)", () => {
+    const sentAt = new Date("2026-05-10T09:00:00.000Z");
+    expect(toggleReactivationSentAt(sentAt, now)).toBeNull();
+  });
+});
+
+describe("getReactivationCards — sentAt e janela de 5 dias úteis", () => {
+  beforeEach(() => {
+    reactivationConfigFindUniqueMock.mockReset();
+    appointmentFindManyMock.mockReset();
+    reactivationCardSlotFindManyMock.mockReset();
+    reactivationCardSlotUpsertMock.mockReset();
+    reactivationConfigUpsertMock.mockReset();
+    leadFindManyMock.mockReset();
+    leadFindManyMock.mockResolvedValue([
+      { id: "lead-1", name: "Fulana", igUsername: "fulana.ig", profilePictureUrl: null, phone: "11987654321" },
+    ]);
+  });
+
+  it(
+    'um card já marcado "enviado" continua desaparecendo sozinho quando a janela de 5 dias úteis vence — ' +
+      "sentAt nunca estende nem protege a elegibilidade, exatamente como um card nunca marcado",
+    async () => {
+      // Mesmo atendimento, DOIS períodos marcados (7 e 90 dias) — a essa
+      // altura (`now`), o período de 7 dias já venceu há muito (sua janela
+      // de 5 dias úteis é bem mais curta que o intervalo entre os dois
+      // thresholds), o de 90 dias ainda está na janela. Os DOIS já têm
+      // ReactivationCardSlot com sentAt preenchido (ambos "enviados" em
+      // algum momento) — só o de 90 dias deve aparecer.
+      const scheduledAt = new Date("2026-01-01T12:00:00.000Z");
+      const window90 = computeReactivationWindow(scheduledAt, 90);
+      const now = window90.start;
+
+      reactivationConfigFindUniqueMock.mockResolvedValue({ thresholdDaysList: [7, 90] });
+      appointmentFindManyMock.mockResolvedValue([
+        { id: "appt-1", leadId: "lead-1", conversationId: "conv-1", scheduledAt, status: "SCHEDULED" },
+      ]);
+      const sentAt7 = new Date("2026-01-10T12:00:00.000Z");
+      const sentAt90 = new Date(now.getTime() - 1000);
+      reactivationCardSlotFindManyMock.mockResolvedValue([
+        { appointmentId: "appt-1", thresholdDays: 7, slot: 1, sentAt: sentAt7 },
+        { appointmentId: "appt-1", thresholdDays: 90, slot: 1, sentAt: sentAt90 },
+      ]);
+
+      const cards = await getReactivationCards("clinic-1", now);
+
+      expect(cards).toHaveLength(1);
+      expect(cards[0]!.thresholdDays).toBe(90);
+      expect(cards[0]!.sentAt).toEqual(sentAt90);
+      // Nenhum slot novo precisou ser criado (os dois já existiam) — prova
+      // de que este teste não depende de upsert nenhum pra valer.
+      expect(reactivationCardSlotUpsertMock).not.toHaveBeenCalled();
+    }
+  );
+
+  it("card dentro da janela, nunca marcado (sem linha de slot ainda): sentAt sai null (pendente)", async () => {
+    const scheduledAt = new Date("2026-01-01T12:00:00.000Z");
+    const window90 = computeReactivationWindow(scheduledAt, 90);
+    const now = window90.start;
+
+    reactivationConfigFindUniqueMock.mockResolvedValue({ thresholdDaysList: [90] });
+    appointmentFindManyMock.mockResolvedValue([
+      { id: "appt-1", leadId: "lead-1", conversationId: "conv-1", scheduledAt, status: "SCHEDULED" },
+    ]);
+    reactivationCardSlotFindManyMock.mockResolvedValue([]);
+    reactivationCardSlotUpsertMock.mockResolvedValue({});
+
+    const cards = await getReactivationCards("clinic-1", now);
+
+    expect(cards).toHaveLength(1);
+    expect(cards[0]!.sentAt).toBeNull();
+  });
+});
+
+function card(overrides: Partial<{ appointmentId: string; sentAt: Date | null }> = {}): { appointmentId: string; sentAt: Date | null } {
+  return { appointmentId: "appt-x", sentAt: null, ...overrides };
+}
+
+describe("sortReactivationCardsForDisplay — pendentes primeiro, enviados no fim", () => {
+  it("preserva a ordem relativa de sempre DENTRO de cada grupo (sort estável)", () => {
+    const a = card({ appointmentId: "a" });
+    const b = card({ appointmentId: "b", sentAt: new Date("2026-05-01T00:00:00Z") });
+    const c = card({ appointmentId: "c" });
+    const d = card({ appointmentId: "d", sentAt: new Date("2026-05-02T00:00:00Z") });
+
+    const sorted = sortReactivationCardsForDisplay([a, b, c, d]);
+
+    expect(sorted.map((x) => x.appointmentId)).toEqual(["a", "c", "b", "d"]);
+  });
+
+  it("lista já toda pendente ou já toda enviada: ordem inalterada", () => {
+    const pendingOnly = [card({ appointmentId: "a" }), card({ appointmentId: "b" })];
+    expect(sortReactivationCardsForDisplay(pendingOnly).map((x) => x.appointmentId)).toEqual(["a", "b"]);
+
+    const sentOnly = [
+      card({ appointmentId: "a", sentAt: new Date() }),
+      card({ appointmentId: "b", sentAt: new Date() }),
+    ];
+    expect(sortReactivationCardsForDisplay(sentOnly).map((x) => x.appointmentId)).toEqual(["a", "b"]);
+  });
+
+  it("não modifica o array original (devolve uma cópia)", () => {
+    const original = [card({ appointmentId: "a", sentAt: new Date() }), card({ appointmentId: "b" })];
+    const originalOrder = original.map((x) => x.appointmentId);
+    sortReactivationCardsForDisplay(original);
+    expect(original.map((x) => x.appointmentId)).toEqual(originalOrder);
+  });
+});
+
+describe("countPendingReactivationCards — título da faixa mostra só os pendentes", () => {
+  it("conta só os cards com sentAt null", () => {
+    const cards = [card({ sentAt: new Date() }), card(), card(), card({ sentAt: new Date() })];
+    expect(countPendingReactivationCards(cards)).toBe(2);
+  });
+
+  it("todos enviados: zero pendentes", () => {
+    const cards = [card({ sentAt: new Date() }), card({ sentAt: new Date() })];
+    expect(countPendingReactivationCards(cards)).toBe(0);
+  });
+
+  it("lista vazia: zero pendentes", () => {
+    expect(countPendingReactivationCards([])).toBe(0);
   });
 });

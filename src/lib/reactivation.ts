@@ -284,6 +284,9 @@ export type ReactivationCard = {
   instagramProfileLink: string | null;
   completionDate: Date;
   thresholdDays: number;
+  // Clique no botão de ação (WhatsApp/Instagram) daquele card — ver
+  // toggleReactivationCardSent, mais abaixo. null = pendente (padrão).
+  sentAt: Date | null;
 };
 
 // Chave composta (agendamento + período) — o mesmo agendamento pode ter um
@@ -400,6 +403,7 @@ export async function getReactivationCards(clinicId: string, now: Date = new Dat
     where: { appointmentId: { in: cardCandidates.map((c) => c.appointmentId) } },
   });
   const existingSlots = new Map(existingSlotRows.map((s) => [cardSlotKey(s.appointmentId, s.thresholdDays), s.slot]));
+  const sentAtBySlotKey = new Map(existingSlotRows.map((s) => [cardSlotKey(s.appointmentId, s.thresholdDays), s.sentAt]));
 
   const initialCounters: ReactivationChannelCounters = {
     whatsapp: config?.sequenceCounter ?? 0,
@@ -468,6 +472,65 @@ export async function getReactivationCards(clinicId: string, now: Date = new Dat
       instagramProfileLink: channel === "INSTAGRAM" && igUsername ? buildInstagramProfileLink(igUsername) : null,
       completionDate: c.window.start,
       thresholdDays: c.thresholdDays,
+      // Nunca indefinido: um card recém-atribuído (newlyAssigned, acima)
+      // não tem linha em existingSlotRows ainda — get() devolve undefined,
+      // ?? null normaliza pro mesmo "pendente" de um card já existente
+      // nunca marcado.
+      sentAt: sentAtBySlotKey.get(cardSlotKey(c.appointmentId, c.thresholdDays)) ?? null,
     };
   });
+}
+
+// Ordenação exibida na Reativação do Painel (ver ReactivationRail) —
+// pendentes primeiro, na ordem de sempre (a mesma que getReactivationCards
+// devolve, "quem completou primeiro"); enviados no fim, preservando a
+// ordem relativa de sempre ENTRE ELES também (pedido explícito). Sort
+// ESTÁVEL (Array.prototype.sort é estável desde ES2019) com um comparador
+// que só distingue "enviado vs pendente" é o que garante isso — nunca
+// reordena dentro de cada grupo, só decide em qual dos dois grupos cada
+// card cai.
+export function sortReactivationCardsForDisplay<T extends { sentAt: Date | null }>(cards: T[]): T[] {
+  return [...cards].sort((a, b) => Number(Boolean(a.sentAt)) - Number(Boolean(b.sentAt)));
+}
+
+// Título da faixa mostra só os PENDENTES (pedido explícito) — um card
+// enviado não conta mais pro número, mesmo continuando visível (apagado,
+// no fim da lista) até a janela de 5 dias úteis vencer.
+export function countPendingReactivationCards<T extends { sentAt: Date | null }>(cards: T[]): number {
+  return cards.filter((c) => !c.sentAt).length;
+}
+
+// Alterna o clique no botão de ação (WhatsApp/Instagram) de um card —
+// mesma semântica de toggle já usada por setAppointmentAttendance
+// (appointments.ts): clicar de novo desfaz. Pura (sem Prisma) — nunca
+// confia em nada vindo do cliente além da intenção de alternar; quem
+// chama decide o valor atual lendo o banco, nunca aceitando um booleano
+// cru de fora.
+export function toggleReactivationSentAt(currentSentAt: Date | null, now: Date): Date | null {
+  return currentSentAt ? null : now;
+}
+
+// Orquestração (lê o slot atual, decide o novo valor, grava) — separada
+// da validação de clínica, que fica nas duas server actions que chamam
+// esta função (uma pra sessão CLIENT, outra pra sessão INTERNAL_ADMIN/
+// STAFF — ver toggleReactivationCardSentClientAction/
+// toggleReactivationCardSentAction). null quando o slot não existe (não
+// deveria acontecer — o botão só aparece pra um card que já passou por
+// getReactivationCards, que sempre garante o slot — mas sem crash
+// nenhum caso aconteça por alguma corrida).
+export async function toggleReactivationCardSent(
+  appointmentId: string,
+  thresholdDays: number,
+  now: Date = new Date()
+): Promise<{ clinicId: string; sentAt: Date | null } | null> {
+  const slot = await prisma.reactivationCardSlot.findUnique({
+    where: { appointmentId_thresholdDays: { appointmentId, thresholdDays } },
+    include: { appointment: { select: { clinicId: true } } },
+  });
+  if (!slot) return null;
+
+  const sentAt = toggleReactivationSentAt(slot.sentAt, now);
+  await prisma.reactivationCardSlot.update({ where: { id: slot.id }, data: { sentAt } });
+
+  return { clinicId: slot.appointment.clinicId, sentAt };
 }
