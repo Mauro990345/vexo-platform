@@ -19,7 +19,7 @@ import {
 import { decryptToken } from "@/lib/crypto";
 import { saveUploadedAttachment, deleteUploadedAttachment } from "@/lib/uploads";
 import { validateBrazilianPhone } from "@/lib/whatsapp";
-import { isValidReactivationThresholdDays } from "@/lib/reactivation";
+import { isValidReactivationThresholdDays, toggleReactivationCardSent } from "@/lib/reactivation";
 
 const CONNECTION_LINK_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 dias
 
@@ -598,6 +598,18 @@ export async function setAppointmentAttendanceAction(
     revalidatePath(`/crm/clinicas/${appt.clinicId}`);
     if (appt.conversationId) revalidatePath(`/crm/conversas/${appt.conversationId}`);
   }
+}
+
+// Mesmo toggle que o cliente tem em /dashboard (ver
+// toggleReactivationCardSentClientAction, dashboard/actions.ts), exposto
+// pra sessão INTERNAL_ADMIN/STAFF — sem a validação de clinicId daquela
+// versão: um admin/staff interno pode marcar o card de QUALQUER clínica
+// (pedido explícito), igual já vale pra setAppointmentAttendanceAction
+// acima.
+export async function toggleReactivationCardSentAction(appointmentId: string, thresholdDays: number) {
+  await requireInternalSession();
+  const result = await toggleReactivationCardSent(appointmentId, thresholdDays);
+  if (result) revalidatePath(`/crm/clinicas/${result.clinicId}`);
 }
 
 export async function logApproach(clinicId: string, formData: FormData) {

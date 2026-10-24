@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { requireInternalSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { ClientPanelView } from "@/components/ClientPanelView";
-import { setAppointmentAttendanceAction } from "@/app/crm/clinicas/actions";
+import { setAppointmentAttendanceAction, toggleReactivationCardSentAction } from "@/app/crm/clinicas/actions";
 
 export const dynamic = "force-dynamic";
 
@@ -35,6 +35,7 @@ export default async function ClientPanelPreviewPage({
       week={searchParams.week}
       base={`/crm/painel-cliente/${clinic.id}`}
       noShowAction={setAppointmentAttendanceAction}
+      reactivationSentAction={toggleReactivationCardSentAction}
     />
   );
 }

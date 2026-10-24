@@ -919,6 +919,16 @@ model ReactivationCardSlot {
   thresholdDays Int
   slot          Int
 
+  // Marcado quando a secretária clica no botão de ação (WhatsApp/Instagram)
+  // do card na Reativação do Painel — registra que aquele acompanhamento
+  // foi disparado, sem exigir confirmação de entrega (o clique já é a
+  // única confirmação que o VEXO tem). null = pendente (padrão); clicar de
+  // novo no "✓" do card já enviado desfaz, voltando a null. Nunca afeta a
+  // elegibilidade pra faixa (ver isWithinReactivationWindow,
+  // reactivation.ts) — um card some da faixa quando a janela de 5 dias
+  // úteis vence, enviado ou não.
+  sentAt DateTime?
+
   createdAt DateTime @default(now())
 
   @@unique([appointmentId, thresholdDays])

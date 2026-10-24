@@ -51,11 +51,25 @@ async function copyToClipboard(text: string): Promise<boolean> {
 // rótulo do botão virando "Copiado ✓" por 2s (pedido explícito) — o toast
 // pode passar batido se o olho já saiu da linha depois de abrir a aba nova
 // do Instagram; o rótulo do botão fica ali, no lugar que o olho já estava.
-export function InstagramDmButton({ message, dmLink }: { message: string; dmLink: string | null }) {
+export function InstagramDmButton({
+  message,
+  dmLink,
+  onSent,
+}: {
+  message: string;
+  dmLink: string | null;
+  // Marca o card como enviado na Reativação (ver ReactivationRail) — chamada
+  // SÍNCRONA, antes de qualquer await abaixo (inclusive antes do
+  // window.open), pra registrar o clique mesmo que o navegador bloqueie a
+  // abertura da nova aba (pedido explícito) — nunca depende do resultado de
+  // window.open nem do copyToClipboard.
+  onSent?: () => void;
+}) {
   const [toast, setToast] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
   async function handleClick() {
+    onSent?.();
     const ok = await copyToClipboard(message);
     setToast(ok ? "Mensagem copiada" : "Não foi possível copiar");
     window.setTimeout(() => setToast(null), TOAST_DURATION_MS);
