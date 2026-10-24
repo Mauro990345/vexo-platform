@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireClientSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { setAppointmentAttendance } from "@/lib/appointments";
-import { toggleReactivationCardSent } from "@/lib/reactivation";
+import { toggleReactivationCardSent, sendReactivationWhatsAppMessage, type SendReactivationWhatsAppResult } from "@/lib/reactivation";
 
 // Única ação que o cliente pode fazer no Painel — mesma function de base
 // (setAppointmentAttendance, em src/lib/appointments.ts) usada pela versão
@@ -56,4 +56,32 @@ export async function toggleReactivationCardSentClientAction(appointmentId: stri
   await toggleReactivationCardSent(appointmentId, thresholdDays);
 
   revalidatePath("/dashboard");
+}
+
+// Envia de verdade a mensagem de WhatsApp de um card da Reativação (decisão
+// explícita: só WhatsApp — Instagram continua copiar + abrir, sem mudança).
+// Um clique = uma mensagem, nunca em lote/automático — ver
+// sendReactivationWhatsAppMessage (reactivation.ts) pro texto nunca vir do
+// cliente, pela reserva atômica (anti duplo clique) e pelo limite de ~10s
+// entre envios da mesma clínica. Mesma validação de clínica de sempre:
+// clinicId vem da sessão, confirma que o agendamento é mesmo dessa clínica
+// antes de prosseguir.
+export async function sendReactivationWhatsAppMessageClientAction(
+  appointmentId: string,
+  thresholdDays: number
+): Promise<SendReactivationWhatsAppResult> {
+  const session = await requireClientSession();
+  const clinicId = session.user.clinicId as string;
+
+  const appt = await prisma.appointment.findUnique({
+    where: { id: appointmentId },
+    select: { clinicId: true },
+  });
+  if (!appt || appt.clinicId !== clinicId) {
+    throw new Error("Agendamento não encontrado.");
+  }
+
+  const result = await sendReactivationWhatsAppMessage(appointmentId, thresholdDays);
+  revalidatePath("/dashboard");
+  return result;
 }

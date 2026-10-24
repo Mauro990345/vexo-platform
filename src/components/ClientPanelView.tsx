@@ -13,7 +13,7 @@ import { LeadAvatar } from "@/components/LeadAvatar";
 import { InstagramGlyphIcon, WhatsAppGlyphIcon } from "@/components/BrandIcons";
 import { NeedsHumanBanner, type NeedsHumanLead } from "@/components/NeedsHumanBanner";
 import { ReactivationRail } from "@/components/ReactivationRail";
-import { getReactivationCards } from "@/lib/reactivation";
+import { getReactivationCards, type SendReactivationWhatsAppResult } from "@/lib/reactivation";
 
 // Marcar "Não compareceu" só faz sentido pra agendamento ainda em aberto —
 // já compareceu ou já foi cancelado não tem o que alternar aqui.
@@ -65,6 +65,7 @@ export async function ClientPanelView({
   base,
   noShowAction,
   reactivationSentAction,
+  reactivationSendWhatsappAction,
   standalone = true,
   headerAction,
 }: {
@@ -77,6 +78,10 @@ export async function ClientPanelView({
   // ReactivationRail) também precisa rodar sob uma sessão diferente em
   // cada contexto.
   reactivationSentAction?: (appointmentId: string, thresholdDays: number) => Promise<unknown>;
+  // Envio de verdade do WhatsApp da Reativação (decisão explícita: só
+  // WhatsApp) — mesmo motivo de reactivationSentAction acima, injetável
+  // por contexto (CLIENT em /dashboard, INTERNAL_ADMIN/STAFF no CRM).
+  reactivationSendWhatsappAction?: (appointmentId: string, thresholdDays: number) => Promise<SendReactivationWhatsAppResult>;
   standalone?: boolean;
   headerAction?: React.ReactNode;
 }) {
@@ -226,7 +231,11 @@ export async function ClientPanelView({
 
             <ApproachMetricsToggle periods={periods} />
 
-            <ReactivationRail cards={reactivationCards} action={reactivationSentAction} />
+            <ReactivationRail
+              cards={reactivationCards}
+              action={reactivationSentAction}
+              sendWhatsappAction={reactivationSendWhatsappAction}
+            />
           </div>
 
           {/* Coluna direita: agendamentos */}

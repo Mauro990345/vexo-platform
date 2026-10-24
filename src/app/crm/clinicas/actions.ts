@@ -19,7 +19,12 @@ import {
 import { decryptToken } from "@/lib/crypto";
 import { saveUploadedAttachment, deleteUploadedAttachment } from "@/lib/uploads";
 import { validateBrazilianPhone } from "@/lib/whatsapp";
-import { isValidReactivationThresholdDays, toggleReactivationCardSent } from "@/lib/reactivation";
+import {
+  isValidReactivationThresholdDays,
+  toggleReactivationCardSent,
+  sendReactivationWhatsAppMessage,
+  type SendReactivationWhatsAppResult,
+} from "@/lib/reactivation";
 
 const CONNECTION_LINK_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 dias
 
@@ -610,6 +615,21 @@ export async function toggleReactivationCardSentAction(appointmentId: string, th
   await requireInternalSession();
   const result = await toggleReactivationCardSent(appointmentId, thresholdDays);
   if (result) revalidatePath(`/crm/clinicas/${result.clinicId}`);
+}
+
+// Mesmo envio de verdade que o cliente tem em /dashboard (ver
+// sendReactivationWhatsAppMessageClientAction, dashboard/actions.ts),
+// exposto pra sessão INTERNAL_ADMIN/STAFF — sem a validação de clinicId
+// daquela versão (admin/staff interno pode mandar pelo card de QUALQUER
+// clínica, mesmo padrão de toggleReactivationCardSentAction acima).
+export async function sendReactivationWhatsAppMessageAction(
+  appointmentId: string,
+  thresholdDays: number
+): Promise<SendReactivationWhatsAppResult> {
+  await requireInternalSession();
+  const result = await sendReactivationWhatsAppMessage(appointmentId, thresholdDays);
+  if (result.clinicId) revalidatePath(`/crm/clinicas/${result.clinicId}`);
+  return result;
 }
 
 export async function logApproach(clinicId: string, formData: FormData) {
