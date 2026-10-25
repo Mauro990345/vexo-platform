@@ -1,5 +1,8 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import { MessageCircle } from "lucide-react";
-import type { WhatsappConnectionState } from "@/lib/whatsapp-connection";
+import { type WhatsappConnectionState, shouldShowWhatsappResetAction, whatsappResetActionLabel } from "@/lib/whatsapp-connection";
 
 const STATUS_LABELS: Record<WhatsappConnectionState, string> = {
   open: "Conectado",
@@ -15,13 +18,26 @@ const STATUS_DOT: Record<WhatsappConnectionState, string> = {
   unknown: "bg-vexo-muted",
 };
 
+// ~3s (pedido explícito) — leve o bastante pra sentir a conexão completar
+// quase na hora, sem virar uma rajada de chamadas na Evolution.
+const POLL_INTERVAL_MS = 3_000;
+
 // Painel de conexão do WhatsApp (pareamento por QR code) — usado pelo CRM
 // interno (/crm/clinicas/[id]/whatsapp). Conectar canais é responsabilidade
 // da M8 Growth, não da clínica, então não existe mais versão disso no
 // painel do cliente.
+//
+// "use client" (pedido explícito, bug real investigado): a tela antiga era
+// 100% servidor, sem nenhuma atualização automática — sem webhook de
+// connection.update (não existe no VEXO) e sem polling nenhum, o único
+// jeito de descobrir que conectou era recarregar a página manualmente. O
+// poll aqui SÓ consulta status (checkStatusAction — connectionState, nunca
+// create/connect), então nunca troca o QR embaixo de quem está
+// escaneando; quem continua pedindo QR novo é só o link "Atualizar /
+// verificar conexão" de sempre.
 export function WhatsappConnectionPanel({
   instanceName,
-  status,
+  status: initialStatus,
   qrBase64,
   statusError,
   refreshHref,
@@ -29,6 +45,7 @@ export function WhatsappConnectionPanel({
   disconnectAction,
   renameAction,
   resetAction,
+  checkStatusAction,
 }: {
   instanceName: string;
   status: WhatsappConnectionState;
@@ -39,8 +56,58 @@ export function WhatsappConnectionPanel({
   disconnectAction?: (formData: FormData) => Promise<void>;
   renameAction?: (formData: FormData) => Promise<void>;
   resetAction?: () => Promise<void>;
+  checkStatusAction?: () => Promise<WhatsappConnectionState>;
 }) {
+  const [status, setStatus] = useState(initialStatus);
+  // Resincroniza sempre que o servidor mandar um valor novo (navegação
+  // pro mesmo link, ex. o próprio "Atualizar / verificar conexão").
+  useEffect(() => setStatus(initialStatus), [initialStatus]);
+
+  // Poll leve enquanto não conectado — para sozinho ao conectar
+  // (`status === "open"`), ao desmontar (navegação/fechar aba — o
+  // cleanup do useEffect cobre os dois) e enquanto a aba está fora de
+  // foco (visibilitychange), retomando se ela voltar a ficar visível
+  // antes de conectar.
+  useEffect(() => {
+    if (!checkStatusAction || status === "open") return;
+
+    let cancelled = false;
+    let intervalId: ReturnType<typeof setInterval> | null = null;
+
+    function poll() {
+      checkStatusAction!()
+        .then((next) => {
+          if (!cancelled) setStatus(next);
+        })
+        .catch((err) => console.error("[vexo] Falha ao checar status do WhatsApp:", err));
+    }
+
+    function start() {
+      if (intervalId === null) intervalId = setInterval(poll, POLL_INTERVAL_MS);
+    }
+    function stop() {
+      if (intervalId !== null) {
+        clearInterval(intervalId);
+        intervalId = null;
+      }
+    }
+    function handleVisibilityChange() {
+      if (document.visibilityState === "visible") start();
+      else stop();
+    }
+
+    if (document.visibilityState === "visible") start();
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      cancelled = true;
+      stop();
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [checkStatusAction, status]);
+
   const isOpen = status === "open";
+  const showResetAction = shouldShowWhatsappResetAction(status);
 
   return (
     <div className="space-y-2.5 rounded-xl border border-vexo-border bg-vexo-surface p-3.5">
@@ -58,10 +125,10 @@ export function WhatsappConnectionPanel({
           </div>
         </div>
 
-        {isOpen && disconnectAction && (
+        {showResetAction && disconnectAction && (
           <form action={disconnectAction} className="shrink-0">
             <button className="rounded-lg border border-vexo-border px-2.5 py-1.5 text-xs text-vexo-muted hover:border-vexo-error/40 hover:text-vexo-error">
-              Desconectar
+              {whatsappResetActionLabel(status)}
             </button>
           </form>
         )}
@@ -91,6 +158,12 @@ export function WhatsappConnectionPanel({
             aparelho, e escaneie o código acima. Ele expira em segundos — se não der tempo, clique em
             "Atualizar" para gerar um novo.
           </p>
+
+          {status === "connecting" && (
+            <p className="text-card leading-normal text-vexo-muted">
+              Se o QR não conectar, clique em Reiniciar pareamento e escaneie o novo código.
+            </p>
+          )}
 
           <a
             href={refreshHref}

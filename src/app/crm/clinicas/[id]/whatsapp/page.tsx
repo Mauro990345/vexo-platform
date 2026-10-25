@@ -3,7 +3,12 @@ import { prisma } from "@/lib/prisma";
 import { requireInternalSession } from "@/lib/session";
 import { ensureWhatsappQrForClinic, refreshWhatsappStatus, type WhatsappConnectionState } from "@/lib/whatsapp-connection";
 import { WhatsappConnectionPanel } from "@/components/WhatsappConnectionPanel";
-import { disconnectWhatsappAction, renameWhatsappInstanceAction, resetWhatsappInstanceNameAction } from "../../actions";
+import {
+  disconnectWhatsappAction,
+  renameWhatsappInstanceAction,
+  resetWhatsappInstanceNameAction,
+  checkWhatsappConnectionStateAction,
+} from "../../actions";
 
 export const dynamic = "force-dynamic";
 
@@ -50,6 +55,7 @@ export default async function ClinicWhatsappPage({ params }: { params: { id: str
         disconnectAction={disconnectWhatsappAction.bind(null, clinic.id)}
         renameAction={renameWhatsappInstanceAction.bind(null, clinic.id)}
         resetAction={resetWhatsappInstanceNameAction.bind(null, clinic.id)}
+        checkStatusAction={checkWhatsappConnectionStateAction.bind(null, clinic.id)}
       />
     </div>
   );

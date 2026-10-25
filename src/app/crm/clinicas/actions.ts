@@ -6,7 +6,13 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireInternalSession } from "@/lib/session";
 import { setAppointmentAttendance } from "@/lib/appointments";
-import { disconnectWhatsapp, renameWhatsappInstance, resetWhatsappInstanceName } from "@/lib/whatsapp-connection";
+import {
+  disconnectWhatsapp,
+  renameWhatsappInstance,
+  resetWhatsappInstanceName,
+  refreshWhatsappStatus,
+  type WhatsappConnectionState,
+} from "@/lib/whatsapp-connection";
 import { disconnectGoogleCalendar } from "@/lib/google-calendar";
 import {
   disconnectInstagram,
@@ -844,6 +850,19 @@ export async function disconnectWhatsappAction(clinicId: string) {
   revalidatePath(`/crm/clinicas/${clinicId}/whatsapp`);
   revalidatePath(`/crm/clinicas/${clinicId}`);
   revalidatePath("/crm");
+}
+
+// Poll leve do card de conexão (ver WhatsappConnectionPanel.tsx) — chamada
+// a cada ~3s, só enquanto o status não é "open". Só consulta
+// /instance/connectionState (via refreshWhatsappStatus, que também já
+// grava Clinic.whatsappStatus) — NUNCA cria instância nem pede QR novo
+// (create/connect ficam só em ensureWhatsappQrForClinic, acionada pelo
+// link "Atualizar / verificar conexão"), pra nunca trocar o QR embaixo de
+// quem está escaneando. Sem revalidatePath de propósito: é só leitura
+// repetida, não uma mutação que precise invalidar cache de rota.
+export async function checkWhatsappConnectionStateAction(clinicId: string): Promise<WhatsappConnectionState> {
+  await requireInternalSession();
+  return refreshWhatsappStatus(clinicId);
 }
 
 // Fotos de resultado (antes/depois) usadas pela IA via send_result_photo
