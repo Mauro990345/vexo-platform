@@ -2,6 +2,7 @@ import crypto from "crypto";
 import { decryptToken } from "@/lib/crypto";
 import { prisma } from "@/lib/prisma";
 import { withRetry, RetryableError } from "@/lib/retry";
+import { stripAnyLeftoverTemplateTokens } from "@/lib/message-template";
 
 // Integração com Instagram Messaging via "Instagram API with Instagram
 // Login" (produto do App configurado no Meta for Developers) — NÃO é o
@@ -122,9 +123,14 @@ export async function sendInstagramMessage(params: {
 }): Promise<{ messageId: string }> {
   const accessToken = decryptToken(params.accessTokenEnc);
 
+  // Guarda final (pedido explícito) — remove qualquer "{{...}}" que
+  // porventura tenha sobrado antes de mandar de verdade, mesmo que todo
+  // ponto de montagem de texto (lembretes, reativação, follow-up) já deva
+  // ter passado por renderMessageTemplate antes disto. Ver
+  // stripAnyLeftoverTemplateTokens, message-template.ts.
   const message = params.mediaUrl
     ? { attachment: { type: attachmentTypeForMediaUrl(params.mediaUrl), payload: { url: params.mediaUrl, is_reusable: true } } }
-    : { text: params.text ?? "" };
+    : { text: params.text ? stripAnyLeftoverTemplateTokens(params.text) : "" };
 
   return withRetry(
     async () => {
@@ -335,6 +341,41 @@ export async function getInstagramUserProfile(
     },
     { label: `getInstagramUserProfile (igScopedId=${igScopedId})` }
   );
+}
+
+// Busca-e-cacheia o nome do lead pra quem precisa de {{primeiro_nome}} FORA
+// do pipeline de webhook (lembretes, reativação — ver renderMessageTemplate/
+// normalizeFirstNameForTemplate, message-template.ts). Mesma regra de
+// "tenta uma vez só" do pipeline de conversa (Lead.nameLookupAttempted,
+// CAMPO COMPARTILHADO — uma tentativa aqui conta pra lá também, e
+// vice-versa: ver o lookup equivalente em conversation-pipeline.ts), só sem
+// os diagnósticos em WebhookLog (que não existem fora do processamento de
+// webhook). Devolve o nome CRU (como salvo/recebido) ou null — a limpeza
+// pra {{primeiro_nome}} (primeira palavra, só letras, etc.) é sempre feita
+// depois, por normalizeFirstNameForTemplate, nunca aqui.
+export async function ensureLeadFirstNameFromInstagram(
+  lead: { id: string; name: string | null; nameLookupAttempted: boolean; igScopedId: string },
+  accessTokenEnc: string
+): Promise<string | null> {
+  if (lead.name?.trim()) return lead.name;
+  if (lead.nameLookupAttempted) return null;
+  if (!isRealIgScopedId(lead.igScopedId)) return null;
+
+  try {
+    const profile = await getInstagramUserProfile(decryptToken(accessTokenEnc), lead.igScopedId);
+    if (profile.name) {
+      await prisma.lead.update({ where: { id: lead.id }, data: { name: profile.name, nameLookupAttempted: true } });
+      return profile.name;
+    }
+    await prisma.lead.update({ where: { id: lead.id }, data: { nameLookupAttempted: true } });
+    return null;
+  } catch (err) {
+    // NÃO marca nameLookupAttempted aqui — mesmo racional do lookup em
+    // conversation-pipeline.ts: erro pode ser transitório, tenta de novo no
+    // próximo ciclo (nunca em loop dentro desta mesma chamada).
+    console.error(`[vexo] Falha ao buscar nome do lead (igScopedId=${lead.igScopedId}):`, err);
+    return null;
+  }
 }
 
 // Foto de perfil — MESMO node de getInstagramUserProfile acima

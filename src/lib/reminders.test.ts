@@ -25,8 +25,10 @@ vi.mock("@/lib/whatsapp", async () => {
 });
 
 const sendInstagramMessageMock = vi.fn();
+const ensureLeadFirstNameFromInstagramMock = vi.fn();
 vi.mock("@/lib/instagram", () => ({
   sendInstagramMessage: (...args: unknown[]) => sendInstagramMessageMock(...args),
+  ensureLeadFirstNameFromInstagram: (...args: unknown[]) => ensureLeadFirstNameFromInstagramMock(...args),
 }));
 
 import { processReminders } from "@/lib/reminders";
@@ -61,6 +63,9 @@ describe("processReminders — sempre por Instagram, nunca por WhatsApp", () => 
     vi.setSystemTime(NOW);
     sendInstagramMessageMock.mockResolvedValue({ messageId: "ig-msg-1" });
     reminderLogCreateMock.mockResolvedValue({});
+    // undefined (nome desconhecido) por padrão — testes que precisam de um
+    // nome resolvido configuram isto explicitamente.
+    ensureLeadFirstNameFromInstagramMock.mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -103,5 +108,76 @@ describe("processReminders — sempre por Instagram, nunca por WhatsApp", () => 
 
     expect(result.sent).toBe(1);
     expect(sendInstagramMessageMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+// Bug real reportado (mesma causa do bug da Reativação): texto customizado
+// de lembrete (ReminderConfig.firstMessageTemplate) com {{primeiro_nome}}
+// saía literal quando o lead não tinha nome salvo.
+describe("processReminders — template customizado com {{primeiro_nome}}/{{data_horario}}", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+    sendInstagramMessageMock.mockResolvedValue({ messageId: "ig-msg-1" });
+    reminderLogCreateMock.mockResolvedValue({});
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("nome resolvido ao vivo (ensureLeadFirstNameFromInstagram): renderiza o template customizado com o nome", async () => {
+    ensureLeadFirstNameFromInstagramMock.mockResolvedValue("Maria Lima");
+    const appt = buildAppointment({
+      clinic: {
+        reminderConfig: { firstMessageTemplate: "Oi, {{primeiro_nome}}! Nos vemos {{data_horario}}.", secondMessageTemplate: null, hoursBefore: [24, 3] },
+        instagramAccount: { accessTokenEnc: "enc-token", igUserId: "ig-user-1" },
+      },
+    });
+    appointmentFindManyMock.mockResolvedValue([appt]);
+
+    await processReminders();
+
+    const [sentPayload] = sendInstagramMessageMock.mock.calls[0] as [{ text: string }];
+    expect(sentPayload.text).toContain("Oi, Maria!");
+    expect(sentPayload.text).not.toMatch(/\{\{/);
+  });
+
+  it("nome desconhecido (API não devolve nome): remove a variável do template customizado com limpeza, nunca literal", async () => {
+    ensureLeadFirstNameFromInstagramMock.mockResolvedValue(undefined);
+    const appt = buildAppointment({
+      lead: { ...buildAppointment().lead, name: null },
+      clinic: {
+        reminderConfig: { firstMessageTemplate: "Oi, {{primeiro_nome}}! Passando para lembrar.", secondMessageTemplate: null, hoursBefore: [24, 3] },
+        instagramAccount: { accessTokenEnc: "enc-token", igUserId: "ig-user-1" },
+      },
+    });
+    appointmentFindManyMock.mockResolvedValue([appt]);
+
+    await processReminders();
+
+    const [sentPayload] = sendInstagramMessageMock.mock.calls[0] as [{ text: string }];
+    expect(sentPayload.text).toBe("Oi! Passando para lembrar.");
+    expect(sentPayload.text).not.toMatch(/\{\{/);
+  });
+
+  it("resolve o nome no máximo uma vez por agendamento, mesmo com 1º e 2º lembrete devidos no mesmo ciclo", async () => {
+    ensureLeadFirstNameFromInstagramMock.mockResolvedValue("Maria Lima");
+    const appt = buildAppointment({
+      // scheduledAt a 3h de NOW (bate o gatilho dos DOIS lembretes padrão
+      // ao mesmo tempo: 24h já passou do trigger, 3h também).
+      scheduledAt: new Date(NOW.getTime() + 3 * 60 * 60 * 1000),
+      clinic: {
+        reminderConfig: null,
+        instagramAccount: { accessTokenEnc: "enc-token", igUserId: "ig-user-1" },
+      },
+    });
+    appointmentFindManyMock.mockResolvedValue([appt]);
+
+    const result = await processReminders();
+
+    expect(result.sent).toBe(2);
+    expect(ensureLeadFirstNameFromInstagramMock).toHaveBeenCalledTimes(1);
   });
 });

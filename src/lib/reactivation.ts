@@ -1,6 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import { startOfDay, addDays } from "@/lib/metrics";
-import { normalizeBrazilianWhatsappNumber, validateBrazilianPhone, sendWhatsappMessage } from "@/lib/whatsapp";
+import { normalizeBrazilianWhatsappNumber, validateBrazilianPhone, sendWhatsappMessage, formatDateTimeLabel } from "@/lib/whatsapp";
+import { ensureLeadFirstNameFromInstagram } from "@/lib/instagram";
+import { renderMessageTemplate, normalizeFirstNameForTemplate } from "@/lib/message-template";
 
 // Faixa "Reativação" do Painel do cliente (ver ClientPanelView.tsx /
 // ReactivationRail.tsx) — pacientes cujo agendamento da IA completou o
@@ -444,17 +446,39 @@ export async function getReactivationCards(clinicId: string, now: Date = new Dat
 
   const leads = await prisma.lead.findMany({
     where: { id: { in: cardCandidates.map((c) => c.leadId) } },
-    select: { id: true, name: true, igUsername: true, profilePictureUrl: true, phone: true },
+    select: { id: true, name: true, igUsername: true, igScopedId: true, nameLookupAttempted: true, profilePictureUrl: true, phone: true },
   });
   const leadById = new Map(leads.map((l) => [l.id, l]));
+
+  // {{primeiro_nome}}/{{data_horario}} (pedido explícito — hoje o texto
+  // configurado pela clínica saía LITERAL, sem nenhuma substituição).
+  // Nome: mesma fonte de sempre (perfil do Instagram do lead) — busca e
+  // cacheia em paralelo, uma vez por LEAD distinto (não por card: o mesmo
+  // lead pode ter cards em períodos diferentes), nunca o @ do Instagram
+  // como nome (ver ensureLeadFirstNameFromInstagram/normalizeFirstNameForTemplate).
+  const instagramAccount = await prisma.instagramAccount.findUnique({ where: { clinicId }, select: { accessTokenEnc: true } });
+  const rawNameByLeadId = new Map<string, string | null>();
+  if (instagramAccount) {
+    await Promise.all(
+      leads.map(async (lead) => {
+        rawNameByLeadId.set(lead.id, await ensureLeadFirstNameFromInstagram(lead, instagramAccount.accessTokenEnc));
+      })
+    );
+  } else {
+    for (const lead of leads) rawNameByLeadId.set(lead.id, lead.name);
+  }
 
   return cards.map((c) => {
     const lead = leadById.get(c.leadId);
     const channel = reactivationChannelForThreshold(c.thresholdDays);
-    const message =
+    const rawTemplate =
       channel === "INSTAGRAM"
         ? resolveReactivationMessageText(c.slot, instagramMessages, DEFAULT_INSTAGRAM_REACTIVATION_MESSAGES)
         : resolveReactivationMessageText(c.slot, whatsappMessages, DEFAULT_WHATSAPP_REACTIVATION_MESSAGES);
+    const message = renderMessageTemplate(rawTemplate, {
+      primeiro_nome: normalizeFirstNameForTemplate(rawNameByLeadId.get(c.leadId) ?? null),
+      data_horario: formatDateTimeLabel(c.scheduledAt, now),
+    });
     const phone = lead?.phone ?? null;
     const igUsername = lead?.igUsername ?? null;
     return {
@@ -592,10 +616,12 @@ export async function sendReactivationWhatsAppMessage(
       appointment: {
         select: {
           clinicId: true,
-          lead: { select: { phone: true } },
+          scheduledAt: true,
+          lead: { select: { id: true, name: true, igScopedId: true, nameLookupAttempted: true, phone: true } },
           clinic: {
             select: {
               whatsappInstanceName: true,
+              instagramAccount: { select: { accessTokenEnc: true } },
               reactivationConfig: {
                 select: { message1: true, message2: true, message3: true, message4: true, message5: true },
               },
@@ -668,7 +694,18 @@ export async function sendReactivationWhatsAppMessage(
 
   const config = slot.appointment.clinic.reactivationConfig;
   const whatsappMessages = [config?.message1, config?.message2, config?.message3, config?.message4, config?.message5];
-  const text = resolveReactivationMessageText(slot.slot, whatsappMessages, DEFAULT_WHATSAPP_REACTIVATION_MESSAGES);
+  const rawTemplate = resolveReactivationMessageText(slot.slot, whatsappMessages, DEFAULT_WHATSAPP_REACTIVATION_MESSAGES);
+
+  // {{primeiro_nome}}/{{data_horario}} (mesmo mecanismo de getReactivationCards,
+  // acima — nunca confia em texto pronto, sempre renderiza de novo aqui no
+  // momento do envio de verdade).
+  const lead = slot.appointment.lead;
+  const instagramAccount = slot.appointment.clinic.instagramAccount;
+  const rawName = lead && instagramAccount ? await ensureLeadFirstNameFromInstagram(lead, instagramAccount.accessTokenEnc) : (lead?.name ?? null);
+  const text = renderMessageTemplate(rawTemplate, {
+    primeiro_nome: normalizeFirstNameForTemplate(rawName),
+    data_horario: formatDateTimeLabel(slot.appointment.scheduledAt, now),
+  });
 
   try {
     await sendWhatsappMessage(instanceName, phoneCheck.e164, text);

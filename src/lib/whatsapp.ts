@@ -4,6 +4,8 @@
 // (ver Clinic.whatsappInstanceName e src/lib/whatsapp-connection.ts), então
 // quem envia sempre informa qual instância usar.
 
+import { renderMessageTemplate, stripAnyLeftoverTemplateTokens } from "@/lib/message-template";
+
 // Bug real reportado: link de WhatsApp no Painel abrindo "esse usuário não
 // está no WhatsApp" pra um lead que TEM WhatsApp de verdade. Causa raiz:
 // Lead.phone é gravado exatamente como o lead digitou na conversa (ver
@@ -122,6 +124,13 @@ export async function sendWhatsappMessage(instanceName: string | null | undefine
   // só na hora de mandar de verdade — que o 55 entra.
   const number = normalizeBrazilianWhatsappNumber(phoneE164);
 
+  // Guarda final (pedido explícito) — remove qualquer "{{...}}" que
+  // porventura tenha sobrado antes de mandar de verdade, mesmo que todo
+  // ponto de montagem de texto (lembretes, reativação, follow-up) já deva
+  // ter passado por renderMessageTemplate antes disto. Ver
+  // stripAnyLeftoverTemplateTokens, message-template.ts.
+  const safeText = stripAnyLeftoverTemplateTokens(text);
+
   const res = await fetch(`${baseUrl}/message/sendText/${instanceName}`, {
     method: "POST",
     headers: {
@@ -130,7 +139,7 @@ export async function sendWhatsappMessage(instanceName: string | null | undefine
     },
     body: JSON.stringify({
       number,
-      text,
+      text: safeText,
     }),
   });
 
@@ -284,8 +293,19 @@ export function formatDateTimeLabel(date: Date, now: Date): string {
 // {{primeiro_nome}} e {{data_horario}}. Usado no lugar de
 // formatReminderMessage quando a clínica personalizou o texto daquele
 // lembrete específico.
+//
+// Bug real corrigido: antes fazia replaceAll cru — nome desconhecido
+// (params.leadFirstName vazio) virava string vazia no lugar da variável,
+// deixando pontuação quebrada ("Oi, , tudo bem?"). Agora usa
+// renderMessageTemplate (message-template.ts), a mesma função usada por
+// todo ponto de envio automático: nome vazio é tratado como desconhecido
+// (null) e a variável é REMOVIDA com limpeza de pontuação, nunca deixada
+// vazia no meio do texto.
 export function applyReminderTemplate(template: string, params: { leadFirstName: string; scheduledAt: Date }): string {
   const dataHorario = formatDateTimeLabel(params.scheduledAt, new Date());
 
-  return template.replaceAll("{{primeiro_nome}}", params.leadFirstName).replaceAll("{{data_horario}}", dataHorario);
+  return renderMessageTemplate(template, {
+    primeiro_nome: params.leadFirstName.trim() || null,
+    data_horario: dataHorario,
+  });
 }

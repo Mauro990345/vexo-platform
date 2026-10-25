@@ -1,9 +1,11 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
   formatAppointmentConfirmationMessage,
   normalizeBrazilianWhatsappNumber,
   validateBrazilianPhone,
   formatBrazilianPhoneForDisplay,
+  applyReminderTemplate,
+  sendWhatsappMessage,
 } from "./whatsapp";
 
 describe("normalizeBrazilianWhatsappNumber", () => {
@@ -207,5 +209,67 @@ describe("formatAppointmentConfirmationMessage", () => {
       expect(message.toLowerCase()).not.toContain("http");
       expect(message.toLowerCase()).not.toContain("wa.me");
     }
+  });
+});
+
+// Texto customizado de lembrete (ReminderConfig.firstMessageTemplate/
+// secondMessageTemplate) — bug real corrigido: antes fazia replaceAll cru,
+// nome desconhecido virava string vazia literal ("Oi, , tudo bem?"). Agora
+// usa renderMessageTemplate (message-template.ts) por baixo.
+describe("applyReminderTemplate", () => {
+  it("nome e data conhecidos: substitui as duas variáveis", () => {
+    const result = applyReminderTemplate("Oi, {{primeiro_nome}}! Nos vemos {{data_horario}}.", {
+      leadFirstName: "Maria",
+      scheduledAt: new Date("2026-09-19T12:00:00.000Z"),
+    });
+    expect(result).toContain("Oi, Maria!");
+    expect(result).toContain("9h");
+  });
+
+  it("nome desconhecido (string vazia): remove a variável com limpeza, nunca deixa vírgula/espaço sobrando", () => {
+    const result = applyReminderTemplate("Oi, {{primeiro_nome}}! Passando para lembrar.", {
+      leadFirstName: "",
+      scheduledAt: new Date("2026-09-19T12:00:00.000Z"),
+    });
+    expect(result).toBe("Oi! Passando para lembrar.");
+    expect(result).not.toMatch(/\{\{/);
+  });
+});
+
+describe("sendWhatsappMessage", () => {
+  beforeEach(() => {
+    process.env.EVOLUTION_API_URL = "https://evolution.vexo.com.br";
+    process.env.EVOLUTION_API_KEY = "fake-key-de-teste";
+    vi.stubGlobal("fetch", vi.fn());
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    delete process.env.EVOLUTION_API_URL;
+    delete process.env.EVOLUTION_API_KEY;
+  });
+
+  // Guarda final (pedido explícito, item 1) — mesma rede de segurança de
+  // sendInstagramMessage (instagram.ts).
+  it('guarda final: remove "{{...}}" que ainda esteja no texto antes de mandar de verdade', async () => {
+    const fetchMock = fetch as unknown as ReturnType<typeof vi.fn>;
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ status: "PENDING" }), { status: 200 }));
+
+    await sendWhatsappMessage("clinica-demo", "5511987654321", "Oi, {{primeiro_nome}}! Tudo bem?");
+
+    const [, requestInit] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(requestInit.body as string);
+    expect(body.text).toBe("Oi! Tudo bem?");
+  });
+
+  it("texto sem nenhuma variável: passa intacto", async () => {
+    const fetchMock = fetch as unknown as ReturnType<typeof vi.fn>;
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ status: "PENDING" }), { status: 200 }));
+
+    await sendWhatsappMessage("clinica-demo", "5511987654321", "Oi! Tudo bem?");
+
+    const [, requestInit] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(requestInit.body as string);
+    expect(body.text).toBe("Oi! Tudo bem?");
   });
 });

@@ -4,6 +4,7 @@ import { classifyConversation } from "@/lib/anthropic";
 import { toChatHistory } from "@/lib/chat-history";
 import { nextValidSendTime } from "@/lib/follow-up-window";
 import { getLLMProvider } from "@/lib/llm/provider";
+import { renderMessageTemplate } from "@/lib/message-template";
 
 // Duas sequências de follow-up independentes (ver FollowUpTrigger no schema):
 //
@@ -320,6 +321,23 @@ export function applyTemplateVariables(text: string, lead: { name: string | null
   return text.replaceAll("{{primeiro_nome}}", leadFirstName(lead));
 }
 
+// Usada pelos PASSOS de follow-up (dispatchFollowUpSteps, abaixo) — NÃO
+// pelo prompt da IA (que continua em applyTemplateVariables, acima,
+// intocado). Mesma fonte de nome de sempre (leadFirstName — segue caindo
+// pro @ do Instagram quando não há Lead.name, comportamento conhecido e
+// não alterado aqui), só a LIMPEZA muda: antes, nome vazio (leadFirstName
+// devolve "") virava string vazia literal no lugar da variável, deixando
+// pontuação quebrada (ex.: "Oi {{primeiro_nome}}, tudo bem?" ->
+// "Oi , tudo bem?"). Agora usa renderMessageTemplate (message-template.ts,
+// mesma função usada por lembretes/reativação): "" vira null (desconhecido)
+// e a variável é REMOVIDA com limpeza de pontuação — nunca deixa resíduo.
+// Qualquer OUTRA variável que a clínica digitar por engano no texto do
+// passo (ex.: {{data_horario}}, que follow-up não suporta) também é
+// removida pela mesma limpeza, nunca sai literal.
+export function renderFollowUpMessage(text: string, lead: { name: string | null; igUsername: string | null }): string {
+  return renderMessageTemplate(text, { primeiro_nome: leadFirstName(lead) || null });
+}
+
 // Exportada só pra teste (mesmo padrão já usado por buildAvailabilityCheck/
 // isSlotFreeIgnoringOwnAppointment em conversation-pipeline.ts) — chamada
 // de verdade continua sendo via processFollowUps, mais abaixo.
@@ -406,7 +424,7 @@ export async function dispatchFollowUpSteps(): Promise<number> {
       continue;
     }
 
-    const stepContent = nextStep.content ? applyTemplateVariables(nextStep.content, log.conversation.lead) : "";
+    const stepContent = nextStep.content ? renderFollowUpMessage(nextStep.content, log.conversation.lead) : "";
 
     const messagesToCreate = [];
 
