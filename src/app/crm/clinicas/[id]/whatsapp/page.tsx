@@ -8,6 +8,7 @@ import {
   renameWhatsappInstanceAction,
   resetWhatsappInstanceNameAction,
   checkWhatsappConnectionStateAction,
+  resetWhatsappPairingAction,
 } from "../../actions";
 
 export const dynamic = "force-dynamic";
@@ -53,6 +54,7 @@ export default async function ClinicWhatsappPage({ params }: { params: { id: str
         refreshHref={`/crm/clinicas/${clinic.id}/whatsapp`}
         description="Notifica a secretária quando um lead precisa de atendimento humano."
         disconnectAction={disconnectWhatsappAction.bind(null, clinic.id)}
+        resetPairingAction={resetWhatsappPairingAction.bind(null, clinic.id)}
         renameAction={renameWhatsappInstanceAction.bind(null, clinic.id)}
         resetAction={resetWhatsappInstanceNameAction.bind(null, clinic.id)}
         checkStatusAction={checkWhatsappConnectionStateAction.bind(null, clinic.id)}

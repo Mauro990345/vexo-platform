@@ -11,6 +11,7 @@ import {
   renameWhatsappInstance,
   resetWhatsappInstanceName,
   refreshWhatsappStatus,
+  resetWhatsappPairing,
   type WhatsappConnectionState,
 } from "@/lib/whatsapp-connection";
 import { disconnectGoogleCalendar } from "@/lib/google-calendar";
@@ -847,6 +848,19 @@ export async function resetWhatsappInstanceNameAction(clinicId: string) {
 export async function disconnectWhatsappAction(clinicId: string) {
   await requireInternalSession();
   await disconnectWhatsapp(clinicId);
+  revalidatePath(`/crm/clinicas/${clinicId}/whatsapp`);
+  revalidatePath(`/crm/clinicas/${clinicId}`);
+  revalidatePath("/crm");
+}
+
+// "Reiniciar pareamento" (status "connecting" — ver
+// whatsappResetActionLabel/shouldShowWhatsappResetAction,
+// whatsapp-connection.ts) — APAGA a instância (resetWhatsappPairing, que
+// nunca recria sozinha: a próxima carga da tela de conexão já faz isso).
+// Nunca roda sozinho, só no clique explícito deste botão.
+export async function resetWhatsappPairingAction(clinicId: string) {
+  await requireInternalSession();
+  await resetWhatsappPairing(clinicId);
   revalidatePath(`/crm/clinicas/${clinicId}/whatsapp`);
   revalidatePath(`/crm/clinicas/${clinicId}`);
   revalidatePath("/crm");
