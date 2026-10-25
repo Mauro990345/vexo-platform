@@ -139,7 +139,9 @@ export async function fetchWhatsappConnectionState(instanceName: string): Promis
 }
 
 // Desconecta o número sem apagar a instância — o próximo /instance/connect
-// gera um QR code novo para reparear.
+// gera um QR code novo para reparear. Continua usada pelo botão
+// "Desconectar" (status "open" — soltar um número já funcionando, ver
+// WhatsappConnectionPanel.tsx).
 export async function logoutWhatsappInstance(instanceName: string): Promise<void> {
   const { baseUrl, apiKey } = evolutionBaseConfig();
 
@@ -151,5 +153,32 @@ export async function logoutWhatsappInstance(instanceName: string): Promise<void
   if (!res.ok && res.status !== 404) {
     const body = await res.text();
     throw new Error(`Falha ao desconectar instância "${instanceName}" (${res.status}): ${body}`);
+  }
+}
+
+// Apaga a instância de verdade (não só desloga) — endpoint confirmado
+// contra o código-fonte da Evolution API (src/api/routes/instance.router.ts,
+// rota DELETE routerPath('delete')). Usada pelo botão "Reiniciar
+// pareamento" (status "connecting" — sessão travada, ver
+// WhatsappConnectionPanel.tsx/resetWhatsappPairing em whatsapp-connection.ts):
+// logout sozinho NÃO limpa uma sessão/credenciais corrompidas do lado da
+// Evolution (é o próprio sintoma investigado — "Reiniciar pareamento"
+// antes só deslogava, e o pareamento seguinte continuava falhando do
+// mesmo jeito); apagar e deixar o próximo carregamento da tela recriar do
+// zero (ensureWhatsappQrForClinic, que já checa whatsappInstanceExists
+// antes de criar) é o que garante uma sessão genuinamente nova.
+// 404 (instância já não existe) é tratado como sucesso — exatamente o
+// estado final desejado, nunca um erro real.
+export async function deleteWhatsappInstance(instanceName: string): Promise<void> {
+  const { baseUrl, apiKey } = evolutionBaseConfig();
+
+  const res = await fetch(`${baseUrl}/instance/delete/${instanceName}`, {
+    method: "DELETE",
+    headers: { apikey: apiKey },
+  });
+
+  if (!res.ok && res.status !== 404) {
+    const body = await res.text();
+    throw new Error(`Falha ao apagar instância "${instanceName}" na Evolution API (${res.status}): ${body}`);
   }
 }

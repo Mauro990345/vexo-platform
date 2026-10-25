@@ -12,12 +12,14 @@ vi.mock("@/lib/prisma", () => ({
 }));
 
 const createWhatsappInstanceMock = vi.fn();
+const deleteWhatsappInstanceMock = vi.fn();
 const fetchWhatsappConnectionStateMock = vi.fn();
 const fetchWhatsappQrMock = vi.fn();
 const logoutWhatsappInstanceMock = vi.fn();
 const whatsappInstanceExistsMock = vi.fn();
 vi.mock("@/lib/whatsapp-instance", () => ({
   createWhatsappInstance: (...args: unknown[]) => createWhatsappInstanceMock(...args),
+  deleteWhatsappInstance: (...args: unknown[]) => deleteWhatsappInstanceMock(...args),
   fetchWhatsappConnectionState: (...args: unknown[]) => fetchWhatsappConnectionStateMock(...args),
   fetchWhatsappQr: (...args: unknown[]) => fetchWhatsappQrMock(...args),
   logoutWhatsappInstance: (...args: unknown[]) => logoutWhatsappInstanceMock(...args),
@@ -27,8 +29,11 @@ vi.mock("@/lib/whatsapp-instance", () => ({
 import {
   ensureWhatsappQrForClinic,
   refreshWhatsappStatus,
+  resetWhatsappPairing,
   shouldShowWhatsappResetAction,
   whatsappResetActionLabel,
+  isWhatsappPairingStuck,
+  WHATSAPP_PAIRING_STUCK_THRESHOLD_MS,
 } from "./whatsapp-connection";
 
 function fakeClinic(overrides: Record<string, unknown> = {}) {
@@ -107,6 +112,71 @@ describe("refreshWhatsappStatus — nunca cria instância nem pede QR novo", () 
     expect(createWhatsappInstanceMock).not.toHaveBeenCalled();
     expect(fetchWhatsappQrMock).not.toHaveBeenCalled();
     expect(whatsappInstanceExistsMock).not.toHaveBeenCalled();
+  });
+});
+
+// "Reiniciar pareamento" (status "connecting") — bug real investigado:
+// logout sozinho não limpa uma sessão/credenciais corrompidas do lado da
+// Evolution. resetWhatsappPairing APAGA a instância e nunca recria
+// sozinha (a próxima carga da tela de conexão já faz isso, via
+// ensureWhatsappQrForClinic).
+describe("resetWhatsappPairing", () => {
+  beforeEach(() => {
+    clinicFindUniqueOrThrowMock.mockReset();
+    clinicUpdateMock.mockReset();
+    deleteWhatsappInstanceMock.mockReset();
+    createWhatsappInstanceMock.mockReset();
+    fetchWhatsappQrMock.mockReset();
+  });
+
+  it("apaga a instância e limpa o status salvo", async () => {
+    clinicFindUniqueOrThrowMock.mockResolvedValue(fakeClinic());
+
+    await resetWhatsappPairing("clinic-1");
+
+    expect(deleteWhatsappInstanceMock).toHaveBeenCalledWith("clinica-demo");
+    expect(clinicUpdateMock).toHaveBeenCalledWith({
+      where: { id: "clinic-1" },
+      data: { whatsappStatus: null, whatsappStatusCheckedAt: null },
+    });
+  });
+
+  it("NUNCA recria sozinha (createWhatsappInstance/fetchWhatsappQr ficam pra próxima carga da tela)", async () => {
+    clinicFindUniqueOrThrowMock.mockResolvedValue(fakeClinic());
+
+    await resetWhatsappPairing("clinic-1");
+
+    expect(createWhatsappInstanceMock).not.toHaveBeenCalled();
+    expect(fetchWhatsappQrMock).not.toHaveBeenCalled();
+  });
+
+  it("sem instância salva: no-op (nada pra apagar)", async () => {
+    clinicFindUniqueOrThrowMock.mockResolvedValue(fakeClinic({ whatsappInstanceName: null }));
+
+    await resetWhatsappPairing("clinic-1");
+
+    expect(deleteWhatsappInstanceMock).not.toHaveBeenCalled();
+  });
+});
+
+// Item "d" — mensagem de erro clara em vez de ficar eternamente em
+// "Conectando…". A Evolution não reporta nenhum estado distinto de
+// "falha de pareamento" pro bug atual (companion_reg_refresh) — este é
+// um heurístico de tempo decorrido desde que o QR atual apareceu.
+describe("isWhatsappPairingStuck", () => {
+  it("menos que o limiar: não travado", () => {
+    const since = 1_000_000;
+    expect(isWhatsappPairingStuck(since, since + WHATSAPP_PAIRING_STUCK_THRESHOLD_MS - 1)).toBe(false);
+  });
+
+  it("exatamente no limiar: travado", () => {
+    const since = 1_000_000;
+    expect(isWhatsappPairingStuck(since, since + WHATSAPP_PAIRING_STUCK_THRESHOLD_MS)).toBe(true);
+  });
+
+  it("bem além do limiar: travado", () => {
+    const since = 1_000_000;
+    expect(isWhatsappPairingStuck(since, since + WHATSAPP_PAIRING_STUCK_THRESHOLD_MS * 5)).toBe(true);
   });
 });
 
