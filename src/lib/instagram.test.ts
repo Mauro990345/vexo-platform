@@ -1,7 +1,14 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+
+const leadUpdateMock = vi.fn();
+vi.mock("@/lib/prisma", () => ({
+  prisma: { lead: { update: (...args: unknown[]) => leadUpdateMock(...args) } },
+}));
+
 import {
   isRealIgScopedId,
   getInstagramUserProfile,
+  ensureLeadFirstNameFromInstagram,
   sendInstagramMessage,
   sendInstagramGenericTemplateCard,
 } from "@/lib/instagram";
@@ -99,6 +106,92 @@ describe("retry em erro transitório da Graph API", () => {
   });
 });
 
+// Bug real corrigido (Reativação/lembretes): {{primeiro_nome}} precisava
+// de uma fonte de nome fora do pipeline de webhook — esta função busca e
+// cacheia o nome do lead (mesma regra de "tenta uma vez só" do pipeline de
+// conversa, Lead.nameLookupAttempted) pra quem precisa fora dele.
+describe("ensureLeadFirstNameFromInstagram", () => {
+  beforeEach(() => {
+    process.env.TOKEN_ENCRYPTION_KEY = "test-key-para-os-testes-de-retry";
+    leadUpdateMock.mockReset();
+    leadUpdateMock.mockResolvedValue({});
+    vi.stubGlobal("fetch", vi.fn());
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("nome já em cache (Lead.name preenchido): devolve direto, sem chamar a API", async () => {
+    const result = await ensureLeadFirstNameFromInstagram(
+      { id: "lead-1", name: "Maria", nameLookupAttempted: false, igScopedId: "17841400000000000" },
+      "enc-token"
+    );
+    expect(result).toBe("Maria");
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("já tentado antes (nameLookupAttempted=true) e sem nome: não tenta de novo, devolve null — nunca em loop", async () => {
+    const result = await ensureLeadFirstNameFromInstagram(
+      { id: "lead-1", name: null, nameLookupAttempted: true, igScopedId: "17841400000000000" },
+      "enc-token"
+    );
+    expect(result).toBeNull();
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("lead de seed/demo (igScopedId não numérico): não chama a API", async () => {
+    const result = await ensureLeadFirstNameFromInstagram(
+      { id: "lead-1", name: null, nameLookupAttempted: false, igScopedId: "demo-new-0" },
+      "enc-token"
+    );
+    expect(result).toBeNull();
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("primeira tentativa, API devolve nome: busca, cacheia (Lead.name + nameLookupAttempted=true) e devolve", async () => {
+    const fetchMock = fetch as unknown as ReturnType<typeof vi.fn>;
+    fetchMock.mockResolvedValue(jsonResponse(200, { name: "João Pedro" }));
+
+    const result = await ensureLeadFirstNameFromInstagram(
+      { id: "lead-1", name: null, nameLookupAttempted: false, igScopedId: "17841400000000000" },
+      encryptToken("fake-token")
+    );
+
+    expect(result).toBe("João Pedro");
+    expect(leadUpdateMock).toHaveBeenCalledWith({
+      where: { id: "lead-1" },
+      data: { name: "João Pedro", nameLookupAttempted: true },
+    });
+  });
+
+  it("API responde sem campo name: cacheia nameLookupAttempted=true (definitivo), devolve null", async () => {
+    const fetchMock = fetch as unknown as ReturnType<typeof vi.fn>;
+    fetchMock.mockResolvedValue(jsonResponse(200, {}));
+
+    const result = await ensureLeadFirstNameFromInstagram(
+      { id: "lead-1", name: null, nameLookupAttempted: false, igScopedId: "17841400000000000" },
+      encryptToken("fake-token")
+    );
+
+    expect(result).toBeNull();
+    expect(leadUpdateMock).toHaveBeenCalledWith({ where: { id: "lead-1" }, data: { nameLookupAttempted: true } });
+  });
+
+  it("erro na chamada (permanente): devolve null, NÃO marca nameLookupAttempted (erro pode ser transitório, tenta de novo depois)", async () => {
+    const fetchMock = fetch as unknown as ReturnType<typeof vi.fn>;
+    fetchMock.mockResolvedValue(jsonResponse(400, { error: { message: "token inválido", code: 190 } }));
+
+    const result = await ensureLeadFirstNameFromInstagram(
+      { id: "lead-1", name: null, nameLookupAttempted: false, igScopedId: "17841400000000000" },
+      encryptToken("fake-token")
+    );
+
+    expect(result).toBeNull();
+    expect(leadUpdateMock).not.toHaveBeenCalled();
+  });
+});
+
 // Bug real corrigido: attachment.type ia SEMPRE "video", mesmo quando
 // mediaUrl era uma foto de resultado (ResultPhoto.imageUrl, JPG/PNG/WEBP/
 // GIF) — a Graph API rejeita uma imagem anunciada como vídeo, e a Message
@@ -180,6 +273,53 @@ describe("sendInstagramMessage — tipo do anexo por extensão de mediaUrl", () 
     const [, requestInit] = fetchMock.mock.calls[0] as [string, RequestInit];
     const body = JSON.parse(requestInit.body as string);
     expect(body.message.attachment.type).toBe("image");
+  });
+});
+
+// Guarda final (pedido explícito, item 1) — remove qualquer "{{...}}" que
+// porventura tenha sobrado, mesmo que todo ponto de montagem de texto já
+// devesse ter passado por renderMessageTemplate antes de chamar isto.
+describe("sendInstagramMessage — guarda final contra variável sem preencher", () => {
+  beforeEach(() => {
+    process.env.TOKEN_ENCRYPTION_KEY = "test-key-para-os-testes-de-retry";
+    vi.stubGlobal("fetch", vi.fn());
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('remove "{{...}}" que ainda esteja no texto antes de mandar de verdade', async () => {
+    const fetchMock = fetch as unknown as ReturnType<typeof vi.fn>;
+    fetchMock.mockResolvedValue(jsonResponse(200, { message_id: "mid.guard" }));
+
+    await sendInstagramMessage({
+      accessTokenEnc: encryptToken("fake-token"),
+      igUserId: "999",
+      recipientIgScopedId: "17841400000000000",
+      text: "Oi, {{primeiro_nome}}! Tudo bem?",
+    });
+
+    const [, requestInit] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(requestInit.body as string);
+    expect(body.message.text).toBe("Oi! Tudo bem?");
+    expect(body.message.text).not.toMatch(/\{\{/);
+  });
+
+  it("texto sem nenhuma variável: passa intacto", async () => {
+    const fetchMock = fetch as unknown as ReturnType<typeof vi.fn>;
+    fetchMock.mockResolvedValue(jsonResponse(200, { message_id: "mid.guard2" }));
+
+    await sendInstagramMessage({
+      accessTokenEnc: encryptToken("fake-token"),
+      igUserId: "999",
+      recipientIgScopedId: "17841400000000000",
+      text: "Oi! Tudo bem?",
+    });
+
+    const [, requestInit] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(requestInit.body as string);
+    expect(body.message.text).toBe("Oi! Tudo bem?");
   });
 });
 

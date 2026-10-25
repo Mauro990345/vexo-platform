@@ -9,6 +9,7 @@ const reactivationCardSlotUpdateManyMock = vi.fn();
 const reactivationCardSlotUpdateMock = vi.fn();
 const reactivationConfigUpsertMock = vi.fn();
 const leadFindManyMock = vi.fn();
+const instagramAccountFindUniqueMock = vi.fn();
 vi.mock("@/lib/prisma", () => ({
   prisma: {
     reactivationConfig: {
@@ -24,7 +25,19 @@ vi.mock("@/lib/prisma", () => ({
       update: (...args: unknown[]) => reactivationCardSlotUpdateMock(...args),
     },
     lead: { findMany: (...args: unknown[]) => leadFindManyMock(...args) },
+    instagramAccount: { findUnique: (...args: unknown[]) => instagramAccountFindUniqueMock(...args) },
   },
+}));
+
+// {{primeiro_nome}}/{{data_horario}} na Reativação (ver renderMessageTemplate,
+// message-template.ts) — ensureLeadFirstNameFromInstagram (busca+cache do
+// nome) é mockada aqui, não a real: a implementação de verdade (Prisma
+// lead.update + chamada à Graph API) já tem seus próprios testes em
+// instagram.test.ts; aqui só importa COMO getReactivationCards/
+// sendReactivationWhatsAppMessage usam o resultado dela.
+const ensureLeadFirstNameFromInstagramMock = vi.fn();
+vi.mock("@/lib/instagram", () => ({
+  ensureLeadFirstNameFromInstagram: (...args: unknown[]) => ensureLeadFirstNameFromInstagramMock(...args),
 }));
 
 // Partial mock (importOriginal) — normalizeBrazilianWhatsappNumber/
@@ -531,9 +544,15 @@ describe("getReactivationCards — sentAt e janela de 5 dias úteis", () => {
     reactivationCardSlotUpsertMock.mockReset();
     reactivationConfigUpsertMock.mockReset();
     leadFindManyMock.mockReset();
+    instagramAccountFindUniqueMock.mockReset();
+    ensureLeadFirstNameFromInstagramMock.mockReset();
     leadFindManyMock.mockResolvedValue([
-      { id: "lead-1", name: "Fulana", igUsername: "fulana.ig", profilePictureUrl: null, phone: "11987654321" },
+      { id: "lead-1", name: "Fulana", igUsername: "fulana.ig", igScopedId: "ig-1", nameLookupAttempted: true, profilePictureUrl: null, phone: "11987654321" },
     ]);
+    // Sem conta do Instagram conectada, por padrão — cai pro nome já em
+    // cache (lead.name), sem tentar nenhuma busca viva. Testes que querem
+    // exercitar a busca viva configuram isto explicitamente.
+    instagramAccountFindUniqueMock.mockResolvedValue(null);
   });
 
   it(
@@ -588,6 +607,85 @@ describe("getReactivationCards — sentAt e janela de 5 dias úteis", () => {
 
     expect(cards).toHaveLength(1);
     expect(cards[0]!.sentAt).toBeNull();
+  });
+
+  // Bug real reportado: mensagem de Reativação chegava com "{{primeiro_nome}}"
+  // literal no WhatsApp — a Reativação nunca substituía variável nenhuma.
+  // Estes dois testes cobrem a wiring de getReactivationCards com
+  // renderMessageTemplate (a lógica de limpeza em si já é testada à parte
+  // em message-template.test.ts).
+  it("mensagem customizada com {{primeiro_nome}}/{{data_horario}}: renderiza com o nome em cache e a data do agendamento", async () => {
+    const scheduledAt = new Date("2026-01-01T15:00:00.000Z"); // quinta-feira, 12h em São Paulo (UTC-3)
+    const window90 = computeReactivationWindow(scheduledAt, 90);
+    const now = window90.start;
+
+    reactivationConfigFindUniqueMock.mockResolvedValue({
+      thresholdDaysList: [90],
+      message1: "Oi, {{primeiro_nome}}! Faz tempo desde {{data_horario}}.",
+    });
+    appointmentFindManyMock.mockResolvedValue([
+      { id: "appt-1", leadId: "lead-1", conversationId: "conv-1", scheduledAt, status: "SCHEDULED" },
+    ]);
+    reactivationCardSlotFindManyMock.mockResolvedValue([]);
+    reactivationCardSlotUpsertMock.mockResolvedValue({});
+
+    const cards = await getReactivationCards("clinic-1", now);
+
+    expect(cards[0]!.message).toBe("Oi, Fulana! Faz tempo desde quinta-feira (01/01) às 12h.");
+    expect(cards[0]!.message).not.toMatch(/\{\{/);
+  });
+
+  it('nome desconhecido (sem cache, sem conta do Instagram pra buscar): remove "{{primeiro_nome}}" com limpeza — nunca sai literal', async () => {
+    const scheduledAt = new Date("2026-01-01T12:00:00.000Z");
+    const window90 = computeReactivationWindow(scheduledAt, 90);
+    const now = window90.start;
+
+    leadFindManyMock.mockResolvedValue([
+      { id: "lead-1", name: null, igUsername: null, igScopedId: "ig-1", nameLookupAttempted: true, profilePictureUrl: null, phone: "11987654321" },
+    ]);
+    reactivationConfigFindUniqueMock.mockResolvedValue({
+      thresholdDaysList: [90],
+      message1: "Oi, {{primeiro_nome}}! Como você está?",
+    });
+    appointmentFindManyMock.mockResolvedValue([
+      { id: "appt-1", leadId: "lead-1", conversationId: "conv-1", scheduledAt, status: "SCHEDULED" },
+    ]);
+    reactivationCardSlotFindManyMock.mockResolvedValue([]);
+    reactivationCardSlotUpsertMock.mockResolvedValue({});
+
+    const cards = await getReactivationCards("clinic-1", now);
+
+    expect(cards[0]!.message).toBe("Oi! Como você está?");
+    expect(cards[0]!.message).not.toMatch(/\{\{/);
+  });
+
+  it("clínica com conta do Instagram conectada: busca o nome ao vivo (ensureLeadFirstNameFromInstagram) em vez de confiar só no cache", async () => {
+    const scheduledAt = new Date("2026-01-01T12:00:00.000Z");
+    const window90 = computeReactivationWindow(scheduledAt, 90);
+    const now = window90.start;
+
+    leadFindManyMock.mockResolvedValue([
+      { id: "lead-1", name: null, igUsername: null, igScopedId: "ig-1", nameLookupAttempted: false, profilePictureUrl: null, phone: "11987654321" },
+    ]);
+    instagramAccountFindUniqueMock.mockResolvedValue({ accessTokenEnc: "enc-token" });
+    ensureLeadFirstNameFromInstagramMock.mockResolvedValue("João Pedro");
+    reactivationConfigFindUniqueMock.mockResolvedValue({
+      thresholdDaysList: [90],
+      message1: "Oi, {{primeiro_nome}}!",
+    });
+    appointmentFindManyMock.mockResolvedValue([
+      { id: "appt-1", leadId: "lead-1", conversationId: "conv-1", scheduledAt, status: "SCHEDULED" },
+    ]);
+    reactivationCardSlotFindManyMock.mockResolvedValue([]);
+    reactivationCardSlotUpsertMock.mockResolvedValue({});
+
+    const cards = await getReactivationCards("clinic-1", now);
+
+    expect(ensureLeadFirstNameFromInstagramMock).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "lead-1" }),
+      "enc-token"
+    );
+    expect(cards[0]!.message).toBe("Oi, João!");
   });
 });
 
@@ -673,7 +771,8 @@ describe("sendReactivationWhatsAppMessage — envio direto pelo VEXO (canal What
       sentAt: null,
       appointment: {
         clinicId: "clinic-1",
-        lead: { phone: "11987654321" },
+        scheduledAt: new Date("2026-01-01T15:00:00.000Z"),
+        lead: { id: "lead-1", name: "Fulana", igScopedId: "ig-1", nameLookupAttempted: true, phone: "11987654321" },
         clinic: {
           whatsappInstanceName: "clinic-1-instance",
           reactivationConfig: {
@@ -817,6 +916,51 @@ describe("sendReactivationWhatsAppMessage — envio direto pelo VEXO (canal What
 
     expect(result).toEqual({ ok: false, reason: "not_found" });
     expect(sendWhatsappMessageMock).not.toHaveBeenCalled();
+  });
+
+  // Bug real reportado (mesmo mecanismo de getReactivationCards, acima) —
+  // o envio direto nunca substituía variável nenhuma no texto configurado.
+  it("mensagem customizada com {{primeiro_nome}}/{{data_horario}}: renderiza antes de mandar de verdade", async () => {
+    reactivationCardSlotFindUniqueMock.mockResolvedValue(
+      fakeSlot({
+        appointment: {
+          ...fakeSlot().appointment,
+          clinic: {
+            ...fakeSlot().appointment.clinic,
+            reactivationConfig: { message1: null, message2: "Oi, {{primeiro_nome}}! Em {{data_horario}}.", message3: null, message4: null, message5: null },
+          },
+        },
+      })
+    );
+    sendWhatsappMessageMock.mockResolvedValue(undefined);
+
+    await sendReactivationWhatsAppMessage("appt-1", 90, new Date("2026-04-01T12:00:00.000Z"));
+
+    expect(sendWhatsappMessageMock).toHaveBeenCalledWith(
+      "clinic-1-instance",
+      "5511987654321",
+      "Oi, Fulana! Em quinta-feira (01/01) às 12h."
+    );
+  });
+
+  it("nome desconhecido (sem cache, sem conta do Instagram): remove {{primeiro_nome}} com limpeza antes de mandar — nunca literal", async () => {
+    reactivationCardSlotFindUniqueMock.mockResolvedValue(
+      fakeSlot({
+        appointment: {
+          ...fakeSlot().appointment,
+          lead: { id: "lead-1", name: null, igScopedId: "ig-1", nameLookupAttempted: true, phone: "11987654321" },
+          clinic: {
+            ...fakeSlot().appointment.clinic,
+            reactivationConfig: { message1: null, message2: "Oi, {{primeiro_nome}}! Como vai?", message3: null, message4: null, message5: null },
+          },
+        },
+      })
+    );
+    sendWhatsappMessageMock.mockResolvedValue(undefined);
+
+    await sendReactivationWhatsAppMessage("appt-1", 90, new Date());
+
+    expect(sendWhatsappMessageMock).toHaveBeenCalledWith("clinic-1-instance", "5511987654321", "Oi! Como vai?");
   });
 
   it("defesa em profundidade: período de canal Instagram nunca manda WhatsApp, mesmo se chamado diretamente", async () => {

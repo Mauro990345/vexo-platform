@@ -36,6 +36,7 @@ vi.mock("@/lib/anthropic", () => ({
 import {
   leadFirstName,
   applyTemplateVariables,
+  renderFollowUpMessage,
   dispatchFollowUpSteps,
   processSilentConversations,
   isFollowUpMessage,
@@ -78,6 +79,30 @@ describe("applyTemplateVariables", () => {
   it("substitui {{primeiro_nome}} pelo nome derivado do @ quando não há Lead.name", () => {
     const result = applyTemplateVariables("Oi, {{primeiro_nome}}! Tudo bem?", { name: null, igUsername: "mauro.iphone" });
     expect(result).toBe("Oi, mauro! Tudo bem?");
+  });
+});
+
+// Usada pelos PASSOS de follow-up (dispatchFollowUpSteps) — NÃO pelo
+// prompt da IA (que continua em applyTemplateVariables, acima, intocado,
+// mesmo teste/comportamento de sempre). Mesma fonte de nome (leadFirstName,
+// com o fallback pro @ preservado), só a limpeza final muda: bug real
+// corrigido aqui — nome vazio virava string vazia literal no lugar da
+// variável ("Oi {{primeiro_nome}}, tudo bem?" -> "Oi , tudo bem?").
+describe("renderFollowUpMessage", () => {
+  it("nome conhecido: substitui normalmente, mesmo comportamento de applyTemplateVariables", () => {
+    const result = renderFollowUpMessage("Oi, {{primeiro_nome}}! Tudo bem?", { name: null, igUsername: "mauro.iphone" });
+    expect(result).toBe("Oi, mauro! Tudo bem?");
+  });
+
+  it('"Oi {{primeiro_nome}}, tudo bem?" sem Lead.name nem @ (nome vazio): remove a variável com limpeza, nunca deixa resíduo', () => {
+    const result = renderFollowUpMessage("Oi {{primeiro_nome}}, tudo bem?", { name: null, igUsername: null });
+    expect(result).not.toMatch(/\{\{/);
+    expect(result).toBe("Oi, tudo bem?");
+  });
+
+  it("qualquer outra variável que a clínica digite por engano (ex.: {{data_horario}}) também é removida, nunca sai literal", () => {
+    const result = renderFollowUpMessage("Combinamos para {{data_horario}}, certo?", { name: "Ana", igUsername: null });
+    expect(result).not.toMatch(/\{\{/);
   });
 });
 

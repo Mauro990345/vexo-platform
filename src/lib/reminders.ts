@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { formatReminderMessage, applyReminderTemplate } from "@/lib/whatsapp";
-import { sendInstagramMessage } from "@/lib/instagram";
+import { sendInstagramMessage, ensureLeadFirstNameFromInstagram } from "@/lib/instagram";
+import { normalizeFirstNameForTemplate } from "@/lib/message-template";
 
 // Lembretes de agendamento — horas configuráveis por clínica (padrão 24h e 3h
 // antes, ver ReminderConfig). SEMPRE por Instagram (mesmo canal da conversa)
@@ -47,6 +48,14 @@ export async function processReminders(): Promise<{ sent: number }> {
     if (!appt.lead) continue; // defesa a mais — já filtrado no where acima
     const hoursBeforeList = appt.clinic.reminderConfig?.hoursBefore ?? [24, 3];
 
+    // Resolvido no máximo UMA VEZ por agendamento (não por lembrete — 1º e
+    // 2º lembrete são do MESMO agendamento, mesmo nome, mesma data),
+    // preguiçosamente (só quando um lembrete realmente vai ser enviado
+    // neste ciclo) pra não gastar uma chamada à API do Instagram à toa pra
+    // todo agendamento dentro da janela de 48h, a cada ciclo do worker.
+    // undefined = ainda não tentado; null = tentado e desconhecido.
+    let primeiroNome: string | null | undefined;
+
     for (const [index, hoursBefore] of hoursBeforeList.entries()) {
       const triggerAt = new Date(appt.scheduledAt.getTime() - hoursBefore * 60 * 60 * 1000);
       if (now < triggerAt) continue; // ainda não chegou a hora deste lembrete
@@ -55,18 +64,27 @@ export async function processReminders(): Promise<{ sent: number }> {
       const alreadySent = appt.reminderLogs.some((r) => r.hoursBefore === hoursBefore);
       if (alreadySent) continue;
 
+      if (!appt.clinic.instagramAccount) continue;
+
+      // Bug real corrigido: {{primeiro_nome}} no texto customizado saía
+      // literal quando o lead não tinha nome salvo — hoje busca o nome do
+      // perfil do Instagram (cacheando em Lead.name, tenta uma vez só, ver
+      // ensureLeadFirstNameFromInstagram em instagram.ts) antes de montar
+      // o texto, em vez de confiar só no que já estava salvo.
+      if (primeiroNome === undefined) {
+        const rawName = await ensureLeadFirstNameFromInstagram(appt.lead, appt.clinic.instagramAccount.accessTokenEnc);
+        primeiroNome = normalizeFirstNameForTemplate(rawName);
+      }
+
       // index 0 = 1º lembrete, 1 = 2º — cada um pode ter um texto próprio
       // (ReminderConfig.firstMessageTemplate/secondMessageTemplate,
       // editável em Automações). Sem personalização, cai no texto fixo
       // padrão (formatReminderMessage).
       const customTemplate =
         index === 0 ? appt.clinic.reminderConfig?.firstMessageTemplate : appt.clinic.reminderConfig?.secondMessageTemplate;
-      const leadFirstName = (appt.lead.name ?? "").split(" ")[0] || "";
       const text = customTemplate
-        ? applyReminderTemplate(customTemplate, { leadFirstName, scheduledAt: appt.scheduledAt })
-        : formatReminderMessage({ leadFirstName: leadFirstName || "tudo bem", hoursBefore, scheduledAt: appt.scheduledAt });
-
-      if (!appt.clinic.instagramAccount) continue;
+        ? applyReminderTemplate(customTemplate, { leadFirstName: primeiroNome ?? "", scheduledAt: appt.scheduledAt })
+        : formatReminderMessage({ leadFirstName: primeiroNome ?? "tudo bem", hoursBefore, scheduledAt: appt.scheduledAt });
 
       try {
         await sendInstagramMessage({
