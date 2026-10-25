@@ -1,4 +1,5 @@
 import { evolutionBaseConfig } from "@/lib/whatsapp";
+import { parseInstanceList, type EvolutionInstanceInfo } from "@/lib/whatsapp-instance";
 
 // Diagnóstico SOMENTE LEITURA da Evolution API, por clínica — nunca envia
 // mensagem, nunca grava nada no banco. Criado pra investigar um caso real:
@@ -19,7 +20,7 @@ import { evolutionBaseConfig } from "@/lib/whatsapp";
 // obter aquele dado específico. 8s de timeout por chamada (AbortSignal.timeout)
 // pra nunca deixar a aba "Status" inteira pendurada esperando uma Evolution
 // fora do ar — timeout vira só mais um tipo de erro mostrado na tela.
-export type EvolutionInstanceInfo = { name: string; state: string | null };
+export type { EvolutionInstanceInfo };
 
 export type EvolutionDiagnostics = {
   apiUrlHost: string | null;
@@ -46,27 +47,9 @@ function extractHost(rawUrl: string): string {
   }
 }
 
-// O formato da resposta de /instance/fetchInstances varia entre versões
-// da Evolution API (mesmo motivo já documentado em whatsapp-instance.ts)
-// — aceita as variantes conhecidas em vez de assumir uma só.
-function parseInstanceList(data: unknown): EvolutionInstanceInfo[] {
-  if (!Array.isArray(data)) return [];
-  return data.map((item): EvolutionInstanceInfo => {
-    const record = (item ?? {}) as Record<string, unknown>;
-    const nested = record.instance as Record<string, unknown> | undefined;
-    const name =
-      (typeof record.name === "string" && record.name) ||
-      (typeof nested?.instanceName === "string" && nested.instanceName) ||
-      (typeof record.instanceName === "string" && record.instanceName) ||
-      "(sem nome)";
-    const state =
-      (typeof record.connectionStatus === "string" && record.connectionStatus) ||
-      (typeof nested?.status === "string" && nested.status) ||
-      (typeof record.status === "string" && record.status) ||
-      null;
-    return { name, state };
-  });
-}
+// parseInstanceList agora mora em whatsapp-instance.ts (reaproveitada por
+// whatsappInstanceExists, mesmo endpoint /instance/fetchInstances) — ver
+// import no topo deste arquivo.
 
 export async function runEvolutionDiagnostics(savedInstanceName: string | null): Promise<EvolutionDiagnostics> {
   const result: EvolutionDiagnostics = {

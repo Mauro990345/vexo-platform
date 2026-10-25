@@ -4,6 +4,7 @@ import {
   fetchWhatsappConnectionState,
   fetchWhatsappQr,
   logoutWhatsappInstance,
+  whatsappInstanceExists,
   type WhatsappConnectionState,
 } from "@/lib/whatsapp-instance";
 
@@ -37,12 +38,23 @@ export async function refreshWhatsappStatus(clinicId: string): Promise<WhatsappC
   return state;
 }
 
+// Bug real investigado: esta função rodava createWhatsappInstance em TODO
+// carregamento da tela, mesmo pra uma instância já existente há meses —
+// arriscado na Evolution 2.3.7 (ver comentário grande em
+// createWhatsappInstance/whatsappInstanceExists, whatsapp-instance.ts).
+// Agora só cria quando whatsappInstanceExists confirma que a instância
+// NÃO existe — qualquer QR pedido daqui em diante é sempre pra uma
+// instância que o VEXO confirmou (ou já sabia) que existe, nunca uma
+// recriação às cegas.
 export async function ensureWhatsappQrForClinic(
   clinicId: string
 ): Promise<{ instanceName: string; qrBase64: string | null }> {
   const instanceName = await ensureInstanceName(clinicId);
 
-  await createWhatsappInstance(instanceName);
+  const exists = await whatsappInstanceExists(instanceName);
+  if (!exists) {
+    await createWhatsappInstance(instanceName);
+  }
   const qr = await fetchWhatsappQr(instanceName);
 
   return { instanceName, ...qr };
@@ -73,6 +85,25 @@ export async function resetWhatsappInstanceName(clinicId: string): Promise<void>
     where: { id: clinicId },
     data: { whatsappInstanceName: clinic.slug, whatsappStatus: null, whatsappStatusCheckedAt: null },
   });
+}
+
+// Pura — decide se o botão de reset (ver WhatsappConnectionPanel.tsx)
+// aparece. Pedido explícito: hoje só aparecia em "open" (pra desconectar
+// um número já pareado); passa a aparecer também em "connecting", onde é
+// o ÚNICO jeito de sair de uma sessão travada (logoutWhatsappInstance,
+// que o próprio botão aciona, é o que faz a Evolution devolver um QR
+// genuinamente novo no próximo /instance/connect — ver comentário grande
+// em whatsapp-instance.ts).
+export function shouldShowWhatsappResetAction(status: WhatsappConnectionState): boolean {
+  return status === "open" || status === "connecting";
+}
+
+// Mesmo botão/ação (logoutWhatsappInstance) nos dois casos — só o RÓTULO
+// muda pra refletir a intenção de quem está clicando: "Desconectar" (já
+// pareado, quer soltar o número) vs. "Reiniciar pareamento" (travado em
+// "connecting", quer uma sessão nova pra tentar de novo).
+export function whatsappResetActionLabel(status: WhatsappConnectionState): string {
+  return status === "open" ? "Desconectar" : "Reiniciar pareamento";
 }
 
 export async function disconnectWhatsapp(clinicId: string): Promise<void> {
