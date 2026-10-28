@@ -51,6 +51,7 @@ import {
 } from "@/lib/result-photo-message";
 import { detectStagnation, STAGNATION_SIMILARITY_THRESHOLD, STAGNATION_WINDOW_SIZE } from "@/lib/loop-guard";
 import { findMostRecentAttendedAppointment, buildReturningPatientContext } from "@/lib/returning-patient-context";
+import { findMostRecentNoShowAppointment, buildNoShowReplyContext, buildColdLeadReengagementContext } from "@/lib/card-reply-context";
 import { parseBrazilLocalDateTime, formatAsBrazilLocalDateTime, startOfBrazilDay } from "@/lib/timezone";
 import { resolveBatchTimestamps } from "@/lib/message-batch-timestamps";
 
@@ -1422,6 +1423,19 @@ export async function handleInboundInstagramMessage(
   const mostRecentAttendedAppointment = findMostRecentAttendedAppointment(leadPastAppointments, now);
   const returningPatientContext = buildReturningPatientContext({ mostRecentAttendedAppointment, reengaged });
 
+  // Extensão do mesmo mecanismo pros outros dois tipos de card da
+  // Reativação do Painel (pedido explícito: "Faltou" e "Quente" — ver
+  // card-reply-context.ts) — MESMA consulta leadPastAppointments acima,
+  // sem query nova. Mutuamente exclusivos entre si e com
+  // returningPatientContext por construção (cada lead cai em no máximo
+  // um: já atendido, ou faltou, ou nunca agendou).
+  const mostRecentNoShowAppointment = findMostRecentNoShowAppointment(leadPastAppointments);
+  const noShowReplyContext = buildNoShowReplyContext({ mostRecentNoShowAppointment, reengaged });
+  const coldLeadReengagementContext = buildColdLeadReengagementContext({
+    everHadAnyAppointment: leadPastAppointments.length > 0,
+    reengaged,
+  });
+
   // Só existe quando pendingAttendanceCheck (acima, calculado ANTES desta
   // chamada) classificou a resposta deste turno como NAO_REMARCA — ou seja,
   // a sequência de confirmação de presença (apresentação + vídeo +
@@ -1496,6 +1510,11 @@ export async function handleInboundInstagramMessage(
       dateTimeContext,
       interestGateContext,
       returningPatientContext,
+      // Mutuamente exclusivos entre si e com returningPatientContext —
+      // na prática nunca mais de um dos três sai não-null ao mesmo tempo
+      // (ver comentário grande acima de onde são calculados).
+      noShowReplyContext,
+      coldLeadReengagementContext,
       resultPhotoHintContext,
       attendanceConfirmedContext,
       clinicContactContext,

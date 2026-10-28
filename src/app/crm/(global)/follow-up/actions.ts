@@ -222,6 +222,25 @@ export async function updateNoShowFirstStepDelay(formData: FormData) {
   revalidatePath("/crm", "layout");
 }
 
+// Textos dos dois passos do card "Faltou" (D3/D10, ver NoShowCardSettings/
+// no-show-cards.ts) — GLOBAL, mesmo motivo de FollowUpStep/FollowUpSettings
+// (a sequência de não-comparecimento também é global). Vazio = usa o
+// texto padrão (DEFAULT_NO_SHOW_CARD_MESSAGES).
+export async function updateNoShowCardSettings(formData: FormData) {
+  await requireInternalSession();
+
+  const day3Content = String(formData.get("day3Content") ?? "").trim() || null;
+  const day10Content = String(formData.get("day10Content") ?? "").trim() || null;
+
+  await prisma.noShowCardSettings.upsert({
+    where: { id: "singleton" },
+    create: { id: "singleton", day3Content, day10Content },
+    update: { day3Content, day10Content },
+  });
+
+  revalidatePath("/crm", "layout");
+}
+
 function parseTimeToMinutes(value: string, label: string): number {
   const match = /^(\d{1,2}):(\d{2})$/.exec(value);
   if (!match) throw new Error(`${label} inválido — use o formato HH:MM.`);

@@ -11,6 +11,7 @@ import {
   moveFollowUpStep,
   updateFollowUpSettings,
   updateNoShowFirstStepDelay,
+  updateNoShowCardSettings,
 } from "./actions";
 
 function preview(text: string, max = 70): string {
@@ -230,10 +231,11 @@ function StepList({
 // (FollowUpStep/FollowUpSettings não têm clinicId, é compartilhada por
 // todas as clínicas) — só muda a sidebar em volta, não o conteúdo.
 export async function FollowUpView() {
-  const [silenceSteps, noShowSteps, settings] = await Promise.all([
+  const [silenceSteps, noShowSteps, settings, noShowCardSettings] = await Promise.all([
     prisma.followUpStep.findMany({ where: { trigger: "SILENCE" }, orderBy: { order: "asc" } }),
     prisma.followUpStep.findMany({ where: { trigger: "NO_SHOW" }, orderBy: { order: "asc" } }),
     prisma.followUpSettings.findUnique({ where: { id: "singleton" } }),
+    prisma.noShowCardSettings.findUnique({ where: { id: "singleton" } }),
   ]);
   const silenceHours = settings?.silenceHours ?? 24;
 
@@ -350,6 +352,57 @@ export async function FollowUpView() {
                     trigger="NO_SHOW"
                     firstStepLabel="Enviado quantas horas após marcar como não compareceu"
                   />
+                </div>
+
+                {/* Card "Faltou" (ver ReactivationRail.tsx/no-show-cards.ts)
+                    — DIFERENTE da sequência automática acima: aparece como
+                    CARD no Painel (WhatsApp direto, ou Instagram sem
+                    telefone), não como mensagem automática. D3/D10 fixos
+                    (não configuráveis, só o texto de cada um) — pedido
+                    explícito. Vazio usa o texto padrão. */}
+                <div className="mt-5">
+                  <h2 className="text-xs font-semibold">Card "Faltou" no Painel</h2>
+                  <p className="mt-1 text-caption text-vexo-muted">
+                    Aparece no Painel pros leads que faltaram e não responderam nem remarcaram — um
+                    card no 3º dia e outro no 10º dia após a falta, em paralelo à sequência
+                    automática acima.
+                  </p>
+
+                  <form
+                    action={updateNoShowCardSettings}
+                    className="mt-2 space-y-2.5 rounded-xl border border-vexo-border bg-vexo-surface p-3.5"
+                  >
+                    <TemplateMessageField
+                      name="day3Content"
+                      label="Card do 3º dia (D3)"
+                      required={false}
+                      rows={2}
+                      variables={[
+                        { token: "{{primeiro_nome}}", label: "+ Nome do lead" },
+                        { token: "{{data_horario}}", label: "+ Data e horário perdidos" },
+                      ]}
+                      defaultValue={noShowCardSettings?.day3Content ?? ""}
+                      placeholder="Vazio usa o texto padrão."
+                    />
+                    <TemplateMessageField
+                      name="day10Content"
+                      label="Card do 10º dia (D10)"
+                      required={false}
+                      rows={2}
+                      variables={[
+                        { token: "{{primeiro_nome}}", label: "+ Nome do lead" },
+                        { token: "{{data_horario}}", label: "+ Data e horário perdidos" },
+                      ]}
+                      defaultValue={noShowCardSettings?.day10Content ?? ""}
+                      placeholder="Vazio usa o texto padrão."
+                    />
+                    <button
+                      type="submit"
+                      className="rounded-lg border border-vexo-accent px-2.5 py-1.5 text-xs font-medium text-vexo-accent hover:bg-vexo-accent/10"
+                    >
+                      Salvar textos
+                    </button>
+                  </form>
                 </div>
               </section>
             ),
