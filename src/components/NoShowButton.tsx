@@ -36,7 +36,11 @@ export function NoShowButton({
       type="button"
       onClick={handleClick}
       disabled={isPending}
-      className={`shrink-0 rounded-sm border px-1.5 py-0.5 text-caption font-medium transition disabled:opacity-50 ${
+      // SÓ CELULAR (abaixo de sm/640px — mesmo ajuste de
+      // AppointmentStatusBadge.tsx/compact, lado a lado na mesma linha da
+      // lista de Agendamentos do Painel): padding 6px/2px -> 8px/3px,
+      // fonte 10px -> 11px. `sm:` com os valores de sempre.
+      className={`shrink-0 rounded-sm border px-2 py-[3px] sm:px-1.5 sm:py-0.5 text-[11px] sm:text-caption font-medium transition disabled:opacity-50 ${
         isNoShow
           ? "border-transparent bg-vexo-panelStatusNegativeBg/80 text-vexo-fg"
           : "border-vexo-border text-vexo-muted hover:border-vexo-error/50 hover:text-vexo-error"

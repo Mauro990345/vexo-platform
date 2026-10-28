@@ -272,7 +272,11 @@ export async function ClientPanelView({
                 return (
                 <div
                   key={a.id}
-                  className="flex items-center gap-2 justify-between rounded-lg border border-vexo-border bg-vexo-surface p-2"
+                  // SÓ CELULAR (abaixo de sm/640px, pedido explícito —
+                  // mesmo ajuste da lista de Reativação, ReactivationRail.tsx:
+                  // ~10%, "não exagere"): padding 8px -> 10px (+4px de
+                  // altura no total). `sm:` com o valor de sempre.
+                  className="flex items-center gap-2 justify-between rounded-lg border border-vexo-border bg-vexo-surface p-[10px] sm:p-2"
                 >
                   <div className="flex min-w-0 flex-1 items-center gap-2">
                     <LeadAvatar profilePictureUrl={a.lead?.profilePictureUrl} name={primary} size="md" />
@@ -280,10 +284,11 @@ export async function ClientPanelView({
                       {/* Nome como elemento principal, @ do Instagram como
                           secundário ao lado (cor discreta, fonte menor, sem
                           parênteses) — ver histórico do formato em
-                          lead-display.ts. */}
+                          lead-display.ts. Fonte só-celular: 14px -> 15px /
+                          10px -> 11px (mesmo ajuste de ReactivationRail.tsx). */}
                       <div className="flex min-w-0 items-baseline gap-1">
-                        <p className="min-w-0 shrink truncate text-sm font-medium">{primary}</p>
-                        {handle && <span className="shrink-0 truncate text-caption text-vexo-muted">@{handle}</span>}
+                        <p className="min-w-0 shrink truncate text-[15px] sm:text-sm font-medium">{primary}</p>
+                        {handle && <span className="shrink-0 truncate text-[11px] sm:text-caption text-vexo-muted">@{handle}</span>}
                       </div>
                       {/* Data, tag e telefone na MESMA linha (pedido
                           explícito — eram 2-3 linhas separadas), com
@@ -295,7 +300,7 @@ export async function ClientPanelView({
                           corrigido historicamente: "inline" aqui (não um
                           <div> de bloco) já limita a área clicável ao
                           próprio texto, sem precisar de inline-flex. */}
-                      <div className="mt-0.5 flex flex-wrap items-center gap-1 text-caption text-vexo-muted">
+                      <div className="mt-0.5 flex flex-wrap items-center gap-1 text-[11px] sm:text-caption text-vexo-muted">
                         <span className="shrink-0">
                           {a.scheduledAt.toLocaleString("pt-BR", {
                             day: "2-digit",

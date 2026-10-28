@@ -98,7 +98,9 @@ export function InstagramDmButton({
             style={{ background: INSTAGRAM_ACTION_GRADIENT }}
           />
           <button type="button" onClick={handleClick} disabled={!dmLink} className={INSTAGRAM_ACTION_BUTTON_CLASS}>
-            <InstagramMonoIcon className="h-3 w-3" />
+            {/* SÓ CELULAR (mesmo ajuste de ReactivationActionButtonStyle.ts,
+                que define INSTAGRAM_ACTION_BUTTON_CLASS): 12px -> 13px. */}
+            <InstagramMonoIcon className="h-[13px] w-[13px] sm:h-3 sm:w-3" />
             {copied ? "Copiado ✓" : "Instagram"}
           </button>
         </div>

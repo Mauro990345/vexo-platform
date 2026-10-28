@@ -77,8 +77,13 @@ export function AppointmentStatusBadge({ status, compact }: { status: string; co
   if (compact) {
     const tint = statusTint(status);
     return (
+      // SÓ CELULAR (abaixo de sm/640px — pedido explícito, lista de
+      // Agendamentos do Painel, ~10%, "não exagere"): padding 6px/2px ->
+      // 8px/3px, fonte 10px -> 11px. `sm:` com os valores de sempre — essa
+      // é a versão `compact`, usada só no Painel (a não-compact, na tela
+      // de conversa do CRM interno, não muda em nada).
       <span
-        className={`inline-flex items-center gap-0.5 rounded-sm px-1.5 py-0.5 text-caption font-medium leading-none ${tint.bg} ${tint.text} ${tint.border ?? ""}`}
+        className={`inline-flex items-center gap-0.5 rounded-sm px-2 py-[3px] sm:px-1.5 sm:py-0.5 text-[11px] sm:text-caption font-medium leading-none ${tint.bg} ${tint.text} ${tint.border ?? ""}`}
       >
         {status === "COMPLETED" && <span aria-hidden="true">✓</span>}
         {label}
