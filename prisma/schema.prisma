@@ -112,6 +112,7 @@ model Clinic {
 
   reminderConfig        ReminderConfig?
   reactivationConfig    ReactivationConfig?
+  hotLeadConfig         HotLeadConfig?
   instagramAccount      InstagramAccount?
   googleCalendarAccount GoogleCalendarAccount?
   connectionLinks       ConnectionLink[]
@@ -575,6 +576,10 @@ model Conversation {
   appointments Appointment[]
   followUps    FollowUpLog[]
 
+  // Card "Quente" (ver HotLeadCardSlot acima e hot-lead-cards.ts) — no
+  // máximo um por conversa.
+  hotLeadCardSlot HotLeadCardSlot?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -819,6 +824,10 @@ model Appointment {
   // em produção).
   reactivationCardSlots ReactivationCardSlot[]
 
+  // Card "Faltou" (D3/D10 após o não-comparecimento) — ver NoShowCardSlot
+  // abaixo e no-show-cards.ts.
+  noShowCardSlots NoShowCardSlot[]
+
   reminderLogs ReminderLog[]
 
   createdAt DateTime @default(now())
@@ -932,6 +941,98 @@ model ReactivationCardSlot {
   createdAt DateTime @default(now())
 
   @@unique([appointmentId, thresholdDays])
+}
+
+// Textos dos dois passos do card "Faltou" (D3 e D10 após o não-
+// comparecimento, ver no-show-cards.ts) — GLOBAL, mesmo padrão de
+// FollowUpSettings/FollowUpStep (a sequência automática de não-
+// comparecimento também é global, não por clínica). Linha única (id fixo
+// "singleton"). Null = usa o texto padrão (DEFAULT_NO_SHOW_CARD_MESSAGES
+// em no-show-cards.ts), mesmo princípio de ReminderConfig.firstMessageTemplate.
+model NoShowCardSettings {
+  id String @id @default("singleton")
+
+  day3Content  String? @db.Text
+  day10Content String? @db.Text
+
+  updatedAt DateTime @updatedAt
+}
+
+// Estado (enviado/pendente) de cada um dos dois passos do card "Faltou"
+// pra um agendamento específico — mesmo papel de ReactivationCardSlot
+// acima, chave composta (appointmentId, step) em vez de
+// (appointmentId, thresholdDays). step 1 = D3, step 2 = D10.
+model NoShowCardSlot {
+  id            String      @id @default(cuid())
+  appointmentId String
+  appointment   Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+
+  step Int
+
+  // Mesma semântica de ReactivationCardSlot.sentAt — null = pendente;
+  // nunca afeta elegibilidade (a janela de 5 dias úteis, ancorada em
+  // FollowUpLog.triggeredAt do log NO_SHOW aberto, decide isso).
+  sentAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@unique([appointmentId, step])
+}
+
+// Configuração do card "Quente" (lead que nunca agendou, parado, com sinal
+// de interesse — ver hot-lead-cards.ts) — POR CLÍNICA, mesmo padrão de
+// ReactivationConfig (diferente de NoShowCardSettings acima: aqui cada
+// clínica tem seu próprio limite diário e suas próprias 5 mensagens).
+model HotLeadConfig {
+  id       String @id @default(cuid())
+  clinicId String @unique
+  clinic   Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  // Limite de cliques (envios de verdade pelo Instagram, ver
+  // sendHotLeadCardMessage) por dia, por clínica — proteção contra
+  // excesso de contato automatizado pela mesma conta (pedido explícito).
+  dailyLimit Int @default(5)
+
+  message1 String? @db.Text
+  message2 String? @db.Text
+  message3 String? @db.Text
+  message4 String? @db.Text
+  message5 String? @db.Text
+
+  // Mesmo papel de ReactivationConfig.sequenceCounter — só decide a
+  // PRÓXIMA posição na rotação em sequência.
+  sequenceCounter Int @default(0)
+
+  updatedAt DateTime @updatedAt
+}
+
+// Card "Quente" — UM por conversa (ao contrário de Reativação/Faltou, que
+// podem gerar mais de um card ao longo do tempo pro mesmo agendamento,
+// aqui a conversa só entra na faixa uma vez: se a janela vencer sem
+// clique, ou se o lead voltar a responder antes disso — o que já tira a
+// conversa da elegibilidade, ver isHotLeadConversationEligible,
+// hot-lead-cards.ts — não há "próxima rodada" pra essa mesma conversa).
+model HotLeadCardSlot {
+  id             String       @id @default(cuid())
+  conversationId String       @unique
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  slot Int
+
+  // "horario" ou "preco_endereco" (ver HotLeadSignalCategory,
+  // hot-lead-detection.ts) — fixado no momento em que o card é criado, só
+  // pra ordenação na faixa (pedido explícito: "horário" antes de
+  // "preço/endereço" entre os Quentes); nunca reavaliado depois.
+  category String
+
+  // A janela de 5 dias úteis (computeReactivationWindow com
+  // thresholdDays=3, reactivation.ts) e a frase "há N dias" na faixa são
+  // sempre calculadas em cima de Conversation.lastLeadMessageAt (sem campo
+  // próprio aqui pra isso) — estável enquanto o lead está calado, que é
+  // exatamente a condição de elegibilidade (ver hot-lead-cards.ts).
+  sentAt DateTime?
+
+  createdAt DateTime @default(now())
 }
 
 model ReminderLog {

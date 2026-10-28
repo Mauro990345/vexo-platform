@@ -582,9 +582,19 @@ export function isReactivationWhatsAppRateLimited(mostRecentWhatsappSentAt: Date
   return now.getTime() - mostRecentWhatsappSentAt.getTime() < REACTIVATION_WHATSAPP_MIN_INTERVAL_MS;
 }
 
+// "no_longer_eligible" (pedido explícito, item 4 — travas) nunca é
+// devolvido por sendReactivationWhatsAppMessage em si (comportamento desta
+// função 100% inalterado); existe aqui só pra no-show-cards.ts reaproveitar
+// o MESMO tipo de resultado (e, no cliente, o mesmo componente/mensagem de
+// aviso) pro card "Faltou" — cobre a corrida "lead respondeu/remarcou
+// entre o card aparecer e o clique" (log de follow-up fechado nesse meio-
+// tempo), ver sendNoShowCardWhatsAppMessage.
 export type SendReactivationWhatsAppResult =
   | { ok: true; alreadySent: boolean }
-  | { ok: false; reason: "not_found" | "wrong_channel" | "rate_limited" | "invalid_phone" | "disconnected" | "send_failed" };
+  | {
+      ok: false;
+      reason: "not_found" | "wrong_channel" | "rate_limited" | "invalid_phone" | "disconnected" | "send_failed" | "no_longer_eligible";
+    };
 
 // Orquestração completa do clique no botão WhatsApp de um card — validação
 // de clínica fica nas duas server actions que chamam esta função (mesmo

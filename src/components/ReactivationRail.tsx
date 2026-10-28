@@ -4,15 +4,18 @@ import { useEffect, useState } from "react";
 import { LeadAvatar } from "@/components/LeadAvatar";
 import { WhatsAppMonoIcon } from "@/components/BrandIcons";
 import { InstagramDmButton } from "@/components/InstagramDmButton";
+import { PanelCardTypeBar, PanelCardTypeChip, PanelCardReasonLine } from "@/components/PanelCardBadge";
 import { WHATSAPP_ACTION_BUTTON_CLASS, REACTIVATION_UNDO_BUTTON_CLASS } from "@/components/ReactivationActionButtonStyle";
-import { toggleReactivationCardSentClientAction, sendReactivationWhatsAppMessageClientAction } from "@/app/dashboard/actions";
 import {
-  sortReactivationCardsForDisplay,
-  countPendingReactivationCards,
-  cardSlotKey,
-  type ReactivationCard,
-  type SendReactivationWhatsAppResult,
-} from "@/lib/reactivation";
+  toggleReactivationCardSentClientAction,
+  sendReactivationWhatsAppMessageClientAction,
+  toggleNoShowCardSentClientAction,
+  sendNoShowCardWhatsAppMessageClientAction,
+  toggleHotLeadCardSentClientAction,
+} from "@/app/dashboard/actions";
+import { sortReactivationCardsForDisplay, countPendingReactivationCards, type SendReactivationWhatsAppResult } from "@/lib/reactivation";
+import type { ToggleHotLeadCardSentResult } from "@/lib/hot-lead-cards";
+import type { PanelCard } from "@/lib/panel-cards";
 
 function pendingCountLabel(n: number): string {
   return n === 1 ? "1 pendente" : `${n} pendentes`;
@@ -26,9 +29,9 @@ const SCROLL_THRESHOLD = 6;
 // discreto que desaparece sozinho, nunca precisa de clique pra fechar.
 const NOTICE_DURATION_MS = 2500;
 
-type SendReactivationWhatsAppFailureReason = Extract<SendReactivationWhatsAppResult, { ok: false }>["reason"];
+type WhatsAppFailureReason = Extract<SendReactivationWhatsAppResult, { ok: false }>["reason"];
 
-function noticeForFailure(reason: SendReactivationWhatsAppFailureReason): string {
+function noticeForFailure(reason: WhatsAppFailureReason): string {
   switch (reason) {
     case "disconnected":
       return "WhatsApp desconectado";
@@ -36,6 +39,8 @@ function noticeForFailure(reason: SendReactivationWhatsAppFailureReason): string
       return "Telefone inválido";
     case "rate_limited":
       return "Aguarde um instante";
+    case "no_longer_eligible":
+      return "Lead já respondeu";
     default:
       return "Falha ao enviar";
   }
@@ -44,41 +49,39 @@ function noticeForFailure(reason: SendReactivationWhatsAppFailureReason): string
 // "use client" (pedido explícito: marcar enviado precisa de atualização
 // OTIMISTA, na hora do clique, sem esperar o round-trip da server action) —
 // estado local inicializado a partir de `cards` (vindo do servidor) e
-// resincronizado sempre que esse prop mudar (nova renderização do
-// servidor: revalidatePath depois de marcar/desmarcar, ou o card
-// simplesmente sumindo quando vence a janela de 5 dias úteis).
+// resincronizado sempre que esse prop mudar.
 //
-// Faixa "Reativação" — coluna ESQUERDA do Painel, logo abaixo das métricas
-// (ver ClientPanelView.tsx; no celular, uma coluna só, aparece depois das
-// métricas e antes da lista de Agendamentos, por estar ANTES dela no JSX
-// da coluna esquerda). Lista vertical compacta (trocou o carrossel
-// horizontal de cards — ficavam pequenos/cortados) — uma linha enxuta por
-// paciente: avatar pequeno, nome, @ (link pro perfil só nas linhas de
-// Instagram — pedido explícito; nas de WhatsApp fica texto puro) e o botão
-// de ação alinhado à direita, de acordo com o CANAL daquele período (ver
-// REACTIVATION_CHANNEL_BY_THRESHOLD em reactivation.ts).
-//
-// Decisão explícita (pedido do usuário): só o canal WhatsApp passou a
-// ENVIAR de verdade pelo clique do botão (ver sendWhatsappAction) — o
-// Instagram continua copiar + abrir, envio manual, sem mudança nenhuma.
+// Faixa "Reativação" — coluna ESQUERDA do Painel (ver ClientPanelView.tsx).
+// Lista vertical compacta, uma linha enxuta por paciente: barra+chip do
+// TIPO (ver PanelCardBadge.tsx — item explícito: identificação visual por
+// tipo, só do lado esquerdo), avatar, nome, @ e motivo em cinza; o botão de
+// ação à direita continua EXATAMENTE como sempre foi (WhatsApp envia de
+// verdade pelo VEXO com as travas de sempre, Instagram copia + abre),
+// agora dispatchado por `card.actionKey.kind` em vez de assumir que todo
+// card é de Reativação.
 export function ReactivationRail({
   cards,
   action = toggleReactivationCardSentClientAction,
   sendWhatsappAction = sendReactivationWhatsAppMessageClientAction,
+  noShowToggleAction = toggleNoShowCardSentClientAction,
+  noShowSendWhatsappAction = sendNoShowCardWhatsAppMessageClientAction,
+  hotLeadToggleAction = toggleHotLeadCardSentClientAction,
 }: {
-  cards: ReactivationCard[];
+  cards: PanelCard[];
   action?: (appointmentId: string, thresholdDays: number) => Promise<unknown>;
   sendWhatsappAction?: (appointmentId: string, thresholdDays: number) => Promise<SendReactivationWhatsAppResult>;
+  noShowToggleAction?: (appointmentId: string, step: number) => Promise<unknown>;
+  noShowSendWhatsappAction?: (appointmentId: string, step: number) => Promise<SendReactivationWhatsAppResult>;
+  hotLeadToggleAction?: (conversationId: string) => Promise<ToggleHotLeadCardSentResult>;
 }) {
   const [localCards, setLocalCards] = useState(cards);
   useEffect(() => setLocalCards(cards), [cards]);
 
-  // Só pro canal WhatsApp: quais cards estão com o envio em andamento
-  // (botão desabilitado, texto "Enviando…"), o aviso discreto atual de
-  // cada card (se algum) e quais cards já caíram de volta pro fluxo
+  // Só pro canal WhatsApp (Reativação e Faltou): quais cards estão com o
+  // envio em andamento (botão desabilitado, "Enviando…"), o aviso discreto
+  // atual de cada card (se algum) e quais já caíram de volta pro fluxo
   // manual de antes (ver reason "disconnected" em handleSendWhatsapp) —
-  // todos mapeados por cardSlotKey, mesma chave usada no resto do sistema
-  // pra identificar (appointmentId, thresholdDays).
+  // todos mapeados por cardKey (único entre os 3 tipos, ver panel-cards.ts).
   const [sendingKeys, setSendingKeys] = useState<Set<string>>(new Set());
   const [notices, setNotices] = useState<Map<string, string>>(new Map());
   const [manualFallbackKeys, setManualFallbackKeys] = useState<Set<string>>(new Set());
@@ -96,67 +99,78 @@ export function ReactivationRail({
     }, NOTICE_DURATION_MS);
   }
 
-  // Alterna a marcação de enviado — usada em DOIS lugares: o "✓" de
-  // desfazer (nunca desfaz a mensagem já enviada, pedido explícito, só
-  // limpa a marcação no Painel) e o botão de WhatsApp quando já caiu pro
-  // fluxo manual de antes (useManualFallback — abrir o wa.me manualmente
-  // conta como "enviado" no Painel, igual sempre contou antes deste
-  // ajuste). Otimista: alterna sentAt local na hora (toggle, igual à
-  // lógica do servidor, ver toggleReactivationSentAt em reactivation.ts) e
-  // só então chama a server action; se ela falhar, desfaz a atualização
-  // otimista (alternar de novo devolve exatamente ao valor anterior, já
-  // que toggle é sua própria inversa).
-  function handleToggleSent(appointmentId: string, thresholdDays: number) {
-    const now = new Date();
-    const applyToggle = (list: ReactivationCard[]) =>
-      list.map((c) =>
-        c.appointmentId === appointmentId && c.thresholdDays === thresholdDays
-          ? { ...c, sentAt: c.sentAt ? null : now }
-          : c
-      );
+  function setSentOptimistically(cardKey: string, sentAt: Date | null) {
+    setLocalCards((prev) => prev.map((c) => (c.cardKey === cardKey ? { ...c, sentAt } : c)));
+  }
 
-    setLocalCards(applyToggle);
-    action(appointmentId, thresholdDays).catch((err) => {
-      console.error("[vexo] Falha ao marcar/desmarcar card de Reativação como enviado:", err);
-      setLocalCards(applyToggle);
+  // Alterna a marcação de enviado — usada no "✓" de desfazer (Reativação e
+  // Faltou) e no botão de WhatsApp quando já caiu pro fluxo manual (abrir o
+  // wa.me manualmente conta como "enviado"). Otimista: alterna sentAt local
+  // na hora; se a action falhar, desfaz a atualização otimista.
+  function handleToggleSent(card: PanelCard) {
+    const now = new Date();
+    const nextSentAt = card.sentAt ? null : now;
+    setSentOptimistically(card.cardKey, nextSentAt);
+
+    const promise =
+      card.actionKey.kind === "REACTIVATION"
+        ? action(card.actionKey.appointmentId, card.actionKey.thresholdDays)
+        : card.actionKey.kind === "NO_SHOW"
+          ? noShowToggleAction(card.actionKey.appointmentId, card.actionKey.step)
+          : Promise.resolve();
+
+    promise.catch((err) => {
+      console.error("[vexo] Falha ao marcar/desmarcar card como enviado:", err);
+      setSentOptimistically(card.cardKey, card.sentAt);
     });
   }
 
-  // Clique no botão de ação de um card de Instagram — ainda só copia +
-  // abre (sem mudança), mas marca o card como enviado no Painel (mesmo
-  // toggle de sempre, nunca manda mensagem nenhuma pelo VEXO).
-  function handleInstagramSent(appointmentId: string, thresholdDays: number) {
+  // Clique no botão de ação de um card de Instagram (Reativação, Faltou
+  // sem telefone, ou Quente) — ainda só copia + abre, mas marca o card
+  // como enviado no Painel. Quente precisa conferir o limite diário
+  // (ver toggleHotLeadCardSent) — se o servidor rejeitar, desfaz a marcação
+  // otimista e avisa, em vez de ficar marcado "enviado" sem ter sido.
+  function handleInstagramSent(card: PanelCard) {
     const now = new Date();
-    setLocalCards((prev) =>
-      prev.map((c) => (c.appointmentId === appointmentId && c.thresholdDays === thresholdDays ? { ...c, sentAt: now } : c))
-    );
-    action(appointmentId, thresholdDays).catch((err) => {
-      console.error("[vexo] Falha ao marcar card de Reativação (Instagram) como enviado:", err);
-    });
+    setSentOptimistically(card.cardKey, now);
+
+    if (card.actionKey.kind === "HOT_LEAD") {
+      hotLeadToggleAction(card.actionKey.conversationId)
+        .then((result) => {
+          if (!result.ok) {
+            setSentOptimistically(card.cardKey, card.sentAt);
+            showNotice(card.cardKey, result.reason === "daily_limit_reached" ? "Limite diário atingido" : "Falha ao marcar");
+          }
+        })
+        .catch((err) => {
+          console.error("[vexo] Falha ao marcar card Quente como enviado:", err);
+          setSentOptimistically(card.cardKey, card.sentAt);
+        });
+      return;
+    }
+
+    const promise = card.actionKey.kind === "REACTIVATION" ? action(card.actionKey.appointmentId, card.actionKey.thresholdDays) : noShowToggleAction(card.actionKey.appointmentId, card.actionKey.step);
+    promise.catch((err) => console.error("[vexo] Falha ao marcar card (Instagram) como enviado:", err));
   }
 
-  // Clique no botão de ação de um card de WhatsApp — ENVIA de verdade pela
-  // conexão da clínica (pedido explícito, decisão já tomada). Um clique =
-  // uma chamada = uma mensagem; nunca reenvia enquanto já está "Enviando…"
-  // pra este mesmo card (guarda local, além da reserva atômica do
-  // servidor — ver sendReactivationWhatsAppMessage, reactivation.ts).
-  // Nunca marca como enviado otimisticamente ANTES da resposta — aqui,
-  // diferente do toggle, só confirma sentAt depois do servidor confirmar
-  // que o envio deu certo.
-  async function handleSendWhatsapp(card: ReactivationCard) {
-    const key = cardSlotKey(card.appointmentId, card.thresholdDays);
+  // Clique no botão de ação de um card de WhatsApp (Reativação ou Faltou)
+  // — ENVIA de verdade pela conexão da clínica. Um clique = uma chamada =
+  // uma mensagem; nunca reenvia enquanto já está "Enviando…" pra este
+  // mesmo card. Só confirma sentAt depois do servidor confirmar sucesso.
+  async function handleSendWhatsapp(card: PanelCard) {
+    if (card.actionKey.kind === "HOT_LEAD") return; // Quente nunca envia WhatsApp
+    const key = card.cardKey;
     if (sendingKeys.has(key)) return;
 
     setSendingKeys((prev) => new Set(prev).add(key));
     try {
-      const result = await sendWhatsappAction(card.appointmentId, card.thresholdDays);
+      const result =
+        card.actionKey.kind === "REACTIVATION"
+          ? await sendWhatsappAction(card.actionKey.appointmentId, card.actionKey.thresholdDays)
+          : await noShowSendWhatsappAction(card.actionKey.appointmentId, card.actionKey.step);
+
       if (result.ok) {
-        const sentAt = new Date();
-        setLocalCards((prev) =>
-          prev.map((c) =>
-            c.appointmentId === card.appointmentId && c.thresholdDays === card.thresholdDays ? { ...c, sentAt } : c
-          )
-        );
+        setSentOptimistically(key, new Date());
         return;
       }
 
@@ -165,7 +179,7 @@ export function ReactivationRail({
       }
       showNotice(key, noticeForFailure(result.reason));
     } catch (err) {
-      console.error("[vexo] Falha ao enviar WhatsApp da Reativação:", err);
+      console.error("[vexo] Falha ao enviar WhatsApp do card:", err);
       showNotice(key, "Falha ao enviar");
     } finally {
       setSendingKeys((prev) => {
@@ -192,18 +206,23 @@ export function ReactivationRail({
       <div className={`space-y-1.5 ${needsScroll ? "max-h-72 overflow-y-auto pr-1" : ""}`}>
         {sortedCards.map((card) => {
           const isSent = Boolean(card.sentAt);
-          const key = cardSlotKey(card.appointmentId, card.thresholdDays);
+          const key = card.cardKey;
           const isSending = sendingKeys.has(key);
           const notice = notices.get(key);
           const useManualFallback = manualFallbackKeys.has(key);
+          // Só o Quente usa isto (limite diário, ver panel-cards.ts) —
+          // nunca desabilita um card já enviado (precisa continuar
+          // clicável pra desfazer).
+          const isDisabledByLimit = Boolean(card.disabledReason) && !isSent;
 
           return (
             <div
               key={key}
-              className={`flex items-center gap-2 rounded-lg border border-vexo-border bg-vexo-surface p-2 transition-opacity duration-150 ${isSent ? "opacity-50" : ""}`}
+              className={`relative flex items-center gap-2 overflow-hidden rounded-lg border border-vexo-border bg-vexo-surface p-2 pl-2.5 transition-opacity duration-150 ${isSent ? "opacity-50" : ""}`}
             >
+              <PanelCardTypeBar kind={card.kind} />
               <LeadAvatar profilePictureUrl={card.profilePictureUrl} name={card.name} size="md" />
-              <div className="min-w-0 flex-1">
+              <div className="min-w-0 flex-1 space-y-0.5">
                 <div className="flex min-w-0 items-baseline gap-1">
                   <p className="min-w-0 shrink truncate text-xs font-medium">{card.name}</p>
                   {card.igUsername &&
@@ -220,7 +239,10 @@ export function ReactivationRail({
                       <span className="shrink-0 truncate text-caption text-vexo-muted">@{card.igUsername}</span>
                     ))}
                 </div>
-                <p className="truncate text-caption text-vexo-muted">{card.thresholdDays} dias</p>
+                <div className="flex items-center gap-1.5">
+                  <PanelCardTypeChip kind={card.kind} />
+                  <PanelCardReasonLine reason={card.reason} />
+                </div>
               </div>
 
               {isSent ? (
@@ -228,11 +250,13 @@ export function ReactivationRail({
                   type="button"
                   title="Desfazer"
                   aria-label="Desfazer envio"
-                  onClick={() => handleToggleSent(card.appointmentId, card.thresholdDays)}
+                  onClick={() => handleToggleSent(card)}
                   className={REACTIVATION_UNDO_BUTTON_CLASS}
                 >
                   ✓
                 </button>
+              ) : isDisabledByLimit ? (
+                <span className="shrink-0 text-caption text-vexo-muted">Limite diário</span>
               ) : card.channel === "WHATSAPP" ? (
                 !card.whatsappLink ? (
                   <span className="shrink-0 text-caption text-vexo-muted">Sem WhatsApp</span>
@@ -246,7 +270,7 @@ export function ReactivationRail({
                         href={card.whatsappLink}
                         target="_blank"
                         rel="noreferrer"
-                        onClick={() => handleToggleSent(card.appointmentId, card.thresholdDays)}
+                        onClick={() => handleToggleSent(card)}
                         className={WHATSAPP_ACTION_BUTTON_CLASS}
                       >
                         <WhatsAppMonoIcon className="h-3 w-3" />
@@ -271,11 +295,18 @@ export function ReactivationRail({
                   </div>
                 )
               ) : (
-                <InstagramDmButton
-                  message={card.message}
-                  dmLink={card.instagramDmLink}
-                  onSent={() => handleInstagramSent(card.appointmentId, card.thresholdDays)}
-                />
+                <div className="relative shrink-0">
+                  <InstagramDmButton
+                    message={card.message}
+                    dmLink={card.instagramDmLink}
+                    onSent={() => handleInstagramSent(card)}
+                  />
+                  {notice && (
+                    <span className="absolute -top-7 right-0 whitespace-nowrap rounded-md bg-vexo-surface2 px-2 py-1 text-caption text-vexo-fg shadow-card">
+                      {notice}
+                    </span>
+                  )}
+                </div>
               )}
             </div>
           );

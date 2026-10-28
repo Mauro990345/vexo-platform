@@ -5,6 +5,8 @@ import { requireClientSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { setAppointmentAttendance } from "@/lib/appointments";
 import { toggleReactivationCardSent, sendReactivationWhatsAppMessage, type SendReactivationWhatsAppResult } from "@/lib/reactivation";
+import { toggleNoShowCardSent, sendNoShowCardWhatsAppMessage } from "@/lib/no-show-cards";
+import { toggleHotLeadCardSent, type ToggleHotLeadCardSentResult } from "@/lib/hot-lead-cards";
 
 // Única ação que o cliente pode fazer no Painel — mesma function de base
 // (setAppointmentAttendance, em src/lib/appointments.ts) usada pela versão
@@ -82,6 +84,54 @@ export async function sendReactivationWhatsAppMessageClientAction(
   }
 
   const result = await sendReactivationWhatsAppMessage(appointmentId, thresholdDays);
+  revalidatePath("/dashboard");
+  return result;
+}
+
+// Card "Faltou" (ver no-show-cards.ts) — mesmo padrão exato dos dois
+// acima (toggle/envio direto da Reativação), só trocando qual card.
+export async function toggleNoShowCardSentClientAction(appointmentId: string, step: number) {
+  const session = await requireClientSession();
+  const clinicId = session.user.clinicId as string;
+
+  const appt = await prisma.appointment.findUnique({ where: { id: appointmentId }, select: { clinicId: true } });
+  if (!appt || appt.clinicId !== clinicId) {
+    throw new Error("Agendamento não encontrado.");
+  }
+
+  await toggleNoShowCardSent(appointmentId, step);
+  revalidatePath("/dashboard");
+}
+
+export async function sendNoShowCardWhatsAppMessageClientAction(
+  appointmentId: string,
+  step: number
+): Promise<SendReactivationWhatsAppResult> {
+  const session = await requireClientSession();
+  const clinicId = session.user.clinicId as string;
+
+  const appt = await prisma.appointment.findUnique({ where: { id: appointmentId }, select: { clinicId: true } });
+  if (!appt || appt.clinicId !== clinicId) {
+    throw new Error("Agendamento não encontrado.");
+  }
+
+  const result = await sendNoShowCardWhatsAppMessage(appointmentId, step);
+  revalidatePath("/dashboard");
+  return result;
+}
+
+// Card "Quente" (ver hot-lead-cards.ts) — nunca envia de verdade pelo
+// VEXO (só copiar + abrir o Instagram), então só precisa de UMA action.
+export async function toggleHotLeadCardSentClientAction(conversationId: string): Promise<ToggleHotLeadCardSentResult> {
+  const session = await requireClientSession();
+  const clinicId = session.user.clinicId as string;
+
+  const conversation = await prisma.conversation.findUnique({ where: { id: conversationId }, select: { clinicId: true } });
+  if (!conversation || conversation.clinicId !== clinicId) {
+    throw new Error("Conversa não encontrada.");
+  }
+
+  const result = await toggleHotLeadCardSent(conversationId);
   revalidatePath("/dashboard");
   return result;
 }

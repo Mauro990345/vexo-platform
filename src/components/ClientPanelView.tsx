@@ -14,6 +14,10 @@ import { InstagramGlyphIcon, WhatsAppGlyphIcon } from "@/components/BrandIcons";
 import { NeedsHumanBanner, type NeedsHumanLead } from "@/components/NeedsHumanBanner";
 import { ReactivationRail } from "@/components/ReactivationRail";
 import { getReactivationCards, type SendReactivationWhatsAppResult } from "@/lib/reactivation";
+import { getNoShowCards } from "@/lib/no-show-cards";
+import { getHotLeadCards } from "@/lib/hot-lead-cards";
+import { mergePanelCards } from "@/lib/panel-cards";
+import type { ToggleHotLeadCardSentResult } from "@/lib/hot-lead-cards";
 
 // Marcar "Não compareceu" só faz sentido pra agendamento ainda em aberto —
 // já compareceu ou já foi cancelado não tem o que alternar aqui.
@@ -66,6 +70,9 @@ export async function ClientPanelView({
   noShowAction,
   reactivationSentAction,
   reactivationSendWhatsappAction,
+  noShowCardSentAction,
+  noShowCardSendWhatsappAction,
+  hotLeadCardSentAction,
   standalone = true,
   headerAction,
 }: {
@@ -82,6 +89,13 @@ export async function ClientPanelView({
   // WhatsApp) — mesmo motivo de reactivationSentAction acima, injetável
   // por contexto (CLIENT em /dashboard, INTERNAL_ADMIN/STAFF no CRM).
   reactivationSendWhatsappAction?: (appointmentId: string, thresholdDays: number) => Promise<SendReactivationWhatsAppResult>;
+  // Card "Faltou" e card "Quente" (ver ReactivationRail/PanelCardBadge) —
+  // mesmo motivo de injeção por contexto dos três acima. Undefined (não
+  // passado por /dashboard) deixa ReactivationRail cair nos próprios
+  // defaults (as *ClientAction de dashboard/actions.ts).
+  noShowCardSentAction?: (appointmentId: string, step: number) => Promise<unknown>;
+  noShowCardSendWhatsappAction?: (appointmentId: string, step: number) => Promise<SendReactivationWhatsAppResult>;
+  hotLeadCardSentAction?: (conversationId: string) => Promise<ToggleHotLeadCardSentResult>;
   standalone?: boolean;
   headerAction?: React.ReactNode;
 }) {
@@ -91,7 +105,7 @@ export async function ClientPanelView({
   const parsedRef = week ? new Date(week) : now;
   const weekStart = startOfWeek(Number.isNaN(parsedRef.getTime()) ? now : parsedRef);
 
-  const [clinic, periods, appointments, dailyApproached, needsHumanConversations, reactivationCards] = await Promise.all([
+  const [clinic, periods, appointments, dailyApproached, needsHumanConversations, reactivationCards, noShowCards, hotLeadCards] = await Promise.all([
     prisma.clinic.findUniqueOrThrow({
       where: { id: clinicId },
       select: {
@@ -142,7 +156,11 @@ export async function ClientPanelView({
       take: 50,
     }),
     getReactivationCards(clinicId, now),
+    getNoShowCards(clinicId, now),
+    getHotLeadCards(clinicId, now),
   ]);
+
+  const panelCards = mergePanelCards({ hotLeadCards, noShowCards, reactivationCards });
 
   const needsHumanLeads: NeedsHumanLead[] = needsHumanConversations.map((conv) => {
     const { primary } = leadDisplayParts(conv.lead, null);
@@ -232,9 +250,12 @@ export async function ClientPanelView({
             <ApproachMetricsToggle periods={periods} />
 
             <ReactivationRail
-              cards={reactivationCards}
+              cards={panelCards}
               action={reactivationSentAction}
               sendWhatsappAction={reactivationSendWhatsappAction}
+              noShowToggleAction={noShowCardSentAction}
+              noShowSendWhatsappAction={noShowCardSendWhatsappAction}
+              hotLeadToggleAction={hotLeadCardSentAction}
             />
           </div>
 

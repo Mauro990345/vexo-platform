@@ -6,6 +6,9 @@ import {
   setAppointmentAttendanceAction,
   toggleReactivationCardSentAction,
   sendReactivationWhatsAppMessageAction,
+  toggleNoShowCardSentAction,
+  sendNoShowCardWhatsAppMessageAction,
+  toggleHotLeadCardSentAction,
 } from "@/app/crm/clinicas/actions";
 
 export const dynamic = "force-dynamic";
@@ -41,6 +44,9 @@ export default async function ClientPanelPreviewPage({
       noShowAction={setAppointmentAttendanceAction}
       reactivationSentAction={toggleReactivationCardSentAction}
       reactivationSendWhatsappAction={sendReactivationWhatsAppMessageAction}
+      noShowCardSentAction={toggleNoShowCardSentAction}
+      noShowCardSendWhatsappAction={sendNoShowCardWhatsAppMessageAction}
+      hotLeadCardSentAction={toggleHotLeadCardSentAction}
     />
   );
 }

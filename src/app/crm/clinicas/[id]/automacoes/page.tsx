@@ -10,10 +10,11 @@ import {
   updateClinicReactivationThresholds,
   updateClinicReactivationWhatsappMessages,
   updateClinicReactivationInstagramMessages,
+  updateClinicHotLeadConfig,
   logApproach,
 } from "../../actions";
 import { DEFAULT_REACTIVATION_THRESHOLD_DAYS_LIST } from "@/lib/reactivation";
-import { ReactivationThresholdsForm, ReactivationMessageBlockForm } from "@/components/ReactivationConfigForms";
+import { ReactivationThresholdsForm, ReactivationMessageBlockForm, HotLeadConfigForm } from "@/components/ReactivationConfigForms";
 
 const REMINDER_VARIABLES = [
   { token: "{{primeiro_nome}}", label: "+ Nome do lead" },
@@ -36,7 +37,7 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
 
   const clinic = await prisma.clinic.findUnique({
     where: { id: params.id },
-    include: { reminderConfig: true, reactivationConfig: true },
+    include: { reminderConfig: true, reactivationConfig: true, hotLeadConfig: true },
   });
   if (!clinic) notFound();
 
@@ -66,6 +67,15 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
   const reactivationInstagramSummary = `${reactivationInstagramMessages.filter((m) => m?.trim()).length} de 5 preenchidas · ${reminderPreview(
     reactivationInstagramMessages[0]
   )}`;
+
+  const hotLeadMessages = [
+    clinic.hotLeadConfig?.message1,
+    clinic.hotLeadConfig?.message2,
+    clinic.hotLeadConfig?.message3,
+    clinic.hotLeadConfig?.message4,
+    clinic.hotLeadConfig?.message5,
+  ];
+  const hotLeadSummary = `${hotLeadMessages.filter((m) => m?.trim()).length} de 5 preenchidas · ${reminderPreview(hotLeadMessages[0])}`;
 
   return (
     <div className="max-w-3xl space-y-4">
@@ -293,6 +303,30 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
                       summary={reactivationInstagramSummary}
                       fieldNamePrefix="instagramMessage"
                       defaultValues={reactivationInstagramMessages}
+                    />
+                  </div>
+                </div>
+
+                {/* Card "Quente" (ver ReactivationRail.tsx/hot-lead-cards.ts)
+                    — lead com conversa que nunca agendou, parado, com
+                    sinal de interesse nas mensagens dele. Só limite diário
+                    + as 5 mensagens aqui (a detecção por palavra-chave não
+                    é configurável, mora em hot-lead-detection.ts). */}
+                <div className="mt-5">
+                  <h2 className="text-xs font-semibold">Quente</h2>
+                  <p className="mt-1 text-caption text-vexo-muted">
+                    Lead que nunca agendou, parado há alguns dias, que perguntou sobre horário,
+                    preço ou endereço — aparece no Painel com um botão de Instagram (copiar e
+                    abrir a conversa). Limite diário de envios por clínica, pra evitar excesso de
+                    contato pela mesma conta.
+                  </p>
+
+                  <div className="mt-2 space-y-2 rounded-xl border border-vexo-border bg-vexo-surface p-3">
+                    <HotLeadConfigForm
+                      action={updateClinicHotLeadConfig.bind(null, clinic.id)}
+                      summary={hotLeadSummary}
+                      dailyLimit={clinic.hotLeadConfig?.dailyLimit ?? 5}
+                      defaultValues={hotLeadMessages}
                     />
                   </div>
                 </div>

@@ -32,6 +32,8 @@ import {
   sendReactivationWhatsAppMessage,
   type SendReactivationWhatsAppResult,
 } from "@/lib/reactivation";
+import { toggleNoShowCardSent, sendNoShowCardWhatsAppMessage } from "@/lib/no-show-cards";
+import { toggleHotLeadCardSent, type ToggleHotLeadCardSentResult } from "@/lib/hot-lead-cards";
 
 const CONNECTION_LINK_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 dias
 
@@ -321,6 +323,35 @@ export async function updateClinicReactivationInstagramMessages(clinicId: string
     where: { clinicId },
     create: { clinicId, instagramMessage1, instagramMessage2, instagramMessage3, instagramMessage4, instagramMessage5 },
     update: { instagramMessage1, instagramMessage2, instagramMessage3, instagramMessage4, instagramMessage5 },
+  });
+
+  revalidatePath(`/crm/clinicas/${clinicId}/automacoes`);
+}
+
+// Card "Quente" (ver hot-lead-cards.ts) — mesmo padrão das três ações
+// acima: upsert PARCIAL, nunca toca em sequenceCounter (preserva a
+// posição da rotação). dailyLimit sempre válido (mínimo 1) — zero
+// desligaria o card silenciosamente sem nenhuma forma de o usuário saber
+// por que nenhum card aparece; pra desligar de fato, é desmarcar
+// Reativação não se aplica aqui, então mantemos um mínimo positivo.
+export async function updateClinicHotLeadConfig(clinicId: string, formData: FormData) {
+  await requireInternalSession();
+
+  const dailyLimit = parseInt(String(formData.get("dailyLimit") ?? ""), 10);
+  if (!Number.isFinite(dailyLimit) || dailyLimit < 1) {
+    throw new Error("Informe um limite diário válido (1 ou mais).");
+  }
+
+  const message1 = String(formData.get("message1") ?? "").trim() || null;
+  const message2 = String(formData.get("message2") ?? "").trim() || null;
+  const message3 = String(formData.get("message3") ?? "").trim() || null;
+  const message4 = String(formData.get("message4") ?? "").trim() || null;
+  const message5 = String(formData.get("message5") ?? "").trim() || null;
+
+  await prisma.hotLeadConfig.upsert({
+    where: { clinicId },
+    create: { clinicId, dailyLimit, message1, message2, message3, message4, message5 },
+    update: { dailyLimit, message1, message2, message3, message4, message5 },
   });
 
   revalidatePath(`/crm/clinicas/${clinicId}/automacoes`);
@@ -635,6 +666,36 @@ export async function sendReactivationWhatsAppMessageAction(
 ): Promise<SendReactivationWhatsAppResult> {
   await requireInternalSession();
   const result = await sendReactivationWhatsAppMessage(appointmentId, thresholdDays);
+  if (result.clinicId) revalidatePath(`/crm/clinicas/${result.clinicId}`);
+  return result;
+}
+
+// Card "Faltou" (ver PanelCardBadge.tsx/ReactivationRail.tsx e
+// no-show-cards.ts) — mesmo padrão exato dos dois acima, exposto pra
+// sessão INTERNAL_ADMIN/STAFF.
+export async function toggleNoShowCardSentAction(appointmentId: string, step: number) {
+  await requireInternalSession();
+  const result = await toggleNoShowCardSent(appointmentId, step);
+  if (result) revalidatePath(`/crm/clinicas/${result.clinicId}`);
+}
+
+export async function sendNoShowCardWhatsAppMessageAction(
+  appointmentId: string,
+  step: number
+): Promise<SendReactivationWhatsAppResult> {
+  await requireInternalSession();
+  const result = await sendNoShowCardWhatsAppMessage(appointmentId, step);
+  if (result.clinicId) revalidatePath(`/crm/clinicas/${result.clinicId}`);
+  return result;
+}
+
+// Card "Quente" (ver hot-lead-cards.ts) — nunca envia de verdade pelo
+// VEXO (só copiar + abrir o Instagram, igual Reativação por Instagram),
+// então só precisa de UMA action (toggle), sem equivalente ao
+// sendReactivationWhatsAppMessageAction acima.
+export async function toggleHotLeadCardSentAction(conversationId: string): Promise<ToggleHotLeadCardSentResult> {
+  await requireInternalSession();
+  const result = await toggleHotLeadCardSent(conversationId);
   if (result.clinicId) revalidatePath(`/crm/clinicas/${result.clinicId}`);
   return result;
 }
