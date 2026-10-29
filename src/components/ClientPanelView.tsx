@@ -22,19 +22,16 @@ import { mergePanelCards } from "@/lib/panel-cards";
 import type { ToggleHotLeadCardSentResult } from "@/lib/hot-lead-cards";
 import {
   MOBILE_APPOINTMENT_ROW_PADDING,
+  MOBILE_APPOINTMENT_ACTION_GAP,
   MOBILE_ROW_GAP,
   MOBILE_LIST_GAP,
-  MOBILE_INLINE_GAP,
   MOBILE_DATE_ROW_GAP,
   MOBILE_DATE_ROW_MARGIN_TOP,
   MOBILE_NAME_TEXT_APPOINTMENT,
   MOBILE_HANDLE_TEXT,
-  MOBILE_HANDLE_SHRINK,
-  MOBILE_SECONDARY_TEXT,
+  MOBILE_APPOINTMENT_HANDLE_CAP,
+  MOBILE_APPOINTMENT_SECONDARY_TEXT,
   MOBILE_CARD_MIN_HEIGHT,
-  MOBILE_NAME_HANDLE_STACK,
-  MOBILE_NAME_CLAMP,
-  MOBILE_APPOINTMENT_BUTTON_ROW,
   MOBILE_TITLE_TEXT,
   MOBILE_SUBTITLE_TEXT,
   MOBILE_CLINIC_NAME_TEXT,
@@ -330,68 +327,87 @@ export async function ClientPanelView({
                 return (
                 <div
                   key={a.id}
-                  // SÓ CELULAR (abaixo de sm/640px, pedido explícito —
-                  // fator 1,45 sobre os valores de desktop, ver
-                  // MobileCardScale.ts): padding 8px -> 14px, gap 8px ->
-                  // 12px, altura mínima ~100px. Vira flex-col (empilhado)
-                  // no celular — conteúdo em cima, botões numa linha
-                  // própria embaixo (ver MOBILE_APPOINTMENT_BUTTON_ROW) —
-                  // volta a ser uma linha só, lado a lado, em desktop,
-                  // igual sempre foi.
-                  className={`flex flex-col sm:flex-row sm:items-center ${MOBILE_ROW_GAP} sm:justify-between rounded-lg border border-vexo-border bg-vexo-surface ${MOBILE_APPOINTMENT_ROW_PADDING} ${MOBILE_CARD_MIN_HEIGHT}`}
+                  // SÓ CELULAR (abaixo de sm/640px): padding 8px (era
+                  // 14px), altura mínima ~56px (era ~100px) — pedido
+                  // explícito (2026-10-29, 3ª rodada) pra ficar do
+                  // tamanho de um card de métrica (ver MOBILE_CARD_MIN_HEIGHT,
+                  // MobileCardScale.ts, com a altura REAL medida via DOM
+                  // contra PanelMetricCard). Deixou de empilhar em
+                  // flex-col: volta a ser uma linha só (conteúdo + botão
+                  // lado a lado), igual desktop já era — a reorganização
+                  // em 2 linhas pedida fica DENTRO do conteúdo (nome+@ na
+                  // linha 1, data/status/telefone na linha 2), não mais
+                  // entre conteúdo e botão.
+                  className={`flex items-center justify-between ${MOBILE_APPOINTMENT_ACTION_GAP} rounded-lg border border-vexo-border bg-vexo-surface ${MOBILE_APPOINTMENT_ROW_PADDING} ${MOBILE_CARD_MIN_HEIGHT}`}
                 >
                   <div className={`flex min-w-0 flex-1 items-center ${MOBILE_ROW_GAP}`}>
                     <LeadAvatar profilePictureUrl={a.lead?.profilePictureUrl} name={primary} size="md" />
                     <div className="min-w-0 flex-1">
                       {/* Nome como elemento principal, @ do Instagram como
                           secundário — ver histórico do formato em
-                          lead-display.ts. SÓ CELULAR (pedido explícito,
-                          "nome longo"): nome empilhado (até 2 linhas,
-                          MOBILE_NAME_CLAMP) acima do @ (1 linha); lado a
-                          lado, igual sempre, em desktop (ver
-                          MOBILE_NAME_HANDLE_STACK, MobileCardScale.ts). */}
-                      <div className={`${MOBILE_NAME_HANDLE_STACK} ${MOBILE_INLINE_GAP}`}>
-                        <p className={`min-w-0 shrink ${MOBILE_NAME_CLAMP} ${MOBILE_NAME_TEXT_APPOINTMENT} font-medium`}>{primary}</p>
-                        {handle && <span className={`${MOBILE_HANDLE_SHRINK} truncate ${MOBILE_HANDLE_TEXT} text-vexo-muted`}>@{handle}</span>}
+                          lead-display.ts. AJUSTE (2026-10-29, 3ª rodada):
+                          nome e @ numa linha SÓ (pedido explícito), com
+                          reticências se não couber — nome como flex-1
+                          (prioridade: encolhe por último) e @ com teto de
+                          40% da linha (MOBILE_APPOINTMENT_HANDLE_CAP) pra
+                          um @ incomumente longo não tomar a linha inteira
+                          e deixar só 1-2 letras pro nome. Deixou de
+                          empilhar (2 linhas) — igual desktop já era. */}
+                      <div className="flex min-w-0 items-baseline gap-[5px]">
+                        <p className={`min-w-0 flex-1 truncate ${MOBILE_NAME_TEXT_APPOINTMENT} font-medium`}>{primary}</p>
+                        {handle && (
+                          <span className={`${MOBILE_APPOINTMENT_HANDLE_CAP} ${MOBILE_HANDLE_TEXT} text-vexo-muted`}>@{handle}</span>
+                        )}
                       </div>
-                      {/* Data, tag e telefone na MESMA linha (pedido
-                          explícito — eram 2-3 linhas separadas), com
-                          flex-wrap: no celular/tela estreita, se não
-                          couber, só o telefone quebra pra linha de baixo
-                          sozinho (ele é o último item da linha). Link
-                          wa.me do telefone inalterado (mesmo comportamento
-                          de antes, só reposicionado) — ver BUG REAL
-                          corrigido historicamente: "inline" aqui (não um
-                          <div> de bloco) já limita a área clicável ao
-                          próprio texto, sem precisar de inline-flex. */}
-                      <div className={`${MOBILE_DATE_ROW_MARGIN_TOP} flex flex-wrap items-center ${MOBILE_DATE_ROW_GAP} ${MOBILE_SECONDARY_TEXT} text-vexo-muted`}>
+                      {/* Data, tag e telefone — AJUSTE (2026-10-29, 3ª
+                          rodada): agrupados em 3 blocos atômicos ("data ·",
+                          badge, "· telefone") com flex-wrap — cada bloco só
+                          quebra pra linha de baixo INTEIRO, nunca deixando
+                          um "·" sozinho numa linha (bug visto nesta
+                          rodada: separadores soltos como filhos
+                          individuais do flex podiam ficar órfãos no ponto
+                          de quebra). Normalmente cabe tudo numa linha só;
+                          em telas muito estreitas ou com conteúdo mais
+                          longo (nome+@ grande, status "Compareceu", botão
+                          "Retorno · N dias"), o telefone quebra pra uma
+                          3ª linha — ainda dentro da margem de altura
+                          medida contra o card de métrica (+15%, ver
+                          MOBILE_CARD_MIN_HEIGHT). Link wa.me do telefone
+                          inalterado (mesmo comportamento de antes) — ver
+                          BUG REAL corrigido historicamente: "inline" aqui
+                          (não um <div> de bloco) já limita a área
+                          clicável ao próprio texto, sem precisar de
+                          inline-flex. */}
+                      <div
+                        className={`${MOBILE_DATE_ROW_MARGIN_TOP} flex flex-wrap items-center ${MOBILE_DATE_ROW_GAP} ${MOBILE_APPOINTMENT_SECONDARY_TEXT} text-vexo-muted`}
+                      >
                         <span className="shrink-0">
                           {a.scheduledAt.toLocaleString("pt-BR", {
                             day: "2-digit",
                             month: "2-digit",
                             hour: "2-digit",
                             minute: "2-digit",
-                          })}
+                          })}{" "}
+                          ·
                         </span>
-                        <span className="shrink-0">·</span>
                         <AppointmentStatusBadge status={appointmentDisplayStatus(a, now)} compact />
                         {a.lead?.phone && (
-                          <>
-                            <span className="shrink-0">·</span>
+                          <span className="inline-flex shrink-0 items-center gap-[4px]">
+                            <span>·</span>
                             <a
                               href={`https://wa.me/${normalizeBrazilianWhatsappNumber(a.lead.phone)}`}
                               target="_blank"
                               rel="noreferrer"
-                              className="shrink-0 text-vexo-accent hover:underline"
+                              className="text-vexo-accent hover:underline"
                             >
                               {a.lead.phone}
                             </a>
-                          </>
+                          </span>
                         )}
                       </div>
                     </div>
                   </div>
-                  <div className={`shrink-0 ${MOBILE_APPOINTMENT_BUTTON_ROW}`}>
+                  <div className="flex shrink-0 items-center">
                     {/* Botão "Retorno" (item 2 do pedido) — agendamento já
                         passado (status derivado COMPLETED — ver
                         appointmentDisplayStatus, metrics.ts, mesmo cálculo
@@ -400,11 +416,15 @@ export async function ClientPanelView({
                         NO_SHOW), com lead vinculado (sem Lead, não tem
                         quem reativar). SEMPRE visível nesse caso, mesmo
                         já marcado — vira só "travado" depois de enviado
-                        (ver lockedReturnPeriodAppointmentIds). SÓ CELULAR:
-                        esta linha vira própria, alinhada à direita, abaixo
-                        do conteúdo (ver MOBILE_APPOINTMENT_BUTTON_ROW,
-                        MobileCardScale.ts) — volta a ficar do lado do
-                        conteúdo, mesma linha, em desktop. */}
+                        (ver lockedReturnPeriodAppointmentIds). AJUSTE
+                        (2026-10-29, 3ª rodada): volta a ficar do lado do
+                        conteúdo em QUALQUER tamanho de tela — a "linha
+                        própria embaixo" da rodada anterior foi revertida
+                        (pedido explícito: "nunca em linha própria
+                        embaixo"). Nunca os dois botões juntos nessa
+                        linha: COMPLETED (Retorno) nunca está em
+                        ACTIONABLE_STATUSES (Não compareceu), então o
+                        wrapper só precisa acomodar UM de cada vez. */}
                     {appointmentDisplayStatus(a, now) === "COMPLETED" && a.leadId && (
                       <RetornoButton
                         appointmentId={a.id}
