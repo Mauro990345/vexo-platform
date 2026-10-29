@@ -1,3 +1,5 @@
+import { MOBILE_STATUS_BADGE_SIZE, MOBILE_STATUS_DOT_SIZE } from "@/components/MobileCardScale";
+
 // Selo de canal do Painel do cliente — ícone da marca (mesmas cores já
 // usadas em Conexões: rosa/Instagram, azul/Google Calendar, verde/
 // WhatsApp, ver clinicas/[id]/conexoes/page.tsx) com um ponto de status no
@@ -6,6 +8,12 @@
 // realmente comunica o estado (verde conectado / apagado não conectado).
 // Não faz nenhuma checagem própria — recebe connected já resolvido pela
 // página, mesma lógica de status já usada em Conexões.
+//
+// SÓ CELULAR (abaixo de sm/640px — pedido explícito, fator 1,45 sobre os
+// valores de desktop, ver MobileCardScale.ts): badge 24px -> 36px (piso
+// de toque pedido pros 3 ícones de status da clínica), pontinho de status
+// 8px -> 12px. `sm:` com os valores de sempre — em tablet/notebook/
+// desktop fica idêntico a antes.
 export function ChannelStatusPill({
   connected,
   label,
@@ -19,7 +27,7 @@ export function ChannelStatusPill({
 }) {
   return (
     <span
-      className={`relative inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-white transition ${iconBg} ${
+      className={`relative inline-flex ${MOBILE_STATUS_BADGE_SIZE} shrink-0 items-center justify-center rounded-md text-white transition ${iconBg} ${
         connected ? "" : "opacity-40"
       }`}
       title={`${label} ${connected ? "conectado" : "não conectado"}`}
@@ -27,7 +35,7 @@ export function ChannelStatusPill({
     >
       {icon}
       <span
-        className={`absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full ring-2 ring-vexo-surface ${
+        className={`absolute -right-0.5 -top-0.5 ${MOBILE_STATUS_DOT_SIZE} rounded-full ring-2 ring-vexo-surface ${
           connected ? "bg-vexo-success" : "bg-vexo-muted"
         }`}
       />

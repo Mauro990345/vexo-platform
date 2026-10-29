@@ -15,6 +15,18 @@
 // comparecimento — removido de propósito: os 4 cards da grade precisam
 // ficar com a mesma altura/largura, e um texto extra só na métrica
 // "Compareceram" desalinhava a grade 2x2).
+import {
+  MOBILE_METRIC_LABEL_TEXT,
+  MOBILE_METRIC_VALUE_TEXT,
+  MOBILE_METRIC_CARD_PADDING,
+  MOBILE_METRIC_VALUE_MARGIN_TOP,
+} from "@/components/MobileCardScale";
+
+// SÓ CELULAR (abaixo de sm/640px — pedido explícito, fator 1,45 sobre os
+// valores de desktop, ver MobileCardScale.ts): rótulo 10px -> 15px,
+// número 24px -> 35px (mínimos do pedido: 14px/32px, o fator já supera os
+// dois), padding do card 10px/8px -> 15px/12px. `sm:` com os valores de
+// sempre — em tablet/notebook/desktop fica idêntico a antes.
 export function PanelMetricCard({
   label,
   value,
@@ -25,10 +37,10 @@ export function PanelMetricCard({
   highlight?: boolean;
 }) {
   return (
-    <div className="rounded-xl border border-vexo-border bg-vexo-surface2 px-2.5 py-2">
-      <p className="truncate text-caption font-medium uppercase tracking-wide text-vexo-muted">{label}</p>
+    <div className={`rounded-xl border border-vexo-border bg-vexo-surface2 ${MOBILE_METRIC_CARD_PADDING}`}>
+      <p className={`truncate ${MOBILE_METRIC_LABEL_TEXT} font-medium uppercase tracking-wide text-vexo-muted`}>{label}</p>
       <p
-        className={`mt-1 text-2xl font-light leading-none tracking-tight ${
+        className={`${MOBILE_METRIC_VALUE_MARGIN_TOP} ${MOBILE_METRIC_VALUE_TEXT} font-light leading-none tracking-tight ${
           highlight ? "text-vexo-panelHighlight" : "text-vexo-fg"
         }`}
       >

@@ -31,6 +31,22 @@ import {
   MOBILE_HANDLE_TEXT,
   MOBILE_HANDLE_SHRINK,
   MOBILE_SECONDARY_TEXT,
+  MOBILE_CARD_MIN_HEIGHT,
+  MOBILE_NAME_HANDLE_STACK,
+  MOBILE_NAME_CLAMP,
+  MOBILE_APPOINTMENT_BUTTON_ROW,
+  MOBILE_TITLE_TEXT,
+  MOBILE_SUBTITLE_TEXT,
+  MOBILE_CLINIC_NAME_TEXT,
+  MOBILE_CLINIC_DOT_SIZE,
+  MOBILE_STATUS_BADGE_SIZE,
+  MOBILE_STATUS_BADGE_ICON_SIZE,
+  MOBILE_NAV_TEXT,
+  MOBILE_NAV_BUTTON_MIN,
+  MOBILE_NAV_BUTTON_PADDING,
+  MOBILE_CHART_TEXT,
+  MOBILE_SECTION_TITLE_TEXT,
+  MOBILE_SECTION_DOT_SIZE,
 } from "@/components/MobileCardScale";
 
 // Marcar "Não compareceu" só faz sentido pra agendamento ainda em aberto —
@@ -204,8 +220,8 @@ export async function ClientPanelView({
       <div className={standalone ? "mx-auto max-w-6xl" : undefined}>
         <div className="mb-8 flex items-start justify-between gap-3">
           <div>
-            <h1 className="text-lg font-semibold tracking-tight">Painel</h1>
-            <p className="text-sm text-vexo-muted">Acompanhamento em tempo real das abordagens no Instagram.</p>
+            <h1 className={`${MOBILE_TITLE_TEXT} font-semibold tracking-tight`}>Painel</h1>
+            <p className={`${MOBILE_SUBTITLE_TEXT} text-vexo-muted`}>Acompanhamento em tempo real das abordagens no Instagram.</p>
           </div>
           {headerAction}
         </div>
@@ -220,26 +236,26 @@ export async function ClientPanelView({
                   padding/borda acima de nenhum dos dois). */}
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
-                  <span className="h-2 w-2 shrink-0 rounded-full bg-vexo-success" />
-                  <h2 className="font-medium">{clinic.name}</h2>
+                  <span className={`shrink-0 rounded-full bg-vexo-success ${MOBILE_CLINIC_DOT_SIZE}`} />
+                  <h2 className={`${MOBILE_CLINIC_NAME_TEXT} font-medium`}>{clinic.name}</h2>
                 </div>
                 <div className="flex flex-wrap items-center gap-1.5">
                   <ChannelStatusPill
                     connected={Boolean(clinic.instagramAccount)}
                     label="Instagram"
-                    icon={<InstagramGlyphIcon className="h-6 w-6" />}
+                    icon={<InstagramGlyphIcon className={MOBILE_STATUS_BADGE_SIZE} />}
                     iconBg=""
                   />
                   <ChannelStatusPill
                     connected={Boolean(clinic.googleCalendarAccount)}
                     label="Google Calendar"
-                    icon={<Calendar className="h-3 w-3" strokeWidth={2.5} />}
+                    icon={<Calendar className={MOBILE_STATUS_BADGE_ICON_SIZE} strokeWidth={2.5} />}
                     iconBg="bg-blue-500"
                   />
                   <ChannelStatusPill
                     connected={clinic.whatsappStatus === "open"}
                     label="WhatsApp"
-                    icon={<WhatsAppGlyphIcon className="h-6 w-6" />}
+                    icon={<WhatsAppGlyphIcon className={MOBILE_STATUS_BADGE_SIZE} />}
                     iconBg=""
                   />
                 </div>
@@ -249,23 +265,26 @@ export async function ClientPanelView({
                 <div className="flex items-center justify-between gap-1.5">
                   <Link
                     href={`${base}?week=${toDateParam(addDays(weekStart, -7))}`}
-                    className="rounded-lg border border-vexo-border px-2.5 py-1 text-xs hover:border-vexo-accent"
+                    className={`inline-flex items-center justify-center rounded-lg border border-vexo-border ${MOBILE_NAV_BUTTON_MIN} ${MOBILE_NAV_BUTTON_PADDING} ${MOBILE_NAV_TEXT} hover:border-vexo-accent`}
                   >
                     ← Semana
                   </Link>
-                  <Link href={base} className="rounded-lg border border-vexo-border px-2.5 py-1 text-xs hover:border-vexo-accent">
+                  <Link
+                    href={base}
+                    className={`inline-flex items-center justify-center rounded-lg border border-vexo-border ${MOBILE_NAV_BUTTON_MIN} ${MOBILE_NAV_BUTTON_PADDING} ${MOBILE_NAV_TEXT} hover:border-vexo-accent`}
+                  >
                     Hoje
                   </Link>
                   <Link
                     href={`${base}?week=${toDateParam(addDays(weekStart, 7))}`}
-                    className="rounded-lg border border-vexo-border px-2.5 py-1 text-xs hover:border-vexo-accent"
+                    className={`inline-flex items-center justify-center rounded-lg border border-vexo-border ${MOBILE_NAV_BUTTON_MIN} ${MOBILE_NAV_BUTTON_PADDING} ${MOBILE_NAV_TEXT} hover:border-vexo-accent`}
                   >
                     Semana →
                   </Link>
                 </div>
 
                 <div className="space-y-2 border-t border-vexo-border pt-3">
-                  <p className="text-caption font-medium uppercase tracking-wide text-vexo-muted">
+                  <p className={`${MOBILE_CHART_TEXT} font-medium uppercase tracking-wide text-vexo-muted`}>
                     Abordagens por dia · {weekStart.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })} –{" "}
                     {addDays(weekStart, 6).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}
                   </p>
@@ -289,8 +308,8 @@ export async function ClientPanelView({
           {/* Coluna direita: agendamentos */}
           <div className="space-y-3">
             <div className="flex items-center gap-2">
-              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-vexo-accent" />
-              <h2 className="text-xs font-semibold text-vexo-fg">Agendamentos</h2>
+              <span className={`shrink-0 rounded-full bg-vexo-accent ${MOBILE_SECTION_DOT_SIZE}`} />
+              <h2 className={`${MOBILE_SECTION_TITLE_TEXT} font-semibold text-vexo-fg`}>Agendamentos</h2>
             </div>
             <NeedsHumanBanner leads={needsHumanLeads} />
             <div className={MOBILE_LIST_GAP}>
@@ -300,21 +319,27 @@ export async function ClientPanelView({
                 <div
                   key={a.id}
                   // SÓ CELULAR (abaixo de sm/640px, pedido explícito —
-                  // leitura pra público 45+, mesmo fator 1,28 da lista de
-                  // Reativação, ver MobileCardScale.ts): padding 10px ->
-                  // 13px, gap 8px -> 10px. `sm:` com o valor de sempre.
-                  className={`flex items-center ${MOBILE_ROW_GAP} justify-between rounded-lg border border-vexo-border bg-vexo-surface ${MOBILE_APPOINTMENT_ROW_PADDING}`}
+                  // fator 1,45 sobre os valores de desktop, ver
+                  // MobileCardScale.ts): padding 8px -> 14px, gap 8px ->
+                  // 12px, altura mínima ~100px. Vira flex-col (empilhado)
+                  // no celular — conteúdo em cima, botões numa linha
+                  // própria embaixo (ver MOBILE_APPOINTMENT_BUTTON_ROW) —
+                  // volta a ser uma linha só, lado a lado, em desktop,
+                  // igual sempre foi.
+                  className={`flex flex-col sm:flex-row sm:items-center ${MOBILE_ROW_GAP} sm:justify-between rounded-lg border border-vexo-border bg-vexo-surface ${MOBILE_APPOINTMENT_ROW_PADDING} ${MOBILE_CARD_MIN_HEIGHT}`}
                 >
                   <div className={`flex min-w-0 flex-1 items-center ${MOBILE_ROW_GAP}`}>
                     <LeadAvatar profilePictureUrl={a.lead?.profilePictureUrl} name={primary} size="md" />
                     <div className="min-w-0 flex-1">
                       {/* Nome como elemento principal, @ do Instagram como
-                          secundário ao lado (cor discreta, fonte menor, sem
-                          parênteses) — ver histórico do formato em
-                          lead-display.ts. Fonte só-celular: 15px -> 19px /
-                          @ com mínimo de 16px (ver MobileCardScale.ts). */}
-                      <div className={`flex min-w-0 items-baseline ${MOBILE_INLINE_GAP}`}>
-                        <p className={`min-w-0 shrink truncate ${MOBILE_NAME_TEXT_APPOINTMENT} font-medium`}>{primary}</p>
+                          secundário — ver histórico do formato em
+                          lead-display.ts. SÓ CELULAR (pedido explícito,
+                          "nome longo"): nome empilhado (até 2 linhas,
+                          MOBILE_NAME_CLAMP) acima do @ (1 linha); lado a
+                          lado, igual sempre, em desktop (ver
+                          MOBILE_NAME_HANDLE_STACK, MobileCardScale.ts). */}
+                      <div className={`${MOBILE_NAME_HANDLE_STACK} ${MOBILE_INLINE_GAP}`}>
+                        <p className={`min-w-0 shrink ${MOBILE_NAME_CLAMP} ${MOBILE_NAME_TEXT_APPOINTMENT} font-medium`}>{primary}</p>
                         {handle && <span className={`${MOBILE_HANDLE_SHRINK} truncate ${MOBILE_HANDLE_TEXT} text-vexo-muted`}>@{handle}</span>}
                       </div>
                       {/* Data, tag e telefone na MESMA linha (pedido
@@ -354,7 +379,7 @@ export async function ClientPanelView({
                       </div>
                     </div>
                   </div>
-                  <div className="flex shrink-0 items-center gap-1.5">
+                  <div className={`shrink-0 ${MOBILE_APPOINTMENT_BUTTON_ROW}`}>
                     {/* Botão "Retorno" (item 2 do pedido) — agendamento já
                         passado (status derivado COMPLETED — ver
                         appointmentDisplayStatus, metrics.ts, mesmo cálculo
@@ -363,7 +388,11 @@ export async function ClientPanelView({
                         NO_SHOW), com lead vinculado (sem Lead, não tem
                         quem reativar). SEMPRE visível nesse caso, mesmo
                         já marcado — vira só "travado" depois de enviado
-                        (ver lockedReturnPeriodAppointmentIds). */}
+                        (ver lockedReturnPeriodAppointmentIds). SÓ CELULAR:
+                        esta linha vira própria, alinhada à direita, abaixo
+                        do conteúdo (ver MOBILE_APPOINTMENT_BUTTON_ROW,
+                        MobileCardScale.ts) — volta a ficar do lado do
+                        conteúdo, mesma linha, em desktop. */}
                     {appointmentDisplayStatus(a, now) === "COMPLETED" && a.leadId && (
                       <RetornoButton
                         appointmentId={a.id}

@@ -1,3 +1,5 @@
+import { MOBILE_CHART_TEXT, MOBILE_CHART_DAY_LABEL_WIDTH, MOBILE_CHART_COUNT_WIDTH } from "@/components/MobileCardScale";
+
 const WEEKDAY_LABELS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
 
 // Gráfico "Abordagens por dia" — uma barra horizontal fina por dia da
@@ -18,7 +20,7 @@ export function ApproachChart({ counts }: { counts: number[] }) {
   if (allZero) {
     return (
       <div className="flex items-center justify-center rounded-lg border border-dashed border-vexo-border/60 py-1.5">
-        <p className="text-caption leading-none text-vexo-muted">Sem abordagens registradas essa semana</p>
+        <p className={`${MOBILE_CHART_TEXT} leading-none text-vexo-muted`}>Sem abordagens registradas essa semana</p>
       </div>
     );
   }
@@ -27,14 +29,14 @@ export function ApproachChart({ counts }: { counts: number[] }) {
     <div className="space-y-1">
       {counts.map((count, i) => (
         <div key={i} className="flex items-center gap-2">
-          <span className="w-7 shrink-0 text-caption leading-none text-vexo-muted">{WEEKDAY_LABELS[i]}</span>
+          <span className={`${MOBILE_CHART_DAY_LABEL_WIDTH} shrink-0 ${MOBILE_CHART_TEXT} leading-none text-vexo-muted`}>{WEEKDAY_LABELS[i]}</span>
           <div className="h-1 flex-1 overflow-hidden rounded-sm bg-vexo-surface2">
             <div
               className="h-full origin-left animate-bar-grow rounded-sm bg-vexo-accent"
               style={{ width: `${(count / max) * 100}%` }}
             />
           </div>
-          <span className="w-4 shrink-0 text-right text-caption font-medium leading-none">{count}</span>
+          <span className={`${MOBILE_CHART_COUNT_WIDTH} shrink-0 text-right ${MOBILE_CHART_TEXT} font-medium leading-none`}>{count}</span>
         </div>
       ))}
     </div>

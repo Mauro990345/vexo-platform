@@ -18,6 +18,11 @@ import {
   MOBILE_HANDLE_SHRINK,
   MOBILE_SECONDARY_TEXT,
   MOBILE_ICON_SIZE,
+  MOBILE_CARD_MIN_HEIGHT,
+  MOBILE_NAME_CLAMP,
+  MOBILE_SECTION_TITLE_TEXT,
+  MOBILE_SECTION_COUNTER_TEXT,
+  MOBILE_SECTION_DOT_SIZE,
 } from "@/components/MobileCardScale";
 import {
   toggleReactivationCardSentClientAction,
@@ -211,10 +216,10 @@ export function ReactivationRail({
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-vexo-success" />
-          <h2 className="text-xs font-semibold text-vexo-fg">Reativação</h2>
+          <span className={`shrink-0 rounded-full bg-vexo-success ${MOBILE_SECTION_DOT_SIZE}`} />
+          <h2 className={`${MOBILE_SECTION_TITLE_TEXT} font-semibold text-vexo-fg`}>Reativação</h2>
         </div>
-        <span className="text-caption text-vexo-muted">{pendingCountLabel(pendingCount)}</span>
+        <span className={`${MOBILE_SECTION_COUNTER_TEXT} text-vexo-muted`}>{pendingCountLabel(pendingCount)}</span>
       </div>
       <div className={`${MOBILE_LIST_GAP} ${needsScroll ? "max-h-72 overflow-y-auto pr-1" : ""}`}>
         {sortedCards.map((card) => {
@@ -229,104 +234,146 @@ export function ReactivationRail({
           // clicável pra desfazer).
           const isDisabledByLimit = Boolean(card.disabledReason) && !isSent;
 
+          // Botão de ação (WhatsApp/Instagram/desfazer/aviso) — extraído
+          // uma vez só e reaproveitado nos dois layouts abaixo (mobile e
+          // desktop; ver comentário no wrapper mobile sobre o motivo da
+          // divisão). Continua exatamente o MESMO componente/classes de
+          // sempre em ambos — só muda com quem ele divide linha.
+          const actionNode = isSent ? (
+            <button
+              type="button"
+              title="Desfazer"
+              aria-label="Desfazer envio"
+              onClick={() => handleToggleSent(card)}
+              className={REACTIVATION_UNDO_BUTTON_CLASS}
+            >
+              ✓
+            </button>
+          ) : isDisabledByLimit ? (
+            <span className={`shrink-0 ${MOBILE_SECONDARY_TEXT} text-vexo-muted`}>{card.disabledReason}</span>
+          ) : card.channel === "WHATSAPP" ? (
+            !card.whatsappLink ? (
+              <span className={`shrink-0 ${MOBILE_SECONDARY_TEXT} text-vexo-muted`}>Sem WhatsApp</span>
+            ) : (
+              <div className="relative shrink-0">
+                {useManualFallback ? (
+                  // Desconectado uma vez nesta sessão — volta pro fluxo
+                  // manual de sempre (abre o wa.me já preenchido, a
+                  // clínica manda pelo próprio app).
+                  <a
+                    href={card.whatsappLink}
+                    target="_blank"
+                    rel="noreferrer"
+                    onClick={() => handleToggleSent(card)}
+                    className={WHATSAPP_ACTION_BUTTON_CLASS}
+                  >
+                    <WhatsAppMonoIcon className={MOBILE_ICON_SIZE} />
+                    WhatsApp
+                  </a>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={isSending}
+                    onClick={() => handleSendWhatsapp(card)}
+                    className={WHATSAPP_ACTION_BUTTON_CLASS}
+                  >
+                    <WhatsAppMonoIcon className={MOBILE_ICON_SIZE} />
+                    {isSending ? "Enviando…" : "WhatsApp"}
+                  </button>
+                )}
+                {notice && (
+                  <span className="absolute -top-7 right-0 whitespace-nowrap rounded-md bg-vexo-surface2 px-2 py-1 text-caption text-vexo-fg shadow-card">
+                    {notice}
+                  </span>
+                )}
+              </div>
+            )
+          ) : (
+            <div className="relative shrink-0">
+              <InstagramDmButton message={card.message} dmLink={card.instagramDmLink} onSent={() => handleInstagramSent(card)} />
+              {notice && (
+                <span className="absolute -top-7 right-0 whitespace-nowrap rounded-md bg-vexo-surface2 px-2 py-1 text-caption text-vexo-fg shadow-card">
+                  {notice}
+                </span>
+              )}
+            </div>
+          );
+
+          const nameAndHandle = (
+            <>
+              <p className={`min-w-0 shrink ${MOBILE_NAME_CLAMP} ${MOBILE_NAME_TEXT_REACTIVATION} font-medium`}>{card.name}</p>
+              {card.igUsername &&
+                (card.instagramProfileLink ? (
+                  <a
+                    href={card.instagramProfileLink}
+                    target="_blank"
+                    rel="noreferrer"
+                    className={`${MOBILE_HANDLE_SHRINK} truncate ${MOBILE_HANDLE_TEXT} text-vexo-muted hover:text-vexo-accent hover:underline`}
+                  >
+                    @{card.igUsername}
+                  </a>
+                ) : (
+                  <span className={`${MOBILE_HANDLE_SHRINK} truncate ${MOBILE_HANDLE_TEXT} text-vexo-muted`}>@{card.igUsername}</span>
+                ))}
+            </>
+          );
+
+          const chipAndReason = (
+            <>
+              <PanelCardTypeChip kind={card.kind} />
+              <PanelCardReasonLine reason={card.reason} />
+            </>
+          );
+
           return (
             <div
               key={key}
-              // SÓ CELULAR (abaixo de sm/640px, pedido explícito — leitura
-              // pra público 45+, fator único 1,28, ver MobileCardScale.ts):
-              // padding 10px/12px -> 13px/15px, gap 8px -> 10px. `sm:` com
-              // os valores de sempre — em tablet/notebook/desktop fica
-              // idêntico a antes.
-              className={`relative flex items-center ${MOBILE_ROW_GAP} overflow-hidden rounded-lg border border-vexo-border bg-vexo-surface ${MOBILE_REACTIVATION_ROW_PADDING} transition-opacity duration-150 ${isSent ? "opacity-50" : ""}`}
+              // SÓ CELULAR (abaixo de sm/640px, pedido explícito — fator
+              // 1,45 sobre os valores de desktop, ver MobileCardScale.ts):
+              // padding 8px/10px -> 14px/15px, gap 8px -> 12px, altura
+              // mínima ~100px. `sm:` com os valores de sempre — em tablet/
+              // notebook/desktop fica idêntico a antes.
+              className={`relative flex items-center ${MOBILE_ROW_GAP} overflow-hidden rounded-lg border border-vexo-border bg-vexo-surface ${MOBILE_REACTIVATION_ROW_PADDING} ${MOBILE_CARD_MIN_HEIGHT} transition-opacity duration-150 ${isSent ? "opacity-50" : ""}`}
             >
               <PanelCardTypeBar kind={card.kind} />
               <LeadAvatar profilePictureUrl={card.profilePictureUrl} name={card.name} size="md" />
-              <div className={`min-w-0 flex-1 ${MOBILE_STACK_GAP}`}>
-                <div className={`flex min-w-0 items-baseline ${MOBILE_INLINE_GAP}`}>
-                  <p className={`min-w-0 shrink truncate ${MOBILE_NAME_TEXT_REACTIVATION} font-medium`}>{card.name}</p>
-                  {card.igUsername &&
-                    (card.instagramProfileLink ? (
-                      <a
-                        href={card.instagramProfileLink}
-                        target="_blank"
-                        rel="noreferrer"
-                        className={`${MOBILE_HANDLE_SHRINK} truncate ${MOBILE_HANDLE_TEXT} text-vexo-muted hover:text-vexo-accent hover:underline`}
-                      >
-                        @{card.igUsername}
-                      </a>
-                    ) : (
-                      <span className={`${MOBILE_HANDLE_SHRINK} truncate ${MOBILE_HANDLE_TEXT} text-vexo-muted`}>@{card.igUsername}</span>
-                    ))}
-                </div>
-                <div className={`flex items-center ${MOBILE_CHIP_ROW_GAP}`}>
-                  <PanelCardTypeChip kind={card.kind} />
-                  <PanelCardReasonLine reason={card.reason} />
+
+              {/* SÓ CELULAR — chip+motivo ganham a linha de cima INTEIRA
+                  (não dividem espaço com o botão de ação à direita): o
+                  motivo precisa sempre caber em 1 linha visível (pedido
+                  explícito), e com avatar(46px) + chip(133px fixo) +
+                  botão "WhatsApp"/"Instagram" (~135px, nunca varia — ver
+                  actionNode acima) disputando a MESMA linha, não sobrava
+                  nenhum espaço pro motivo numa tela de 320-375px (bug
+                  visto na verificação visual desta rodada: motivo ficava
+                  0px de largura, sumia). Nome (até 2 linhas) e @ (1 linha
+                  com reticências) dividem a linha de baixo com o botão —
+                  tolerável, os dois já são feitos pra ceder espaço (nome
+                  quebra, @ trunca) sem perder informação essencial. Botão
+                  continua com a mesma aparência/posição à direita de
+                  sempre, só muda com qual linha ele compartilha. */}
+              <div className={`flex min-w-0 flex-1 flex-col sm:hidden ${MOBILE_STACK_GAP}`}>
+                <div className={`flex items-center ${MOBILE_CHIP_ROW_GAP}`}>{chipAndReason}</div>
+                <div className={`flex items-center justify-between ${MOBILE_ROW_GAP}`}>
+                  {/* nome em cima (até 2 linhas) / @ embaixo (1 linha) —
+                      pedido explícito ("abaixo dele, o @ em 1 linha"), por
+                      isso flex-col aqui (não items-baseline lado a lado). */}
+                  <div className={`flex min-w-0 flex-1 flex-col ${MOBILE_INLINE_GAP}`}>{nameAndHandle}</div>
+                  {actionNode}
                 </div>
               </div>
 
-              {isSent ? (
-                <button
-                  type="button"
-                  title="Desfazer"
-                  aria-label="Desfazer envio"
-                  onClick={() => handleToggleSent(card)}
-                  className={REACTIVATION_UNDO_BUTTON_CLASS}
-                >
-                  ✓
-                </button>
-              ) : isDisabledByLimit ? (
-                <span className={`shrink-0 ${MOBILE_SECONDARY_TEXT} text-vexo-muted`}>{card.disabledReason}</span>
-              ) : card.channel === "WHATSAPP" ? (
-                !card.whatsappLink ? (
-                  <span className={`shrink-0 ${MOBILE_SECONDARY_TEXT} text-vexo-muted`}>Sem WhatsApp</span>
-                ) : (
-                  <div className="relative shrink-0">
-                    {useManualFallback ? (
-                      // Desconectado uma vez nesta sessão — volta pro
-                      // fluxo manual de sempre (abre o wa.me já
-                      // preenchido, a clínica manda pelo próprio app).
-                      <a
-                        href={card.whatsappLink}
-                        target="_blank"
-                        rel="noreferrer"
-                        onClick={() => handleToggleSent(card)}
-                        className={WHATSAPP_ACTION_BUTTON_CLASS}
-                      >
-                        <WhatsAppMonoIcon className={MOBILE_ICON_SIZE} />
-                        WhatsApp
-                      </a>
-                    ) : (
-                      <button
-                        type="button"
-                        disabled={isSending}
-                        onClick={() => handleSendWhatsapp(card)}
-                        className={WHATSAPP_ACTION_BUTTON_CLASS}
-                      >
-                        <WhatsAppMonoIcon className={MOBILE_ICON_SIZE} />
-                        {isSending ? "Enviando…" : "WhatsApp"}
-                      </button>
-                    )}
-                    {notice && (
-                      <span className="absolute -top-7 right-0 whitespace-nowrap rounded-md bg-vexo-surface2 px-2 py-1 text-caption text-vexo-fg shadow-card">
-                        {notice}
-                      </span>
-                    )}
-                  </div>
-                )
-              ) : (
-                <div className="relative shrink-0">
-                  <InstagramDmButton
-                    message={card.message}
-                    dmLink={card.instagramDmLink}
-                    onSent={() => handleInstagramSent(card)}
-                  />
-                  {notice && (
-                    <span className="absolute -top-7 right-0 whitespace-nowrap rounded-md bg-vexo-surface2 px-2 py-1 text-caption text-vexo-fg shadow-card">
-                      {notice}
-                    </span>
-                  )}
+              {/* >=640px — estrutura de sempre, intocada: nome/@ e
+                  chip/motivo empilhados numa coluna só, dividindo espaço
+                  com o botão (sempre coube nesse tamanho de tela; o fator
+                  desktop não muda nesta rodada). */}
+              <div className="hidden min-w-0 flex-1 sm:flex sm:items-center sm:justify-between sm:gap-1.5">
+                <div className="min-w-0 flex-1 space-y-0.5">
+                  <div className="flex items-baseline gap-1">{nameAndHandle}</div>
+                  <div className="flex items-center gap-1.5">{chipAndReason}</div>
                 </div>
-              )}
+                {actionNode}
+              </div>
             </div>
           );
         })}

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { PanelMetricCard } from "@/components/PanelMetricCard";
+import { MOBILE_CHART_TEXT, MOBILE_NAV_BUTTON_MIN, MOBILE_SELECT_PADDING } from "@/components/MobileCardScale";
 
 type PeriodMetrics = { approached: number; responded: number; scheduled: number };
 type AttendanceMetrics = { attended: number; pastDue: number };
@@ -29,11 +30,14 @@ export function ApproachMetricsToggle({ periods }: { periods: PeriodOption[] }) 
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-2">
-        <p className="text-caption font-medium uppercase tracking-wide text-vexo-muted">Período</p>
+        <p className={`${MOBILE_CHART_TEXT} font-medium uppercase tracking-wide text-vexo-muted`}>Período</p>
+        {/* SÓ CELULAR (ver MobileCardScale.ts): piso de toque de 48px
+            (mesmo da navegação de semana — é um controle clicável) e
+            texto 15px, igual ao resto do bloco "Abordagens por dia". */}
         <select
           value={days}
           onChange={(e) => setDays(Number(e.target.value))}
-          className="rounded-full border border-vexo-border bg-vexo-surface2 px-3 py-1 text-caption font-medium outline-none focus:border-vexo-accent"
+          className={`rounded-full border border-vexo-border bg-vexo-surface2 ${MOBILE_NAV_BUTTON_MIN} ${MOBILE_SELECT_PADDING} ${MOBILE_CHART_TEXT} font-medium outline-none focus:border-vexo-accent`}
         >
           {periods.map((p) => (
             <option key={p.days} value={p.days}>
