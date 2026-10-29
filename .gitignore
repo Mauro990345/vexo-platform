@@ -14,6 +14,10 @@ npm-debug.log*
 .DS_Store
 
 /prisma/migrations/dev/
+# Estado/backup do script prisma/seed-reactivation-showcase.ts — gerado em
+# runtime (ids escolhidos + scheduledAt original dos 5 agendamentos reais
+# da Clínica Demo), nunca deve ser commitado.
+/prisma/reactivation-showcase-state.json
 *.tsbuildinfo
 next-env.d.ts
 
