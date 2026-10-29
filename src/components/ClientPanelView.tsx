@@ -18,6 +18,18 @@ import { getNoShowCards } from "@/lib/no-show-cards";
 import { getHotLeadCards } from "@/lib/hot-lead-cards";
 import { mergePanelCards } from "@/lib/panel-cards";
 import type { ToggleHotLeadCardSentResult } from "@/lib/hot-lead-cards";
+import {
+  MOBILE_APPOINTMENT_ROW_PADDING,
+  MOBILE_ROW_GAP,
+  MOBILE_LIST_GAP,
+  MOBILE_INLINE_GAP,
+  MOBILE_DATE_ROW_GAP,
+  MOBILE_DATE_ROW_MARGIN_TOP,
+  MOBILE_NAME_TEXT_APPOINTMENT,
+  MOBILE_HANDLE_TEXT,
+  MOBILE_HANDLE_SHRINK,
+  MOBILE_SECONDARY_TEXT,
+} from "@/components/MobileCardScale";
 
 // Marcar "Não compareceu" só faz sentido pra agendamento ainda em aberto —
 // já compareceu ou já foi cancelado não tem o que alternar aqui.
@@ -266,29 +278,29 @@ export async function ClientPanelView({
               <h2 className="text-xs font-semibold text-vexo-fg">Agendamentos</h2>
             </div>
             <NeedsHumanBanner leads={needsHumanLeads} />
-            <div className="space-y-1.5">
+            <div className={MOBILE_LIST_GAP}>
               {appointments.map((a) => {
                 const { primary, handle } = leadDisplayParts(a.lead, a.manualTitle);
                 return (
                 <div
                   key={a.id}
                   // SÓ CELULAR (abaixo de sm/640px, pedido explícito —
-                  // mesmo ajuste da lista de Reativação, ReactivationRail.tsx:
-                  // ~10%, "não exagere"): padding 8px -> 10px (+4px de
-                  // altura no total). `sm:` com o valor de sempre.
-                  className="flex items-center gap-2 justify-between rounded-lg border border-vexo-border bg-vexo-surface p-[10px] sm:p-2"
+                  // leitura pra público 45+, mesmo fator 1,28 da lista de
+                  // Reativação, ver MobileCardScale.ts): padding 10px ->
+                  // 13px, gap 8px -> 10px. `sm:` com o valor de sempre.
+                  className={`flex items-center ${MOBILE_ROW_GAP} justify-between rounded-lg border border-vexo-border bg-vexo-surface ${MOBILE_APPOINTMENT_ROW_PADDING}`}
                 >
-                  <div className="flex min-w-0 flex-1 items-center gap-2">
+                  <div className={`flex min-w-0 flex-1 items-center ${MOBILE_ROW_GAP}`}>
                     <LeadAvatar profilePictureUrl={a.lead?.profilePictureUrl} name={primary} size="md" />
                     <div className="min-w-0 flex-1">
                       {/* Nome como elemento principal, @ do Instagram como
                           secundário ao lado (cor discreta, fonte menor, sem
                           parênteses) — ver histórico do formato em
-                          lead-display.ts. Fonte só-celular: 14px -> 15px /
-                          10px -> 11px (mesmo ajuste de ReactivationRail.tsx). */}
-                      <div className="flex min-w-0 items-baseline gap-1">
-                        <p className="min-w-0 shrink truncate text-[15px] sm:text-sm font-medium">{primary}</p>
-                        {handle && <span className="shrink-0 truncate text-[11px] sm:text-caption text-vexo-muted">@{handle}</span>}
+                          lead-display.ts. Fonte só-celular: 15px -> 19px /
+                          @ com mínimo de 16px (ver MobileCardScale.ts). */}
+                      <div className={`flex min-w-0 items-baseline ${MOBILE_INLINE_GAP}`}>
+                        <p className={`min-w-0 shrink truncate ${MOBILE_NAME_TEXT_APPOINTMENT} font-medium`}>{primary}</p>
+                        {handle && <span className={`${MOBILE_HANDLE_SHRINK} truncate ${MOBILE_HANDLE_TEXT} text-vexo-muted`}>@{handle}</span>}
                       </div>
                       {/* Data, tag e telefone na MESMA linha (pedido
                           explícito — eram 2-3 linhas separadas), com
@@ -300,7 +312,7 @@ export async function ClientPanelView({
                           corrigido historicamente: "inline" aqui (não um
                           <div> de bloco) já limita a área clicável ao
                           próprio texto, sem precisar de inline-flex. */}
-                      <div className="mt-0.5 flex flex-wrap items-center gap-1 text-[11px] sm:text-caption text-vexo-muted">
+                      <div className={`${MOBILE_DATE_ROW_MARGIN_TOP} flex flex-wrap items-center ${MOBILE_DATE_ROW_GAP} ${MOBILE_SECONDARY_TEXT} text-vexo-muted`}>
                         <span className="shrink-0">
                           {a.scheduledAt.toLocaleString("pt-BR", {
                             day: "2-digit",

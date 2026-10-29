@@ -3,15 +3,24 @@
 import { useState } from "react";
 import { User } from "lucide-react";
 import { InstagramGlyphIcon } from "@/components/BrandIcons";
+import { MOBILE_AVATAR_SIZE, MOBILE_AVATAR_ICON_SIZE, MOBILE_AVATAR_BADGE_SIZE } from "@/components/MobileCardScale";
 
-const SIZE_CLASSES = { sm: "h-6 w-6", md: "h-8 w-8", lg: "h-10 w-10" } as const;
-const ICON_SIZE_CLASSES = { sm: "h-3 w-3", md: "h-4 w-4", lg: "h-5 w-5" } as const;
+// "md" é o tamanho ESCALADO só-celular (abaixo de sm/640px, ver
+// MobileCardScale.ts) — pedido explícito, leitura pra público 45+. Seguro
+// fazer isso aqui dentro (em vez de um prop novo) porque "md" é usado
+// EXCLUSIVAMENTE pelos dois cards do Painel (ReactivationRail.tsx e a
+// lista de Agendamentos em ClientPanelView.tsx); o Pipeline usa "lg"
+// (crm/clinicas/[id]/page.tsx) e o banner "precisa de humano" usa "sm"
+// (NeedsHumanBanner.tsx) — nenhum dos dois é afetado. Em tablet/notebook/
+// desktop os três tamanhos ficam idênticos a antes.
+const SIZE_CLASSES = { sm: "h-6 w-6", md: MOBILE_AVATAR_SIZE, lg: "h-10 w-10" } as const;
+const ICON_SIZE_CLASSES = { sm: "h-3 w-3", md: MOBILE_AVATAR_ICON_SIZE, lg: "h-5 w-5" } as const;
 // Badge do Instagram, sobreposto no canto inferior direito — proporcional
 // ao tamanho do avatar (pequeno o bastante pra não tomar conta da foto,
 // mas legível). Mesmo padrão visual usado por outros CRMs de social
 // selling (Kommo, Clint) pra indicar o canal de origem do lead direto no
 // avatar, sem precisar de um selo/texto separado.
-const BADGE_SIZE_CLASSES = { sm: "h-2.5 w-2.5", md: "h-3 w-3", lg: "h-3.5 w-3.5" } as const;
+const BADGE_SIZE_CLASSES = { sm: "h-2.5 w-2.5", md: MOBILE_AVATAR_BADGE_SIZE, lg: "h-3.5 w-3.5" } as const;
 
 // Avatar do lead (Painel e Pipeline) — <img> puro, não next/image: as URLs
 // vêm do CDN do Instagram, em subdomínios que mudam (scontent-*), então não
