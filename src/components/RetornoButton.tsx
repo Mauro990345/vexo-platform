@@ -4,7 +4,13 @@ import { useEffect, useState, useTransition } from "react";
 import { CalendarArrowUp } from "lucide-react";
 import { setAppointmentReturnPeriodClientAction } from "@/app/dashboard/actions";
 import type { SetAppointmentReturnPeriodResult } from "@/lib/appointments";
-import { MOBILE_SECONDARY_TEXT, MOBILE_ICON_SIZE, MOBILE_TOGGLE_BUTTON_MIN, MOBILE_INLINE_GAP } from "@/components/MobileCardScale";
+import {
+  MOBILE_SECONDARY_TEXT,
+  MOBILE_APPOINTMENT_SECONDARY_TEXT,
+  MOBILE_APPOINTMENT_BUTTON_ICON_SIZE,
+  MOBILE_TOGGLE_BUTTON_MIN,
+  MOBILE_INLINE_GAP,
+} from "@/components/MobileCardScale";
 
 // Botão "Retorno" do card de agendamento atendido (item 2 do pedido) —
 // SEMPRE visível com ícone + texto (nunca só ícone, nunca dependente de
@@ -87,24 +93,26 @@ export function RetornoButton({
 
   return (
     <div className="relative shrink-0">
-      {/* SÓ CELULAR (abaixo de sm/640px — pedido explícito, "Retorno" é um
-          dos botões de ação citados, ver MobileCardScale.ts): piso de
-          toque de 40px de altura E largura (min-h/min-w, texto varia
-          entre "Retorno"/"Retorno · N dias"), ícone 12px -> 15px, texto
-          10px -> 15px, padding 8px/4px -> 12px/6px. `sm:` com os valores
-          de sempre. */}
+      {/* SÓ CELULAR (abaixo de sm/640px): piso de toque de 32px de altura
+          E largura (min-h/min-w, texto varia entre "Retorno"/"Retorno ·
+          N dias") — AJUSTE (2026-10-29, 3ª rodada): 40px -> 32px, ícone
+          15px -> 12px, texto 15px -> 12px (MOBILE_APPOINTMENT_SECONDARY_TEXT,
+          não mais MOBILE_SECONDARY_TEXT — pedido explícito "botões...
+          compactos, altura ~32px", pra caber no card do tamanho de um
+          card de métrica), padding 12px/6px -> 8px/6px. `sm:` com os
+          valores de sempre. */}
       <button
         type="button"
         title={locked ? "Já enviado — prazo não pode mais ser alterado" : undefined}
         onClick={() => !locked && setOpen((o) => !o)}
         disabled={locked}
-        className={`inline-flex items-center justify-center ${MOBILE_TOGGLE_BUTTON_MIN} ${MOBILE_INLINE_GAP} rounded-lg border px-[12px] py-[6px] sm:px-2 sm:py-1 ${MOBILE_SECONDARY_TEXT} font-medium transition disabled:cursor-not-allowed disabled:opacity-60 ${
+        className={`inline-flex items-center justify-center ${MOBILE_TOGGLE_BUTTON_MIN} ${MOBILE_INLINE_GAP} rounded-lg border px-[8px] py-[6px] sm:px-2 sm:py-1 ${MOBILE_APPOINTMENT_SECONDARY_TEXT} font-medium transition disabled:cursor-not-allowed disabled:opacity-60 ${
           marked
             ? "border-vexo-accent bg-vexo-accent/15 text-vexo-accent"
             : "border-vexo-border text-vexo-muted hover:border-vexo-accent/50"
         }`}
       >
-        <CalendarArrowUp className={`${MOBILE_ICON_SIZE} shrink-0`} strokeWidth={2.5} />
+        <CalendarArrowUp className={`${MOBILE_APPOINTMENT_BUTTON_ICON_SIZE} shrink-0`} strokeWidth={2.5} />
         {label}
       </button>
 

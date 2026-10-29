@@ -165,18 +165,32 @@ export const MOBILE_SECTION_COUNTER_TEXT = "text-[15px] sm:text-caption";
 // Linha de Reativação: padding 8/10px (p-2/pl-2.5) × 1,29 = 10,32/12,9 →
 // 10px/13px.
 export const MOBILE_REACTIVATION_ROW_PADDING = "p-[10px] pl-[13px] sm:p-2 sm:pl-2.5";
-// Linha de Agendamentos: padding 8px (p-2) × 1,29 = 10,32 → 10px.
-export const MOBILE_APPOINTMENT_ROW_PADDING = "p-[10px] sm:p-2";
-// Altura mínima do card: reduzida de ~100px pra ~80px (não é um valor de
-// fator, é um piso deliberado — perto da altura NATURAL de um
-// PanelMetricCard: padding 12×2 + rótulo ~18px + gap 6px + número ~38px
-// ≈ 86px) — garante um piso mesmo com nome/motivo curtos (uma linha só);
-// nomes longos (até 2 linhas, ver MOBILE_NAME_TEXT_*) naturalmente
-// ultrapassam isso.
-export const MOBILE_CARD_MIN_HEIGHT = "min-h-[80px] sm:min-h-0";
-// Gap entre avatar/conteúdo/botão dentro da linha: 8px (gap-2) × 1,29 =
-// 10,32 → 10px.
-export const MOBILE_ROW_GAP = "gap-[10px] sm:gap-2";
+// Linha de Agendamentos: reduzido mais uma vez (2026-10-29, 3ª rodada) —
+// pedido explícito pra ficar do tamanho de um card de métrica (ver
+// MOBILE_CARD_MIN_HEIGHT abaixo); 8px (p-2) não escala mais por fator
+// aqui, é o mesmo valor de desktop.
+export const MOBILE_APPOINTMENT_ROW_PADDING = "p-[8px] sm:p-2";
+// Altura mínima do card: AJUSTE (2026-10-29, 3ª rodada) — pedido
+// explícito pra medir contra a altura REAL (DOM) dos cards de métrica
+// (PanelMetricCard) e ficar parecido (tolerância de até +15%). Medido
+// via Playwright offline: PanelMetricCard ~89,5px de altura a 375px.
+// 56px aqui é só um PISO (não um valor de fator) — o card de Agendamentos
+// raramente bate nele: com avatar+nome+@ numa linha e data/status/
+// telefone na linha de baixo (ver reestruturação em ClientPanelView.tsx),
+// a altura natural já fica entre ~53px (2 linhas, caso comum) e ~90px
+// (3 linhas, quando o telefone não cabe ao lado de data+status+botão e
+// quebra sozinho pra uma linha própria — ver comentário no date-row em
+// ClientPanelView.tsx) — sempre dentro da margem de +15% medida.
+export const MOBILE_CARD_MIN_HEIGHT = "min-h-[56px] sm:min-h-0";
+// Gap entre avatar/conteúdo/botão dentro da linha: reduzido de 10 pra
+// 8px nesta rodada (não é mais um valor de fator puro — ajuste pra
+// aproximar da densidade do card de métrica).
+export const MOBILE_ROW_GAP = "gap-[8px] sm:gap-2";
+// Gap entre o conteúdo (avatar+texto) e o botão de ação dos Agendamentos
+// — SÓ nesse card (ReactivationRail usa MOBILE_ROW_GAP tanto pro gap
+// externo quanto pro interno; aqui os dois viraram valores diferentes
+// nesta rodada, por isso uma constante própria): 6px.
+export const MOBILE_APPOINTMENT_ACTION_GAP = "gap-[6px] sm:gap-2";
 // Gap entre as linhas da lista: 6px (space-y-1.5) × 1,29 = 7,74 → 8px.
 export const MOBILE_LIST_GAP = "space-y-[8px] sm:space-y-1.5";
 // Gap vertical entre a linha nome/@ e a linha chip/motivo: 2px
@@ -188,27 +202,40 @@ export const MOBILE_INLINE_GAP = "gap-[5px] sm:gap-1";
 // Gap entre o chip de tipo e a linha de motivo: 6px (gap-1.5) × 1,29 =
 // 7,74 → 8px.
 export const MOBILE_CHIP_ROW_GAP = "gap-[8px] sm:gap-1.5";
-// Gap na linha data · status · telefone dos Agendamentos: 4px (gap-1) ×
-// 1,29 = 5,16 → 5px.
-export const MOBILE_DATE_ROW_GAP = "gap-[5px] sm:gap-1";
-// Margem acima da linha data/status/telefone: 2px (mt-0.5) × 1,29 = 2,58
-// → 3px.
-export const MOBILE_DATE_ROW_MARGIN_TOP = "mt-[3px] sm:mt-0.5";
+// Gap na linha data · status · telefone dos Agendamentos — AJUSTE
+// (2026-10-29, 3ª rodada): a linha virou flex-wrap (pedido explícito, só
+// quebra quando não cabe — ver ClientPanelView.tsx, agrupado em "data ·"
+// / badge / "· telefone" pra nunca sobrar um "·" sozinho numa linha);
+// gap-x/gap-y separados porque o gap vertical entre as linhas quebradas
+// precisa ser 0 (a margem já vem de fora, mt abaixo), só o horizontal
+// mantém espaço entre os grupos: 5px.
+export const MOBILE_DATE_ROW_GAP = "gap-x-[5px] gap-y-0 sm:gap-1";
+// Margem acima da linha data/status/telefone: 2px.
+export const MOBILE_DATE_ROW_MARGIN_TOP = "mt-[2px] sm:mt-0.5";
 
 // Fontes dos cards ---------------------------------------------------------
 
 // Nome (Reativação/Faltou/Quente): 12px (text-xs) × 1,29 = 15,48 → 15px.
 export const MOBILE_NAME_TEXT_REACTIVATION = "text-[15px] sm:text-xs";
-// Nome (Agendamentos): 14px (text-sm) × 1,29 = 18,06 → 18px.
-export const MOBILE_NAME_TEXT_APPOINTMENT = "text-[18px] sm:text-sm";
-// @ do lead: 10px (text-caption) × 1,29 = 12,9 → 13px.
-export const MOBILE_HANDLE_TEXT = "text-[13px] sm:text-caption";
+// Nome (Agendamentos) — AJUSTE (2026-10-29, 3ª rodada): pedido explícito
+// pra ficar do tamanho de um card de métrica — 14px, o MESMO valor de
+// desktop (não é mais maior que desktop nesse card específico; os outros
+// elementos do card já encolheram o bastante que não precisa de um
+// "boost" de fator aqui pra continuar legível).
+export const MOBILE_NAME_TEXT_APPOINTMENT = "text-[14px] sm:text-sm";
+// @ do lead — AJUSTE (2026-10-29, 3ª rodada): 12px (era 13px).
+export const MOBILE_HANDLE_TEXT = "text-[12px] sm:text-caption";
 // Motivo/horário/status/telefone/rótulos ("Limite diário", "Sem
 // WhatsApp") — NÃO mudou nesta rodada de propósito (pedido explícito:
 // "mantenha motivo visível e sem cortar"; já está no mesmo nível do
 // rótulo do card de métrica, ver MOBILE_METRIC_LABEL_TEXT, ambos 15px):
 // 10px (text-caption) -> ×1,45=14,5→15px.
 export const MOBILE_SECONDARY_TEXT = "text-[15px] sm:text-caption";
+// Data/status/telefone/texto dos botões do card de Agendamentos —
+// NOVO (2026-10-29, 3ª rodada), separado de MOBILE_SECONDARY_TEXT de
+// propósito (motivo/data dos OUTROS cards não mudam, ver acima; só este
+// card ganhou fonte menor, pedido explícito "fonte pequena"): 12px.
+export const MOBILE_APPOINTMENT_SECONDARY_TEXT = "text-[12px] sm:text-caption";
 // Texto dos botões de ação (WhatsApp/Instagram/"Enviando…"/"✓"): 11px
 // (text-card) × 1,29 = 14,19 → 14px.
 export const MOBILE_BUTTON_TEXT = "text-[14px] sm:text-card";
@@ -254,13 +281,19 @@ export const MOBILE_BAR_WIDTH = "w-[4px] sm:w-[3px]";
 // cards desta tela; Pipeline usa "lg" e o banner "precisa de humano" usa
 // "sm", nenhum dos dois é afetado) ----------------------------------------
 
-// 32px (h-8 w-8) × 1,29 = 41,28 → 41px.
-export const MOBILE_AVATAR_SIZE = "h-[41px] w-[41px] sm:h-8 sm:w-8";
-// Ícone de fallback (sem foto): 16px (h-4 w-4) × 1,29 = 20,64 → 21px.
-export const MOBILE_AVATAR_ICON_SIZE = "h-[21px] w-[21px] sm:h-4 sm:w-4";
-// Badge de origem (Instagram) sobreposto no avatar: 12px (h-3 w-3) ×
-// 1,29 = 15,48 → 15px.
-export const MOBILE_AVATAR_BADGE_SIZE = "h-[15px] w-[15px] sm:h-3 sm:w-3";
+// AJUSTE (2026-10-29, 3ª rodada): avatar ainda menor — pedido explícito
+// ("avatar pequeno") pra caber no card de Agendamentos do tamanho de um
+// card de métrica. Não é mais escalado por fator a partir de desktop (o
+// resultado ficaria grande demais pro pedido) — valor deliberado, 28px.
+// Como "md" é usado só pelos cards de Reativação/Faltou/Quente e
+// Agendamentos (ver comentário acima), o ajuste casceia pros dois sem
+// precisar duplicar — pedido explícito permite isso ("se os outros tipos
+// usarem o mesmo componente, o ajuste vale pra eles também").
+export const MOBILE_AVATAR_SIZE = "h-[28px] w-[28px] sm:h-8 sm:w-8";
+// Ícone de fallback (sem foto): mesma proporção do avatar acima — 14px.
+export const MOBILE_AVATAR_ICON_SIZE = "h-[14px] w-[14px] sm:h-4 sm:w-4";
+// Badge de origem (Instagram) sobreposto no avatar: 10px.
+export const MOBILE_AVATAR_BADGE_SIZE = "h-[10px] w-[10px] sm:h-3 sm:w-3";
 
 // Botões de ação (WhatsApp/Instagram/retorno/"Retorno"/"Não compareceu") -
 //
@@ -279,9 +312,16 @@ export const MOBILE_ACTION_BUTTON_SQUARE = "h-[40px] w-[40px] sm:h-[23px] sm:w-[
 // (px-1.5) × 1,29 = 7,74 → 8px.
 export const MOBILE_ACTION_BUTTON_PADDING_X = "px-[8px] sm:px-1.5";
 // "Retorno"/"Não compareceu" não têm altura fixa (texto varia) — usam
-// min-h/min-w pra garantir o mesmo piso de 40px mesmo com o texto mais
-// curto.
-export const MOBILE_TOGGLE_BUTTON_MIN = "min-h-[40px] min-w-[40px] sm:min-h-0 sm:min-w-0";
+// min-h/min-w pra garantir um piso de toque mesmo com o texto mais
+// curto. AJUSTE (2026-10-29, 3ª rodada): 40px -> 32px — pedido explícito
+// ("botões... compactos, altura ~32px"), pra caber no card do tamanho de
+// um card de métrica; ainda um alvo de toque razoável (os dois só
+// aparecem um de cada vez nessa linha — nunca os dois juntos, ver
+// comentário em ClientPanelView.tsx — então não competem por espaço
+// entre si). Exclusivo do Agendamentos (RetornoButton/NoShowButton), não
+// afeta os botões de WhatsApp/Instagram da Reativação (que usam
+// MOBILE_ACTION_BUTTON_HEIGHT/SQUARE, constante separada, inalterada).
+export const MOBILE_TOGGLE_BUTTON_MIN = "min-h-[32px] min-w-[32px] sm:min-h-0 sm:min-w-0";
 
 // Reordenação SÓ CELULAR: nome/@ e chip/motivo trocam de posição -----------
 //
@@ -305,10 +345,6 @@ export const MOBILE_TOGGLE_BUTTON_MIN = "min-h-[40px] min-w-[40px] sm:min-h-0 sm
 // segundo bloco reproduz a estrutura de sempre (nome/@ e chip/motivo
 // empilhados numa coluna só, ao lado do botão) sem nenhuma mudança.
 
-// Empilha nome (até 2 linhas) acima do @ (1 linha) no celular; lado a
-// lado (baseline), como sempre, em telas ≥640px.
-export const MOBILE_NAME_HANDLE_STACK = "flex min-w-0 flex-col sm:flex-row sm:items-baseline";
-
 // Nome: até 2 linhas com reticências no celular (line-clamp-2); 1 linha
 // com reticências em desktop, igual sempre foi (line-clamp-none desfaz o
 // "display: -webkit-box" do line-clamp-2 antes do truncate de sempre
@@ -316,9 +352,41 @@ export const MOBILE_NAME_HANDLE_STACK = "flex min-w-0 flex-col sm:flex-row sm:it
 // anterior, agora aplicado ao nome em vez do motivo).
 export const MOBILE_NAME_CLAMP = "line-clamp-2 sm:line-clamp-none sm:truncate";
 
-// Linha de botões dos Agendamentos (Retorno/Não compareceu) — no celular
-// vira uma linha PRÓPRIA, alinhada à direita, abaixo do conteúdo (pedido
-// explícito: "numa linha própria alinhada à direita, sem apertar"); em
-// desktop volta a ficar ao lado do conteúdo, na mesma linha, como sempre
-// foi (w-auto, sem forçar alinhamento).
-export const MOBILE_APPOINTMENT_BUTTON_ROW = "flex w-full items-center justify-end gap-[9px] sm:w-auto sm:justify-start sm:gap-1.5";
+// Card de Agendamentos — layout de 2 linhas com botão ao lado -----------
+//
+// AJUSTE (2026-10-29, 3ª rodada): pedido explícito pra REVERTER a "linha
+// própria embaixo" da rodada anterior — o botão (Retorno OU Não
+// compareceu, nunca os dois juntos — COMPLETED, o único status que
+// mostra Retorno, nunca está em ACTIONABLE_STATUSES, o único grupo que
+// mostra Não compareceu) volta a ficar AO LADO do conteúdo, igual sempre
+// foi em desktop — por isso MOBILE_APPOINTMENT_BUTTON_ROW (a versão
+// "linha própria embaixo") foi removida: não tem mais nenhuma diferença
+// de layout entre mobile/desktop aqui além de tamanho, então o botão
+// pode usar o wrapper simples de sempre (`shrink-0 flex items-center`,
+// direto em ClientPanelView.tsx, sem precisar de uma constante — não há
+// nenhum valor que mude por breakpoint nesse wrapper específico).
+//
+// Nome/@ também pararam de empilhar (MOBILE_NAME_CLAMP, usada pela
+// Reativação, CONTINUA como está — não mexida nesta rodada; o antigo
+// MOBILE_NAME_HANDLE_STACK, que só o Agendamentos usava, foi removido
+// por ficar órfão): pedido explícito "nome + @ numa linha única, com
+// reticências se longo" — igual ao desktop já era, então o Agendamentos
+// passou a usar uma classe simples direto em ClientPanelView.tsx (mesma
+// estrutura de linha em mobile e desktop, só o tamanho muda por `sm:`).
+//
+// @ do lead do Agendamentos — AJUSTE (2026-10-29, 3ª rodada): como nome
+// e @ dividem uma linha SÓ (e nome entra como flex-1, prioridade pra
+// ficar visível), um @ de Instagram incomumente longo (ex.:
+// "@maria.fernanda.albuquerque.costa.oficial") sozinho já tomaria quase
+// toda a linha (shrink-0 = nunca encolhe, mostra sempre o conteúdo
+// inteiro) — sobrando só 1-2 letras pro nome. max-w-[40%] garante um
+// piso mínimo de espaço pro nome mesmo nesse caso extremo (@ comuns,
+// bem mais curtos que 40% da linha, continuam aparecendo inteiros, sem
+// reticências — só o caso extremo trunca). Em desktop (sm:) reverte pro
+// de sempre: sem limite de largura, sempre mostra o @ inteiro.
+export const MOBILE_APPOINTMENT_HANDLE_CAP = "max-w-[40%] shrink-0 truncate sm:max-w-none sm:shrink-0";
+// Ícone do botão "Retorno" — PRÓPRIO (não mais MOBILE_ICON_SIZE, que
+// também serve os botões de WhatsApp/Instagram da Reativação/
+// InstagramDmButton — separado pra poder encolher só este sem afetar os
+// outros dois): 12px (h-3 w-3), mesmo valor de desktop.
+export const MOBILE_APPOINTMENT_BUTTON_ICON_SIZE = "h-[12px] w-[12px] sm:h-3 sm:w-3";

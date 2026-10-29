@@ -1,4 +1,4 @@
-import { MOBILE_SECONDARY_TEXT } from "@/components/MobileCardScale";
+import { MOBILE_APPOINTMENT_SECONDARY_TEXT } from "@/components/MobileCardScale";
 
 const STATUS_LABELS: Record<string, string> = {
   SCHEDULED: "Agendado",
@@ -79,17 +79,17 @@ export function AppointmentStatusBadge({ status, compact }: { status: string; co
   if (compact) {
     const tint = statusTint(status);
     return (
-      // SÓ CELULAR (abaixo de sm/640px — pedido explícito, fator 1,45
-      // sobre os valores de desktop, lista de Agendamentos do Painel, ver
-      // MobileCardScale.ts): padding 6px/2px -> 9px/3px, fonte 10px ->
-      // 15px (mesmo texto de "motivo/horário/status" do pedido — fica
-      // alinhado com a mesma linha data/status/telefone). `sm:` com os
-      // valores de sempre — essa é a versão `compact`, usada só no Painel
-      // (a não-compact, na tela de conversa do CRM interno, não muda em
-      // nada). Não é um botão (só texto informativo), por isso sem piso
-      // de toque de 48px.
+      // SÓ CELULAR (lista de Agendamentos do Painel, ver
+      // MobileCardScale.ts): padding/fonte alinhados com o resto da
+      // linha data/status/telefone (MOBILE_APPOINTMENT_SECONDARY_TEXT).
+      // AJUSTE (2026-10-29, 3ª rodada): padding 9px/3px -> 5px/1px, fonte
+      // 15px -> 12px — pedido explícito pra caber no card do tamanho de
+      // um card de métrica. `sm:` com os valores de sempre — essa é a
+      // versão `compact`, usada só no Painel (a não-compact, na tela de
+      // conversa do CRM interno, não muda em nada). Não é um botão (só
+      // texto informativo), por isso sem piso de toque.
       <span
-        className={`inline-flex items-center gap-[3px] sm:gap-0.5 rounded-sm px-[9px] py-[3px] sm:px-1.5 sm:py-0.5 ${MOBILE_SECONDARY_TEXT} font-medium leading-none ${tint.bg} ${tint.text} ${tint.border ?? ""}`}
+        className={`inline-flex items-center gap-[2px] sm:gap-0.5 rounded-sm px-[5px] py-[1px] sm:px-1.5 sm:py-0.5 ${MOBILE_APPOINTMENT_SECONDARY_TEXT} font-medium leading-none ${tint.bg} ${tint.text} ${tint.border ?? ""}`}
       >
         {status === "COMPLETED" && <span aria-hidden="true">✓</span>}
         {label}
