@@ -162,8 +162,15 @@ export async function ClientPanelView({
         return { ...p, metrics, attendance };
       })
     ),
+    // AJUSTE (2026-10-29, 6ª rodada, pedido explícito "exclua da lista os
+    // agendamentos cancelados"): status: { not: "CANCELLED" } — só filtro
+    // de EXIBIÇÃO desta lista; nada é apagado do banco (um agendamento
+    // cancelado continua existindo, só não aparece mais aqui), e as
+    // métricas (getClinicMetrics/getAttendanceMetrics acima, em
+    // metrics.ts) já excluíam CANCELLED antes disso, por conta própria —
+    // não dependiam desta lista, então continuam exatamente como estavam.
     prisma.appointment.findMany({
-      where: { clinicId },
+      where: { clinicId, status: { not: "CANCELLED" } },
       include: { lead: true },
       orderBy: { scheduledAt: "desc" },
       take: 100,
