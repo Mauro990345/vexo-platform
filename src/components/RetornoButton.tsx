@@ -8,12 +8,13 @@ import { MOBILE_SECONDARY_TEXT, MOBILE_ICON_SIZE, MOBILE_TOGGLE_BUTTON_MIN, MOBI
 
 // Botão "Retorno" do card de agendamento atendido (item 2 do pedido) —
 // SEMPRE visível com ícone + texto (nunca só ícone, nunca dependente de
-// hover, pedido explícito). Clique abre um painel escuro compacto, grade
-// de 3 colunas, com os prazos DISPONÍVEIS da clínica (ver
-// ReactivationConfig.availablePeriods) + "Sem retorno" — seleção única, a
-// escolhida fica destacada. Guarda só o NÚMERO de dias (ou "nenhum"),
-// nunca texto livre nem dado clínico (LGPD, ver setAppointmentReturnPeriod,
-// appointments.ts).
+// hover, pedido explícito). Clique abre um painel escuro compacto, linha
+// horizontal (que quebra só se não couber, ver comentário na grade
+// abaixo — pedido explícito, 2026-10-29) com os prazos DISPONÍVEIS da
+// clínica (ver ReactivationConfig.availablePeriods) + "Sem retorno" —
+// seleção única, a escolhida fica destacada. Guarda só o NÚMERO de dias
+// (ou "nenhum"), nunca texto livre nem dado clínico (LGPD, ver
+// setAppointmentReturnPeriod, appointments.ts).
 //
 // Otimista (igual a NoShowButton/ReactivationRail): atualiza a aparência
 // do botão na hora do clique, desfaz se o servidor rejeitar (ex.: card já
@@ -88,8 +89,8 @@ export function RetornoButton({
     <div className="relative shrink-0">
       {/* SÓ CELULAR (abaixo de sm/640px — pedido explícito, "Retorno" é um
           dos botões de ação citados, ver MobileCardScale.ts): piso de
-          toque de 48px de altura E largura (min-h/min-w, texto varia
-          entre "Retorno"/"Retorno · N dias"), ícone 12px -> 17px, texto
+          toque de 40px de altura E largura (min-h/min-w, texto varia
+          entre "Retorno"/"Retorno · N dias"), ícone 12px -> 15px, texto
           10px -> 15px, padding 8px/4px -> 12px/6px. `sm:` com os valores
           de sempre. */}
       <button
@@ -120,13 +121,28 @@ export function RetornoButton({
           <div className="absolute right-0 top-full z-50 mt-1 w-[220px] sm:w-[200px] rounded-xl border border-vexo-border bg-vexo-surface2 p-[12px] sm:p-2.5 shadow-card">
             <p className={`mb-2 ${MOBILE_SECONDARY_TEXT} font-medium text-vexo-muted`}>Prazo de retorno</p>
             {availablePeriods.length > 0 && (
-              <div className="grid grid-cols-3 gap-[7px] sm:gap-1.5">
+              // SÓ CELULAR: linha horizontal que QUEBRA (flex-wrap), não
+              // grade fixa de 3 colunas (pedido explícito, 2026-10-29, 2ª
+              // rodada: "lado a lado, numa única linha horizontal,
+              // esticados na largura disponível, só quebram se realmente
+              // não couber" — uma grade de colunas fixas não "estica" pra
+              // preencher a largura nem se adapta à contagem de prazos,
+              // que pode chegar a 9; cada botão com flex-1 + min-w garante
+              // que eles se esticam uniformemente na linha e só formam
+              // uma linha nova quando o conjunto atual não cabe mais). Em
+              // >=640px volta a ser a grade de 3 colunas de sempre
+              // (sm:grid sm:grid-cols-3) — essa grade nunca teve uma
+              // versão separada "só desktop", então pra não mudar nada em
+              // telas >=640px o revert precisa ser explícito aqui (não dá
+              // pra só adicionar as classes de celular sem prefixo, como
+              // no resto do Painel).
+              <div className="flex flex-wrap gap-[7px] sm:grid sm:grid-cols-3 sm:gap-1.5">
                 {availablePeriods.map((days) => (
                   <button
                     key={days}
                     type="button"
                     onClick={() => handlePick(days)}
-                    className={`rounded-md border px-[9px] py-[6px] sm:px-1.5 sm:py-1 ${MOBILE_SECONDARY_TEXT} font-medium transition ${
+                    className={`flex-1 min-w-[44px] sm:min-w-0 sm:flex-none rounded-md border px-[9px] py-[6px] sm:px-1.5 sm:py-1 ${MOBILE_SECONDARY_TEXT} font-medium transition ${
                       !localNone && localDays === days
                         ? "border-vexo-accent bg-vexo-accent/15 text-vexo-accent"
                         : "border-vexo-border text-vexo-muted hover:border-vexo-accent/50"
