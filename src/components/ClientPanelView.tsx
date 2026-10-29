@@ -44,7 +44,7 @@ import {
   MOBILE_NAV_TEXT,
   MOBILE_NAV_BUTTON_MIN,
   MOBILE_NAV_BUTTON_PADDING,
-  MOBILE_CHART_TEXT,
+  MOBILE_CHART_ROW_TEXT,
   MOBILE_SECTION_TITLE_TEXT,
   MOBILE_SECTION_DOT_SIZE,
 } from "@/components/MobileCardScale";
@@ -284,7 +284,7 @@ export async function ClientPanelView({
                 </div>
 
                 <div className="space-y-2 border-t border-vexo-border pt-3">
-                  <p className={`${MOBILE_CHART_TEXT} font-medium uppercase tracking-wide text-vexo-muted`}>
+                  <p className={`${MOBILE_CHART_ROW_TEXT} font-medium uppercase tracking-wide text-vexo-muted`}>
                     Abordagens por dia · {weekStart.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })} –{" "}
                     {addDays(weekStart, 6).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}
                   </p>

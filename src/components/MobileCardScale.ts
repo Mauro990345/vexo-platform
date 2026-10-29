@@ -15,7 +15,16 @@
 // constante é SEMPRE o valor de desktop/tablet/notebook — pixel-idêntico
 // a antes de qualquer ajuste de celular já feito.
 //
-// Mínimos do pedido (o maior entre escalado×1,45 e este mínimo vale):
+// AJUSTE FINO (2026-10-29): o bloco título "Painel" → gráfico "Abordagens
+// por dia" (inclusive) ficou grande demais no 1,45 — pedido explícito pra
+// usar um fator MENOR só nesse trecho (sem clamping por mínimo: aqui o
+// fator manda sozinho). Ver cada constante da seção "Cabeçalho do Painel
+// (...) + navegação de semana + gráfico" abaixo pro valor usado. O resto
+// do Painel (Período, indicadores, títulos de seção, cards) continua no
+// 1,45 original, sem mudança.
+//
+// Mínimos do pedido original (o maior entre escalado×1,45 e este mínimo
+// vale — NÃO se aplica ao bloco reduzido acima, ver AJUSTE FINO):
 //   - título "Painel" 28px, texto abaixo 16px, nome da clínica 22px
 //   - ícones de status da clínica (badge Instagram/Calendário/WhatsApp) 36px
 //   - navegação de semana/seletor de período/rótulos do gráfico: texto 15px,
@@ -31,57 +40,78 @@
 // piso de 4.5:1, nenhuma cor precisou mudar.
 
 // Cabeçalho do Painel (título, subtítulo, nome da clínica, ícones de
-// status) ---------------------------------------------------------------
+// status) + navegação de semana + gráfico "Abordagens por dia" ----------
+//
+// Esse bloco (do título "Painel" até o gráfico, inclusive — título,
+// subtítulo, nome da clínica, ícones de status/pontinhos, navegação de
+// semana e rótulos do gráfico) usa um fator PRÓPRIO, menor que o resto do
+// Painel: pedido explícito de ajuste fino (2026-10-29) — o 1,45 geral
+// ficou grande demais nessa região específica, mas não é pra voltar ao
+// tamanho pequeno de antes. Fator usado: **1,36** (meio do intervalo
+// 1,35-1,38 pedido), sobre os mesmos pixels ORIGINAIS de desktop de
+// sempre — SEM clamping pelos mínimos do pedido anterior (28/22/36px
+// etc.): aqui o pedido é reduzir de propósito, então o fator manda
+// sozinho, arredondado ao pixel mais próximo. O resto do Painel
+// (Período/indicadores/títulos de seção/cards) continua no 1,45 de
+// sempre, intocado.
+//
+// Exceção: a altura mínima de toque dos botões "← Semana"/"Hoje"/
+// "Semana →" continua em 48px (MOBILE_NAV_BUTTON_MIN, não mudou) — é o
+// piso de acessibilidade (WCAG 2.5.5) pedido desde a primeira rodada,
+// não um valor calculado por fator; só o texto/padding deles encolheu.
 
-// "Painel": 18px (text-lg) -> ×1,45=26,1 : mínimo do pedido (28px) vale.
-export const MOBILE_TITLE_TEXT = "text-[28px] sm:text-lg";
-// Texto abaixo do título: 14px (text-sm) -> ×1,45=20,3: 20 > mínimo (16).
-export const MOBILE_SUBTITLE_TEXT = "text-[20px] sm:text-sm";
-// Nome da clínica: 16px (sem classe de fonte hoje = text-base do
-// Tailwind) -> ×1,45=23,2: 23 > mínimo (22).
-export const MOBILE_CLINIC_NAME_TEXT = "text-[23px] sm:text-base";
+// "Painel": 18px (text-lg) × 1,36 = 24,48 → 24px.
+export const MOBILE_TITLE_TEXT = "text-[24px] sm:text-lg";
+// Texto abaixo do título: 14px (text-sm) × 1,36 = 19,04 → 19px.
+export const MOBILE_SUBTITLE_TEXT = "text-[19px] sm:text-sm";
+// Nome da clínica: 16px (text-base) × 1,36 = 21,76 → 22px.
+export const MOBILE_CLINIC_NAME_TEXT = "text-[22px] sm:text-base";
 // Badge de status (Instagram/Calendário/WhatsApp, ver ChannelStatusPill.tsx):
-// 24px (h-6 w-6) -> ×1,45=34,8: mínimo do pedido (36px) vale. O ícone do
-// Instagram/WhatsApp preenche o badge inteiro (mesma proporção 1:1 de
-// desktop), por isso usa o mesmo tamanho do badge.
-export const MOBILE_STATUS_BADGE_SIZE = "h-[36px] w-[36px] sm:h-6 sm:w-6";
+// 24px (h-6 w-6) × 1,36 = 32,64 → 33px. O ícone do Instagram/WhatsApp
+// preenche o badge inteiro (mesma proporção 1:1 de desktop), por isso usa
+// o mesmo tamanho do badge.
+export const MOBILE_STATUS_BADGE_SIZE = "h-[33px] w-[33px] sm:h-6 sm:w-6";
 // Ícone do Google Calendar DENTRO do badge: 12px (h-3 w-3, sempre menor
 // que o badge, dentro de um círculo colorido — proporção diferente do
-// Instagram/WhatsApp de propósito, desktop já é assim) -> ×1,45=17,4→17px.
-export const MOBILE_STATUS_BADGE_ICON_SIZE = "h-[17px] w-[17px] sm:h-3 sm:w-3";
-// Pontinho de conectado/desconectado no canto do badge: 8px (h-2 w-2) ->
-// ×1,45=11,6→12px.
-export const MOBILE_STATUS_DOT_SIZE = "h-[12px] w-[12px] sm:h-2 sm:w-2";
-// Bolinha antes do nome da clínica/títulos de seção: 6px (h-1.5 w-1.5) ->
-// ×1,45=8,7→9px.
+// Instagram/WhatsApp de propósito, desktop já é assim) × 1,36 = 16,32 →
+// 16px.
+export const MOBILE_STATUS_BADGE_ICON_SIZE = "h-[16px] w-[16px] sm:h-3 sm:w-3";
+// Pontinho de conectado/desconectado no canto do badge: 8px (h-2 w-2) ×
+// 1,36 = 10,88 → 11px.
+export const MOBILE_STATUS_DOT_SIZE = "h-[11px] w-[11px] sm:h-2 sm:w-2";
+// Bolinha antes dos títulos de SEÇÃO (Reativação/Agendamentos) — fora do
+// bloco reduzido desta rodada (fica no 1,45 de sempre): 6px (h-1.5 w-1.5)
+// × 1,45 = 8,7 → 9px.
 export const MOBILE_SECTION_DOT_SIZE = "h-[9px] w-[9px] sm:h-1.5 sm:w-1.5";
-// Bolinha maior, só antes do nome da clínica: 8px (h-2 w-2) -> ×1,45=
-// 11,6→12px (mesmo valor de MOBILE_STATUS_DOT_SIZE, constante própria só
-// por clareza de uso).
-export const MOBILE_CLINIC_DOT_SIZE = "h-[12px] w-[12px] sm:h-2 sm:w-2";
+// Bolinha maior, só antes do nome da clínica — dentro do bloco reduzido
+// desta rodada: 8px (h-2 w-2) × 1,36 = 10,88 → 11px (mesmo valor de
+// MOBILE_STATUS_DOT_SIZE, constante própria só por clareza de uso).
+export const MOBILE_CLINIC_DOT_SIZE = "h-[11px] w-[11px] sm:h-2 sm:w-2";
 
-// Navegação de semana, seletor de período, rótulos do gráfico -----------
-
-// Texto: 12px (text-xs, nav/seletor) ou 10px (text-caption, rótulos do
-// gráfico) -> ambos ×1,45 ficam abaixo do mínimo comum (15px) ou perto
-// dele; usar o mesmo piso de 15px pros dois grupos simplifica (pedido:
-// "texto 15px" cobre os dois). 12×1,45=17,4→17 (nav, > mínimo, usa 17);
-// 10×1,45=14,5→15 (gráfico/seletor, empata com o mínimo, usa 15).
-export const MOBILE_NAV_TEXT = "text-[17px] sm:text-xs";
-export const MOBILE_CHART_TEXT = "text-[15px] sm:text-caption";
-// Botões "← Semana"/"Hoje"/"Semana →" e o <select> de período: piso de
-// toque do pedido (48px) — bem maior que o escalado puro (23×1,45≈33),
-// por isso o mínimo vale sozinho. Padding: 10px/4px (nav) ou 12px/4px
-// (select) ×1,45.
+// Navegação de semana ("← Semana"/"Hoje"/"Semana →") — dentro do bloco
+// reduzido desta rodada: 12px (text-xs) × 1,36 = 16,32 → 16px. Padding:
+// 10px/4px (px-2.5/py-1) × 1,36 = 13,6/5,44 → 14px/5px.
+export const MOBILE_NAV_TEXT = "text-[16px] sm:text-xs";
+export const MOBILE_NAV_BUTTON_PADDING = "px-[14px] py-[5px] sm:px-2.5 sm:py-1";
+// Altura mínima de toque dos botões de navegação/select — piso de
+// acessibilidade (48px, WCAG 2.5.5), não muda com nenhum fator.
 export const MOBILE_NAV_BUTTON_MIN = "min-h-[48px] sm:min-h-0";
-export const MOBILE_NAV_BUTTON_PADDING = "px-[15px] py-[6px] sm:px-2.5 sm:py-1";
+// Texto do seletor de período e do rótulo "PERÍODO" (ApproachMetricsToggle.tsx)
+// — FORA do bloco reduzido desta rodada (o pedido não citou "Período"),
+// continua no 1,45 de sempre: 10px (text-caption) × 1,45 = 14,5 → 15px
+// (empata com o mínimo antigo de 15px).
+export const MOBILE_CHART_TEXT = "text-[15px] sm:text-caption";
 export const MOBILE_SELECT_PADDING = "px-[17px] py-[6px] sm:px-3 sm:py-1";
+// Legenda "ABORDAGENS POR DIA" e rótulos de dentro do gráfico (dias da
+// semana, números) — dentro do bloco reduzido desta rodada: 10px
+// (text-caption) × 1,36 = 13,6 → 14px.
+export const MOBILE_CHART_ROW_TEXT = "text-[14px] sm:text-caption";
 // Largura fixa do rótulo do dia da semana (w-7=28px) e do número de
-// abordagens (w-4=16px) no gráfico — aumentada na mesma proporção, pra
-// caber o texto maior sem cortar ("Seg"/"Ter"/etc., número de até 2
-// dígitos).
-export const MOBILE_CHART_DAY_LABEL_WIDTH = "w-[41px] sm:w-7";
-export const MOBILE_CHART_COUNT_WIDTH = "w-[23px] sm:w-4";
+// abordagens (w-4=16px) no gráfico — mesma proporção do texto acima, pra
+// caber sem cortar ("Seg"/"Ter"/etc., número de até 2 dígitos): 28×1,36=
+// 38,08→38px; 16×1,36=21,76→22px.
+export const MOBILE_CHART_DAY_LABEL_WIDTH = "w-[38px] sm:w-7";
+export const MOBILE_CHART_COUNT_WIDTH = "w-[22px] sm:w-4";
 
 // Indicadores (ABORDADOS/EM CONVERSA/AGENDARAM/COMPARECERAM, ver
 // PanelMetricCard.tsx) ----------------------------------------------------
