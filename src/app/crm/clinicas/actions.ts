@@ -344,10 +344,13 @@ export async function updateClinicReactivationMessages(clinicId: string, formDat
 // isValidReturnPeriodDays) — setAppointmentReturnPeriod (appointments.ts)
 // só decide SE a troca pode acontecer agora (trava: depois de enviado,
 // não muda mais).
-export async function setAppointmentReturnPeriodAction(appointmentId: string, selection: number | "none"): Promise<SetAppointmentReturnPeriodResult> {
+export async function setAppointmentReturnPeriodAction(
+  appointmentId: string,
+  selection: number | "none" | "unset"
+): Promise<SetAppointmentReturnPeriodResult> {
   await requireInternalSession();
 
-  if (selection !== "none" && !isValidReturnPeriodDays(selection)) {
+  if (selection !== "none" && selection !== "unset" && !isValidReturnPeriodDays(selection)) {
     throw new Error("Prazo de retorno inválido.");
   }
 

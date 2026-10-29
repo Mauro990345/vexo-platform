@@ -77,4 +77,27 @@ describe("setAppointmentReturnPeriod", () => {
     expect(result).toEqual({ ok: false, reason: "already_sent" });
     expect(appointmentUpdateMock).not.toHaveBeenCalled();
   });
+
+  it('desmarca via "unset": volta ao padrão (returnPeriodDays null, returnPeriodNone false)', async () => {
+    appointmentFindUniqueMock.mockResolvedValue({ id: "appt-1", reactivationCardSlots: [] });
+    appointmentUpdateMock.mockResolvedValue({ id: "appt-1", returnPeriodDays: null, returnPeriodNone: false });
+
+    const result = await setAppointmentReturnPeriod("appt-1", "unset");
+
+    expect(result).toEqual({ ok: true, appointmentId: "appt-1", returnPeriodDays: null, returnPeriodNone: false });
+    expect(appointmentUpdateMock).toHaveBeenCalledWith({
+      where: { id: "appt-1" },
+      data: { returnPeriodDays: null, returnPeriodNone: false },
+      select: { id: true, returnPeriodDays: true, returnPeriodNone: true },
+    });
+  });
+
+  it('já enviado: "unset" também trava — already_sent, sem gravar (mesma regra que marcar um prazo)', async () => {
+    appointmentFindUniqueMock.mockResolvedValue({ id: "appt-1", reactivationCardSlots: [{ id: "slot-1" }] });
+
+    const result = await setAppointmentReturnPeriod("appt-1", "unset");
+
+    expect(result).toEqual({ ok: false, reason: "already_sent" });
+    expect(appointmentUpdateMock).not.toHaveBeenCalled();
+  });
 });

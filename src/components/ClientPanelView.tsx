@@ -109,7 +109,7 @@ export async function ClientPanelView({
   base: string;
   noShowAction?: (appointmentId: string, status: "COMPLETED" | "NO_SHOW") => Promise<unknown>;
   // Mesmo motivo de noShowAction — botão "Retorno" (ver RetornoButton.tsx).
-  returnPeriodAction?: (appointmentId: string, selection: number | "none") => Promise<SetAppointmentReturnPeriodResult>;
+  returnPeriodAction?: (appointmentId: string, selection: number | "none" | "unset") => Promise<SetAppointmentReturnPeriodResult>;
   // Mesmo motivo de noShowAction acima (comentário grande logo abaixo) —
   // marcar/desmarcar um card da Reativação como enviado (ver
   // ReactivationRail) também precisa rodar sob uma sessão diferente em
@@ -236,8 +236,22 @@ export async function ClientPanelView({
         </div>
 
         <div className="grid gap-6 lg:grid-cols-2">
+          {/* min-w-0 nas duas colunas (2026-10-29, 4ª rodada — bug real
+              achado na validação ao vivo desta rodada): um item de grid
+              sem `min-width` explícito usa `min-width: auto` por padrão,
+              que pra uma faixa (`grid-template-columns`) com trilha
+              "auto" (como aqui — não há `grid-cols-1` explícito no
+              celular, só o `lg:grid-cols-2`) deixa o item crescer até o
+              tamanho MAX-CONTENT do conteúdo em vez de ficar preso à
+              largura da tela — passou despercebido até agora porque
+              nenhum conteúdo tinha um max-content tão largo quanto o
+              novo card de Agendamentos (nome+@+telefone+botão numa
+              largura mínima de conteúdo que passa de 700px se não for
+              contido). Mesma categoria de bug do "min-w-0" já usado em
+              vários lugares deste arquivo pra filhos de flex — aqui é a
+              versão pro container `grid`. */}
           {/* Coluna esquerda: status de canais, semana e números */}
-          <div className="space-y-6">
+          <div className="min-w-0 space-y-6">
             <div className="space-y-3">
               {/* Linha do nome da clínica + pills — solta, sem card ao redor,
                   pra começar exatamente na mesma altura que o título
@@ -315,7 +329,7 @@ export async function ClientPanelView({
           </div>
 
           {/* Coluna direita: agendamentos */}
-          <div className="space-y-3">
+          <div className="min-w-0 space-y-3">
             <div className="flex items-center gap-2">
               <span className={`shrink-0 rounded-full bg-vexo-accent ${MOBILE_SECTION_DOT_SIZE}`} />
               <h2 className={`${MOBILE_SECTION_TITLE_TEXT} font-semibold text-vexo-fg`}>Agendamentos</h2>
@@ -327,18 +341,36 @@ export async function ClientPanelView({
                 return (
                 <div
                   key={a.id}
-                  // SÓ CELULAR (abaixo de sm/640px): padding 8px (era
-                  // 14px), altura mínima ~56px (era ~100px) — pedido
-                  // explícito (2026-10-29, 3ª rodada) pra ficar do
-                  // tamanho de um card de métrica (ver MOBILE_CARD_MIN_HEIGHT,
-                  // MobileCardScale.ts, com a altura REAL medida via DOM
-                  // contra PanelMetricCard). Deixou de empilhar em
-                  // flex-col: volta a ser uma linha só (conteúdo + botão
-                  // lado a lado), igual desktop já era — a reorganização
-                  // em 2 linhas pedida fica DENTRO do conteúdo (nome+@ na
+                  // SÓ CELULAR (abaixo de sm/640px): padding vertical
+                  // 12px (era 8px na rodada anterior — ver AJUSTE abaixo),
+                  // altura mínima ~56px. Deixou de empilhar em flex-col:
+                  // volta a ser uma linha só (conteúdo + botão lado a
+                  // lado), igual desktop já era — a reorganização em 2
+                  // linhas pedida fica DENTRO do conteúdo (nome+@ na
                   // linha 1, data/status/telefone na linha 2), não mais
                   // entre conteúdo e botão.
-                  className={`flex items-center justify-between ${MOBILE_APPOINTMENT_ACTION_GAP} rounded-lg border border-vexo-border bg-vexo-surface ${MOBILE_APPOINTMENT_ROW_PADDING} ${MOBILE_CARD_MIN_HEIGHT}`}
+                  //
+                  // AJUSTE (2026-10-29, 4ª rodada, pedido explícito): a
+                  // altura comum (~77px) ficou um pouco menor que a dos
+                  // cards de métrica (~89,5px) — aumentado o padding
+                  // vertical (8->12px, ver MOBILE_APPOINTMENT_ROW_PADDING)
+                  // e o espaço entre as 2 linhas (2->6px, ver
+                  // MOBILE_DATE_ROW_MARGIN_TOP) pra chegar em ~85-90px,
+                  // sem mexer na largura dos botões nem em mais nada.
+                  //
+                  // `relative`: contexto de posicionamento do popover do
+                  // botão "Retorno" — ver RetornoButton.tsx (`sm:relative`
+                  // no wrapper do botão, não mais `relative` sem prefixo)
+                  // — SÓ CELULAR o popover passa a ocupar a largura do
+                  // CARD (o ancestral `relative` MAIS PRÓXIMO), não mais
+                  // a largura pequena do botão. Em desktop isso não muda
+                  // nada: o wrapper do botão (mais próximo que o card, já
+                  // que fica DENTRO dele) volta a ser `sm:relative`, então
+                  // o popover ancora nele primeiro, igual sempre foi —
+                  // `relative` aqui no card fica inofensivo (sem
+                  // top/left/etc., só estabelece o contexto, sem mudar a
+                  // posição do próprio card no layout).
+                  className={`relative flex w-full items-center justify-between ${MOBILE_APPOINTMENT_ACTION_GAP} rounded-lg border border-vexo-border bg-vexo-surface ${MOBILE_APPOINTMENT_ROW_PADDING} ${MOBILE_CARD_MIN_HEIGHT}`}
                 >
                   <div className={`flex min-w-0 flex-1 items-center ${MOBILE_ROW_GAP}`}>
                     <LeadAvatar profilePictureUrl={a.lead?.profilePictureUrl} name={primary} size="md" />
@@ -407,24 +439,35 @@ export async function ClientPanelView({
                       </div>
                     </div>
                   </div>
-                  <div className="flex shrink-0 items-center">
+                  <div className="flex shrink-0 flex-col items-end gap-[4px]">
                     {/* Botão "Retorno" (item 2 do pedido) — agendamento já
                         passado (status derivado COMPLETED — ver
                         appointmentDisplayStatus, metrics.ts, mesmo cálculo
-                        do badge de status da linha), nunca em "Não
-                        compareceu" (esse já não vira COMPLETED, continua
-                        NO_SHOW), com lead vinculado (sem Lead, não tem
-                        quem reativar). SEMPRE visível nesse caso, mesmo
-                        já marcado — vira só "travado" depois de enviado
-                        (ver lockedReturnPeriodAppointmentIds). AJUSTE
-                        (2026-10-29, 3ª rodada): volta a ficar do lado do
-                        conteúdo em QUALQUER tamanho de tela — a "linha
-                        própria embaixo" da rodada anterior foi revertida
-                        (pedido explícito: "nunca em linha própria
-                        embaixo"). Nunca os dois botões juntos nessa
-                        linha: COMPLETED (Retorno) nunca está em
-                        ACTIONABLE_STATUSES (Não compareceu), então o
-                        wrapper só precisa acomodar UM de cada vez. */}
+                        do badge de status da linha), com lead vinculado
+                        (sem Lead, não tem quem reativar). SEMPRE visível
+                        nesse caso, mesmo já marcado — vira só "travado"
+                        depois de enviado (ver lockedReturnPeriodAppointmentIds).
+                        AJUSTE (2026-10-29, 3ª rodada): volta a ficar do
+                        lado do conteúdo em QUALQUER tamanho de tela — a
+                        "linha própria embaixo" da rodada anterior foi
+                        revertida (pedido explícito: "nunca em linha
+                        própria embaixo").
+                        CORREÇÃO (2026-10-29, 4ª rodada — achado na
+                        validação ao vivo desta rodada): os dois botões
+                        PODEM aparecer juntos sim — displayStatus
+                        "COMPLETED" é DERIVADO (status cru SCHEDULED/
+                        CONFIRMED + data no passado), mas ACTIONABLE_STATUSES
+                        testa o status CRU (`a.status`), que continua
+                        "SCHEDULED" até alguém marcar explicitamente —
+                        um agendamento vencido e ainda não marcado mostra
+                        Retorno E Não compareceu ao mesmo tempo (comentário
+                        anterior, que dizia o contrário, estava errado).
+                        flex-col aqui (empilha em vez de lado a lado)
+                        pra esse caso não espremer o conteúdo contra a
+                        parede — sem aumentar a largura de nenhum botão,
+                        só reorganiza em até 2 linhas quando os dois
+                        aparecem; com só um botão, fica idêntico a antes
+                        (flex-col de 1 item só não muda nada visualmente). */}
                     {appointmentDisplayStatus(a, now) === "COMPLETED" && a.leadId && (
                       <RetornoButton
                         appointmentId={a.id}

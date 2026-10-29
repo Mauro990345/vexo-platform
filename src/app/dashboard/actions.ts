@@ -49,12 +49,12 @@ export async function setAppointmentAttendanceClientAction(
 // pode acontecer agora (trava: depois de enviado, não muda mais).
 export async function setAppointmentReturnPeriodClientAction(
   appointmentId: string,
-  selection: number | "none"
+  selection: number | "none" | "unset"
 ): Promise<SetAppointmentReturnPeriodResult> {
   const session = await requireClientSession();
   const clinicId = session.user.clinicId as string;
 
-  if (selection !== "none" && !isValidReturnPeriodDays(selection)) {
+  if (selection !== "none" && selection !== "unset" && !isValidReturnPeriodDays(selection)) {
     throw new Error("Prazo de retorno inválido.");
   }
 
