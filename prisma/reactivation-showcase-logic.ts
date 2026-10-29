@@ -102,6 +102,28 @@ export function computeShowcaseScheduledAt(now: Date, periodDays: number): Date 
   return new Date(now.getTime() - periodDays * 24 * 60 * 60 * 1000);
 }
 
+// Quando não existem (ou não existem o bastante) pacientes atendidos SEM
+// telefone pro canal Instagram (pedido explícito, rodada seguinte: "para
+// ter 2 cards de Instagram, remova temporariamente o telefone de 2
+// pacientes atendidos adicionais"), escolhe `count` pacientes A MAIS
+// (distintos dos já escolhidos pra qualquer canal) entre os que TÊM
+// telefone, pros mais recentes primeiro — candidatos a ter o telefone
+// removido TEMPORARIAMENTE (backup + --restore devolvem, ver script
+// principal). Só ESCOLHE — nunca mexe no telefone de verdade aqui (isso é
+// responsabilidade de quem chama, depois de gravar o backup).
+export function selectForcedInstagramCandidates(
+  wholePool: ShowcaseCandidate[],
+  alreadyChosenAppointmentIds: readonly string[],
+  count: number
+): ShowcaseCandidate[] {
+  if (count <= 0) return [];
+  const chosen = new Set(alreadyChosenAppointmentIds);
+  const pool = wholePool
+    .filter((c) => c.hasPhone && !chosen.has(c.appointmentId))
+    .sort((a, b) => b.scheduledAt.getTime() - a.scheduledAt.getTime() || a.appointmentId.localeCompare(b.appointmentId));
+  return pool.slice(0, count);
+}
+
 // Mascara um telefone pro resumo final (pedido explícito "diga quais
 // cards enviam pra qual número (mascarado)") — mantém DDD + primeiro
 // dígito e os 2 últimos, esconde o meio. Funciona com ou sem "+55"/"55"

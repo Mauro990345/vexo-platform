@@ -761,6 +761,21 @@ model Appointment {
 
   scheduledAt   DateTime
   googleEventId String?
+  // true = o worker de sync (syncClinicCalendar, google-calendar-sync.ts)
+  // continua RECONHECENDO este agendamento pelo googleEventId (evento
+  // cancelado no Google ainda cancela aqui, normalmente) mas PARA de
+  // sobrescrever scheduledAt de volta pro horário do evento quando
+  // diferem — usado só por prisma/seed-reactivation-showcase.ts, pros 5
+  // agendamentos de demonstração da Clínica Demo cujo scheduledAt o
+  // script precisa poder ajustar sem o sync desfazer em até 5 minutos.
+  // Deliberadamente NÃO limpamos googleEventId pra conseguir isso (ver
+  // comentário grande em google-calendar-sync.ts) — isso faria o próximo
+  // sync não reconhecer mais o evento real e CRIAR um agendamento
+  // duplicado (órfão, sem Lead) na próxima vez que esse evento aparecer
+  // numa resposta incremental do Google (edição real do evento, ou um
+  // syncToken expirado forçando um full resync) — risco real, não só
+  // teórico, descartado explicitamente antes de implementar este campo.
+  skipGoogleCalendarSync Boolean @default(false)
 
   // Só preenchidos pra agendamentos importados do Google Calendar sem Lead
   // (sync de leitura) — manualTitle vem do "summary" do evento, usado como
@@ -963,6 +978,33 @@ model ReactivationCardSlot {
   createdAt DateTime @default(now())
 
   @@unique([appointmentId, thresholdDays])
+}
+
+// Backup/estado de prisma/seed-reactivation-showcase.ts — nunca lido/
+// escrito por nenhuma outra parte do app. Existe só pra sobreviver a um
+// redeploy do Railway: o filesystem do container é efêmero (um JSON local
+// seria perdido), então o estado (QUAIS agendamentos de demonstração
+// estão sendo usados + os valores ORIGINAIS deles, pra --restore
+// devolver) mora no banco, igual tudo mais. Uma linha por agendamento
+// tocado pelo script — existir é o próprio sinal de "este agendamento faz
+// parte do showcase agora"; apagada no --restore.
+model ReactivationShowcaseBackup {
+  id            String @id @default(cuid())
+  clinicId      String
+  appointmentId String @unique
+  leadId        String
+
+  originalScheduledAt            DateTime
+  originalReturnPeriodDays       Int?
+  originalReturnPeriodNone       Boolean
+  originalSkipGoogleCalendarSync Boolean
+  // Preenchido só nos (até 2) pacientes cujo telefone foi temporariamente
+  // removido pra forçar o canal Instagram (ver reactivationChannelForLead,
+  // reactivation.ts, e assignShowcasePeriods, reactivation-showcase-logic.ts)
+  // — null significa "o telefone deste paciente não foi mexido".
+  originalLeadPhone String?
+
+  createdAt DateTime @default(now())
 }
 
 // Textos dos dois passos do card "Faltou" (D3 e D10 após o não-

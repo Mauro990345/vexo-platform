@@ -4,6 +4,7 @@ import {
   assignShowcasePeriods,
   computeShowcaseScheduledAt,
   maskPhone,
+  selectForcedInstagramCandidates,
   type ShowcaseCandidate,
 } from "./reactivation-showcase-logic";
 
@@ -105,5 +106,36 @@ describe("maskPhone", () => {
 
   it("telefone curto demais: mascara tudo, sem lançar erro", () => {
     expect(maskPhone("123")).toBe("***");
+  });
+});
+
+describe("selectForcedInstagramCandidates", () => {
+  it("escolhe os N mais recentes COM telefone, excluindo os já escolhidos", () => {
+    const pool = [
+      candidate("wa-already-1", "lead-1", 5, true),
+      candidate("wa-already-2", "lead-2", 10, true),
+      candidate("wa-already-3", "lead-3", 15, true),
+      candidate("wa-extra-new", "lead-4", 3, true),
+      candidate("wa-extra-old", "lead-5", 25, true),
+    ];
+    const result = selectForcedInstagramCandidates(pool, ["wa-already-1", "wa-already-2", "wa-already-3"], 2);
+    expect(result.map((c) => c.appointmentId)).toEqual(["wa-extra-new", "wa-extra-old"]);
+  });
+
+  it("nunca escolhe quem já tem telefone removido (hasPhone false já excluído do pool)", () => {
+    const pool = [candidate("ig-1", "lead-1", 5, false), candidate("wa-1", "lead-2", 5, true)];
+    const result = selectForcedInstagramCandidates(pool, [], 5);
+    expect(result.map((c) => c.appointmentId)).toEqual(["wa-1"]);
+  });
+
+  it("count=0: não escolhe ninguém", () => {
+    const pool = [candidate("wa-1", "lead-1", 5, true)];
+    expect(selectForcedInstagramCandidates(pool, [], 0)).toEqual([]);
+  });
+
+  it("pool insuficiente: devolve o que tiver, sem lançar erro", () => {
+    const pool = [candidate("wa-1", "lead-1", 5, true)];
+    const result = selectForcedInstagramCandidates(pool, [], 3);
+    expect(result).toHaveLength(1);
   });
 });
