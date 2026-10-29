@@ -79,16 +79,17 @@ export function AppointmentStatusBadge({ status, compact }: { status: string; co
   if (compact) {
     const tint = statusTint(status);
     return (
-      // SÓ CELULAR (abaixo de sm/640px — pedido explícito, leitura pra
-      // público 45+, lista de Agendamentos do Painel, ver
-      // MobileCardScale.ts): padding 8px/3px -> 10px/4px, fonte 11px ->
-      // 14px (mínimo de "horário" do pedido — fica alinhado com a mesma
-      // linha data/status/telefone). `sm:` com os valores de sempre — essa
-      // é a versão `compact`, usada só no Painel (a não-compact, na tela
-      // de conversa do CRM interno, não muda em nada). Não é um botão
-      // (só texto informativo), por isso sem piso de toque de 44px.
+      // SÓ CELULAR (abaixo de sm/640px — pedido explícito, fator 1,45
+      // sobre os valores de desktop, lista de Agendamentos do Painel, ver
+      // MobileCardScale.ts): padding 6px/2px -> 9px/3px, fonte 10px ->
+      // 15px (mesmo texto de "motivo/horário/status" do pedido — fica
+      // alinhado com a mesma linha data/status/telefone). `sm:` com os
+      // valores de sempre — essa é a versão `compact`, usada só no Painel
+      // (a não-compact, na tela de conversa do CRM interno, não muda em
+      // nada). Não é um botão (só texto informativo), por isso sem piso
+      // de toque de 48px.
       <span
-        className={`inline-flex items-center gap-[3px] sm:gap-0.5 rounded-sm px-[10px] py-[4px] sm:px-1.5 sm:py-0.5 ${MOBILE_SECONDARY_TEXT} font-medium leading-none ${tint.bg} ${tint.text} ${tint.border ?? ""}`}
+        className={`inline-flex items-center gap-[3px] sm:gap-0.5 rounded-sm px-[9px] py-[3px] sm:px-1.5 sm:py-0.5 ${MOBILE_SECONDARY_TEXT} font-medium leading-none ${tint.bg} ${tint.text} ${tint.border ?? ""}`}
       >
         {status === "COMPLETED" && <span aria-hidden="true">✓</span>}
         {label}

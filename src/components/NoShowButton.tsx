@@ -37,16 +37,16 @@ export function NoShowButton({
       type="button"
       onClick={handleClick}
       disabled={isPending}
-      // SÓ CELULAR (abaixo de sm/640px — pedido explícito, leitura pra
-      // público 45+, ver MobileCardScale.ts): é um dos botões de ação
-      // citados no pedido ("toggle 'Não compareceu'") — por isso leva o
-      // piso de toque de 44px de altura E largura (min-h/min-w, já que o
-      // texto varia de tamanho entre os dois estados: "Não compareceu" /
-      // "Faltou ✓"), com inline-flex/items-center/justify-center pra
-      // centralizar o texto dentro da caixa maior (visualmente idêntico a
-      // antes em telas ≥640px, onde o min-h/min-w volta a 0). Padding
-      // 8px/3px -> 10px/4px, fonte 10px -> 14px.
-      className={`inline-flex items-center justify-center ${MOBILE_TOGGLE_BUTTON_MIN} shrink-0 rounded-sm border px-[10px] py-[4px] sm:px-1.5 sm:py-0.5 ${MOBILE_SECONDARY_TEXT} font-medium transition disabled:opacity-50 ${
+      // SÓ CELULAR (abaixo de sm/640px — pedido explícito, fator 1,45
+      // sobre os valores de desktop, ver MobileCardScale.ts): é um dos
+      // botões de ação citados no pedido ("Não compareceu") — por isso
+      // leva o piso de toque de 48px de altura E largura (min-h/min-w, já
+      // que o texto varia de tamanho entre os dois estados: "Não
+      // compareceu" / "Faltou ✓"), com inline-flex/items-center/
+      // justify-center pra centralizar o texto dentro da caixa maior
+      // (visualmente idêntico a antes em telas ≥640px, onde o min-h/min-w
+      // volta a 0). Padding 6px/2px -> 9px/3px, fonte 10px -> 15px.
+      className={`inline-flex items-center justify-center ${MOBILE_TOGGLE_BUTTON_MIN} shrink-0 rounded-sm border px-[9px] py-[3px] sm:px-1.5 sm:py-0.5 ${MOBILE_SECONDARY_TEXT} font-medium transition disabled:opacity-50 ${
         isNoShow
           ? "border-transparent bg-vexo-panelStatusNegativeBg/80 text-vexo-fg"
           : "border-vexo-border text-vexo-muted hover:border-vexo-error/50 hover:text-vexo-error"

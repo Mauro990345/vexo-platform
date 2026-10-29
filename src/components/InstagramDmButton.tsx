@@ -99,7 +99,7 @@ export function InstagramDmButton({
             style={{ background: INSTAGRAM_ACTION_GRADIENT }}
           />
           <button type="button" onClick={handleClick} disabled={!dmLink} className={INSTAGRAM_ACTION_BUTTON_CLASS}>
-            {/* SÓ CELULAR (ver MobileCardScale.ts): 13px -> 17px. */}
+            {/* SÓ CELULAR (ver MobileCardScale.ts): 12px -> 17px. */}
             <InstagramMonoIcon className={MOBILE_ICON_SIZE} />
             {copied ? "Copiado ✓" : "Instagram"}
           </button>

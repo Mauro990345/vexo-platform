@@ -4,6 +4,7 @@ import { useEffect, useState, useTransition } from "react";
 import { CalendarArrowUp } from "lucide-react";
 import { setAppointmentReturnPeriodClientAction } from "@/app/dashboard/actions";
 import type { SetAppointmentReturnPeriodResult } from "@/lib/appointments";
+import { MOBILE_SECONDARY_TEXT, MOBILE_ICON_SIZE, MOBILE_TOGGLE_BUTTON_MIN, MOBILE_INLINE_GAP } from "@/components/MobileCardScale";
 
 // Botão "Retorno" do card de agendamento atendido (item 2 do pedido) —
 // SEMPRE visível com ícone + texto (nunca só ícone, nunca dependente de
@@ -85,18 +86,24 @@ export function RetornoButton({
 
   return (
     <div className="relative shrink-0">
+      {/* SÓ CELULAR (abaixo de sm/640px — pedido explícito, "Retorno" é um
+          dos botões de ação citados, ver MobileCardScale.ts): piso de
+          toque de 48px de altura E largura (min-h/min-w, texto varia
+          entre "Retorno"/"Retorno · N dias"), ícone 12px -> 17px, texto
+          10px -> 15px, padding 8px/4px -> 12px/6px. `sm:` com os valores
+          de sempre. */}
       <button
         type="button"
         title={locked ? "Já enviado — prazo não pode mais ser alterado" : undefined}
         onClick={() => !locked && setOpen((o) => !o)}
         disabled={locked}
-        className={`inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-caption font-medium transition disabled:cursor-not-allowed disabled:opacity-60 ${
+        className={`inline-flex items-center justify-center ${MOBILE_TOGGLE_BUTTON_MIN} ${MOBILE_INLINE_GAP} rounded-lg border px-[12px] py-[6px] sm:px-2 sm:py-1 ${MOBILE_SECONDARY_TEXT} font-medium transition disabled:cursor-not-allowed disabled:opacity-60 ${
           marked
             ? "border-vexo-accent bg-vexo-accent/15 text-vexo-accent"
             : "border-vexo-border text-vexo-muted hover:border-vexo-accent/50"
         }`}
       >
-        <CalendarArrowUp className="h-3 w-3 shrink-0" strokeWidth={2.5} />
+        <CalendarArrowUp className={`${MOBILE_ICON_SIZE} shrink-0`} strokeWidth={2.5} />
         {label}
       </button>
 
@@ -107,16 +114,19 @@ export function RetornoButton({
               compacto ancorado no botão (pedido explícito: "painel escuro
               compacto"). */}
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 top-full z-50 mt-1 w-[200px] rounded-xl border border-vexo-border bg-vexo-surface2 p-2.5 shadow-card">
-            <p className="mb-2 text-caption font-medium text-vexo-muted">Prazo de retorno</p>
+          {/* Painel do seletor — texto/padding também escalados no celular
+              (mesma MOBILE_SECONDARY_TEXT do botão acima), largura um
+              pouco maior pra acompanhar sem apertar os chips de 3 colunas. */}
+          <div className="absolute right-0 top-full z-50 mt-1 w-[220px] sm:w-[200px] rounded-xl border border-vexo-border bg-vexo-surface2 p-[12px] sm:p-2.5 shadow-card">
+            <p className={`mb-2 ${MOBILE_SECONDARY_TEXT} font-medium text-vexo-muted`}>Prazo de retorno</p>
             {availablePeriods.length > 0 && (
-              <div className="grid grid-cols-3 gap-1.5">
+              <div className="grid grid-cols-3 gap-[7px] sm:gap-1.5">
                 {availablePeriods.map((days) => (
                   <button
                     key={days}
                     type="button"
                     onClick={() => handlePick(days)}
-                    className={`rounded-md border px-1.5 py-1 text-caption font-medium transition ${
+                    className={`rounded-md border px-[9px] py-[6px] sm:px-1.5 sm:py-1 ${MOBILE_SECONDARY_TEXT} font-medium transition ${
                       !localNone && localDays === days
                         ? "border-vexo-accent bg-vexo-accent/15 text-vexo-accent"
                         : "border-vexo-border text-vexo-muted hover:border-vexo-accent/50"
@@ -130,7 +140,7 @@ export function RetornoButton({
             <button
               type="button"
               onClick={() => handlePick("none")}
-              className={`mt-1.5 w-full rounded-md border px-1.5 py-1 text-caption font-medium transition ${
+              className={`mt-[9px] sm:mt-1.5 w-full rounded-md border px-[9px] py-[6px] sm:px-1.5 sm:py-1 ${MOBILE_SECONDARY_TEXT} font-medium transition ${
                 localNone
                   ? "border-vexo-error/50 bg-vexo-error/10 text-vexo-error"
                   : "border-vexo-border text-vexo-muted hover:border-vexo-error/40"

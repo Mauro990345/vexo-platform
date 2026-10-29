@@ -15,13 +15,13 @@ import {
 // muda. A linha da lista não cresce com isso (botão sempre menor que a
 // altura da linha).
 //
-// SÓ CELULAR (abaixo de sm/640px, pedido explícito — leitura pra público
-// 45+, fator único 1,28 + piso de toque de 44px, ver MobileCardScale.ts):
-// 25px -> 44px de altura (piso de toque, maior que o fator puro), padding
-// horizontal 7px -> 9px, fonte 12px -> 15px. Os valores com `sm:` são os
-// de SEMPRE (idênticos a antes desta mudança) — em tablet/notebook/desktop
-// nada muda. Mobile-first: a classe sem prefixo vale até sm, a com `sm:`
-// assume a partir de 640px.
+// SÓ CELULAR (abaixo de sm/640px, pedido explícito — fator único 1,45
+// sobre os valores de desktop + piso de toque de 48px, ver
+// MobileCardScale.ts): 23px -> 48px de altura (piso de toque, maior que o
+// fator puro), padding horizontal 6px -> 9px, fonte 11px -> 16px. Os
+// valores com `sm:` são os de SEMPRE (idênticos a antes de qualquer ajuste
+// de celular) — em tablet/notebook/desktop nada muda. Mobile-first: a
+// classe sem prefixo vale até sm, a com `sm:` assume a partir de 640px.
 export const REACTIVATION_ACTION_BUTTON_BASE_CLASS =
   `inline-flex ${MOBILE_ACTION_BUTTON_HEIGHT} shrink-0 items-center justify-center ${MOBILE_INLINE_GAP} rounded-lg ${MOBILE_ACTION_BUTTON_PADDING_X} ${MOBILE_BUTTON_TEXT} font-semibold leading-none transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-vexo-accent focus-visible:ring-offset-1 focus-visible:ring-offset-vexo-surface disabled:cursor-not-allowed disabled:opacity-40`;
 
@@ -63,9 +63,9 @@ export const INSTAGRAM_ACTION_BUTTON_CLASS = `${REACTIVATION_ACTION_BUTTON_BASE_
 // usado no "✓" do badge "Compareceu", ver AppointmentStatusBadge.tsx) —
 // hover em vexo-muted, só pra indicar que é clicável, sem outra cor nova.
 // Mesmo ajuste só-celular de REACTIVATION_ACTION_BUTTON_BASE_CLASS acima
-// (25px -> 44px, mesmo quadrado w=h, fonte 12px -> 15px — "retorno" na
-// lista de mínimos de toque do pedido) — continua sem usar a base class de
-// propósito (motivo de sempre: largura fixa igual à altura, não padding
-// horizontal com texto do canal ao lado).
+// (23px -> 48px, mesmo quadrado w=h, fonte 11px -> 16px — piso de toque do
+// pedido) — continua sem usar a base class de propósito (motivo de
+// sempre: largura fixa igual à altura, não padding horizontal com texto
+// do canal ao lado).
 export const REACTIVATION_UNDO_BUTTON_CLASS =
   `inline-flex ${MOBILE_ACTION_BUTTON_SQUARE} shrink-0 items-center justify-center rounded-lg ${MOBILE_BUTTON_TEXT} font-semibold leading-none text-vexo-success transition-colors duration-150 hover:text-vexo-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-vexo-accent focus-visible:ring-offset-1 focus-visible:ring-offset-vexo-surface`;
