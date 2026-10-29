@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { InstagramMonoIcon } from "@/components/BrandIcons";
 import { INSTAGRAM_ACTION_BUTTON_CLASS, INSTAGRAM_ACTION_GRADIENT } from "@/components/ReactivationActionButtonStyle";
+import { MOBILE_ICON_SIZE } from "@/components/MobileCardScale";
 
 const LABEL_RESET_DELAY_MS = 2000;
 const TOAST_DURATION_MS = 2500;
@@ -98,9 +99,8 @@ export function InstagramDmButton({
             style={{ background: INSTAGRAM_ACTION_GRADIENT }}
           />
           <button type="button" onClick={handleClick} disabled={!dmLink} className={INSTAGRAM_ACTION_BUTTON_CLASS}>
-            {/* SÓ CELULAR (mesmo ajuste de ReactivationActionButtonStyle.ts,
-                que define INSTAGRAM_ACTION_BUTTON_CLASS): 12px -> 13px. */}
-            <InstagramMonoIcon className="h-[13px] w-[13px] sm:h-3 sm:w-3" />
+            {/* SÓ CELULAR (ver MobileCardScale.ts): 13px -> 17px. */}
+            <InstagramMonoIcon className={MOBILE_ICON_SIZE} />
             {copied ? "Copiado ✓" : "Instagram"}
           </button>
         </div>

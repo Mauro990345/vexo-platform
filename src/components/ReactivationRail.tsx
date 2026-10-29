@@ -7,6 +7,19 @@ import { InstagramDmButton } from "@/components/InstagramDmButton";
 import { PanelCardTypeBar, PanelCardTypeChip, PanelCardReasonLine } from "@/components/PanelCardBadge";
 import { WHATSAPP_ACTION_BUTTON_CLASS, REACTIVATION_UNDO_BUTTON_CLASS } from "@/components/ReactivationActionButtonStyle";
 import {
+  MOBILE_REACTIVATION_ROW_PADDING,
+  MOBILE_ROW_GAP,
+  MOBILE_LIST_GAP,
+  MOBILE_STACK_GAP,
+  MOBILE_INLINE_GAP,
+  MOBILE_CHIP_ROW_GAP,
+  MOBILE_NAME_TEXT_REACTIVATION,
+  MOBILE_HANDLE_TEXT,
+  MOBILE_HANDLE_SHRINK,
+  MOBILE_SECONDARY_TEXT,
+  MOBILE_ICON_SIZE,
+} from "@/components/MobileCardScale";
+import {
   toggleReactivationCardSentClientAction,
   sendReactivationWhatsAppMessageClientAction,
   toggleNoShowCardSentClientAction,
@@ -203,7 +216,7 @@ export function ReactivationRail({
         </div>
         <span className="text-caption text-vexo-muted">{pendingCountLabel(pendingCount)}</span>
       </div>
-      <div className={`space-y-1.5 ${needsScroll ? "max-h-72 overflow-y-auto pr-1" : ""}`}>
+      <div className={`${MOBILE_LIST_GAP} ${needsScroll ? "max-h-72 overflow-y-auto pr-1" : ""}`}>
         {sortedCards.map((card) => {
           const isSent = Boolean(card.sentAt);
           const key = card.cardKey;
@@ -218,33 +231,33 @@ export function ReactivationRail({
           return (
             <div
               key={key}
-              // SÓ CELULAR (abaixo de sm/640px, pedido explícito — card um
-              // pouco maior, ~10%, "não exagere"): padding 8px/10px ->
-              // 10px/12px (+4px de altura no total, dentro dos "4 a 6px"
-              // pedidos). `sm:` com os valores de sempre — em tablet/
-              // notebook/desktop fica idêntico a antes.
-              className={`relative flex items-center gap-2 overflow-hidden rounded-lg border border-vexo-border bg-vexo-surface p-[10px] pl-3 sm:p-2 sm:pl-2.5 transition-opacity duration-150 ${isSent ? "opacity-50" : ""}`}
+              // SÓ CELULAR (abaixo de sm/640px, pedido explícito — leitura
+              // pra público 45+, fator único 1,28, ver MobileCardScale.ts):
+              // padding 10px/12px -> 13px/15px, gap 8px -> 10px. `sm:` com
+              // os valores de sempre — em tablet/notebook/desktop fica
+              // idêntico a antes.
+              className={`relative flex items-center ${MOBILE_ROW_GAP} overflow-hidden rounded-lg border border-vexo-border bg-vexo-surface ${MOBILE_REACTIVATION_ROW_PADDING} transition-opacity duration-150 ${isSent ? "opacity-50" : ""}`}
             >
               <PanelCardTypeBar kind={card.kind} />
               <LeadAvatar profilePictureUrl={card.profilePictureUrl} name={card.name} size="md" />
-              <div className="min-w-0 flex-1 space-y-0.5">
-                <div className="flex min-w-0 items-baseline gap-1">
-                  <p className="min-w-0 shrink truncate text-[13px] sm:text-xs font-medium">{card.name}</p>
+              <div className={`min-w-0 flex-1 ${MOBILE_STACK_GAP}`}>
+                <div className={`flex min-w-0 items-baseline ${MOBILE_INLINE_GAP}`}>
+                  <p className={`min-w-0 shrink truncate ${MOBILE_NAME_TEXT_REACTIVATION} font-medium`}>{card.name}</p>
                   {card.igUsername &&
                     (card.instagramProfileLink ? (
                       <a
                         href={card.instagramProfileLink}
                         target="_blank"
                         rel="noreferrer"
-                        className="shrink-0 truncate text-[11px] sm:text-caption text-vexo-muted hover:text-vexo-accent hover:underline"
+                        className={`${MOBILE_HANDLE_SHRINK} truncate ${MOBILE_HANDLE_TEXT} text-vexo-muted hover:text-vexo-accent hover:underline`}
                       >
                         @{card.igUsername}
                       </a>
                     ) : (
-                      <span className="shrink-0 truncate text-[11px] sm:text-caption text-vexo-muted">@{card.igUsername}</span>
+                      <span className={`${MOBILE_HANDLE_SHRINK} truncate ${MOBILE_HANDLE_TEXT} text-vexo-muted`}>@{card.igUsername}</span>
                     ))}
                 </div>
-                <div className="flex items-center gap-1.5">
+                <div className={`flex items-center ${MOBILE_CHIP_ROW_GAP}`}>
                   <PanelCardTypeChip kind={card.kind} />
                   <PanelCardReasonLine reason={card.reason} />
                 </div>
@@ -261,10 +274,10 @@ export function ReactivationRail({
                   ✓
                 </button>
               ) : isDisabledByLimit ? (
-                <span className="shrink-0 text-[11px] sm:text-caption text-vexo-muted">Limite diário</span>
+                <span className={`shrink-0 ${MOBILE_SECONDARY_TEXT} text-vexo-muted`}>Limite diário</span>
               ) : card.channel === "WHATSAPP" ? (
                 !card.whatsappLink ? (
-                  <span className="shrink-0 text-[11px] sm:text-caption text-vexo-muted">Sem WhatsApp</span>
+                  <span className={`shrink-0 ${MOBILE_SECONDARY_TEXT} text-vexo-muted`}>Sem WhatsApp</span>
                 ) : (
                   <div className="relative shrink-0">
                     {useManualFallback ? (
@@ -278,7 +291,7 @@ export function ReactivationRail({
                         onClick={() => handleToggleSent(card)}
                         className={WHATSAPP_ACTION_BUTTON_CLASS}
                       >
-                        <WhatsAppMonoIcon className="h-[13px] w-[13px] sm:h-3 sm:w-3" />
+                        <WhatsAppMonoIcon className={MOBILE_ICON_SIZE} />
                         WhatsApp
                       </a>
                     ) : (
@@ -288,7 +301,7 @@ export function ReactivationRail({
                         onClick={() => handleSendWhatsapp(card)}
                         className={WHATSAPP_ACTION_BUTTON_CLASS}
                       >
-                        <WhatsAppMonoIcon className="h-[13px] w-[13px] sm:h-3 sm:w-3" />
+                        <WhatsAppMonoIcon className={MOBILE_ICON_SIZE} />
                         {isSending ? "Enviando…" : "WhatsApp"}
                       </button>
                     )}

@@ -1,5 +1,6 @@
 import { UserCheck, CalendarX, Flame } from "lucide-react";
 import type { PanelCardKind } from "@/lib/panel-cards";
+import { MOBILE_BAR_WIDTH, MOBILE_CHIP_SIZE, MOBILE_SECONDARY_TEXT, MOBILE_ICON_SIZE, MOBILE_INLINE_GAP } from "@/components/MobileCardScale";
 
 // Identificação visual por TIPO de card da faixa de Reativação do Painel
 // (item 1 do pedido) — só o lado ESQUERDO da linha (barra + chip + motivo);
@@ -25,40 +26,47 @@ const KIND_STYLE: Record<PanelCardKind, { bar: string; chipBg: string; chipText:
 // pelo overflow-hidden do container pra não vazar do formato arredondado,
 // mas o próprio elemento da barra nunca tem nenhum rounded-* aplicado.
 //
-// SEM variante de celular (ajuste "só celular" pedido depois, cards
-// maiores): 3px já não tem um próximo valor inteiro dentro de ~10-12%
-// (3 × 1,1 ≈ 3,3, arredonda pra 3 de volta) — subir pra 4px seria +33%,
-// passando muito do "discreto, não exagere" pedido. Fica igual nos dois
-// tamanhos de tela de propósito.
+// SÓ CELULAR (abaixo de sm/640px, pedido "leitura pra público 45+", fator
+// 1,28 — ver MobileCardScale.ts): 3px -> 4px. O ajuste anterior (~10%)
+// tinha deixado sem variante de celular porque 3×1,1 arredondava de volta
+// pra 3; com o fator maior deste pedido (1,28), 3×1,28≈3,84 já sobe pra
+// 4px.
 export function PanelCardTypeBar({ kind }: { kind: PanelCardKind }) {
-  return <span aria-hidden="true" className={`absolute inset-y-0 left-0 w-[3px] ${KIND_STYLE[kind].bar}`} />;
+  return <span aria-hidden="true" className={`absolute inset-y-0 left-0 ${MOBILE_BAR_WIDTH} ${KIND_STYLE[kind].bar}`} />;
 }
 
 // Chip de largura fixa (~92px) + ícone + uma palavra (pedido explícito).
 //
-// SÓ CELULAR (abaixo de sm/640px, mesmo ajuste de ~10% do resto do card):
-// 92px -> 100px de largura (ainda cabe o ícone + a palavra numa linha só,
-// nenhum dos 3 rótulos — "Reativação"/"Faltou"/"Quente" — chega a
-// quebrar), padding 6px/2px -> 8px/3px, fonte 10px -> 11px, ícone 12px ->
-// 13px. `sm:` sempre com os valores de antes, intocados.
+// SÓ CELULAR (ver MobileCardScale.ts): 92px -> 128px de largura (ainda
+// cabe o ícone + a palavra numa linha só, nenhum dos 3 rótulos —
+// "Reativação"/"Faltou"/"Quente" — chega a quebrar), padding 6px/2px ->
+// 10px/4px, fonte 10px -> 14px (mínimo de "palavra do chip" do pedido),
+// ícone 12px -> 17px. `sm:` sempre com os valores de antes, intocados.
 export function PanelCardTypeChip({ kind }: { kind: PanelCardKind }) {
   const { chipBg, chipText, icon: Icon, label } = KIND_STYLE[kind];
   return (
     <span
-      className={`inline-flex w-[100px] sm:w-[92px] shrink-0 items-center justify-center gap-1 rounded-md ${chipBg} px-2 py-[3px] sm:px-1.5 sm:py-0.5 text-[11px] sm:text-caption font-medium ${chipText}`}
+      className={`inline-flex ${MOBILE_CHIP_SIZE} shrink-0 items-center justify-center ${MOBILE_INLINE_GAP} rounded-md ${chipBg} ${MOBILE_SECONDARY_TEXT} font-medium ${chipText}`}
     >
-      <Icon className="h-[13px] w-[13px] sm:h-3 sm:w-3 shrink-0" strokeWidth={2.5} />
+      <Icon className={`${MOBILE_ICON_SIZE} shrink-0`} strokeWidth={2.5} />
       {label}
     </span>
   );
 }
 
-// Linha de motivo (1 linha, cinza, reticências se passar) — texto já
-// pronto (ex.: "120 dias após o procedimento", "Faltou há 3 dias ·
-// mensagem 1 de 2", "Perguntou preço/endereço · há 6 dias", ver
-// panel-cards.ts/no-show-cards.ts/hot-lead-cards.ts).
+// Linha de motivo (cinza, reticências se passar) — texto já pronto (ex.:
+// "120 dias após o procedimento", "Faltou há 3 dias · mensagem 1 de 2",
+// "Perguntou preço/endereço · há 6 dias", ver panel-cards.ts/
+// no-show-cards.ts/hot-lead-cards.ts).
 //
-// SÓ CELULAR: 10px -> 11px (mesmo nível de PanelCardTypeChip acima).
+// SÓ CELULAR: 10px -> 14px (mínimo de "motivo" do pedido, ver
+// MobileCardScale.ts — mesmo nível de PanelCardTypeChip acima). Fonte
+// maior = motivo pode não caber mais numa linha só — pedido explícito:
+// quebra em até 2 linhas com reticências em vez de reduzir fonte
+// (line-clamp-2). Em telas ≥640px volta a ser 1 linha só com reticências,
+// igual sempre foi (line-clamp-none desfaz o "display: -webkit-box" do
+// line-clamp-2 antes do truncate de sempre entrar, senão as duas regras
+// de overflow se somariam de um jeito diferente do truncate original).
 export function PanelCardReasonLine({ reason }: { reason: string }) {
-  return <p className="truncate text-[11px] sm:text-caption text-vexo-muted">{reason}</p>;
+  return <p className={`line-clamp-2 sm:line-clamp-none sm:truncate ${MOBILE_SECONDARY_TEXT} text-vexo-muted`}>{reason}</p>;
 }
