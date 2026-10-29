@@ -6,6 +6,7 @@ import { ApproachChart } from "@/components/ApproachChart";
 import { ApproachMetricsToggle } from "@/components/ApproachMetricsToggle";
 import { AppointmentStatusBadge } from "@/components/AppointmentStatusBadge";
 import { NoShowButton } from "@/components/NoShowButton";
+import { RetornoButton } from "@/components/RetornoButton";
 import { ChannelStatusPill } from "@/components/ChannelStatusPill";
 import { normalizeBrazilianWhatsappNumber } from "@/lib/whatsapp";
 import { leadDisplayParts } from "@/lib/lead-display";
@@ -13,7 +14,8 @@ import { LeadAvatar } from "@/components/LeadAvatar";
 import { InstagramGlyphIcon, WhatsAppGlyphIcon } from "@/components/BrandIcons";
 import { NeedsHumanBanner, type NeedsHumanLead } from "@/components/NeedsHumanBanner";
 import { ReactivationRail } from "@/components/ReactivationRail";
-import { getReactivationCards, type SendReactivationWhatsAppResult } from "@/lib/reactivation";
+import { getReactivationCards, RETURN_PERIOD_OPTIONS, type SendReactivationWhatsAppResult } from "@/lib/reactivation";
+import type { SetAppointmentReturnPeriodResult } from "@/lib/appointments";
 import { getNoShowCards } from "@/lib/no-show-cards";
 import { getHotLeadCards } from "@/lib/hot-lead-cards";
 import { mergePanelCards } from "@/lib/panel-cards";
@@ -80,6 +82,7 @@ export async function ClientPanelView({
   week,
   base,
   noShowAction,
+  returnPeriodAction,
   reactivationSentAction,
   reactivationSendWhatsappAction,
   noShowCardSentAction,
@@ -92,6 +95,8 @@ export async function ClientPanelView({
   week?: string;
   base: string;
   noShowAction?: (appointmentId: string, status: "COMPLETED" | "NO_SHOW") => Promise<unknown>;
+  // Mesmo motivo de noShowAction — botão "Retorno" (ver RetornoButton.tsx).
+  returnPeriodAction?: (appointmentId: string, selection: number | "none") => Promise<SetAppointmentReturnPeriodResult>;
   // Mesmo motivo de noShowAction acima (comentário grande logo abaixo) —
   // marcar/desmarcar um card da Reativação como enviado (ver
   // ReactivationRail) também precisa rodar sob uma sessão diferente em
@@ -107,7 +112,7 @@ export async function ClientPanelView({
   // defaults (as *ClientAction de dashboard/actions.ts).
   noShowCardSentAction?: (appointmentId: string, step: number) => Promise<unknown>;
   noShowCardSendWhatsappAction?: (appointmentId: string, step: number) => Promise<SendReactivationWhatsAppResult>;
-  hotLeadCardSentAction?: (conversationId: string) => Promise<ToggleHotLeadCardSentResult>;
+  hotLeadCardSentAction?: (conversationId: string, step: number) => Promise<ToggleHotLeadCardSentResult>;
   standalone?: boolean;
   headerAction?: React.ReactNode;
 }) {
@@ -117,7 +122,7 @@ export async function ClientPanelView({
   const parsedRef = week ? new Date(week) : now;
   const weekStart = startOfWeek(Number.isNaN(parsedRef.getTime()) ? now : parsedRef);
 
-  const [clinic, periods, appointments, dailyApproached, needsHumanConversations, reactivationCards, noShowCards, hotLeadCards] = await Promise.all([
+  const [clinic, periods, appointments, dailyApproached, needsHumanConversations, reactivationCards, noShowCards, hotLeadCards, sentReactivationSlots] = await Promise.all([
     prisma.clinic.findUniqueOrThrow({
       where: { id: clinicId },
       select: {
@@ -125,6 +130,7 @@ export async function ClientPanelView({
         whatsappStatus: true,
         instagramAccount: { select: { id: true } },
         googleCalendarAccount: { select: { id: true } },
+        reactivationConfig: { select: { availablePeriods: true } },
       },
     }),
     // Cada período já sai emparelhado com suas próprias métricas (em vez de
@@ -170,9 +176,18 @@ export async function ClientPanelView({
     getReactivationCards(clinicId, now),
     getNoShowCards(clinicId, now),
     getHotLeadCards(clinicId, now),
+    // Agendamentos com o prazo de retorno TRAVADO (ver RetornoButton.tsx/
+    // setAppointmentReturnPeriod, appointments.ts) — qualquer card de
+    // Reativação já enviado pra aquele agendamento, em qualquer prazo.
+    prisma.reactivationCardSlot.findMany({
+      where: { sentAt: { not: null }, appointment: { clinicId } },
+      select: { appointmentId: true },
+    }),
   ]);
 
   const panelCards = mergePanelCards({ hotLeadCards, noShowCards, reactivationCards });
+  const availableReturnPeriods = clinic.reactivationConfig?.availablePeriods ?? [...RETURN_PERIOD_OPTIONS];
+  const lockedReturnPeriodAppointmentIds = new Set(sentReactivationSlots.map((s) => s.appointmentId));
 
   const needsHumanLeads: NeedsHumanLead[] = needsHumanConversations.map((conv) => {
     const { primary } = leadDisplayParts(conv.lead, null);
@@ -339,9 +354,30 @@ export async function ClientPanelView({
                       </div>
                     </div>
                   </div>
-                  {ACTIONABLE_STATUSES.includes(a.status) && (
-                    <NoShowButton appointmentId={a.id} status={a.status} action={noShowAction} />
-                  )}
+                  <div className="flex shrink-0 items-center gap-1.5">
+                    {/* Botão "Retorno" (item 2 do pedido) — agendamento já
+                        passado (status derivado COMPLETED — ver
+                        appointmentDisplayStatus, metrics.ts, mesmo cálculo
+                        do badge de status da linha), nunca em "Não
+                        compareceu" (esse já não vira COMPLETED, continua
+                        NO_SHOW), com lead vinculado (sem Lead, não tem
+                        quem reativar). SEMPRE visível nesse caso, mesmo
+                        já marcado — vira só "travado" depois de enviado
+                        (ver lockedReturnPeriodAppointmentIds). */}
+                    {appointmentDisplayStatus(a, now) === "COMPLETED" && a.leadId && (
+                      <RetornoButton
+                        appointmentId={a.id}
+                        availablePeriods={availableReturnPeriods}
+                        returnPeriodDays={a.returnPeriodDays}
+                        returnPeriodNone={a.returnPeriodNone}
+                        locked={lockedReturnPeriodAppointmentIds.has(a.id)}
+                        action={returnPeriodAction}
+                      />
+                    )}
+                    {ACTIONABLE_STATUSES.includes(a.status) && (
+                      <NoShowButton appointmentId={a.id} status={a.status} action={noShowAction} />
+                    )}
+                  </div>
                 </div>
                 );
               })}

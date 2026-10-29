@@ -576,9 +576,9 @@ model Conversation {
   appointments Appointment[]
   followUps    FollowUpLog[]
 
-  // Card "Quente" (ver HotLeadCardSlot acima e hot-lead-cards.ts) — no
-  // máximo um por conversa.
-  hotLeadCardSlot HotLeadCardSlot?
+  // Cards "Quente" (ver HotLeadCardSlot acima e hot-lead-cards.ts) — até
+  // 3 por conversa, um por passo da cadência.
+  hotLeadCardSlots HotLeadCardSlot[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -816,6 +816,23 @@ model Appointment {
   // novo num turno seguinte (mesmo padrão de whatsappConfirmationSentAt).
   instagramConfirmationSentAt DateTime?
 
+  // Prazo de retorno escolhido pela secretária no botão "Retorno" do card
+  // do agendamento (ver RETURN_PERIOD_OPTIONS/RetornoButton) — só o NÚMERO
+  // de dias, nunca texto livre nem nada clínico (pedido explícito, LGPD).
+  // null = ainda não marcou (usa os prazos padrão da clínica, ver
+  // ReactivationConfig.defaultPeriods); um valor marca um prazo único,
+  // substituindo os cards padrão pendentes (ver cancelPendingDefaultSlots,
+  // reactivation.ts). Pode trocar enquanto nenhum envio daquele card
+  // aconteceu (sentAt ainda null em ReactivationCardSlot).
+  returnPeriodDays Int?
+  // true = marcou "Sem retorno" explicitamente (nenhum card, nem os
+  // padrão da clínica) — campo SEPARADO de returnPeriodDays porque null
+  // por si só significa "não marcou nada ainda" (usa os padrões), não
+  // "marcou que não quer retorno". Mutuamente exclusivo com
+  // returnPeriodDays ter um valor (marcar um prazo zera isto, e vice-versa
+  // — ver setAppointmentReturnPeriod).
+  returnPeriodNone Boolean @default(false)
+
   // Variação de mensagem de Reativação atribuída a este agendamento, por
   // período completado — ver ReactivationCardSlot acima (substituiu um
   // campo Int único aqui, reactivationMessageSlot, que só suportava um
@@ -858,17 +875,30 @@ model ReminderConfig {
 
 // Configuração da faixa "Reativação" do Painel do cliente (ver
 // ClientPanelView.tsx / reactivation.ts) — por clínica, mesmo padrão 1:1
-// de ReminderConfig acima. thresholdDaysList: quais prazos sem retorno
-// (30/60/120/90/150 dias) disparam card — CADA um marcado funciona de
-// forma independente (o mesmo agendamento pode gerar um card por período
-// marcado, em momentos diferentes). Vazio = Reativação desligada pra essa
-// clínica (nenhum card em nenhum período). Era um Int único (thresholdDays)
-// até vários períodos simultâneos passarem a ser suportados (ver migration
-// 20261023010000_reactivation_multi_period) — mesmo padrão Int[] já usado
-// em ReminderConfig.hoursBefore acima.
+// de ReminderConfig acima.
 //
-// As 5 mensagens são TODAS opcionais, válidas pra TODOS os períodos
-// marcados (uma sequência só, não uma por período) — com todas vazias,
+// availablePeriods: quais prazos (em dias) aparecem como opção no botão
+// "Retorno" do agendamento, pra secretária marcar (ver RETURN_PERIOD_OPTIONS
+// em reactivation.ts — availablePeriods é sempre um SUBCONJUNTO dessa lista
+// fixa de 9 valores, 30 a 270). defaultPeriods: quais prazos geram card
+// AUTOMATICAMENTE quando a secretária não marca nada pro agendamento (ver
+// Appointment.returnPeriodDays) — pode ser mais de um (um card por período
+// padrão, até a secretária marcar um prazo manual, que cancela os
+// pendentes dos padrões — ver cancelPendingDefaultSlots). Substituiu
+// thresholdDaysList (período único global por clínica, antes da Reativação
+// passar a ser por agendamento via o botão "Retorno" — "fase de teste, sem
+// usuários reais", dado antigo descartado na mesma migration).
+//
+// dailyWhatsappLimit: quantos envios de WhatsApp (Reativação + Faltou
+// somados, ver countTodaysWhatsappSends) a clínica pode disparar por dia;
+// acima disso o botão mostra "Limite diário atingido" (mesmo mecanismo já
+// usado pro card Quente, ver isDisabledByLimit em ReactivationRail.tsx) e
+// o card simplesmente continua existindo pro dia seguinte, dentro da
+// janela de elegibilidade normal.
+//
+// As 5 mensagens são TODAS opcionais, usadas tanto no envio de WhatsApp
+// quanto no fallback de Instagram (texto idêntico nos dois canais, pedido
+// explícito — um conjunto só, não mais um por canal) — com todas vazias,
 // reactivation.ts usa um conjunto padrão fixo (DEFAULT_REACTIVATION_MESSAGES).
 // Nenhuma variável de nome do lead nos textos (pedido explícito).
 model ReactivationConfig {
@@ -876,55 +906,47 @@ model ReactivationConfig {
   clinicId String @unique
   clinic   Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
 
-  thresholdDaysList Int[] @default([150])
+  availablePeriods Int[] @default([30, 60, 90, 120, 150, 180, 210, 240, 270])
+  defaultPeriods   Int[] @default([30, 60])
 
-  // Mensagens de WHATSAPP — nome dos campos mantido como estava antes dos
-  // dois canais existirem (só o RÓTULO na tela virou "Mensagens WhatsApp",
-  // ver automacoes/page.tsx); o Instagram ganhou seu próprio conjunto
-  // separado abaixo.
+  dailyWhatsappLimit Int @default(15)
+
   message1 String? @db.Text
   message2 String? @db.Text
   message3 String? @db.Text
   message4 String? @db.Text
   message5 String? @db.Text
 
-  // Mensagens de INSTAGRAM — conjunto PRÓPRIO, separado do WhatsApp acima
-  // (pedido explícito: "o Instagram tem as suas próprias 5 mensagens").
-  instagramMessage1 String? @db.Text
-  instagramMessage2 String? @db.Text
-  instagramMessage3 String? @db.Text
-  instagramMessage4 String? @db.Text
-  instagramMessage5 String? @db.Text
-
-  // Só decidem a PRÓXIMA posição na rotação em sequência (ver
-  // assignReactivationCardSlotsByChannel, reactivation.ts) — nunca são
-  // lidos de volta pra decidir o texto de um card já existente (isso vem
-  // de ReactivationCardSlot, abaixo, fixo por agendamento+período desde o
-  // momento em que aquele card entra na faixa). DOIS contadores — um por
-  // CANAL (pedido explícito: "contador SEPARADO por canal") — porque cada
-  // canal tem seu próprio conjunto de 5 mensagens e sua própria sequência;
-  // sequenceCounter é o do WhatsApp (nome mantido de antes dos dois
-  // canais existirem), instagramSequenceCounter é o novo, do Instagram.
-  sequenceCounter          Int @default(0)
-  instagramSequenceCounter Int @default(0)
+  // Só decide a PRÓXIMA posição na rotação em sequência (ver
+  // assignNextReactivationSlot, reactivation.ts) — nunca é lido de volta
+  // pra decidir o texto de um card já existente (isso vem de
+  // ReactivationCardSlot, abaixo, fixo por agendamento+período desde o
+  // momento em que aquele card entra na faixa).
+  sequenceCounter Int @default(0)
 
   updatedAt DateTime @updatedAt
 }
 
 // Variação de mensagem atribuída a um card de Reativação — um agendamento
-// pode ter um card POR PERÍODO marcado (ver ReactivationConfig.thresholdDaysList),
-// então um Int único em Appointment (como era antes) não bastava mais: a
-// chave precisa ser (agendamento, período). Gravado UMA vez, na primeira
-// vez que aquele card (desse agendamento, desse período) entra na faixa —
-// nunca mais trocado depois (garante a variação fixa por card, mesmo que a
-// clínica mude a configuração ou o card saia/volte a ser consultado — ele
-// não volta de verdade, a janela de 5 dias úteis só acontece uma vez por
-// agendamento+período).
+// pode ter um card POR PERÍODO (ver Appointment.returnPeriodDays, marcado
+// manualmente no botão "Retorno", ou um por período padrão da clínica
+// quando não marcou nada — ver ReactivationConfig.defaultPeriods), então
+// um Int único em Appointment (como era antes) não bastava: a chave
+// precisa ser (agendamento, período). Gravado UMA vez, na primeira vez que
+// aquele card (desse agendamento, desse período) entra na faixa — nunca
+// mais trocado depois (garante a variação fixa por card, mesmo que a
+// clínica mude a configuração ou o card saia/volte a ser consultado — a
+// janela de 3 dias antes/3 dias depois da data de contato só acontece uma
+// vez por agendamento+período).
 model ReactivationCardSlot {
   id            String      @id @default(cuid())
   appointmentId String
   appointment   Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
 
+  // Prazo de retorno (dias) que gerou este card — o mesmo número de
+  // Appointment.returnPeriodDays quando marcado manualmente, ou um dos
+  // ReactivationConfig.defaultPeriods da época em que este slot foi criado
+  // (congelado aqui, não recalculado se a clínica mudar os padrões depois).
   thresholdDays Int
   slot          Int
 
@@ -933,9 +955,9 @@ model ReactivationCardSlot {
   // foi disparado, sem exigir confirmação de entrega (o clique já é a
   // única confirmação que o VEXO tem). null = pendente (padrão); clicar de
   // novo no "✓" do card já enviado desfaz, voltando a null. Nunca afeta a
-  // elegibilidade pra faixa (ver isWithinReactivationWindow,
-  // reactivation.ts) — um card some da faixa quando a janela de 5 dias
-  // úteis vence, enviado ou não.
+  // elegibilidade pra faixa (ver isWithinReturnContactWindow,
+  // reactivation.ts) — um card some da faixa quando a janela de 3 dias
+  // antes/3 depois da data de contato vence, enviado ou não.
   sentAt DateTime?
 
   createdAt DateTime @default(now())
@@ -981,8 +1003,13 @@ model NoShowCardSlot {
 
 // Configuração do card "Quente" (lead que nunca agendou, parado, com sinal
 // de interesse — ver hot-lead-cards.ts) — POR CLÍNICA, mesmo padrão de
-// ReactivationConfig (diferente de NoShowCardSettings acima: aqui cada
-// clínica tem seu próprio limite diário e suas próprias 5 mensagens).
+// ReactivationConfig. Cadência FIXA de 3 passos (2/4/30 dias desde a
+// última mensagem do lead, ver HOT_LEAD_STEP_DAYS em hot-lead-cards.ts) —
+// cada passo tem seu PRÓPRIO conjunto de até 3 variações de texto (eram 5
+// variações únicas pra todos os passos antes da cadência de 3 passos
+// existir — "fase de teste, sem usuários reais", conjunto antigo
+// descartado na mesma migration) e seu PRÓPRIO contador de rotação, porque
+// cada passo roda sua própria sequência entre leads diferentes.
 model HotLeadConfig {
   id       String @id @default(cuid())
   clinicId String @unique
@@ -993,30 +1020,45 @@ model HotLeadConfig {
   // excesso de contato automatizado pela mesma conta (pedido explícito).
   dailyLimit Int @default(5)
 
-  message1 String? @db.Text
-  message2 String? @db.Text
-  message3 String? @db.Text
-  message4 String? @db.Text
-  message5 String? @db.Text
+  // Passo 1 · 2 dias desde a última mensagem do lead.
+  step1Message1 String? @db.Text
+  step1Message2 String? @db.Text
+  step1Message3 String? @db.Text
 
-  // Mesmo papel de ReactivationConfig.sequenceCounter — só decide a
-  // PRÓXIMA posição na rotação em sequência.
-  sequenceCounter Int @default(0)
+  // Passo 2 · 4 dias.
+  step2Message1 String? @db.Text
+  step2Message2 String? @db.Text
+  step2Message3 String? @db.Text
+
+  // Passo 3 · 30 dias — última tentativa (depois dele a sequência encerra,
+  // ver evaluateHotLeadEligibility).
+  step3Message1 String? @db.Text
+  step3Message2 String? @db.Text
+  step3Message3 String? @db.Text
+
+  // Mesmo papel de ReactivationConfig.sequenceCounter, um por passo — só
+  // decide a PRÓXIMA posição na rotação em sequência daquele passo.
+  step1SequenceCounter Int @default(0)
+  step2SequenceCounter Int @default(0)
+  step3SequenceCounter Int @default(0)
 
   updatedAt DateTime @updatedAt
 }
 
-// Card "Quente" — UM por conversa (ao contrário de Reativação/Faltou, que
-// podem gerar mais de um card ao longo do tempo pro mesmo agendamento,
-// aqui a conversa só entra na faixa uma vez: se a janela vencer sem
-// clique, ou se o lead voltar a responder antes disso — o que já tira a
-// conversa da elegibilidade, ver isHotLeadConversationEligible,
-// hot-lead-cards.ts — não há "próxima rodada" pra essa mesma conversa).
+// Card "Quente" — agora até TRÊS por conversa, um por passo da cadência
+// fixa (ver HotLeadConfig acima e HOT_LEAD_STEP_DAYS, hot-lead-cards.ts),
+// chave composta (conversa, passo) em vez de uma linha única por conversa
+// (como era antes de a cadência de 3 passos existir). Só um card PENDENTE
+// por vez aparece na faixa (ver getHotLeadCards) — os passos são
+// independentes na tabela, a regra de "um só visível" é aplicada na
+// consulta, não no schema.
 model HotLeadCardSlot {
   id             String       @id @default(cuid())
-  conversationId String       @unique
+  conversationId String
   conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 
+  // 1, 2 ou 3 — ver HOT_LEAD_STEP_DAYS.
+  step Int
   slot Int
 
   // "horario" ou "preco_endereco" (ver HotLeadSignalCategory,
@@ -1025,14 +1067,29 @@ model HotLeadCardSlot {
   // "preço/endereço" entre os Quentes); nunca reavaliado depois.
   category String
 
-  // A janela de 5 dias úteis (computeReactivationWindow com
-  // thresholdDays=3, reactivation.ts) e a frase "há N dias" na faixa são
-  // sempre calculadas em cima de Conversation.lastLeadMessageAt (sem campo
-  // próprio aqui pra isso) — estável enquanto o lead está calado, que é
-  // exatamente a condição de elegibilidade (ver hot-lead-cards.ts).
+  // Valor de Conversation.lastLeadMessageAt no momento em que o PRIMEIRO
+  // passo desta conversa foi criado — âncora FIXA da cadência (congelada
+  // aqui porque lastLeadMessageAt é um campo vivo, que avança sempre que o
+  // lead manda mensagem de novo; sem congelar, uma nova mensagem do lead
+  // reiniciaria os prazos da cadência em vez de cancelá-la). Os 3 passos
+  // da mesma conversa guardam o MESMO valor (copiado do primeiro passo
+  // criado). Se Conversation.lastLeadMessageAt ficar MAIOR que isto, o
+  // lead respondeu depois da âncora — os passos ainda pendentes (sentAt
+  // null) deixam de aparecer na faixa (ver getHotLeadCards), sem precisar
+  // de um campo "cancelado": a sequência não reinicia porque nenhum passo
+  // novo é criado depois disso pra essa conversa (ver
+  // isHotLeadSequenceStale).
+  sequenceAnchorAt DateTime
+
+  // Marcado ao clicar no card (copia a mensagem + abre o Instagram, mesmo
+  // comportamento de sempre) — null = pendente. Nunca mais desfeito (ao
+  // contrário do "✓" de Reativação/Faltou — um passo do Quente, uma vez
+  // enviado, não volta).
   sentAt DateTime?
 
   createdAt DateTime @default(now())
+
+  @@unique([conversationId, step])
 }
 
 model ReminderLog {

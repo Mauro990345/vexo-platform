@@ -16,6 +16,7 @@
     "prisma:migrate:dev": "prisma migrate dev",
     "prisma:seed": "tsx prisma/seed.ts",
     "prisma:seed:demo": "tsx prisma/seed-demo.ts",
+    "prisma:seed:return-demo": "tsx prisma/seed-return-demo.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {

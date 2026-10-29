@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireInternalSession } from "@/lib/session";
-import { setAppointmentAttendance } from "@/lib/appointments";
+import { setAppointmentAttendance, setAppointmentReturnPeriod, type SetAppointmentReturnPeriodResult } from "@/lib/appointments";
 import {
   disconnectWhatsapp,
   renameWhatsappInstance,
@@ -27,7 +27,7 @@ import { decryptToken } from "@/lib/crypto";
 import { saveUploadedAttachment, deleteUploadedAttachment } from "@/lib/uploads";
 import { validateBrazilianPhone } from "@/lib/whatsapp";
 import {
-  isValidReactivationThresholdDays,
+  isValidReturnPeriodDays,
   toggleReactivationCardSent,
   sendReactivationWhatsAppMessage,
   type SendReactivationWhatsAppResult,
@@ -257,39 +257,69 @@ export async function updateClinicReminders(clinicId: string, formData: FormData
 }
 
 // Seção "Reativação" de Automações — interna (só Mauro vê, nunca aparece
-// pro cliente nem no Painel dele, ver automacoes/page.tsx). TRÊS ações
+// pro cliente nem no Painel dele, ver automacoes/page.tsx). QUATRO ações
 // independentes (pedido explícito — eram uma só, um botão gravava tudo):
-// cada uma grava SÓ o próprio bloco (períodos / mensagens de WhatsApp /
-// mensagens de Instagram) via um upsert PARCIAL — nunca inclui os campos
-// dos outros dois blocos no `update`, então salvar um nunca sobrescreve
-// (ou apaga) os outros, mesmo que o form deles nunca tenha sido reenviado
-// nesta visita à página. sequenceCounter/instagramSequenceCounter NUNCA
-// são lidos/escritos aqui — ficam intocados pelo upsert parcial (ver
-// getReactivationCards, reactivation.ts), preservando a posição da
-// rotação em sequência mesmo quando a clínica edita períodos ou mensagens.
+// cada uma grava SÓ o próprio bloco (prazos disponíveis / prazos padrão /
+// limite diário de WhatsApp / mensagens) via um upsert PARCIAL — nunca
+// inclui os campos dos outros blocos no `update`, então salvar um nunca
+// sobrescreve (ou apaga) os outros, mesmo que o form deles nunca tenha
+// sido reenviado nesta visita à página. sequenceCounter NUNCA é lido/
+// escrito aqui — fica intocado pelo upsert parcial (ver getReactivationCards,
+// reactivation.ts), preservando a posição da rotação em sequência mesmo
+// quando a clínica edita prazos ou mensagens.
 //
-// "thresholdDays" é um grupo de checkboxes (ver automacoes/page.tsx), não
-// um <select> único — formData.getAll devolve só os marcados. Lista vazia
-// é um valor VÁLIDO de propósito (pedido explícito: nenhum marcado =
-// Reativação desligada pra essa clínica), nunca lança erro por estar vazia.
-export async function updateClinicReactivationThresholds(clinicId: string, formData: FormData) {
+// "availablePeriods"/"defaultPeriods" são grupos de checkboxes (ver
+// automacoes/page.tsx), não um <select> único — formData.getAll devolve só
+// os marcados. Lista vazia é um valor VÁLIDO (nenhum prazo disponível/
+// padrão — um agendamento sem marcação manual simplesmente não gera
+// nenhum card automático até a secretária marcar um prazo ela mesma, ou
+// até a clínica marcar pelo menos um prazo padrão de novo).
+export async function updateClinicReturnPeriods(clinicId: string, group: "available" | "default", formData: FormData) {
   await requireInternalSession();
 
-  const thresholdDaysList = formData
-    .getAll("thresholdDays")
+  const fieldName = group === "available" ? "availablePeriods" : "defaultPeriods";
+  const periods = formData
+    .getAll(fieldName)
     .map((v) => parseInt(String(v), 10))
-    .filter(isValidReactivationThresholdDays);
+    .filter(isValidReturnPeriodDays);
+
+  const data = group === "available" ? { availablePeriods: periods } : { defaultPeriods: periods };
 
   await prisma.reactivationConfig.upsert({
     where: { clinicId },
-    create: { clinicId, thresholdDaysList },
-    update: { thresholdDaysList },
+    create: { clinicId, ...data },
+    update: data,
   });
 
   revalidatePath(`/crm/clinicas/${clinicId}/automacoes`);
 }
 
-export async function updateClinicReactivationWhatsappMessages(clinicId: string, formData: FormData) {
+// "Limite diário de envios por WhatsApp (Reativação + Faltou)" — item 1 do
+// pedido, compartilhado pelos dois tipos de card (ver
+// countTodaysWhatsappSends, reactivation.ts). Sempre válido (mínimo 1) —
+// mesmo motivo do limite diário do Quente abaixo: zero desligaria o envio
+// silenciosamente, sem nenhuma forma de a clínica saber por que o botão
+// sumiu.
+export async function updateClinicDailyWhatsappLimit(clinicId: string, formData: FormData) {
+  await requireInternalSession();
+
+  const dailyWhatsappLimit = parseInt(String(formData.get("dailyWhatsappLimit") ?? ""), 10);
+  if (!Number.isFinite(dailyWhatsappLimit) || dailyWhatsappLimit < 1) {
+    throw new Error("Informe um limite diário válido (1 ou mais).");
+  }
+
+  await prisma.reactivationConfig.upsert({
+    where: { clinicId },
+    create: { clinicId, dailyWhatsappLimit },
+    update: { dailyWhatsappLimit },
+  });
+
+  revalidatePath(`/crm/clinicas/${clinicId}/automacoes`);
+}
+
+// Conjunto ÚNICO de até 5 mensagens — usado tanto no envio de WhatsApp
+// quanto no fallback de Instagram (pedido explícito, ver reactivation.ts).
+export async function updateClinicReactivationMessages(clinicId: string, formData: FormData) {
   await requireInternalSession();
 
   const message1 = String(formData.get("message1") ?? "").trim() || null;
@@ -307,33 +337,33 @@ export async function updateClinicReactivationWhatsappMessages(clinicId: string,
   revalidatePath(`/crm/clinicas/${clinicId}/automacoes`);
 }
 
-// Conjunto SEPARADO de mensagens do Instagram (pedido explícito: "o
-// Instagram tem as suas próprias 5 mensagens, separadas das do WhatsApp")
-// — campos com nome próprio, form próprio, ação própria.
-export async function updateClinicReactivationInstagramMessages(clinicId: string, formData: FormData) {
+// Botão "Retorno" do card de agendamento (ver RetornoButton.tsx) — grava
+// só o número de dias (ou "none" pra "Sem retorno") no próprio
+// Appointment, não em ReactivationConfig (é por AGENDAMENTO, não por
+// clínica). Validação do valor aqui (mesma lista fixa de
+// isValidReturnPeriodDays) — setAppointmentReturnPeriod (appointments.ts)
+// só decide SE a troca pode acontecer agora (trava: depois de enviado,
+// não muda mais).
+export async function setAppointmentReturnPeriodAction(appointmentId: string, selection: number | "none"): Promise<SetAppointmentReturnPeriodResult> {
   await requireInternalSession();
 
-  const instagramMessage1 = String(formData.get("instagramMessage1") ?? "").trim() || null;
-  const instagramMessage2 = String(formData.get("instagramMessage2") ?? "").trim() || null;
-  const instagramMessage3 = String(formData.get("instagramMessage3") ?? "").trim() || null;
-  const instagramMessage4 = String(formData.get("instagramMessage4") ?? "").trim() || null;
-  const instagramMessage5 = String(formData.get("instagramMessage5") ?? "").trim() || null;
+  if (selection !== "none" && !isValidReturnPeriodDays(selection)) {
+    throw new Error("Prazo de retorno inválido.");
+  }
 
-  await prisma.reactivationConfig.upsert({
-    where: { clinicId },
-    create: { clinicId, instagramMessage1, instagramMessage2, instagramMessage3, instagramMessage4, instagramMessage5 },
-    update: { instagramMessage1, instagramMessage2, instagramMessage3, instagramMessage4, instagramMessage5 },
-  });
-
-  revalidatePath(`/crm/clinicas/${clinicId}/automacoes`);
+  const result = await setAppointmentReturnPeriod(appointmentId, selection);
+  if (result.ok) {
+    const appt = await prisma.appointment.findUnique({ where: { id: appointmentId }, select: { clinicId: true } });
+    if (appt) revalidatePath(`/crm/clinicas/${appt.clinicId}`);
+  }
+  return result;
 }
 
-// Card "Quente" (ver hot-lead-cards.ts) — mesmo padrão das três ações
-// acima: upsert PARCIAL, nunca toca em sequenceCounter (preserva a
-// posição da rotação). dailyLimit sempre válido (mínimo 1) — zero
-// desligaria o card silenciosamente sem nenhuma forma de o usuário saber
-// por que nenhum card aparece; pra desligar de fato, é desmarcar
-// Reativação não se aplica aqui, então mantemos um mínimo positivo.
+// Card "Quente" (ver hot-lead-cards.ts) — mesmo padrão das ações acima:
+// upsert PARCIAL, nunca toca nos contadores de rotação (um por passo,
+// preserva a posição da rotação de cada um). dailyLimit sempre válido
+// (mínimo 1) — zero desligaria o card silenciosamente sem nenhuma forma de
+// a clínica saber por que nenhum card aparece.
 export async function updateClinicHotLeadConfig(clinicId: string, formData: FormData) {
   await requireInternalSession();
 
@@ -342,16 +372,27 @@ export async function updateClinicHotLeadConfig(clinicId: string, formData: Form
     throw new Error("Informe um limite diário válido (1 ou mais).");
   }
 
-  const message1 = String(formData.get("message1") ?? "").trim() || null;
-  const message2 = String(formData.get("message2") ?? "").trim() || null;
-  const message3 = String(formData.get("message3") ?? "").trim() || null;
-  const message4 = String(formData.get("message4") ?? "").trim() || null;
-  const message5 = String(formData.get("message5") ?? "").trim() || null;
+  function field(name: string): string | null {
+    return String(formData.get(name) ?? "").trim() || null;
+  }
+
+  const data = {
+    dailyLimit,
+    step1Message1: field("step1Message1"),
+    step1Message2: field("step1Message2"),
+    step1Message3: field("step1Message3"),
+    step2Message1: field("step2Message1"),
+    step2Message2: field("step2Message2"),
+    step2Message3: field("step2Message3"),
+    step3Message1: field("step3Message1"),
+    step3Message2: field("step3Message2"),
+    step3Message3: field("step3Message3"),
+  };
 
   await prisma.hotLeadConfig.upsert({
     where: { clinicId },
-    create: { clinicId, dailyLimit, message1, message2, message3, message4, message5 },
-    update: { dailyLimit, message1, message2, message3, message4, message5 },
+    create: { clinicId, ...data },
+    update: data,
   });
 
   revalidatePath(`/crm/clinicas/${clinicId}/automacoes`);
@@ -693,9 +734,9 @@ export async function sendNoShowCardWhatsAppMessageAction(
 // VEXO (só copiar + abrir o Instagram, igual Reativação por Instagram),
 // então só precisa de UMA action (toggle), sem equivalente ao
 // sendReactivationWhatsAppMessageAction acima.
-export async function toggleHotLeadCardSentAction(conversationId: string): Promise<ToggleHotLeadCardSentResult> {
+export async function toggleHotLeadCardSentAction(conversationId: string, step: number): Promise<ToggleHotLeadCardSentResult> {
   await requireInternalSession();
-  const result = await toggleHotLeadCardSent(conversationId);
+  const result = await toggleHotLeadCardSent(conversationId, step);
   if (result.clinicId) revalidatePath(`/crm/clinicas/${result.clinicId}`);
   return result;
 }

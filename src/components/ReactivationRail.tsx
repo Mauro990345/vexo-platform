@@ -85,7 +85,7 @@ export function ReactivationRail({
   sendWhatsappAction?: (appointmentId: string, thresholdDays: number) => Promise<SendReactivationWhatsAppResult>;
   noShowToggleAction?: (appointmentId: string, step: number) => Promise<unknown>;
   noShowSendWhatsappAction?: (appointmentId: string, step: number) => Promise<SendReactivationWhatsAppResult>;
-  hotLeadToggleAction?: (conversationId: string) => Promise<ToggleHotLeadCardSentResult>;
+  hotLeadToggleAction?: (conversationId: string, step: number) => Promise<ToggleHotLeadCardSentResult>;
 }) {
   const [localCards, setLocalCards] = useState(cards);
   useEffect(() => setLocalCards(cards), [cards]);
@@ -148,7 +148,7 @@ export function ReactivationRail({
     setSentOptimistically(card.cardKey, now);
 
     if (card.actionKey.kind === "HOT_LEAD") {
-      hotLeadToggleAction(card.actionKey.conversationId)
+      hotLeadToggleAction(card.actionKey.conversationId, card.actionKey.step)
         .then((result) => {
           if (!result.ok) {
             setSentOptimistically(card.cardKey, card.sentAt);
@@ -223,8 +223,9 @@ export function ReactivationRail({
           const isSending = sendingKeys.has(key);
           const notice = notices.get(key);
           const useManualFallback = manualFallbackKeys.has(key);
-          // Só o Quente usa isto (limite diário, ver panel-cards.ts) —
-          // nunca desabilita um card já enviado (precisa continuar
+          // Limite diário batido (Quente: cliques de Instagram; Reativação/
+          // Faltou: envios de WhatsApp — ver panel-cards.ts/disabledReason)
+          // — nunca desabilita um card já enviado (precisa continuar
           // clicável pra desfazer).
           const isDisabledByLimit = Boolean(card.disabledReason) && !isSent;
 
@@ -274,7 +275,7 @@ export function ReactivationRail({
                   ✓
                 </button>
               ) : isDisabledByLimit ? (
-                <span className={`shrink-0 ${MOBILE_SECONDARY_TEXT} text-vexo-muted`}>Limite diário</span>
+                <span className={`shrink-0 ${MOBILE_SECONDARY_TEXT} text-vexo-muted`}>{card.disabledReason}</span>
               ) : card.channel === "WHATSAPP" ? (
                 !card.whatsappLink ? (
                   <span className={`shrink-0 ${MOBILE_SECONDARY_TEXT} text-vexo-muted`}>Sem WhatsApp</span>

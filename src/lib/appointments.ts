@@ -1,6 +1,48 @@
 import { prisma } from "@/lib/prisma";
 import { triggerFollowUp, cancelPendingFollowUp } from "@/lib/follow-up";
 
+// Botão "Retorno" do card de agendamento atendido (ver RetornoButton.tsx)
+// — grava só o NÚMERO de dias (ou "nenhum"), nunca texto livre nem
+// qualquer dado clínico (pedido explícito, LGPD — ver
+// Appointment.returnPeriodDays/returnPeriodNone, schema.prisma).
+// Validação de QUAL número é aceito (RETURN_PERIOD_OPTIONS) fica na server
+// action que chama isto (mesmo padrão de "dailyLimit < 1 throws" já usado
+// pelas outras configs de Automações) — esta função só decide SE a
+// mudança pode acontecer agora.
+//
+// "Pode trocar enquanto o envio não ocorreu" (pedido explícito) — depois
+// que QUALQUER card de Reativação deste agendamento já foi marcado
+// enviado (ReactivationCardSlot.sentAt, qualquer prazo), o prazo fica
+// travado: trocar depois disso bagunçaria a mensagem já disparada (ela foi
+// montada pro prazo de ENTÃO, não existe "reenviar" a mesma mensagem com
+// outro prazo). Sem usuários reais ainda — mas a trava já vale desde já,
+// pra não depender de lembrar disso quando a Reativação entrar em uso de
+// verdade.
+export type SetAppointmentReturnPeriodResult =
+  | { ok: true; appointmentId: string; returnPeriodDays: number | null; returnPeriodNone: boolean }
+  | { ok: false; reason: "not_found" | "already_sent" };
+
+export async function setAppointmentReturnPeriod(
+  appointmentId: string,
+  selection: number | "none"
+): Promise<SetAppointmentReturnPeriodResult> {
+  const appt = await prisma.appointment.findUnique({
+    where: { id: appointmentId },
+    select: { id: true, reactivationCardSlots: { where: { sentAt: { not: null } }, select: { id: true }, take: 1 } },
+  });
+  if (!appt) return { ok: false, reason: "not_found" };
+  if (appt.reactivationCardSlots.length > 0) return { ok: false, reason: "already_sent" };
+
+  const data = selection === "none" ? { returnPeriodDays: null, returnPeriodNone: true } : { returnPeriodDays: selection, returnPeriodNone: false };
+
+  const updated = await prisma.appointment.update({
+    where: { id: appointmentId },
+    data,
+    select: { id: true, returnPeriodDays: true, returnPeriodNone: true },
+  });
+  return { ok: true, appointmentId: updated.id, returnPeriodDays: updated.returnPeriodDays, returnPeriodNone: updated.returnPeriodNone };
+}
+
 // Chave reversível de comparecimento — não é um botão de ação única. A
 // secretária pode alternar entre Compareceu / Não compareceu / (voltar a
 // indefinido) a qualquer momento, inclusive depois de já ter marcado algo

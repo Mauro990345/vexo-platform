@@ -10,7 +10,7 @@ const sendReactivationWhatsAppMessageMock = vi.fn();
 vi.mock("@/lib/reactivation", () => ({
   toggleReactivationCardSent: (...args: unknown[]) => toggleReactivationCardSentMock(...args),
   sendReactivationWhatsAppMessage: (...args: unknown[]) => sendReactivationWhatsAppMessageMock(...args),
-  isValidReactivationThresholdDays: vi.fn(),
+  isValidReturnPeriodDays: () => true,
 }));
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));

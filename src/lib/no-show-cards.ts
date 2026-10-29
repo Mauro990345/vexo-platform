@@ -7,6 +7,9 @@ import {
   resolveInstagramDmLink,
   buildInstagramProfileLink,
   buildReactivationWhatsAppLink,
+  countTodaysWhatsappSends,
+  isDailyWhatsappLimitReached,
+  DEFAULT_DAILY_WHATSAPP_LIMIT,
   type ReactivationWindow,
   type SendReactivationWhatsAppResult,
 } from "@/lib/reactivation";
@@ -105,6 +108,11 @@ export type NoShowCard = {
   reason: string;
   noShowTriggeredAt: Date;
   sentAt: Date | null;
+  // Limite diário de WhatsApp (Reativação + Faltou, compartilhado — ver
+  // countTodaysWhatsappSends/ReactivationConfig.dailyWhatsappLimit em
+  // reactivation.ts) já atingido — só true pra card de canal WHATSAPP
+  // ainda pendente, mesmo mecanismo de ReactivationCard.dailyLimitReached.
+  dailyLimitReached: boolean;
 };
 
 export async function getNoShowCards(clinicId: string, now: Date = new Date()): Promise<NoShowCard[]> {
@@ -149,7 +157,7 @@ export async function getNoShowCards(clinicId: string, now: Date = new Date()): 
   const cardCandidates = buildNoShowCardCandidates(candidates, now);
   if (cardCandidates.length === 0) return [];
 
-  const [settings, leads, instagramAccount, existingSlotRows] = await Promise.all([
+  const [settings, leads, instagramAccount, existingSlotRows, reactivationConfig, sentTodayCount] = await Promise.all([
     prisma.noShowCardSettings.findUnique({ where: { id: "singleton" } }),
     prisma.lead.findMany({
       where: { id: { in: cardCandidates.map((c) => c.leadId) } },
@@ -157,8 +165,11 @@ export async function getNoShowCards(clinicId: string, now: Date = new Date()): 
     }),
     prisma.instagramAccount.findUnique({ where: { clinicId }, select: { accessTokenEnc: true } }),
     prisma.noShowCardSlot.findMany({ where: { appointmentId: { in: cardCandidates.map((c) => c.appointmentId) } } }),
+    prisma.reactivationConfig.findUnique({ where: { clinicId }, select: { dailyWhatsappLimit: true } }),
+    countTodaysWhatsappSends(clinicId, now),
   ]);
   const leadById = new Map(leads.map((l) => [l.id, l]));
+  const whatsappDailyLimitReached = isDailyWhatsappLimitReached(sentTodayCount, reactivationConfig?.dailyWhatsappLimit ?? DEFAULT_DAILY_WHATSAPP_LIMIT);
   const sentAtByKey = new Map(existingSlotRows.map((s) => [`${s.appointmentId}:${s.step}`, s.sentAt]));
 
   // Nome ao vivo (Instagram) — uma vez por lead distinto, igual
@@ -208,6 +219,7 @@ export async function getNoShowCards(clinicId: string, now: Date = new Date()): 
       reason: buildNoShowCardReason(c.noShowTriggeredAt, now, c.step),
       noShowTriggeredAt: c.noShowTriggeredAt,
       sentAt: sentAtByKey.get(`${c.appointmentId}:${c.step}`) ?? null,
+      dailyLimitReached: channel === "WHATSAPP" && !sentAtByKey.get(`${c.appointmentId}:${c.step}`) && whatsappDailyLimitReached,
     };
   });
 }
@@ -276,6 +288,14 @@ export async function sendNoShowCardWhatsAppMessage(
 
   const existing = await prisma.noShowCardSlot.findUnique({ where: { appointmentId_step: { appointmentId, step } } });
   if (existing?.sentAt) return { ok: true, alreadySent: true, clinicId };
+
+  const [reactivationConfig, sentTodayCount] = await Promise.all([
+    prisma.reactivationConfig.findUnique({ where: { clinicId }, select: { dailyWhatsappLimit: true } }),
+    countTodaysWhatsappSends(clinicId, now),
+  ]);
+  if (isDailyWhatsappLimitReached(sentTodayCount, reactivationConfig?.dailyWhatsappLimit ?? DEFAULT_DAILY_WHATSAPP_LIMIT)) {
+    return { ok: false, reason: "daily_limit_reached", clinicId };
+  }
 
   const [recentReactivationSent, recentNoShowSent] = await Promise.all([
     prisma.reactivationCardSlot.findFirst({ where: { sentAt: { not: null }, appointment: { clinicId } }, orderBy: { sentAt: "desc" }, select: { sentAt: true } }),

@@ -13,7 +13,7 @@ export type PanelCardKind = "HOT_LEAD" | "NO_SHOW" | "REACTIVATION";
 export type PanelCardActionKey =
   | { kind: "REACTIVATION"; appointmentId: string; thresholdDays: number }
   | { kind: "NO_SHOW"; appointmentId: string; step: number }
-  | { kind: "HOT_LEAD"; conversationId: string };
+  | { kind: "HOT_LEAD"; conversationId: string; step: number };
 
 export type PanelCard = {
   kind: PanelCardKind;
@@ -30,8 +30,11 @@ export type PanelCard = {
   reason: string;
   sentAt: Date | null;
   actionKey: PanelCardActionKey;
-  // Só o Quente usa isto hoje (limite diário por clínica) — undefined nos
-  // outros dois tipos, nunca desabilita o botão deles.
+  // Limite diário por clínica atingido (ver *.dailyLimitReached em cada
+  // módulo de origem) — Quente tem o seu próprio (cliques de Instagram);
+  // Reativação e Faltou compartilham o limite de WhatsApp (ver
+  // ReactivationConfig.dailyWhatsappLimit/countTodaysWhatsappSends,
+  // reactivation.ts). undefined = sem limite batido, botão normal.
   disabledReason?: string;
 };
 
@@ -59,7 +62,10 @@ export function mergePanelCards(input: {
 }): PanelCard[] {
   const hotLead: PanelCard[] = input.hotLeadCards.map((c) => ({
     kind: "HOT_LEAD",
-    cardKey: `hot:${c.conversationId}`,
+    // Chave inclui o PASSO (ver HotLeadCardSlot, schema.prisma) — a mesma
+    // conversa pode gerar um cardKey diferente em momentos diferentes, um
+    // por passo da cadência.
+    cardKey: `hot:${c.conversationId}:${c.step}`,
     leadId: c.leadId,
     name: c.name,
     igUsername: c.igUsername,
@@ -71,7 +77,7 @@ export function mergePanelCards(input: {
     instagramProfileLink: c.instagramProfileLink,
     reason: c.reason,
     sentAt: c.sentAt,
-    actionKey: { kind: "HOT_LEAD", conversationId: c.conversationId },
+    actionKey: { kind: "HOT_LEAD", conversationId: c.conversationId, step: c.step },
     disabledReason: !c.sentAt && c.dailyLimitReached ? "Limite diário atingido" : undefined,
   }));
 
@@ -90,6 +96,7 @@ export function mergePanelCards(input: {
     reason: c.reason,
     sentAt: c.sentAt,
     actionKey: { kind: "NO_SHOW", appointmentId: c.appointmentId, step: c.step },
+    disabledReason: !c.sentAt && c.dailyLimitReached ? "Limite diário atingido" : undefined,
   }));
 
   const reactivation: PanelCard[] = input.reactivationCards.map((c) => ({
@@ -107,6 +114,7 @@ export function mergePanelCards(input: {
     reason: reactivationCardReason(c.thresholdDays),
     sentAt: c.sentAt,
     actionKey: { kind: "REACTIVATION", appointmentId: c.appointmentId, thresholdDays: c.thresholdDays },
+    disabledReason: !c.sentAt && c.dailyLimitReached ? "Limite diário atingido" : undefined,
   }));
 
   return [...hotLead, ...noShow, ...reactivation];

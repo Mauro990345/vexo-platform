@@ -7,14 +7,14 @@ import { TemplateMessageField } from "@/components/TemplateMessageField";
 import {
   updateClinicSettings,
   updateClinicReminders,
-  updateClinicReactivationThresholds,
-  updateClinicReactivationWhatsappMessages,
-  updateClinicReactivationInstagramMessages,
+  updateClinicReturnPeriods,
+  updateClinicReactivationMessages,
+  updateClinicDailyWhatsappLimit,
   updateClinicHotLeadConfig,
   logApproach,
 } from "../../actions";
-import { DEFAULT_REACTIVATION_THRESHOLD_DAYS_LIST } from "@/lib/reactivation";
-import { ReactivationThresholdsForm, ReactivationMessageBlockForm, HotLeadConfigForm } from "@/components/ReactivationConfigForms";
+import { DEFAULT_AVAILABLE_RETURN_PERIODS, DEFAULT_RETURN_PERIODS, DEFAULT_DAILY_WHATSAPP_LIMIT } from "@/lib/reactivation";
+import { ReturnPeriodChipsForm, DailyWhatsappLimitForm, ReactivationMessageBlockForm, HotLeadConfigForm } from "@/components/ReactivationConfigForms";
 
 const REMINDER_VARIABLES = [
   { token: "{{primeiro_nome}}", label: "+ Nome do lead" },
@@ -44,38 +44,25 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
   const firstReminderHours = clinic.reminderConfig?.hoursBefore?.[0] ?? 24;
   const secondReminderHours = clinic.reminderConfig?.hoursBefore?.[1] ?? 3;
 
-  const reactivationThresholdSet = new Set(
-    clinic.reactivationConfig?.thresholdDaysList ?? DEFAULT_REACTIVATION_THRESHOLD_DAYS_LIST
-  );
-  const reactivationWhatsappMessages = [
+  const availablePeriodsSet = new Set(clinic.reactivationConfig?.availablePeriods ?? DEFAULT_AVAILABLE_RETURN_PERIODS);
+  const defaultPeriodsSet = new Set(clinic.reactivationConfig?.defaultPeriods ?? DEFAULT_RETURN_PERIODS);
+  const dailyWhatsappLimit = clinic.reactivationConfig?.dailyWhatsappLimit ?? DEFAULT_DAILY_WHATSAPP_LIMIT;
+  const reactivationMessages = [
     clinic.reactivationConfig?.message1,
     clinic.reactivationConfig?.message2,
     clinic.reactivationConfig?.message3,
     clinic.reactivationConfig?.message4,
     clinic.reactivationConfig?.message5,
   ];
-  const reactivationInstagramMessages = [
-    clinic.reactivationConfig?.instagramMessage1,
-    clinic.reactivationConfig?.instagramMessage2,
-    clinic.reactivationConfig?.instagramMessage3,
-    clinic.reactivationConfig?.instagramMessage4,
-    clinic.reactivationConfig?.instagramMessage5,
-  ];
-  const reactivationWhatsappSummary = `${reactivationWhatsappMessages.filter((m) => m?.trim()).length} de 5 preenchidas · ${reminderPreview(
-    reactivationWhatsappMessages[0]
-  )}`;
-  const reactivationInstagramSummary = `${reactivationInstagramMessages.filter((m) => m?.trim()).length} de 5 preenchidas · ${reminderPreview(
-    reactivationInstagramMessages[0]
-  )}`;
+  const reactivationSummary = `${reactivationMessages.filter((m) => m?.trim()).length} de 5 preenchidas · ${reminderPreview(reactivationMessages[0])}`;
 
-  const hotLeadMessages = [
-    clinic.hotLeadConfig?.message1,
-    clinic.hotLeadConfig?.message2,
-    clinic.hotLeadConfig?.message3,
-    clinic.hotLeadConfig?.message4,
-    clinic.hotLeadConfig?.message5,
+  const hotLeadStepMessages = [
+    [clinic.hotLeadConfig?.step1Message1, clinic.hotLeadConfig?.step1Message2, clinic.hotLeadConfig?.step1Message3],
+    [clinic.hotLeadConfig?.step2Message1, clinic.hotLeadConfig?.step2Message2, clinic.hotLeadConfig?.step2Message3],
+    [clinic.hotLeadConfig?.step3Message1, clinic.hotLeadConfig?.step3Message2, clinic.hotLeadConfig?.step3Message3],
   ];
-  const hotLeadSummary = `${hotLeadMessages.filter((m) => m?.trim()).length} de 5 preenchidas · ${reminderPreview(hotLeadMessages[0])}`;
+  const hotLeadFilledCount = hotLeadStepMessages.flat().filter((m) => m?.trim()).length;
+  const hotLeadSummary = `${hotLeadFilledCount} de 9 preenchidas · ${reminderPreview(hotLeadStepMessages[0]![0])}`;
 
   return (
     <div className="max-w-3xl space-y-4">
@@ -261,64 +248,69 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
                   </form>
                 </div>
 
-                {/* Faixa "Reativação" do Painel do cliente (ver
-                    ClientPanelView.tsx/ReactivationRail.tsx) — interna, só
+                {/* Prazos de retorno (item 1 do pedido) — interna, só
                     aparece aqui em Automações (nunca pro cliente nem no
-                    Painel dele). TRÊS salvamentos INDEPENDENTES (pedido
-                    explícito — era um form só, um botão gravava tudo):
-                    períodos (ReactivationThresholdsForm) e cada bloco de
-                    mensagens (ReactivationMessageBlockForm, um pro WhatsApp
-                    e outro pro Instagram) têm a própria ação/botão/"Salvo
-                    ✓", nunca um sobrescrevendo o outro. Componentes client
-                    próprios (ReactivationConfigForms.tsx) só por causa
-                    desse feedback — um <form action={fn}> puro não dá
-                    gancho de "terminou com sucesso" pra mostrar o check. */}
+                    Painel dele). Controla o botão "Retorno" do card de
+                    agendamento (ver RetornoButton.tsx) e a faixa
+                    "Reativação" do Painel (ClientPanelView.tsx/
+                    ReactivationRail.tsx). QUATRO salvamentos INDEPENDENTES
+                    (pedido explícito): prazos disponíveis, prazos padrão,
+                    limite diário de WhatsApp e as mensagens — cada um com
+                    a própria ação/botão/"Salvo ✓", nunca um sobrescrevendo
+                    o outro. Componentes client próprios
+                    (ReactivationConfigForms.tsx) só por causa desse
+                    feedback — um <form action={fn}> puro não dá gancho de
+                    "terminou com sucesso" pra mostrar o check. */}
                 <div className="mt-5">
-                  <h2 className="text-xs font-semibold">Reativação</h2>
+                  <h2 className="text-xs font-semibold">Prazos de retorno</h2>
                   <p className="mt-1 text-caption text-vexo-muted">
-                    Cards de pacientes cujo agendamento da IA completou algum dos prazos
-                    marcados sem um retorno — aparecem só no Painel do cliente, com uma
-                    mensagem de acompanhamento sugerida pra enviar por WhatsApp ou Instagram
-                    (ver canal de cada prazo abaixo; nada é enviado automaticamente). Sem
-                    nenhum prazo marcado, a faixa fica desligada.
+                    A secretária marca o prazo de retorno de cada paciente atendido no botão
+                    "Retorno" do card de agendamento. Sem marcação, valem os prazos padrão
+                    abaixo. Na data de contato (atendimento + prazo), um card de Reativação
+                    aparece no Painel com uma mensagem sugerida — por WhatsApp (com fallback
+                    pra Instagram sem telefone/desconectado) — nada é enviado automaticamente.
                   </p>
 
-                  <div className="mt-2 space-y-2 rounded-xl border border-vexo-border bg-vexo-surface p-3">
-                    <ReactivationThresholdsForm
-                      action={updateClinicReactivationThresholds.bind(null, clinic.id)}
-                      defaultSelected={reactivationThresholdSet}
+                  <div className="mt-2 space-y-3 rounded-xl border border-vexo-border bg-vexo-surface p-3">
+                    <ReturnPeriodChipsForm
+                      action={updateClinicReturnPeriods.bind(null, clinic.id, "available")}
+                      label="Prazos disponíveis para a secretária"
+                      fieldName="availablePeriods"
+                      defaultSelected={availablePeriodsSet}
                     />
 
-                    <ReactivationMessageBlockForm
-                      action={updateClinicReactivationWhatsappMessages.bind(null, clinic.id)}
-                      title="Mensagens WhatsApp"
-                      summary={reactivationWhatsappSummary}
-                      fieldNamePrefix="message"
-                      defaultValues={reactivationWhatsappMessages}
+                    <ReturnPeriodChipsForm
+                      action={updateClinicReturnPeriods.bind(null, clinic.id, "default")}
+                      label="Padrão quando ela não marcar"
+                      fieldName="defaultPeriods"
+                      defaultSelected={defaultPeriodsSet}
                     />
 
+                    <DailyWhatsappLimitForm action={updateClinicDailyWhatsappLimit.bind(null, clinic.id)} dailyLimit={dailyWhatsappLimit} />
+
                     <ReactivationMessageBlockForm
-                      action={updateClinicReactivationInstagramMessages.bind(null, clinic.id)}
-                      title="Mensagens Instagram"
-                      summary={reactivationInstagramSummary}
-                      fieldNamePrefix="instagramMessage"
-                      defaultValues={reactivationInstagramMessages}
+                      action={updateClinicReactivationMessages.bind(null, clinic.id)}
+                      summary={reactivationSummary}
+                      defaultValues={reactivationMessages}
                     />
                   </div>
                 </div>
 
                 {/* Card "Quente" (ver ReactivationRail.tsx/hot-lead-cards.ts)
-                    — lead com conversa que nunca agendou, parado, com
-                    sinal de interesse nas mensagens dele. Só limite diário
-                    + as 5 mensagens aqui (a detecção por palavra-chave não
-                    é configurável, mora em hot-lead-detection.ts). */}
+                    — lead com conversa que nunca agendou, com sinal de
+                    interesse nas mensagens dele. Cadência fixa de 3 passos
+                    (2/4/30 dias desde a última mensagem do lead) — limite
+                    diário + até 3 mensagens POR PASSO aqui (a detecção por
+                    palavra-chave não é configurável, mora em
+                    hot-lead-detection.ts). */}
                 <div className="mt-5">
                   <h2 className="text-xs font-semibold">Quente</h2>
                   <p className="mt-1 text-caption text-vexo-muted">
-                    Lead que nunca agendou, parado há alguns dias, que perguntou sobre horário,
-                    preço ou endereço — aparece no Painel com um botão de Instagram (copiar e
-                    abrir a conversa). Limite diário de envios por clínica, pra evitar excesso de
-                    contato pela mesma conta.
+                    Lead que nunca agendou, que perguntou sobre horário, preço ou endereço —
+                    aparece no Painel com um botão de Instagram (copiar e abrir a conversa) em 3
+                    tentativas (2, 4 e 30 dias desde a última mensagem dele, uma sequência só por
+                    lead). Limite diário de envios por clínica, pra evitar excesso de contato pela
+                    mesma conta.
                   </p>
 
                   <div className="mt-2 space-y-2 rounded-xl border border-vexo-border bg-vexo-surface p-3">
@@ -326,7 +318,7 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
                       action={updateClinicHotLeadConfig.bind(null, clinic.id)}
                       summary={hotLeadSummary}
                       dailyLimit={clinic.hotLeadConfig?.dailyLimit ?? 5}
-                      defaultValues={hotLeadMessages}
+                      stepDefaultValues={hotLeadStepMessages}
                     />
                   </div>
                 </div>

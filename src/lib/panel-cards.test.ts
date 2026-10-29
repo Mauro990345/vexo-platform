@@ -8,6 +8,7 @@ function hotLeadCard(overrides: Partial<HotLeadCard> = {}): HotLeadCard {
   return {
     conversationId: "conv-1",
     leadId: "lead-1",
+    step: 1,
     slot: 1,
     category: "horario",
     name: "Ana",
@@ -16,7 +17,7 @@ function hotLeadCard(overrides: Partial<HotLeadCard> = {}): HotLeadCard {
     message: "Oi!",
     instagramDmLink: "https://ig.me/m/ana.ig",
     instagramProfileLink: "https://www.instagram.com/ana.ig/",
-    reason: "Perguntou sobre horário · há 6 dias",
+    reason: "Perguntou sobre horário · há 6 dias · passo 1 de 3",
     sentAt: null,
     dailyLimitReached: false,
     ...overrides,
@@ -39,6 +40,7 @@ function noShowCard(overrides: Partial<NoShowCard> = {}): NoShowCard {
     reason: "Faltou há 3 dias · mensagem 1 de 2",
     noShowTriggeredAt: new Date(),
     sentAt: null,
+    dailyLimitReached: false,
     ...overrides,
   };
 }
@@ -58,6 +60,7 @@ function reactivationCard(overrides: Partial<ReactivationCard> = {}): Reactivati
     completionDate: new Date(),
     thresholdDays: 120,
     sentAt: null,
+    dailyLimitReached: false,
     ...overrides,
   };
 }
@@ -85,7 +88,17 @@ describe("mergePanelCards", () => {
       noShowCards: [],
       reactivationCards: [],
     });
-    expect(merged.map((c) => c.cardKey)).toEqual(["hot:conv-a", "hot:conv-b"]);
+    expect(merged.map((c) => c.cardKey)).toEqual(["hot:conv-a:1", "hot:conv-b:1"]);
+  });
+
+  it("cardKey do Quente inclui o passo — a mesma conversa gera chaves diferentes em passos diferentes", () => {
+    const merged = mergePanelCards({
+      hotLeadCards: [hotLeadCard({ conversationId: "conv-a", step: 2 })],
+      noShowCards: [],
+      reactivationCards: [],
+    });
+    expect(merged[0]!.cardKey).toBe("hot:conv-a:2");
+    expect((merged[0]!.actionKey as { kind: "HOT_LEAD"; conversationId: string; step: number }).step).toBe(2);
   });
 
   it("card do Quente no limite diário (sem ainda ter sido marcado) vem com disabledReason", () => {
@@ -106,8 +119,27 @@ describe("mergePanelCards", () => {
     expect(merged[0]!.disabledReason).toBeUndefined();
   });
 
-  it("Faltou e Reativação nunca têm disabledReason", () => {
-    const merged = mergePanelCards({ hotLeadCards: [], noShowCards: [noShowCard()], reactivationCards: [reactivationCard()] });
+  it("card de Faltou no limite diário de WhatsApp (sem ainda ter sido marcado) vem com disabledReason", () => {
+    const merged = mergePanelCards({ hotLeadCards: [], noShowCards: [noShowCard({ dailyLimitReached: true })], reactivationCards: [] });
+    expect(merged[0]!.disabledReason).toBe("Limite diário atingido");
+  });
+
+  it("card de Reativação no limite diário de WhatsApp (sem ainda ter sido marcado) vem com disabledReason", () => {
+    const merged = mergePanelCards({ hotLeadCards: [], noShowCards: [], reactivationCards: [reactivationCard({ dailyLimitReached: true })] });
+    expect(merged[0]!.disabledReason).toBe("Limite diário atingido");
+  });
+
+  it("card de Faltou/Reativação já enviado nunca fica desabilitado, mesmo com limite atingido", () => {
+    const merged = mergePanelCards({
+      hotLeadCards: [],
+      noShowCards: [noShowCard({ dailyLimitReached: true, sentAt: new Date() })],
+      reactivationCards: [reactivationCard({ dailyLimitReached: true, sentAt: new Date() })],
+    });
+    expect(merged.every((c) => c.disabledReason === undefined)).toBe(true);
+  });
+
+  it("sem limite diário atingido: nenhum dos três tipos fica desabilitado", () => {
+    const merged = mergePanelCards({ hotLeadCards: [hotLeadCard()], noShowCards: [noShowCard()], reactivationCards: [reactivationCard()] });
     expect(merged.every((c) => c.disabledReason === undefined)).toBe(true);
   });
 

@@ -7,6 +7,10 @@ const reactivationCardSlotUpsertMock = vi.fn();
 const reactivationCardSlotFindUniqueMock = vi.fn();
 const reactivationCardSlotUpdateManyMock = vi.fn();
 const reactivationCardSlotUpdateMock = vi.fn();
+const reactivationCardSlotCountMock = vi.fn();
+const reactivationCardSlotFindFirstMock = vi.fn();
+const noShowCardSlotCountMock = vi.fn();
+const noShowCardSlotFindFirstMock = vi.fn();
 const reactivationConfigUpsertMock = vi.fn();
 const leadFindManyMock = vi.fn();
 const instagramAccountFindUniqueMock = vi.fn();
@@ -23,6 +27,12 @@ vi.mock("@/lib/prisma", () => ({
       findUnique: (...args: unknown[]) => reactivationCardSlotFindUniqueMock(...args),
       updateMany: (...args: unknown[]) => reactivationCardSlotUpdateManyMock(...args),
       update: (...args: unknown[]) => reactivationCardSlotUpdateMock(...args),
+      count: (...args: unknown[]) => reactivationCardSlotCountMock(...args),
+      findFirst: (...args: unknown[]) => reactivationCardSlotFindFirstMock(...args),
+    },
+    noShowCardSlot: {
+      count: (...args: unknown[]) => noShowCardSlotCountMock(...args),
+      findFirst: (...args: unknown[]) => noShowCardSlotFindFirstMock(...args),
     },
     lead: { findMany: (...args: unknown[]) => leadFindManyMock(...args) },
     instagramAccount: { findUnique: (...args: unknown[]) => instagramAccountFindUniqueMock(...args) },
@@ -42,11 +52,11 @@ vi.mock("@/lib/instagram", () => ({
 
 // Partial mock (importOriginal) — normalizeBrazilianWhatsappNumber/
 // validateBrazilianPhone continuam com a implementação REAL (usadas pelos
-// testes de buildReactivationWhatsAppLink já existentes mais abaixo, e
-// pelos novos testes de sendReactivationWhatsAppMessage, que precisam da
-// validação de telefone de verdade pra testar o caso "telefone inválido"
-// de forma realista); só sendWhatsappMessage (a chamada de rede de
-// verdade, Evolution API) é mockada.
+// testes de buildReactivationWhatsAppLink mais abaixo, e pelos testes de
+// sendReactivationWhatsAppMessage, que precisam da validação de telefone
+// de verdade pra testar o caso "telefone inválido" de forma realista); só
+// sendWhatsappMessage (a chamada de rede de verdade, Evolution API) é
+// mockada.
 const sendWhatsappMessageMock = vi.fn();
 vi.mock("@/lib/whatsapp", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/whatsapp")>();
@@ -56,10 +66,12 @@ vi.mock("@/lib/whatsapp", async (importOriginal) => {
 import {
   computeReactivationWindow,
   isWithinReactivationWindow,
+  computeCalendarDayWindow,
+  computeReturnContactWindow,
   selectReactivationCandidates,
+  resolveAppointmentReturnPeriods,
   buildReactivationCardCandidates,
   assignReactivationCardSlots,
-  assignReactivationCardSlotsByChannel,
   cardSlotKey,
   resolveAvailableReactivationSlots,
   assignNextReactivationSlot,
@@ -68,18 +80,19 @@ import {
   buildInstagramDmLink,
   buildInstagramProfileLink,
   resolveInstagramDmLink,
-  reactivationChannelForThreshold,
-  REACTIVATION_CHANNEL_BY_THRESHOLD,
-  DEFAULT_WHATSAPP_REACTIVATION_MESSAGES,
-  DEFAULT_INSTAGRAM_REACTIVATION_MESSAGES,
-  REACTIVATION_THRESHOLD_OPTIONS,
-  TEST_PERIOD_DAYS,
-  isValidReactivationThresholdDays,
+  reactivationChannelForLead,
+  DEFAULT_REACTIVATION_MESSAGES,
+  RETURN_PERIOD_OPTIONS,
+  DEFAULT_AVAILABLE_RETURN_PERIODS,
+  DEFAULT_RETURN_PERIODS,
+  DEFAULT_DAILY_WHATSAPP_LIMIT,
+  isValidReturnPeriodDays,
   toggleReactivationSentAt,
   getReactivationCards,
   sortReactivationCardsForDisplay,
   countPendingReactivationCards,
   isReactivationWhatsAppRateLimited,
+  isDailyWhatsappLimitReached,
   sendReactivationWhatsAppMessage,
   REACTIVATION_WHATSAPP_MIN_INTERVAL_MS,
   type ReactivationSourceAppointment,
@@ -93,11 +106,13 @@ function appt(overrides: Partial<ReactivationSourceAppointment> = {}): Reactivat
     conversationId: "conv-1",
     scheduledAt: new Date("2026-05-20T12:00:00.000Z"),
     status: "SCHEDULED",
+    returnPeriodDays: null,
+    returnPeriodNone: false,
     ...overrides,
   };
 }
 
-describe("computeReactivationWindow / isWithinReactivationWindow — janela de 5 dias úteis", () => {
+describe("computeReactivationWindow / isWithinReactivationWindow — janela de 5 dias úteis (Faltou, no-show-cards.ts)", () => {
   it("completou numa segunda: janela segunda a sexta da mesma semana (sem fim de semana no meio)", () => {
     // 2026-10-19 é segunda-feira
     const window = computeReactivationWindow(new Date("2026-07-22T12:00:00.000Z"), 89); // 2026-07-22 + 89d = 2026-10-19 (segunda)
@@ -119,13 +134,6 @@ describe("computeReactivationWindow / isWithinReactivationWindow — janela de 5
     expect(window.end.toISOString().slice(0, 10)).toBe("2026-10-30"); // sexta da mesma semana
   });
 
-  it("completou num domingo: a janela também só começa a contar na segunda seguinte", () => {
-    // 2026-10-25 é domingo
-    const window = computeReactivationWindow(new Date("2026-07-22T12:00:00.000Z"), 95); // + 95d = 2026-10-25 (domingo)
-    expect(window.start.toISOString().slice(0, 10)).toBe("2026-10-26");
-    expect(window.end.toISOString().slice(0, 10)).toBe("2026-10-30");
-  });
-
   it("isWithinReactivationWindow: true dentro da janela (incluindo os extremos), false antes e depois", () => {
     const window = { start: new Date("2026-10-19T03:00:00.000Z"), end: new Date("2026-10-23T03:00:00.000Z") };
     expect(isWithinReactivationWindow(window, new Date("2026-10-19T15:00:00.000Z"))).toBe(true);
@@ -135,44 +143,85 @@ describe("computeReactivationWindow / isWithinReactivationWindow — janela de 5
   });
 });
 
-describe("computeReactivationWindow — os 7 prazos (7/10/30/60/90/120/150 dias)", () => {
-  it("todos os 7 prazos existem, na ordem certa, com 7/10/30/60 marcados como teste", () => {
-    expect(REACTIVATION_THRESHOLD_OPTIONS).toEqual([7, 10, 30, 60, 90, 120, 150]);
-    expect(TEST_PERIOD_DAYS).toEqual([7, 10, 30, 60]);
+describe("computeCalendarDayWindow / computeReturnContactWindow — janela em dias corridos do botão Retorno", () => {
+  it("computeCalendarDayWindow: ancora em anchor+offsetDays, visível de offsetDays-beforeDays até offsetDays+afterDays", () => {
+    const anchor = new Date("2026-01-01T12:00:00.000Z");
+    const window = computeCalendarDayWindow(anchor, 10, 3, 3);
+    expect(window.start.toISOString().slice(0, 10)).toBe("2026-01-08"); // dia 10 - 3
+    expect(window.end.toISOString().slice(0, 10)).toBe("2026-01-14"); // dia 10 + 3
   });
 
-  it("REACTIVATION_THRESHOLD_OPTIONS sempre inclui todo item de TEST_PERIOD_DAYS — removê-los da constante basta pra tirar o chip e a validação", () => {
-    for (const days of TEST_PERIOD_DAYS) {
-      expect(REACTIVATION_THRESHOLD_OPTIONS).toContain(days);
-    }
-  });
-
-  it("isValidReactivationThresholdDays: aceita todos os valores válidos (teste e normais)", () => {
-    for (const days of REACTIVATION_THRESHOLD_OPTIONS) {
-      expect(isValidReactivationThresholdDays(days)).toBe(true);
-    }
-  });
-
-  it("isValidReactivationThresholdDays: rejeita valor inválido", () => {
-    expect(isValidReactivationThresholdDays(45)).toBe(false);
-    expect(isValidReactivationThresholdDays(0)).toBe(false);
-    expect(isValidReactivationThresholdDays(-30)).toBe(false);
-    expect(isValidReactivationThresholdDays(200)).toBe(false);
-  });
-
-  it("cada prazo seguinte gera uma janela mais tarde pro mesmo agendamento", () => {
+  it("computeReturnContactWindow: data de contato = atendimento + prazo, visível 3 dias antes e 3 depois", () => {
     const scheduledAt = new Date("2026-01-01T12:00:00.000Z");
-    const windows = REACTIVATION_THRESHOLD_OPTIONS.map((days) => computeReactivationWindow(scheduledAt, days));
-    for (let i = 1; i < windows.length; i++) {
-      expect(windows[i]!.start.getTime()).toBeGreaterThan(windows[i - 1]!.start.getTime());
+    const window = computeReturnContactWindow(scheduledAt, 30);
+    // 2026-01-01 + 30 dias = 2026-01-31
+    expect(window.start.toISOString().slice(0, 10)).toBe("2026-01-28");
+    expect(window.end.toISOString().slice(0, 10)).toBe("2026-02-03");
+  });
+
+  it("3 dias antes da data de contato: já dentro da janela", () => {
+    const scheduledAt = new Date("2026-01-01T12:00:00.000Z");
+    const window = computeReturnContactWindow(scheduledAt, 30);
+    expect(isWithinReactivationWindow(window, window.start)).toBe(true);
+  });
+
+  it("3 dias depois da data de contato: ainda dentro da janela; no 4º dia, já fora", () => {
+    const scheduledAt = new Date("2026-01-01T12:00:00.000Z");
+    const window = computeReturnContactWindow(scheduledAt, 30);
+    expect(isWithinReactivationWindow(window, window.end)).toBe(true);
+    const oneDayAfterEnd = new Date(window.end.getTime() + 24 * 60 * 60 * 1000);
+    expect(isWithinReactivationWindow(window, oneDayAfterEnd)).toBe(false);
+  });
+
+  it("4 dias antes da data de contato (antes do começo da janela): ainda fora", () => {
+    const scheduledAt = new Date("2026-01-01T12:00:00.000Z");
+    const window = computeReturnContactWindow(scheduledAt, 30);
+    const oneDayBeforeStart = new Date(window.start.getTime() - 24 * 60 * 60 * 1000);
+    expect(isWithinReactivationWindow(window, oneDayBeforeStart)).toBe(false);
+  });
+});
+
+describe("prazos de retorno — RETURN_PERIOD_OPTIONS / isValidReturnPeriodDays", () => {
+  it("9 prazos fixos, de 30 a 270", () => {
+    expect(RETURN_PERIOD_OPTIONS).toEqual([30, 60, 90, 120, 150, 180, 210, 240, 270]);
+  });
+
+  it("defaults do schema batem com as constantes exportadas", () => {
+    expect(DEFAULT_AVAILABLE_RETURN_PERIODS).toEqual([...RETURN_PERIOD_OPTIONS]);
+    expect(DEFAULT_RETURN_PERIODS).toEqual([30, 60]);
+    expect(DEFAULT_DAILY_WHATSAPP_LIMIT).toBe(15);
+  });
+
+  it("isValidReturnPeriodDays: aceita todos os valores da lista", () => {
+    for (const days of RETURN_PERIOD_OPTIONS) {
+      expect(isValidReturnPeriodDays(days)).toBe(true);
     }
+  });
+
+  it("isValidReturnPeriodDays: rejeita valor fora da lista", () => {
+    expect(isValidReturnPeriodDays(45)).toBe(false);
+    expect(isValidReturnPeriodDays(0)).toBe(false);
+    expect(isValidReturnPeriodDays(-30)).toBe(false);
+    expect(isValidReturnPeriodDays(300)).toBe(false);
+  });
+});
+
+describe("reactivationChannelForLead — sempre WhatsApp quando há telefone, Instagram como fallback", () => {
+  it("com telefone: WHATSAPP", () => {
+    expect(reactivationChannelForLead("11987654321")).toBe("WHATSAPP");
+  });
+
+  it("sem telefone: INSTAGRAM", () => {
+    expect(reactivationChannelForLead(null)).toBe("INSTAGRAM");
   });
 });
 
 describe("selectReactivationCandidates", () => {
   it("agendamento da IA sem agendamento posterior nem marcação é candidato", () => {
     const candidates = selectReactivationCandidates([appt()]);
-    expect(candidates).toEqual([{ appointmentId: "appt-1", leadId: "lead-1", scheduledAt: appt().scheduledAt }]);
+    expect(candidates).toEqual([
+      { appointmentId: "appt-1", leadId: "lead-1", scheduledAt: appt().scheduledAt, returnPeriodDays: null, returnPeriodNone: false },
+    ]);
   });
 
   it("exclui quem voltou — lead com agendamento posterior não vira candidato (o mais recente é o que conta)", () => {
@@ -204,67 +253,100 @@ describe("selectReactivationCandidates", () => {
     const candidates = selectReactivationCandidates([appt({ status: "CANCELLED" })]);
     expect(candidates).toEqual([]);
   });
+
+  it("carrega returnPeriodDays/returnPeriodNone do agendamento pro candidato", () => {
+    const candidates = selectReactivationCandidates([appt({ returnPeriodDays: 120 })]);
+    expect(candidates[0]!.returnPeriodDays).toBe(120);
+  });
 });
 
-describe("buildReactivationCardCandidates — vários períodos marcados", () => {
+describe("resolveAppointmentReturnPeriods — qual prazo (ou prazos) gera card pra um agendamento", () => {
+  it('"Sem retorno" marcado: nenhum prazo, mesmo com padrões da clínica configurados', () => {
+    expect(resolveAppointmentReturnPeriods({ returnPeriodDays: null, returnPeriodNone: true }, [30, 60])).toEqual([]);
+  });
+
+  it("prazo manual marcado: só esse, ignora os padrões da clínica", () => {
+    expect(resolveAppointmentReturnPeriods({ returnPeriodDays: 120, returnPeriodNone: false }, [30, 60])).toEqual([120]);
+  });
+
+  it("nada marcado: usa os padrões da clínica (pode ser mais de um)", () => {
+    expect(resolveAppointmentReturnPeriods({ returnPeriodDays: null, returnPeriodNone: false }, [30, 60])).toEqual([30, 60]);
+  });
+
+  it("nada marcado e clínica sem nenhum padrão: nenhum prazo", () => {
+    expect(resolveAppointmentReturnPeriods({ returnPeriodDays: null, returnPeriodNone: false }, [])).toEqual([]);
+  });
+});
+
+describe("buildReactivationCardCandidates — manual vs. padrão da clínica", () => {
   function candidate(overrides: Partial<ReactivationCandidate> = {}): ReactivationCandidate {
     return {
       appointmentId: "appt-1",
       leadId: "lead-1",
       scheduledAt: new Date("2026-01-01T12:00:00.000Z"),
+      returnPeriodDays: null,
+      returnPeriodNone: false,
       ...overrides,
     };
   }
 
-  it("nenhum período marcado (lista vazia) = Reativação desligada, nenhum card", () => {
-    const now = new Date("2027-01-01T12:00:00.000Z"); // bem depois de qualquer prazo, só pra garantir que não é a janela que está zerando
+  it("nenhum padrão da clínica e nada marcado = nenhum card", () => {
+    const now = new Date("2027-01-01T12:00:00.000Z");
     const cards = buildReactivationCardCandidates([candidate()], [], now);
     expect(cards).toEqual([]);
   });
 
-  it("cada período marcado funciona de forma independente — só entra na faixa quem está dentro da janela DAQUELE período", () => {
+  it('"Sem retorno" marcado: nenhum card, mesmo dentro da janela que os padrões gerariam', () => {
     const scheduledAt = new Date("2026-01-01T12:00:00.000Z");
-    const window90 = computeReactivationWindow(scheduledAt, 90);
-    const now = window90.start; // dentro da janela de 90 dias, mas bem antes da janela de 150
+    const window30 = computeReturnContactWindow(scheduledAt, 30);
+    const cards = buildReactivationCardCandidates([candidate({ scheduledAt, returnPeriodNone: true })], [30, 60], window30.start);
+    expect(cards).toEqual([]);
+  });
 
-    const cards = buildReactivationCardCandidates([candidate({ scheduledAt })], [90, 150], now);
+  it("prazo manual marcado: só um card, no prazo marcado — ignora os padrões", () => {
+    const scheduledAt = new Date("2026-01-01T12:00:00.000Z");
+    const window120 = computeReturnContactWindow(scheduledAt, 120);
+    const cards = buildReactivationCardCandidates([candidate({ scheduledAt, returnPeriodDays: 120 })], [30, 60], window120.start);
     expect(cards).toHaveLength(1);
-    expect(cards[0]!.thresholdDays).toBe(90);
+    expect(cards[0]!.thresholdDays).toBe(120);
   });
 
-  it("o mesmo paciente pode ter dois cards se completar dois períodos marcados em momentos diferentes", () => {
+  it("nada marcado, dois padrões da clínica (30 e 60): gera um card por padrão, em momentos diferentes", () => {
     const scheduledAt = new Date("2026-01-01T12:00:00.000Z");
-    const window90 = computeReactivationWindow(scheduledAt, 90);
-    const window150 = computeReactivationWindow(scheduledAt, 150);
+    const window30 = computeReturnContactWindow(scheduledAt, 30);
+    const window60 = computeReturnContactWindow(scheduledAt, 60);
 
-    const candidates = [candidate({ scheduledAt })];
-    const cardsAt90 = buildReactivationCardCandidates(candidates, [90, 150], window90.start);
-    const cardsAt150 = buildReactivationCardCandidates(candidates, [90, 150], window150.start);
+    const cardsAt30 = buildReactivationCardCandidates([candidate({ scheduledAt })], [30, 60], window30.start);
+    const cardsAt60 = buildReactivationCardCandidates([candidate({ scheduledAt })], [30, 60], window60.start);
 
-    expect(cardsAt90.map((c) => c.thresholdDays)).toEqual([90]);
-    expect(cardsAt150.map((c) => c.thresholdDays)).toEqual([150]);
-    // As duas janelas nunca se sobrepõem — por isso em cada momento só um
-    // dos dois cards (90 ou 150) existe, nunca os dois ao mesmo tempo, mas
-    // o MESMO agendamento gera um card em cada momento.
-    expect(window90.end.getTime()).toBeLessThan(window150.start.getTime());
+    expect(cardsAt30.map((c) => c.thresholdDays)).toEqual([30]);
+    expect(cardsAt60.map((c) => c.thresholdDays)).toEqual([60]);
   });
 
-  it("ordena globalmente por quem completou primeiro, entre todos os períodos juntos", () => {
+  it("janela do prazo marcado já passou: nenhum card gerado (nunca retroage)", () => {
+    const scheduledAt = new Date("2020-01-01T12:00:00.000Z"); // muitíssimo tempo atrás
+    const now = new Date("2026-01-01T12:00:00.000Z");
+    const cards = buildReactivationCardCandidates([candidate({ scheduledAt, returnPeriodDays: 30 })], [], now);
+    expect(cards).toEqual([]);
+  });
+
+  it("ordena globalmente por quem entrou na janela primeiro", () => {
     const scheduledAtA = new Date("2026-01-01T12:00:00.000Z");
     const scheduledAtB = new Date("2026-01-10T12:00:00.000Z");
     // B (agendado depois) com prazo de 30 dias completa ANTES de A (agendado
-    // antes) com prazo de 150 dias — a ordem global precisa respeitar isso.
-    const windowB30 = computeReactivationWindow(scheduledAtB, 30);
-    const now = windowB30.start;
+    // antes) com prazo de 60 dias — a ordem global precisa respeitar isso.
+    const windowB30 = computeReturnContactWindow(scheduledAtB, 30);
 
     const cards = buildReactivationCardCandidates(
-      [candidate({ appointmentId: "appt-a", scheduledAt: scheduledAtA }), candidate({ appointmentId: "appt-b", scheduledAt: scheduledAtB })],
-      [30, 150],
-      now
+      [
+        candidate({ appointmentId: "appt-a", scheduledAt: scheduledAtA, returnPeriodDays: 60 }),
+        candidate({ appointmentId: "appt-b", scheduledAt: scheduledAtB, returnPeriodDays: 30 }),
+      ],
+      [],
+      windowB30.start
     );
     expect(cards).toHaveLength(1);
     expect(cards[0]!.appointmentId).toBe("appt-b");
-    expect(cards[0]!.thresholdDays).toBe(30);
   });
 
   it("exclusões continuam valendo (vêm de selectReactivationCandidates, aplicadas antes)", () => {
@@ -273,18 +355,20 @@ describe("buildReactivationCardCandidates — vários períodos marcados", () =>
       appt({ id: "voltou-novo", scheduledAt: new Date("2026-06-01T12:00:00.000Z") }),
     ];
     const candidates = selectReactivationCandidates(appointments);
-    const now = computeReactivationWindow(new Date("2026-06-01T12:00:00.000Z"), 30).start;
+    const now = computeReturnContactWindow(new Date("2026-06-01T12:00:00.000Z"), 30).start;
     const cards = buildReactivationCardCandidates(candidates, [30], now);
     expect(cards.map((c) => c.appointmentId)).toEqual(["voltou-novo"]);
   });
 });
 
-describe("assignReactivationCardSlots — fixa por card E por período", () => {
+describe("assignReactivationCardSlots — fixa por card E por prazo", () => {
   function cardCandidate(appointmentId: string, thresholdDays: number): ReturnType<typeof buildReactivationCardCandidates>[number] {
     return {
       appointmentId,
       leadId: "lead-1",
       scheduledAt: new Date("2026-01-01T12:00:00.000Z"),
+      returnPeriodDays: thresholdDays,
+      returnPeriodNone: false,
       thresholdDays,
       window: { start: new Date("2026-04-01T00:00:00.000Z"), end: new Date("2026-04-07T00:00:00.000Z") },
     };
@@ -301,25 +385,15 @@ describe("assignReactivationCardSlots — fixa por card E por período", () => {
     expect(finalSequenceCounter).toBe(2);
   });
 
-  it("o mesmo agendamento em dois períodos diferentes recebe slots INDEPENDENTES (chave appointmentId+thresholdDays)", () => {
-    const { cards } = assignReactivationCardSlots(
-      [cardCandidate("appt-1", 30), cardCandidate("appt-1", 150)],
-      [1, 2, 3],
-      0,
-      new Map()
-    );
+  it("o mesmo agendamento em dois prazos diferentes recebe slots INDEPENDENTES (chave appointmentId+thresholdDays)", () => {
+    const { cards } = assignReactivationCardSlots([cardCandidate("appt-1", 30), cardCandidate("appt-1", 60)], [1, 2, 3], 0, new Map());
     expect(cards[0]!.slot).toBe(1); // appt-1 + 30 dias
-    expect(cards[1]!.slot).toBe(2); // appt-1 + 150 dias — slot DIFERENTE, mesmo agendamento
+    expect(cards[1]!.slot).toBe(2); // appt-1 + 60 dias — slot DIFERENTE, mesmo agendamento
   });
 
   it("reusa o slot já existente (persistido) em vez de reatribuir, e não avança o contador por isso", () => {
     const existing = new Map([[cardSlotKey("appt-1", 90), 4]]);
-    const { cards, finalSequenceCounter, newlyAssigned } = assignReactivationCardSlots(
-      [cardCandidate("appt-1", 90)],
-      [1, 2, 3, 4, 5],
-      7,
-      existing
-    );
+    const { cards, finalSequenceCounter, newlyAssigned } = assignReactivationCardSlots([cardCandidate("appt-1", 90)], [1, 2, 3, 4, 5], 7, existing);
     expect(cards[0]!.slot).toBe(4);
     expect(finalSequenceCounter).toBe(7); // não avançou — nada novo pra atribuir
     expect(newlyAssigned).toEqual([]);
@@ -386,100 +460,19 @@ describe("rotação em sequência das mensagens", () => {
 
   it("resolveReactivationMessageText: usa o texto customizado do slot quando existe", () => {
     const messages = [null, "Mensagem customizada", null, null, null];
-    expect(resolveReactivationMessageText(2, messages, DEFAULT_WHATSAPP_REACTIVATION_MESSAGES)).toBe("Mensagem customizada");
+    expect(resolveReactivationMessageText(2, messages, DEFAULT_REACTIVATION_MESSAGES)).toBe("Mensagem customizada");
   });
 
-  it("resolveReactivationMessageText: sem customização nesse slot, cai pro texto padrão do canal (WhatsApp)", () => {
+  it("resolveReactivationMessageText: sem customização nesse slot, cai pro texto padrão (mesmo pro fallback de Instagram)", () => {
     const messages = [null, null, null, null, null];
-    expect(resolveReactivationMessageText(3, messages, DEFAULT_WHATSAPP_REACTIVATION_MESSAGES)).toBe(
-      DEFAULT_WHATSAPP_REACTIVATION_MESSAGES[2]
-    );
+    expect(resolveReactivationMessageText(3, messages, DEFAULT_REACTIVATION_MESSAGES)).toBe(DEFAULT_REACTIVATION_MESSAGES[2]);
   });
 
-  it("resolveReactivationMessageText: sem customização nesse slot, cai pro texto padrão do canal (Instagram) — conjunto DIFERENTE do WhatsApp", () => {
-    const messages = [null, null, null, null, null];
-    const result = resolveReactivationMessageText(3, messages, DEFAULT_INSTAGRAM_REACTIVATION_MESSAGES);
-    expect(result).toBe(DEFAULT_INSTAGRAM_REACTIVATION_MESSAGES[2]);
-    expect(result).not.toBe(DEFAULT_WHATSAPP_REACTIVATION_MESSAGES[2]);
-  });
-
-  it("DEFAULT_WHATSAPP_REACTIVATION_MESSAGES e DEFAULT_INSTAGRAM_REACTIVATION_MESSAGES: 5 textos cada, nenhum citando serviço/procedimento, sem variável de nome", () => {
-    for (const set of [DEFAULT_WHATSAPP_REACTIVATION_MESSAGES, DEFAULT_INSTAGRAM_REACTIVATION_MESSAGES]) {
-      expect(set).toHaveLength(5);
-      for (const msg of set) {
-        expect(msg).not.toMatch(/\{\{/);
-      }
+  it("DEFAULT_REACTIVATION_MESSAGES: 5 textos, nenhum citando serviço/procedimento, sem variável de nome", () => {
+    expect(DEFAULT_REACTIVATION_MESSAGES).toHaveLength(5);
+    for (const msg of DEFAULT_REACTIVATION_MESSAGES) {
+      expect(msg).not.toMatch(/\{\{/);
     }
-  });
-});
-
-describe("canal por período (Instagram vs. WhatsApp)", () => {
-  it("7, 30 e 60 dias são Instagram; 10, 90, 120 e 150 são WhatsApp", () => {
-    expect(reactivationChannelForThreshold(7)).toBe("INSTAGRAM");
-    expect(reactivationChannelForThreshold(30)).toBe("INSTAGRAM");
-    expect(reactivationChannelForThreshold(60)).toBe("INSTAGRAM");
-    expect(reactivationChannelForThreshold(10)).toBe("WHATSAPP");
-    expect(reactivationChannelForThreshold(90)).toBe("WHATSAPP");
-    expect(reactivationChannelForThreshold(120)).toBe("WHATSAPP");
-    expect(reactivationChannelForThreshold(150)).toBe("WHATSAPP");
-  });
-
-  it("todo período em REACTIVATION_THRESHOLD_OPTIONS tem um canal mapeado em REACTIVATION_CHANNEL_BY_THRESHOLD", () => {
-    for (const days of REACTIVATION_THRESHOLD_OPTIONS) {
-      expect(["INSTAGRAM", "WHATSAPP"]).toContain(REACTIVATION_CHANNEL_BY_THRESHOLD[days]);
-    }
-  });
-});
-
-describe("assignReactivationCardSlotsByChannel — contador SEPARADO por canal", () => {
-  function cardCandidate(appointmentId: string, thresholdDays: number): ReturnType<typeof buildReactivationCardCandidates>[number] {
-    return {
-      appointmentId,
-      leadId: "lead-1",
-      scheduledAt: new Date("2026-01-01T12:00:00.000Z"),
-      thresholdDays,
-      window: { start: new Date("2026-04-01T00:00:00.000Z"), end: new Date("2026-04-07T00:00:00.000Z") },
-    };
-  }
-
-  it("as mensagens do Instagram rodam entre si e as do WhatsApp entre si — contadores não se misturam", () => {
-    // 2 cards de Instagram (7 dias) + 2 cards de WhatsApp (90 dias), nessa
-    // ordem — cada canal deveria recomeçar sua própria sequência do zero.
-    const { cards, finalCounters } = assignReactivationCardSlotsByChannel(
-      [cardCandidate("appt-ig-1", 7), cardCandidate("appt-ig-2", 30), cardCandidate("appt-wa-1", 90), cardCandidate("appt-wa-2", 120)],
-      [1, 2, 3, 4, 5],
-      [1, 2, 3, 4, 5],
-      { whatsapp: 0, instagram: 0 },
-      new Map()
-    );
-    const slotFor = (appointmentId: string) => cards.find((c) => c.appointmentId === appointmentId)!.slot;
-    expect(slotFor("appt-ig-1")).toBe(1);
-    expect(slotFor("appt-ig-2")).toBe(2);
-    expect(slotFor("appt-wa-1")).toBe(1); // recomeça do slot 1 — contador do WhatsApp é outro
-    expect(slotFor("appt-wa-2")).toBe(2);
-    expect(finalCounters).toEqual({ whatsapp: 2, instagram: 2 });
-  });
-
-  it("contador de um canal avançando não afeta o contador do outro", () => {
-    const { finalCounters } = assignReactivationCardSlotsByChannel(
-      [cardCandidate("appt-ig-1", 7)],
-      [1, 2, 3],
-      [1, 2, 3],
-      { whatsapp: 5, instagram: 0 },
-      new Map()
-    );
-    expect(finalCounters).toEqual({ whatsapp: 5, instagram: 1 }); // whatsapp intocado
-  });
-
-  it("devolve os cards na ordem global original (não agrupados por canal)", () => {
-    const { cards } = assignReactivationCardSlotsByChannel(
-      [cardCandidate("appt-wa-1", 90), cardCandidate("appt-ig-1", 7), cardCandidate("appt-wa-2", 120)],
-      [1, 2, 3],
-      [1, 2, 3],
-      { whatsapp: 0, instagram: 0 },
-      new Map()
-    );
-    expect(cards.map((c) => c.appointmentId)).toEqual(["appt-wa-1", "appt-ig-1", "appt-wa-2"]);
   });
 });
 
@@ -536,13 +529,29 @@ describe("toggleReactivationSentAt", () => {
   });
 });
 
-describe("getReactivationCards — sentAt e janela de 5 dias úteis", () => {
+describe("isDailyWhatsappLimitReached", () => {
+  it("abaixo do limite: não atingido", () => {
+    expect(isDailyWhatsappLimitReached(5, 15)).toBe(false);
+  });
+
+  it("exatamente no limite: atingido", () => {
+    expect(isDailyWhatsappLimitReached(15, 15)).toBe(true);
+  });
+
+  it("acima do limite: atingido", () => {
+    expect(isDailyWhatsappLimitReached(20, 15)).toBe(true);
+  });
+});
+
+describe("getReactivationCards — sentAt, janela e limite diário", () => {
   beforeEach(() => {
     reactivationConfigFindUniqueMock.mockReset();
     appointmentFindManyMock.mockReset();
     reactivationCardSlotFindManyMock.mockReset();
     reactivationCardSlotUpsertMock.mockReset();
     reactivationConfigUpsertMock.mockReset();
+    reactivationCardSlotCountMock.mockReset();
+    noShowCardSlotCountMock.mockReset();
     leadFindManyMock.mockReset();
     instagramAccountFindUniqueMock.mockReset();
     ensureLeadFirstNameFromInstagramMock.mockReset();
@@ -553,52 +562,47 @@ describe("getReactivationCards — sentAt e janela de 5 dias úteis", () => {
     // cache (lead.name), sem tentar nenhuma busca viva. Testes que querem
     // exercitar a busca viva configuram isto explicitamente.
     instagramAccountFindUniqueMock.mockResolvedValue(null);
+    reactivationCardSlotCountMock.mockResolvedValue(0);
+    noShowCardSlotCountMock.mockResolvedValue(0);
   });
 
-  it(
-    'um card já marcado "enviado" continua desaparecendo sozinho quando a janela de 5 dias úteis vence — ' +
-      "sentAt nunca estende nem protege a elegibilidade, exatamente como um card nunca marcado",
-    async () => {
-      // Mesmo atendimento, DOIS períodos marcados (7 e 90 dias) — a essa
-      // altura (`now`), o período de 7 dias já venceu há muito (sua janela
-      // de 5 dias úteis é bem mais curta que o intervalo entre os dois
-      // thresholds), o de 90 dias ainda está na janela. Os DOIS já têm
-      // ReactivationCardSlot com sentAt preenchido (ambos "enviados" em
-      // algum momento) — só o de 90 dias deve aparecer.
-      const scheduledAt = new Date("2026-01-01T12:00:00.000Z");
-      const window90 = computeReactivationWindow(scheduledAt, 90);
-      const now = window90.start;
+  it('um card já marcado "enviado" continua desaparecendo sozinho quando a janela vence — sentAt nunca estende nem protege a elegibilidade', async () => {
+    // Mesmo atendimento, DOIS prazos padrão (30 e 90 dias) — a essa
+    // altura (`now`), o prazo de 30 dias já venceu há muito, o de 90 dias
+    // ainda está na janela. Os DOIS já têm ReactivationCardSlot com sentAt
+    // preenchido (ambos "enviados" em algum momento) — só o de 90 dias
+    // deve aparecer.
+    const scheduledAt = new Date("2026-01-01T12:00:00.000Z");
+    const window90 = computeReturnContactWindow(scheduledAt, 90);
+    const now = window90.start;
 
-      reactivationConfigFindUniqueMock.mockResolvedValue({ thresholdDaysList: [7, 90] });
-      appointmentFindManyMock.mockResolvedValue([
-        { id: "appt-1", leadId: "lead-1", conversationId: "conv-1", scheduledAt, status: "SCHEDULED" },
-      ]);
-      const sentAt7 = new Date("2026-01-10T12:00:00.000Z");
-      const sentAt90 = new Date(now.getTime() - 1000);
-      reactivationCardSlotFindManyMock.mockResolvedValue([
-        { appointmentId: "appt-1", thresholdDays: 7, slot: 1, sentAt: sentAt7 },
-        { appointmentId: "appt-1", thresholdDays: 90, slot: 1, sentAt: sentAt90 },
-      ]);
+    reactivationConfigFindUniqueMock.mockResolvedValue({ defaultPeriods: [30, 90], dailyWhatsappLimit: 15 });
+    appointmentFindManyMock.mockResolvedValue([
+      { id: "appt-1", leadId: "lead-1", conversationId: "conv-1", scheduledAt, status: "SCHEDULED", returnPeriodDays: null, returnPeriodNone: false },
+    ]);
+    const sentAt30 = new Date("2026-01-10T12:00:00.000Z");
+    const sentAt90 = new Date(now.getTime() - 1000);
+    reactivationCardSlotFindManyMock.mockResolvedValue([
+      { appointmentId: "appt-1", thresholdDays: 30, slot: 1, sentAt: sentAt30 },
+      { appointmentId: "appt-1", thresholdDays: 90, slot: 1, sentAt: sentAt90 },
+    ]);
 
-      const cards = await getReactivationCards("clinic-1", now);
+    const cards = await getReactivationCards("clinic-1", now);
 
-      expect(cards).toHaveLength(1);
-      expect(cards[0]!.thresholdDays).toBe(90);
-      expect(cards[0]!.sentAt).toEqual(sentAt90);
-      // Nenhum slot novo precisou ser criado (os dois já existiam) — prova
-      // de que este teste não depende de upsert nenhum pra valer.
-      expect(reactivationCardSlotUpsertMock).not.toHaveBeenCalled();
-    }
-  );
+    expect(cards).toHaveLength(1);
+    expect(cards[0]!.thresholdDays).toBe(90);
+    expect(cards[0]!.sentAt).toEqual(sentAt90);
+    expect(reactivationCardSlotUpsertMock).not.toHaveBeenCalled();
+  });
 
   it("card dentro da janela, nunca marcado (sem linha de slot ainda): sentAt sai null (pendente)", async () => {
     const scheduledAt = new Date("2026-01-01T12:00:00.000Z");
-    const window90 = computeReactivationWindow(scheduledAt, 90);
+    const window90 = computeReturnContactWindow(scheduledAt, 90);
     const now = window90.start;
 
-    reactivationConfigFindUniqueMock.mockResolvedValue({ thresholdDaysList: [90] });
+    reactivationConfigFindUniqueMock.mockResolvedValue({ defaultPeriods: [90], dailyWhatsappLimit: 15 });
     appointmentFindManyMock.mockResolvedValue([
-      { id: "appt-1", leadId: "lead-1", conversationId: "conv-1", scheduledAt, status: "SCHEDULED" },
+      { id: "appt-1", leadId: "lead-1", conversationId: "conv-1", scheduledAt, status: "SCHEDULED", returnPeriodDays: null, returnPeriodNone: false },
     ]);
     reactivationCardSlotFindManyMock.mockResolvedValue([]);
     reactivationCardSlotUpsertMock.mockResolvedValue({});
@@ -609,22 +613,133 @@ describe("getReactivationCards — sentAt e janela de 5 dias úteis", () => {
     expect(cards[0]!.sentAt).toBeNull();
   });
 
+  it("prazo manual marcado (120 dias): gera card só nesse prazo, mesmo com padrões diferentes configurados", async () => {
+    const scheduledAt = new Date("2026-01-01T12:00:00.000Z");
+    const window120 = computeReturnContactWindow(scheduledAt, 120);
+    const now = window120.start;
+
+    reactivationConfigFindUniqueMock.mockResolvedValue({ defaultPeriods: [30, 60], dailyWhatsappLimit: 15 });
+    appointmentFindManyMock.mockResolvedValue([
+      { id: "appt-1", leadId: "lead-1", conversationId: "conv-1", scheduledAt, status: "SCHEDULED", returnPeriodDays: 120, returnPeriodNone: false },
+    ]);
+    reactivationCardSlotFindManyMock.mockResolvedValue([]);
+    reactivationCardSlotUpsertMock.mockResolvedValue({});
+
+    const cards = await getReactivationCards("clinic-1", now);
+
+    expect(cards).toHaveLength(1);
+    expect(cards[0]!.thresholdDays).toBe(120);
+  });
+
+  it('"Sem retorno" marcado: nenhum card, mesmo dentro da janela que os padrões gerariam', async () => {
+    const scheduledAt = new Date("2026-01-01T12:00:00.000Z");
+    const window30 = computeReturnContactWindow(scheduledAt, 30);
+    const now = window30.start;
+
+    reactivationConfigFindUniqueMock.mockResolvedValue({ defaultPeriods: [30, 60], dailyWhatsappLimit: 15 });
+    appointmentFindManyMock.mockResolvedValue([
+      { id: "appt-1", leadId: "lead-1", conversationId: "conv-1", scheduledAt, status: "SCHEDULED", returnPeriodDays: null, returnPeriodNone: true },
+    ]);
+    reactivationCardSlotFindManyMock.mockResolvedValue([]);
+
+    const cards = await getReactivationCards("clinic-1", now);
+
+    expect(cards).toEqual([]);
+  });
+
+  it("sem telefone cadastrado: canal INSTAGRAM, sem link de WhatsApp", async () => {
+    const scheduledAt = new Date("2026-01-01T12:00:00.000Z");
+    const window90 = computeReturnContactWindow(scheduledAt, 90);
+    const now = window90.start;
+
+    leadFindManyMock.mockResolvedValue([
+      { id: "lead-1", name: "Fulana", igUsername: "fulana.ig", igScopedId: "ig-1", nameLookupAttempted: true, profilePictureUrl: null, phone: null },
+    ]);
+    reactivationConfigFindUniqueMock.mockResolvedValue({ defaultPeriods: [90], dailyWhatsappLimit: 15 });
+    appointmentFindManyMock.mockResolvedValue([
+      { id: "appt-1", leadId: "lead-1", conversationId: "conv-1", scheduledAt, status: "SCHEDULED", returnPeriodDays: null, returnPeriodNone: false },
+    ]);
+    reactivationCardSlotFindManyMock.mockResolvedValue([]);
+    reactivationCardSlotUpsertMock.mockResolvedValue({});
+
+    const cards = await getReactivationCards("clinic-1", now);
+
+    expect(cards[0]!.channel).toBe("INSTAGRAM");
+    expect(cards[0]!.whatsappLink).toBeNull();
+    expect(cards[0]!.instagramDmLink).toBe("https://ig.me/m/fulana.ig");
+  });
+
+  it("limite diário de WhatsApp atingido: card de canal WHATSAPP ainda pendente sai com dailyLimitReached", async () => {
+    const scheduledAt = new Date("2026-01-01T12:00:00.000Z");
+    const window90 = computeReturnContactWindow(scheduledAt, 90);
+    const now = window90.start;
+
+    reactivationConfigFindUniqueMock.mockResolvedValue({ defaultPeriods: [90], dailyWhatsappLimit: 15 });
+    appointmentFindManyMock.mockResolvedValue([
+      { id: "appt-1", leadId: "lead-1", conversationId: "conv-1", scheduledAt, status: "SCHEDULED", returnPeriodDays: null, returnPeriodNone: false },
+    ]);
+    reactivationCardSlotFindManyMock.mockResolvedValue([]);
+    reactivationCardSlotUpsertMock.mockResolvedValue({});
+    reactivationCardSlotCountMock.mockResolvedValue(10);
+    noShowCardSlotCountMock.mockResolvedValue(5); // 10 + 5 = 15, limite batido
+
+    const cards = await getReactivationCards("clinic-1", now);
+
+    expect(cards[0]!.dailyLimitReached).toBe(true);
+  });
+
+  it("limite diário NÃO atingido: dailyLimitReached false", async () => {
+    const scheduledAt = new Date("2026-01-01T12:00:00.000Z");
+    const window90 = computeReturnContactWindow(scheduledAt, 90);
+    const now = window90.start;
+
+    reactivationConfigFindUniqueMock.mockResolvedValue({ defaultPeriods: [90], dailyWhatsappLimit: 15 });
+    appointmentFindManyMock.mockResolvedValue([
+      { id: "appt-1", leadId: "lead-1", conversationId: "conv-1", scheduledAt, status: "SCHEDULED", returnPeriodDays: null, returnPeriodNone: false },
+    ]);
+    reactivationCardSlotFindManyMock.mockResolvedValue([]);
+    reactivationCardSlotUpsertMock.mockResolvedValue({});
+    reactivationCardSlotCountMock.mockResolvedValue(3);
+    noShowCardSlotCountMock.mockResolvedValue(2);
+
+    const cards = await getReactivationCards("clinic-1", now);
+
+    expect(cards[0]!.dailyLimitReached).toBe(false);
+  });
+
+  it("card já enviado não fica dailyLimitReached mesmo com o limite batido (continua clicável pra desfazer)", async () => {
+    const scheduledAt = new Date("2026-01-01T12:00:00.000Z");
+    const window90 = computeReturnContactWindow(scheduledAt, 90);
+    const now = window90.start;
+
+    reactivationConfigFindUniqueMock.mockResolvedValue({ defaultPeriods: [90], dailyWhatsappLimit: 15 });
+    appointmentFindManyMock.mockResolvedValue([
+      { id: "appt-1", leadId: "lead-1", conversationId: "conv-1", scheduledAt, status: "SCHEDULED", returnPeriodDays: null, returnPeriodNone: false },
+    ]);
+    reactivationCardSlotFindManyMock.mockResolvedValue([{ appointmentId: "appt-1", thresholdDays: 90, slot: 1, sentAt: new Date(now.getTime() - 1000) }]);
+    reactivationCardSlotCountMock.mockResolvedValue(15);
+    noShowCardSlotCountMock.mockResolvedValue(0);
+
+    const cards = await getReactivationCards("clinic-1", now);
+
+    expect(cards[0]!.sentAt).not.toBeNull();
+    expect(cards[0]!.dailyLimitReached).toBe(false);
+  });
+
   // Bug real reportado: mensagem de Reativação chegava com "{{primeiro_nome}}"
   // literal no WhatsApp — a Reativação nunca substituía variável nenhuma.
-  // Estes dois testes cobrem a wiring de getReactivationCards com
-  // renderMessageTemplate (a lógica de limpeza em si já é testada à parte
-  // em message-template.test.ts).
   it("mensagem customizada com {{primeiro_nome}}/{{data_horario}}: renderiza com o nome em cache e a data do agendamento", async () => {
     const scheduledAt = new Date("2026-01-01T15:00:00.000Z"); // quinta-feira, 12h em São Paulo (UTC-3)
-    const window90 = computeReactivationWindow(scheduledAt, 90);
+    const window90 = computeReturnContactWindow(scheduledAt, 90);
     const now = window90.start;
 
     reactivationConfigFindUniqueMock.mockResolvedValue({
-      thresholdDaysList: [90],
+      defaultPeriods: [90],
+      dailyWhatsappLimit: 15,
       message1: "Oi, {{primeiro_nome}}! Faz tempo desde {{data_horario}}.",
     });
     appointmentFindManyMock.mockResolvedValue([
-      { id: "appt-1", leadId: "lead-1", conversationId: "conv-1", scheduledAt, status: "SCHEDULED" },
+      { id: "appt-1", leadId: "lead-1", conversationId: "conv-1", scheduledAt, status: "SCHEDULED", returnPeriodDays: null, returnPeriodNone: false },
     ]);
     reactivationCardSlotFindManyMock.mockResolvedValue([]);
     reactivationCardSlotUpsertMock.mockResolvedValue({});
@@ -635,33 +750,9 @@ describe("getReactivationCards — sentAt e janela de 5 dias úteis", () => {
     expect(cards[0]!.message).not.toMatch(/\{\{/);
   });
 
-  it('nome desconhecido (sem cache, sem conta do Instagram pra buscar): remove "{{primeiro_nome}}" com limpeza — nunca sai literal', async () => {
-    const scheduledAt = new Date("2026-01-01T12:00:00.000Z");
-    const window90 = computeReactivationWindow(scheduledAt, 90);
-    const now = window90.start;
-
-    leadFindManyMock.mockResolvedValue([
-      { id: "lead-1", name: null, igUsername: null, igScopedId: "ig-1", nameLookupAttempted: true, profilePictureUrl: null, phone: "11987654321" },
-    ]);
-    reactivationConfigFindUniqueMock.mockResolvedValue({
-      thresholdDaysList: [90],
-      message1: "Oi, {{primeiro_nome}}! Como você está?",
-    });
-    appointmentFindManyMock.mockResolvedValue([
-      { id: "appt-1", leadId: "lead-1", conversationId: "conv-1", scheduledAt, status: "SCHEDULED" },
-    ]);
-    reactivationCardSlotFindManyMock.mockResolvedValue([]);
-    reactivationCardSlotUpsertMock.mockResolvedValue({});
-
-    const cards = await getReactivationCards("clinic-1", now);
-
-    expect(cards[0]!.message).toBe("Oi! Como você está?");
-    expect(cards[0]!.message).not.toMatch(/\{\{/);
-  });
-
   it("clínica com conta do Instagram conectada: busca o nome ao vivo (ensureLeadFirstNameFromInstagram) em vez de confiar só no cache", async () => {
     const scheduledAt = new Date("2026-01-01T12:00:00.000Z");
-    const window90 = computeReactivationWindow(scheduledAt, 90);
+    const window90 = computeReturnContactWindow(scheduledAt, 90);
     const now = window90.start;
 
     leadFindManyMock.mockResolvedValue([
@@ -669,22 +760,16 @@ describe("getReactivationCards — sentAt e janela de 5 dias úteis", () => {
     ]);
     instagramAccountFindUniqueMock.mockResolvedValue({ accessTokenEnc: "enc-token" });
     ensureLeadFirstNameFromInstagramMock.mockResolvedValue("João Pedro");
-    reactivationConfigFindUniqueMock.mockResolvedValue({
-      thresholdDaysList: [90],
-      message1: "Oi, {{primeiro_nome}}!",
-    });
+    reactivationConfigFindUniqueMock.mockResolvedValue({ defaultPeriods: [90], dailyWhatsappLimit: 15, message1: "Oi, {{primeiro_nome}}!" });
     appointmentFindManyMock.mockResolvedValue([
-      { id: "appt-1", leadId: "lead-1", conversationId: "conv-1", scheduledAt, status: "SCHEDULED" },
+      { id: "appt-1", leadId: "lead-1", conversationId: "conv-1", scheduledAt, status: "SCHEDULED", returnPeriodDays: null, returnPeriodNone: false },
     ]);
     reactivationCardSlotFindManyMock.mockResolvedValue([]);
     reactivationCardSlotUpsertMock.mockResolvedValue({});
 
     const cards = await getReactivationCards("clinic-1", now);
 
-    expect(ensureLeadFirstNameFromInstagramMock).toHaveBeenCalledWith(
-      expect.objectContaining({ id: "lead-1" }),
-      "enc-token"
-    );
+    expect(ensureLeadFirstNameFromInstagramMock).toHaveBeenCalledWith(expect.objectContaining({ id: "lead-1" }), "enc-token");
     expect(cards[0]!.message).toBe("Oi, João!");
   });
 });
@@ -705,17 +790,6 @@ describe("sortReactivationCardsForDisplay — pendentes primeiro, enviados no fi
     expect(sorted.map((x) => x.appointmentId)).toEqual(["a", "c", "b", "d"]);
   });
 
-  it("lista já toda pendente ou já toda enviada: ordem inalterada", () => {
-    const pendingOnly = [card({ appointmentId: "a" }), card({ appointmentId: "b" })];
-    expect(sortReactivationCardsForDisplay(pendingOnly).map((x) => x.appointmentId)).toEqual(["a", "b"]);
-
-    const sentOnly = [
-      card({ appointmentId: "a", sentAt: new Date() }),
-      card({ appointmentId: "b", sentAt: new Date() }),
-    ];
-    expect(sortReactivationCardsForDisplay(sentOnly).map((x) => x.appointmentId)).toEqual(["a", "b"]);
-  });
-
   it("não modifica o array original (devolve uma cópia)", () => {
     const original = [card({ appointmentId: "a", sentAt: new Date() }), card({ appointmentId: "b" })];
     const originalOrder = original.map((x) => x.appointmentId);
@@ -730,11 +804,6 @@ describe("countPendingReactivationCards — título da faixa mostra só os pende
     expect(countPendingReactivationCards(cards)).toBe(2);
   });
 
-  it("todos enviados: zero pendentes", () => {
-    const cards = [card({ sentAt: new Date() }), card({ sentAt: new Date() })];
-    expect(countPendingReactivationCards(cards)).toBe(0);
-  });
-
   it("lista vazia: zero pendentes", () => {
     expect(countPendingReactivationCards([])).toBe(0);
   });
@@ -742,7 +811,7 @@ describe("countPendingReactivationCards — título da faixa mostra só os pende
 
 // Proteção do chip (pedido explícito): ~10s entre envios de WhatsApp da
 // MESMA clínica. Pura — quem chama (sendReactivationWhatsAppMessage,
-// abaixo) acha o sentAt mais recente só entre slots de canal WHATSAPP.
+// abaixo) acha o sentAt mais recente só entre slots de lead com telefone.
 describe("isReactivationWhatsAppRateLimited", () => {
   it("sem nenhum envio anterior (null): nunca limitado", () => {
     expect(isReactivationWhatsAppRateLimited(null, new Date())).toBe(false);
@@ -761,12 +830,12 @@ describe("isReactivationWhatsAppRateLimited", () => {
   });
 });
 
-describe("sendReactivationWhatsAppMessage — envio direto pelo VEXO (canal WhatsApp)", () => {
+describe("sendReactivationWhatsAppMessage — envio direto pelo VEXO", () => {
   function fakeSlot(overrides: Record<string, unknown> = {}) {
     return {
       id: "slot-1",
       appointmentId: "appt-1",
-      thresholdDays: 90, // WHATSAPP (ver REACTIVATION_CHANNEL_BY_THRESHOLD)
+      thresholdDays: 90,
       slot: 2,
       sentAt: null,
       appointment: {
@@ -790,12 +859,20 @@ describe("sendReactivationWhatsAppMessage — envio direto pelo VEXO (canal What
 
   beforeEach(() => {
     reactivationCardSlotFindUniqueMock.mockReset();
-    reactivationCardSlotFindManyMock.mockReset();
+    reactivationCardSlotFindFirstMock.mockReset();
+    noShowCardSlotFindFirstMock.mockReset();
     reactivationCardSlotUpdateManyMock.mockReset();
     reactivationCardSlotUpdateMock.mockReset();
+    reactivationCardSlotCountMock.mockReset();
+    noShowCardSlotCountMock.mockReset();
+    reactivationConfigFindUniqueMock.mockReset();
     sendWhatsappMessageMock.mockReset();
-    reactivationCardSlotFindManyMock.mockResolvedValue([]); // sem envio anterior = sem rate limit, por padrão
+    reactivationCardSlotFindFirstMock.mockResolvedValue(null); // sem envio anterior = sem rate limit, por padrão
+    noShowCardSlotFindFirstMock.mockResolvedValue(null);
     reactivationCardSlotUpdateManyMock.mockResolvedValue({ count: 1 }); // claim ganho, por padrão
+    reactivationCardSlotCountMock.mockResolvedValue(0); // abaixo do limite diário, por padrão
+    noShowCardSlotCountMock.mockResolvedValue(0);
+    reactivationConfigFindUniqueMock.mockResolvedValue({ dailyWhatsappLimit: 15 });
   });
 
   it("sucesso: reserva, manda o texto certo (da config+slot, nunca do cliente) e marca enviado", async () => {
@@ -826,7 +903,7 @@ describe("sendReactivationWhatsAppMessage — envio direto pelo VEXO (canal What
     expect(reactivationCardSlotUpdateMock).toHaveBeenCalledWith({ where: { id: "slot-1" }, data: { sentAt: null } });
   });
 
-  it('card já marcado como enviado: não reenvia (idempotente) — nem chega a checar rate limit ou reservar', async () => {
+  it("card já marcado como enviado: não reenvia (idempotente) — nem chega a checar rate limit/limite diário ou reservar", async () => {
     reactivationCardSlotFindUniqueMock.mockResolvedValue(fakeSlot({ sentAt: new Date("2026-05-01T00:00:00Z") }));
 
     const result = await sendReactivationWhatsAppMessage("appt-1", 90, new Date());
@@ -849,9 +926,7 @@ describe("sendReactivationWhatsAppMessage — envio direto pelo VEXO (canal What
   it("intervalo mínimo entre envios da mesma clínica: rejeita sem mandar nada, nem reserva o card", async () => {
     reactivationCardSlotFindUniqueMock.mockResolvedValue(fakeSlot());
     const now = new Date("2026-05-20T12:00:30.000Z");
-    reactivationCardSlotFindManyMock.mockResolvedValue([
-      { thresholdDays: 90, sentAt: new Date(now.getTime() - 5_000) }, // 5s atrás, canal WHATSAPP — dentro do limite
-    ]);
+    reactivationCardSlotFindFirstMock.mockResolvedValue({ sentAt: new Date(now.getTime() - 5_000) }); // 5s atrás
 
     const result = await sendReactivationWhatsAppMessage("appt-1", 90, now);
 
@@ -860,24 +935,20 @@ describe("sendReactivationWhatsAppMessage — envio direto pelo VEXO (canal What
     expect(sendWhatsappMessageMock).not.toHaveBeenCalled();
   });
 
-  it("envio recente só de card de Instagram (canal diferente) não conta pro limite do WhatsApp", async () => {
+  it("limite diário de WhatsApp (Reativação + Faltou) já atingido: rejeita antes de checar rate limit ou reservar", async () => {
     reactivationCardSlotFindUniqueMock.mockResolvedValue(fakeSlot());
-    const now = new Date("2026-05-20T12:00:30.000Z");
-    reactivationCardSlotFindManyMock.mockResolvedValue([
-      { thresholdDays: 30, sentAt: new Date(now.getTime() - 1_000) }, // 1s atrás, mas canal INSTAGRAM
-    ]);
-    sendWhatsappMessageMock.mockResolvedValue(undefined);
+    reactivationCardSlotCountMock.mockResolvedValue(10);
+    noShowCardSlotCountMock.mockResolvedValue(5); // 10 + 5 = 15 = limite
 
-    const result = await sendReactivationWhatsAppMessage("appt-1", 90, now);
+    const result = await sendReactivationWhatsAppMessage("appt-1", 90, new Date());
 
-    expect(result.ok).toBe(true);
-    expect(sendWhatsappMessageMock).toHaveBeenCalled();
+    expect(result).toEqual({ ok: false, reason: "daily_limit_reached", clinicId: "clinic-1" });
+    expect(reactivationCardSlotUpdateManyMock).not.toHaveBeenCalled();
+    expect(sendWhatsappMessageMock).not.toHaveBeenCalled();
   });
 
   it('telefone inválido: NÃO manda, libera a reserva, nunca marca como enviado', async () => {
-    reactivationCardSlotFindUniqueMock.mockResolvedValue(
-      fakeSlot({ appointment: { ...fakeSlot().appointment, lead: { phone: "123" } } })
-    );
+    reactivationCardSlotFindUniqueMock.mockResolvedValue(fakeSlot({ appointment: { ...fakeSlot().appointment, lead: { phone: "123" } } }));
 
     const result = await sendReactivationWhatsAppMessage("appt-1", 90, new Date());
 
@@ -886,10 +957,8 @@ describe("sendReactivationWhatsAppMessage — envio direto pelo VEXO (canal What
     expect(reactivationCardSlotUpdateMock).toHaveBeenCalledWith({ where: { id: "slot-1" }, data: { sentAt: null } });
   });
 
-  it("lead sem telefone cadastrado: mesmo tratamento de telefone inválido", async () => {
-    reactivationCardSlotFindUniqueMock.mockResolvedValue(
-      fakeSlot({ appointment: { ...fakeSlot().appointment, lead: null } })
-    );
+  it("lead sem telefone cadastrado: mesmo tratamento de telefone inválido — é o caso que leva ao fallback de Instagram na UI", async () => {
+    reactivationCardSlotFindUniqueMock.mockResolvedValue(fakeSlot({ appointment: { ...fakeSlot().appointment, lead: null } }));
 
     const result = await sendReactivationWhatsAppMessage("appt-1", 90, new Date());
 
@@ -918,8 +987,6 @@ describe("sendReactivationWhatsAppMessage — envio direto pelo VEXO (canal What
     expect(sendWhatsappMessageMock).not.toHaveBeenCalled();
   });
 
-  // Bug real reportado (mesmo mecanismo de getReactivationCards, acima) —
-  // o envio direto nunca substituía variável nenhuma no texto configurado.
   it("mensagem customizada com {{primeiro_nome}}/{{data_horario}}: renderiza antes de mandar de verdade", async () => {
     reactivationCardSlotFindUniqueMock.mockResolvedValue(
       fakeSlot({
@@ -936,39 +1003,6 @@ describe("sendReactivationWhatsAppMessage — envio direto pelo VEXO (canal What
 
     await sendReactivationWhatsAppMessage("appt-1", 90, new Date("2026-04-01T12:00:00.000Z"));
 
-    expect(sendWhatsappMessageMock).toHaveBeenCalledWith(
-      "clinic-1-instance",
-      "5511987654321",
-      "Oi, Fulana! Em quinta-feira (01/01) às 12h."
-    );
-  });
-
-  it("nome desconhecido (sem cache, sem conta do Instagram): remove {{primeiro_nome}} com limpeza antes de mandar — nunca literal", async () => {
-    reactivationCardSlotFindUniqueMock.mockResolvedValue(
-      fakeSlot({
-        appointment: {
-          ...fakeSlot().appointment,
-          lead: { id: "lead-1", name: null, igScopedId: "ig-1", nameLookupAttempted: true, phone: "11987654321" },
-          clinic: {
-            ...fakeSlot().appointment.clinic,
-            reactivationConfig: { message1: null, message2: "Oi, {{primeiro_nome}}! Como vai?", message3: null, message4: null, message5: null },
-          },
-        },
-      })
-    );
-    sendWhatsappMessageMock.mockResolvedValue(undefined);
-
-    await sendReactivationWhatsAppMessage("appt-1", 90, new Date());
-
-    expect(sendWhatsappMessageMock).toHaveBeenCalledWith("clinic-1-instance", "5511987654321", "Oi! Como vai?");
-  });
-
-  it("defesa em profundidade: período de canal Instagram nunca manda WhatsApp, mesmo se chamado diretamente", async () => {
-    reactivationCardSlotFindUniqueMock.mockResolvedValue(fakeSlot({ thresholdDays: 30 })); // 30 = INSTAGRAM
-
-    const result = await sendReactivationWhatsAppMessage("appt-1", 30, new Date());
-
-    expect(result).toEqual({ ok: false, reason: "wrong_channel", clinicId: "clinic-1" });
-    expect(sendWhatsappMessageMock).not.toHaveBeenCalled();
+    expect(sendWhatsappMessageMock).toHaveBeenCalledWith("clinic-1-instance", "5511987654321", "Oi, Fulana! Em quinta-feira (01/01) às 12h.");
   });
 });

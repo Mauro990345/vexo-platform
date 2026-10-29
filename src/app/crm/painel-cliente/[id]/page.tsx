@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { ClientPanelView } from "@/components/ClientPanelView";
 import {
   setAppointmentAttendanceAction,
+  setAppointmentReturnPeriodAction,
   toggleReactivationCardSentAction,
   sendReactivationWhatsAppMessageAction,
   toggleNoShowCardSentAction,
@@ -42,6 +43,7 @@ export default async function ClientPanelPreviewPage({
       week={searchParams.week}
       base={`/crm/painel-cliente/${clinic.id}`}
       noShowAction={setAppointmentAttendanceAction}
+      returnPeriodAction={setAppointmentReturnPeriodAction}
       reactivationSentAction={toggleReactivationCardSentAction}
       reactivationSendWhatsappAction={sendReactivationWhatsAppMessageAction}
       noShowCardSentAction={toggleNoShowCardSentAction}

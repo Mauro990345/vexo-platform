@@ -1,8 +1,28 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { resolveBatchTimestamps } from "@/lib/message-batch-timestamps";
 import { toChatHistory } from "@/lib/chat-history";
 
 describe("resolveBatchTimestamps", () => {
+  // Corrige as 2 falhas recorrentes de relógio real (pedido explícito) —
+  // os testes de "ordem preservada"/"timestamps já crescentes" abaixo
+  // chamam resolveBatchTimestamps SEM passar `now`, então o default
+  // (`() => new Date()`, ver message-batch-timestamps.ts) usava o RELÓGIO
+  // DE VERDADE; como as fixtures são datas fixas de 2026-10-08, bastava o
+  // relógio real avançar mais de MAX_CLOCK_SKEW_MS (24h) dessa data pro
+  // "timestamp plausível" virar "implausível", caindo no fallback de
+  // now() e quebrando as asserções (exatamente o que acontecia aqui).
+  // Congelar o relógio pra DENTRO da janela plausível, pra toda a suíte
+  // deste arquivo, resolve de vez — sem depender de nenhum teste lembrar
+  // de passar `now` explicitamente.
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-10-08T12:00:00.000Z"));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("timestamp inválido (ausente, NaN, ou muito fora do horário atual) cai no horário atual", () => {
     const now = () => new Date("2026-10-08T12:00:00.000Z");
 

@@ -1,28 +1,33 @@
 import { PrismaClient } from "@prisma/client";
 import {
   selectReactivationCandidates,
-  computeReactivationWindow,
+  computeReturnContactWindow,
   isWithinReactivationWindow,
+  RETURN_PERIOD_OPTIONS,
   type ReactivationSourceAppointment,
 } from "@/lib/reactivation";
 
 const prisma = new PrismaClient();
 
 // Script ÚNICO, SOMENTE LEITURA — prévia de quantos cards a faixa
-// "Reativação" mostraria HOJE para uma clínica, num ou mais prazos, SEM
-// gravar nada (nunca chama getReactivationCards, que atribui e persiste
-// slot — só repete a mesma seleção/filtro de janela que ele usa, em modo
-// dry-run). Pedido explícito: "sem alterar nada no banco".
+// "Reativação" mostraria HOJE para uma clínica, num ou mais prazos de
+// retorno, SEM gravar nada (nunca chama getReactivationCards, que atribui
+// e persiste slot — só repete a mesma seleção/filtro de janela que ele
+// usa, em modo dry-run). Pedido explícito: "sem alterar nada no banco".
 //
 // Lista TODO candidato elegível (não só os que já estão na janela hoje),
 // com nome do lead, data do agendamento, dias já passados desde então, e
-// pra CADA período pedido: quando aquele candidato entraria na faixa
-// (data de início da janela de 5 dias úteis) e se isso já passou, está
-// acontecendo agora ou ainda vai acontecer.
+// pra CADA prazo pedido: quando aquele candidato entraria na faixa (data
+// de início da janela de 3 dias antes/3 depois da data de contato) e se
+// isso já passou, está acontecendo agora ou ainda vai acontecer. Os
+// prazos (--days) são sempre SIMULADOS pra todo candidato aqui — é uma
+// prévia "e se", não uma leitura do que cada agendamento tem realmente
+// marcado (Appointment.returnPeriodDays), que varia por agendamento desde
+// que o botão "Retorno" passou a existir.
 //
 // Uso:
-//   npx tsx prisma/reactivation-preview.ts --clinic=<id> --days=7,10,30,60
-//   npx tsx prisma/reactivation-preview.ts --clinic=<id>                  # usa 7,10,30,60,90,120,150
+//   npx tsx prisma/reactivation-preview.ts --clinic=<id> --days=30,60,90
+//   npx tsx prisma/reactivation-preview.ts --clinic=<id>                  # usa os 9 prazos disponíveis
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
@@ -50,7 +55,7 @@ async function main(): Promise<void> {
         .split(",")
         .map((d) => parseInt(d.trim(), 10))
         .filter((d) => Number.isFinite(d) && d > 0)
-    : [7, 10, 30, 60, 90, 120, 150];
+    : [...RETURN_PERIOD_OPTIONS];
 
   const clinic = await prisma.clinic.findUnique({ where: { id: clinicId }, select: { id: true, name: true } });
   if (!clinic) {
@@ -60,7 +65,15 @@ async function main(): Promise<void> {
 
   const appointments: ReactivationSourceAppointment[] = await prisma.appointment.findMany({
     where: { clinicId, conversationId: { not: null } },
-    select: { id: true, leadId: true, conversationId: true, scheduledAt: true, status: true },
+    select: {
+      id: true,
+      leadId: true,
+      conversationId: true,
+      scheduledAt: true,
+      status: true,
+      returnPeriodDays: true,
+      returnPeriodNone: true,
+    },
   });
 
   const candidates = selectReactivationCandidates(appointments);
@@ -79,7 +92,7 @@ async function main(): Promise<void> {
 
   console.log("--- Resumo: quantos entrariam na faixa HOJE, por período ---");
   for (const thresholdDays of thresholdDaysList) {
-    const countToday = candidates.filter((c) => isWithinReactivationWindow(computeReactivationWindow(c.scheduledAt, thresholdDays), now)).length;
+    const countToday = candidates.filter((c) => isWithinReactivationWindow(computeReturnContactWindow(c.scheduledAt, thresholdDays), now)).length;
     console.log(`  ${thresholdDays} dias: ${countToday} card(s) hoje.`);
   }
 
@@ -97,7 +110,7 @@ async function main(): Promise<void> {
         .slice(0, 10)} (${daysElapsed} dia(s) atrás)`
     );
     for (const thresholdDays of thresholdDaysList) {
-      const window = computeReactivationWindow(candidate.scheduledAt, thresholdDays);
+      const window = computeReturnContactWindow(candidate.scheduledAt, thresholdDays);
       const startStr = window.start.toISOString().slice(0, 10);
       const endStr = window.end.toISOString().slice(0, 10);
       let statusLabel: string;
