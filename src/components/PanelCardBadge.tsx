@@ -1,6 +1,13 @@
 import { UserCheck, CalendarX, Flame } from "lucide-react";
 import type { PanelCardKind } from "@/lib/panel-cards";
-import { MOBILE_BAR_WIDTH, MOBILE_CHIP_SIZE, MOBILE_SECONDARY_TEXT, MOBILE_ICON_SIZE, MOBILE_INLINE_GAP } from "@/components/MobileCardScale";
+import {
+  MOBILE_BAR_WIDTH,
+  MOBILE_CHIP_SIZE,
+  MOBILE_CHIP_TEXT,
+  MOBILE_CHIP_ICON_SIZE,
+  MOBILE_SECONDARY_TEXT,
+  MOBILE_INLINE_GAP,
+} from "@/components/MobileCardScale";
 
 // Identificação visual por TIPO de card da faixa de Reativação do Painel
 // (item 1 do pedido) — só o lado ESQUERDO da linha (barra + chip + motivo);
@@ -35,18 +42,21 @@ export function PanelCardTypeBar({ kind }: { kind: PanelCardKind }) {
 
 // Chip de largura fixa (~92px) + ícone + uma palavra (pedido explícito).
 //
-// SÓ CELULAR (fator 1,45 — ver MobileCardScale.ts): 92px -> 133px de
-// largura (ainda cabe o ícone + a palavra numa linha só, nenhum dos 3
-// rótulos — "Reativação"/"Faltou"/"Quente" — chega a quebrar), padding
-// 6px/2px -> 9px/3px, fonte 10px -> 15px, ícone 12px -> 17px. `sm:`
-// sempre com os valores de antes, intocados.
+// SÓ CELULAR (ver MobileCardScale.ts): 92px -> 96px de largura (ainda
+// cabe o ícone + a palavra numa linha só, nenhum dos 3 rótulos —
+// "Reativação"/"Faltou"/"Quente" — chega a quebrar), padding 6px/2px ->
+// 8px/3px, fonte 10px -> 13px, ícone 12px -> 14px. Fonte/ícone PRÓPRIOS
+// (MOBILE_CHIP_TEXT/MOBILE_CHIP_ICON_SIZE, não mais compartilhados com o
+// motivo/MOBILE_ICON_SIZE dos botões — pedido explícito da 2ª rodada de
+// ajuste: reduzir o chip, sem reduzir o motivo). `sm:` sempre com os
+// valores de antes, intocados.
 export function PanelCardTypeChip({ kind }: { kind: PanelCardKind }) {
   const { chipBg, chipText, icon: Icon, label } = KIND_STYLE[kind];
   return (
     <span
-      className={`inline-flex ${MOBILE_CHIP_SIZE} shrink-0 items-center justify-center ${MOBILE_INLINE_GAP} rounded-md ${chipBg} ${MOBILE_SECONDARY_TEXT} font-medium ${chipText}`}
+      className={`inline-flex ${MOBILE_CHIP_SIZE} shrink-0 items-center justify-center ${MOBILE_INLINE_GAP} rounded-md ${chipBg} ${MOBILE_CHIP_TEXT} font-medium ${chipText}`}
     >
-      <Icon className={`${MOBILE_ICON_SIZE} shrink-0`} strokeWidth={2.5} />
+      <Icon className={`${MOBILE_CHIP_ICON_SIZE} shrink-0`} strokeWidth={2.5} />
       {label}
     </span>
   );

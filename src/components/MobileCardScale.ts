@@ -23,6 +23,15 @@
 // do Painel (Período, indicadores, títulos de seção, cards) continua no
 // 1,45 original, sem mudança.
 //
+// AJUSTE FINO 2 (mesmo dia, pedido seguinte): o 1,36 da primeira rodada
+// ainda estava grande — reduzido pra **1,29** (meio do intervalo 1,28-
+// 1,30 pedido), mesmo bloco, mesmo cálculo (pixel de desktop × fator,
+// sem clamping por mínimo). Também nesta rodada: os cards de Reativação/
+// Faltou/Quente/Agendamentos ganharam uma escala PRÓPRIA, mais compacta
+// (pra ficar "proporcional aos cards de métricas" — pedido explícito),
+// ver seções "Espaçamento dos cards", "Fontes dos cards", "Ícones",
+// "Chip de tipo", "Avatar" e "Botões de ação" mais abaixo.
+//
 // Mínimos do pedido original (o maior entre escalado×1,45 e este mínimo
 // vale — NÃO se aplica ao bloco reduzido acima, ver AJUSTE FINO):
 //   - título "Painel" 28px, texto abaixo 16px, nome da clínica 22px
@@ -45,54 +54,59 @@
 // Esse bloco (do título "Painel" até o gráfico, inclusive — título,
 // subtítulo, nome da clínica, ícones de status/pontinhos, navegação de
 // semana e rótulos do gráfico) usa um fator PRÓPRIO, menor que o resto do
-// Painel: pedido explícito de ajuste fino (2026-10-29) — o 1,45 geral
-// ficou grande demais nessa região específica, mas não é pra voltar ao
-// tamanho pequeno de antes. Fator usado: **1,36** (meio do intervalo
-// 1,35-1,38 pedido), sobre os mesmos pixels ORIGINAIS de desktop de
-// sempre — SEM clamping pelos mínimos do pedido anterior (28/22/36px
-// etc.): aqui o pedido é reduzir de propósito, então o fator manda
-// sozinho, arredondado ao pixel mais próximo. O resto do Painel
-// (Período/indicadores/títulos de seção/cards) continua no 1,45 de
-// sempre, intocado.
+// Painel: pedido explícito de ajuste fino (2026-10-29, 2 rodadas no mesmo
+// dia) — o 1,45 geral ficou grande demais nessa região específica, mas
+// não é pra voltar ao tamanho pequeno de antes. Fator usado agora:
+// **1,29** (meio do intervalo 1,28-1,30 pedido na 2ª rodada — a 1ª usou
+// 1,36, que ainda estava grande), sobre os mesmos pixels ORIGINAIS de
+// desktop de sempre — SEM clamping pelos mínimos do pedido original
+// (28/22/36px etc.): aqui o pedido é reduzir de propósito, então o fator
+// manda sozinho, arredondado ao pixel mais próximo. O resto do Painel
+// (Período/indicadores/títulos de seção) continua no 1,45 de sempre,
+// intocado; os cards (Reativação/Faltou/Quente/Agendamentos) ganharam
+// escala própria nesta 2ª rodada (ver seções mais abaixo).
 //
 // Exceção: a altura mínima de toque dos botões "← Semana"/"Hoje"/
 // "Semana →" continua em 48px (MOBILE_NAV_BUTTON_MIN, não mudou) — é o
 // piso de acessibilidade (WCAG 2.5.5) pedido desde a primeira rodada,
 // não um valor calculado por fator; só o texto/padding deles encolheu.
 
-// "Painel": 18px (text-lg) × 1,36 = 24,48 → 24px.
-export const MOBILE_TITLE_TEXT = "text-[24px] sm:text-lg";
-// Texto abaixo do título: 14px (text-sm) × 1,36 = 19,04 → 19px.
-export const MOBILE_SUBTITLE_TEXT = "text-[19px] sm:text-sm";
-// Nome da clínica: 16px (text-base) × 1,36 = 21,76 → 22px.
-export const MOBILE_CLINIC_NAME_TEXT = "text-[22px] sm:text-base";
+// "Painel": 18px (text-lg) × 1,29 = 23,22 → 23px.
+export const MOBILE_TITLE_TEXT = "text-[23px] sm:text-lg";
+// Texto abaixo do título: 14px (text-sm) × 1,29 = 18,06 → 18px. Entrelinha
+// e espaço até o título reduzidos à parte — ver leading-tight/mt no uso
+// em ClientPanelView.tsx (pedido explícito: "espaçamento entre linhas
+// grande demais").
+export const MOBILE_SUBTITLE_TEXT = "text-[18px] sm:text-sm";
+// Nome da clínica: 16px (text-base) × 1,29 = 20,64 → 21px.
+export const MOBILE_CLINIC_NAME_TEXT = "text-[21px] sm:text-base";
 // Badge de status (Instagram/Calendário/WhatsApp, ver ChannelStatusPill.tsx):
-// 24px (h-6 w-6) × 1,36 = 32,64 → 33px. O ícone do Instagram/WhatsApp
+// 24px (h-6 w-6) × 1,29 = 30,96 → 31px. O ícone do Instagram/WhatsApp
 // preenche o badge inteiro (mesma proporção 1:1 de desktop), por isso usa
 // o mesmo tamanho do badge.
-export const MOBILE_STATUS_BADGE_SIZE = "h-[33px] w-[33px] sm:h-6 sm:w-6";
+export const MOBILE_STATUS_BADGE_SIZE = "h-[31px] w-[31px] sm:h-6 sm:w-6";
 // Ícone do Google Calendar DENTRO do badge: 12px (h-3 w-3, sempre menor
 // que o badge, dentro de um círculo colorido — proporção diferente do
-// Instagram/WhatsApp de propósito, desktop já é assim) × 1,36 = 16,32 →
-// 16px.
-export const MOBILE_STATUS_BADGE_ICON_SIZE = "h-[16px] w-[16px] sm:h-3 sm:w-3";
+// Instagram/WhatsApp de propósito, desktop já é assim) × 1,29 = 15,48 →
+// 15px.
+export const MOBILE_STATUS_BADGE_ICON_SIZE = "h-[15px] w-[15px] sm:h-3 sm:w-3";
 // Pontinho de conectado/desconectado no canto do badge: 8px (h-2 w-2) ×
-// 1,36 = 10,88 → 11px.
-export const MOBILE_STATUS_DOT_SIZE = "h-[11px] w-[11px] sm:h-2 sm:w-2";
+// 1,29 = 10,32 → 10px.
+export const MOBILE_STATUS_DOT_SIZE = "h-[10px] w-[10px] sm:h-2 sm:w-2";
 // Bolinha antes dos títulos de SEÇÃO (Reativação/Agendamentos) — fora do
 // bloco reduzido desta rodada (fica no 1,45 de sempre): 6px (h-1.5 w-1.5)
 // × 1,45 = 8,7 → 9px.
 export const MOBILE_SECTION_DOT_SIZE = "h-[9px] w-[9px] sm:h-1.5 sm:w-1.5";
 // Bolinha maior, só antes do nome da clínica — dentro do bloco reduzido
-// desta rodada: 8px (h-2 w-2) × 1,36 = 10,88 → 11px (mesmo valor de
+// desta rodada: 8px (h-2 w-2) × 1,29 = 10,32 → 10px (mesmo valor de
 // MOBILE_STATUS_DOT_SIZE, constante própria só por clareza de uso).
-export const MOBILE_CLINIC_DOT_SIZE = "h-[11px] w-[11px] sm:h-2 sm:w-2";
+export const MOBILE_CLINIC_DOT_SIZE = "h-[10px] w-[10px] sm:h-2 sm:w-2";
 
 // Navegação de semana ("← Semana"/"Hoje"/"Semana →") — dentro do bloco
-// reduzido desta rodada: 12px (text-xs) × 1,36 = 16,32 → 16px. Padding:
-// 10px/4px (px-2.5/py-1) × 1,36 = 13,6/5,44 → 14px/5px.
-export const MOBILE_NAV_TEXT = "text-[16px] sm:text-xs";
-export const MOBILE_NAV_BUTTON_PADDING = "px-[14px] py-[5px] sm:px-2.5 sm:py-1";
+// reduzido desta rodada: 12px (text-xs) × 1,29 = 15,48 → 15px. Padding:
+// 10px/4px (px-2.5/py-1) × 1,29 = 12,9/5,16 → 13px/5px.
+export const MOBILE_NAV_TEXT = "text-[15px] sm:text-xs";
+export const MOBILE_NAV_BUTTON_PADDING = "px-[13px] py-[5px] sm:px-2.5 sm:py-1";
 // Altura mínima de toque dos botões de navegação/select — piso de
 // acessibilidade (48px, WCAG 2.5.5), não muda com nenhum fator.
 export const MOBILE_NAV_BUTTON_MIN = "min-h-[48px] sm:min-h-0";
@@ -104,14 +118,14 @@ export const MOBILE_CHART_TEXT = "text-[15px] sm:text-caption";
 export const MOBILE_SELECT_PADDING = "px-[17px] py-[6px] sm:px-3 sm:py-1";
 // Legenda "ABORDAGENS POR DIA" e rótulos de dentro do gráfico (dias da
 // semana, números) — dentro do bloco reduzido desta rodada: 10px
-// (text-caption) × 1,36 = 13,6 → 14px.
-export const MOBILE_CHART_ROW_TEXT = "text-[14px] sm:text-caption";
+// (text-caption) × 1,29 = 12,9 → 13px.
+export const MOBILE_CHART_ROW_TEXT = "text-[13px] sm:text-caption";
 // Largura fixa do rótulo do dia da semana (w-7=28px) e do número de
 // abordagens (w-4=16px) no gráfico — mesma proporção do texto acima, pra
-// caber sem cortar ("Seg"/"Ter"/etc., número de até 2 dígitos): 28×1,36=
-// 38,08→38px; 16×1,36=21,76→22px.
-export const MOBILE_CHART_DAY_LABEL_WIDTH = "w-[38px] sm:w-7";
-export const MOBILE_CHART_COUNT_WIDTH = "w-[22px] sm:w-4";
+// caber sem cortar ("Seg"/"Ter"/etc., número de até 2 dígitos): 28×1,29=
+// 36,12→36px; 16×1,29=20,64→21px.
+export const MOBILE_CHART_DAY_LABEL_WIDTH = "w-[36px] sm:w-7";
+export const MOBILE_CHART_COUNT_WIDTH = "w-[21px] sm:w-4";
 
 // Indicadores (ABORDADOS/EM CONVERSA/AGENDARAM/COMPARECERAM, ver
 // PanelMetricCard.tsx) ----------------------------------------------------
@@ -132,54 +146,72 @@ export const MOBILE_SECTION_TITLE_TEXT = "text-[20px] sm:text-xs";
 export const MOBILE_SECTION_COUNTER_TEXT = "text-[15px] sm:text-caption";
 
 // Espaçamento (padding/gap) dos cards -------------------------------------
+//
+// AJUSTE (2026-10-29, 2ª rodada): pedido explícito pra ficar "proporcional
+// aos cards de métricas" (PanelMetricCard, ~15px rótulo/35px número/12px
+// de padding) — os cards de Reativação/Faltou/Quente/Agendamentos tinham
+// MUITOS elementos grandes empilhados (avatar 46px + chip 133px + nome
+// 19-20px + botão 48px + gaps generosos + piso de 100px de altura) que,
+// somados, deixavam o card bem mais alto que um card de métrica, mesmo
+// com fontes individualmente não tão diferentes. Fator usado agora nesse
+// grupo (padding/gap/nome/@/chip/avatar/ícones): **1,29** (mesmo da
+// seção de cabeçalho acima, por consistência), sobre os mesmos pixels de
+// desktop — EXCETO altura dos botões de ação (ver seção própria mais
+// abaixo, não é um valor de fator) e o motivo/data/status/telefone
+// (MOBILE_SECONDARY_TEXT, mantido em 15px de propósito — já estava no
+// "mesmo nível" do rótulo do card de métrica, e o pedido foi "mantenha
+// motivo visível e sem cortar", não reduzir mais).
 
-// Linha de Reativação: padding 8/10px -> ×1,45: 12/15 — o mínimo geral de
-// padding do pedido (14px) é MAIOR que o 12 escalado, então o lado
-// simétrico usa 14; o pl extra (que já era maior que o padding simples em
-// desktop) escala puro pra 15, que já fica acima do piso de 14 sozinho.
-export const MOBILE_REACTIVATION_ROW_PADDING = "p-[14px] pl-[15px] sm:p-2 sm:pl-2.5";
-// Linha de Agendamentos: padding 8px -> ×1,45=11,6: mínimo (14px) vale.
-export const MOBILE_APPOINTMENT_ROW_PADDING = "p-[14px] sm:p-2";
-// Altura mínima do card (pedido novo, ~100px) — garante um piso mesmo
-// com nome/motivo curtos (uma linha só); nomes longos (até 2 linhas, ver
-// MOBILE_NAME_TEXT_*) naturalmente ultrapassam isso.
-export const MOBILE_CARD_MIN_HEIGHT = "min-h-[100px] sm:min-h-0";
-// Gap entre avatar/conteúdo/botão dentro da linha: 8px -> ×1,45=11,6→12px.
-export const MOBILE_ROW_GAP = "gap-[12px] sm:gap-2";
-// Gap entre as linhas da lista (toque: espaço entre os botões de linhas
-// vizinhas): 6px -> ×1,45=8,7→9px.
-export const MOBILE_LIST_GAP = "space-y-[9px] sm:space-y-1.5";
-// Gap vertical entre a linha nome/@ e a linha chip/motivo: 2px -> ×1,45=
-// 2,9→3px.
+// Linha de Reativação: padding 8/10px (p-2/pl-2.5) × 1,29 = 10,32/12,9 →
+// 10px/13px.
+export const MOBILE_REACTIVATION_ROW_PADDING = "p-[10px] pl-[13px] sm:p-2 sm:pl-2.5";
+// Linha de Agendamentos: padding 8px (p-2) × 1,29 = 10,32 → 10px.
+export const MOBILE_APPOINTMENT_ROW_PADDING = "p-[10px] sm:p-2";
+// Altura mínima do card: reduzida de ~100px pra ~80px (não é um valor de
+// fator, é um piso deliberado — perto da altura NATURAL de um
+// PanelMetricCard: padding 12×2 + rótulo ~18px + gap 6px + número ~38px
+// ≈ 86px) — garante um piso mesmo com nome/motivo curtos (uma linha só);
+// nomes longos (até 2 linhas, ver MOBILE_NAME_TEXT_*) naturalmente
+// ultrapassam isso.
+export const MOBILE_CARD_MIN_HEIGHT = "min-h-[80px] sm:min-h-0";
+// Gap entre avatar/conteúdo/botão dentro da linha: 8px (gap-2) × 1,29 =
+// 10,32 → 10px.
+export const MOBILE_ROW_GAP = "gap-[10px] sm:gap-2";
+// Gap entre as linhas da lista: 6px (space-y-1.5) × 1,29 = 7,74 → 8px.
+export const MOBILE_LIST_GAP = "space-y-[8px] sm:space-y-1.5";
+// Gap vertical entre a linha nome/@ e a linha chip/motivo: 2px
+// (space-y-0.5) × 1,29 = 2,58 → 3px.
 export const MOBILE_STACK_GAP = "space-y-[3px] sm:space-y-0.5";
 // Gap nome/@ (quando lado a lado, desktop) e ícone/texto dos botões: 4px
-// -> ×1,45=5,8→6px.
-export const MOBILE_INLINE_GAP = "gap-[6px] sm:gap-1";
-// Gap entre o chip de tipo e a linha de motivo: 6px -> ×1,45=8,7→9px.
-export const MOBILE_CHIP_ROW_GAP = "gap-[9px] sm:gap-1.5";
-// Gap na linha data · status · telefone dos Agendamentos: 4px -> ×1,45=
-// 5,8→6px.
-export const MOBILE_DATE_ROW_GAP = "gap-[6px] sm:gap-1";
-// Margem acima da linha data/status/telefone: 2px -> ×1,45=2,9→3px.
+// (gap-1) × 1,29 = 5,16 → 5px.
+export const MOBILE_INLINE_GAP = "gap-[5px] sm:gap-1";
+// Gap entre o chip de tipo e a linha de motivo: 6px (gap-1.5) × 1,29 =
+// 7,74 → 8px.
+export const MOBILE_CHIP_ROW_GAP = "gap-[8px] sm:gap-1.5";
+// Gap na linha data · status · telefone dos Agendamentos: 4px (gap-1) ×
+// 1,29 = 5,16 → 5px.
+export const MOBILE_DATE_ROW_GAP = "gap-[5px] sm:gap-1";
+// Margem acima da linha data/status/telefone: 2px (mt-0.5) × 1,29 = 2,58
+// → 3px.
 export const MOBILE_DATE_ROW_MARGIN_TOP = "mt-[3px] sm:mt-0.5";
 
 // Fontes dos cards ---------------------------------------------------------
 
-// Nome (Reativação/Faltou/Quente, antes text-xs/12px): 12×1,45=17,4:
-// mínimo do pedido (19px) vale.
-export const MOBILE_NAME_TEXT_REACTIVATION = "text-[19px] sm:text-xs";
-// Nome (Agendamentos, antes text-sm/14px): 14×1,45=20,3: 20 > mínimo (19).
-export const MOBILE_NAME_TEXT_APPOINTMENT = "text-[20px] sm:text-sm";
-// @ do lead — mínimo do pedido (16px) vale: escalado seria 10×1,45=14,5→15.
-export const MOBILE_HANDLE_TEXT = "text-[16px] sm:text-caption";
-// Motivo/horário/status/telefone/chip/rótulos ("Limite diário", "Sem
-// WhatsApp"): 10px (text-caption) -> ×1,45=14,5: 15, acima de qualquer
-// mínimo pedido pra esse grupo (14 ou 15, "o maior vale" sempre dá 15) —
-// um valor só serve todo mundo.
+// Nome (Reativação/Faltou/Quente): 12px (text-xs) × 1,29 = 15,48 → 15px.
+export const MOBILE_NAME_TEXT_REACTIVATION = "text-[15px] sm:text-xs";
+// Nome (Agendamentos): 14px (text-sm) × 1,29 = 18,06 → 18px.
+export const MOBILE_NAME_TEXT_APPOINTMENT = "text-[18px] sm:text-sm";
+// @ do lead: 10px (text-caption) × 1,29 = 12,9 → 13px.
+export const MOBILE_HANDLE_TEXT = "text-[13px] sm:text-caption";
+// Motivo/horário/status/telefone/rótulos ("Limite diário", "Sem
+// WhatsApp") — NÃO mudou nesta rodada de propósito (pedido explícito:
+// "mantenha motivo visível e sem cortar"; já está no mesmo nível do
+// rótulo do card de métrica, ver MOBILE_METRIC_LABEL_TEXT, ambos 15px):
+// 10px (text-caption) -> ×1,45=14,5→15px.
 export const MOBILE_SECONDARY_TEXT = "text-[15px] sm:text-caption";
 // Texto dos botões de ação (WhatsApp/Instagram/"Enviando…"/"✓"): 11px
-// (text-card) -> ×1,45=15,95→16px.
-export const MOBILE_BUTTON_TEXT = "text-[16px] sm:text-card";
+// (text-card) × 1,29 = 14,19 → 14px.
+export const MOBILE_BUTTON_TEXT = "text-[14px] sm:text-card";
 
 // @ do lead: SÓ CELULAR vira encolhível no layout empilhado (herda o
 // "truncate" ao lado — reticências de verdade quando um @ muito longo não
@@ -189,49 +221,67 @@ export const MOBILE_HANDLE_SHRINK = "min-w-0 shrink sm:shrink-0";
 
 // Ícones --------------------------------------------------------------------
 
-// Ícones mono (WhatsApp/Instagram) e ícone do chip: 12px -> ×1,45=17,4:
-// 17, empata com o mínimo do chip (17px).
-export const MOBILE_ICON_SIZE = "h-[17px] w-[17px] sm:h-3 sm:w-3";
+// Ícones mono (WhatsApp/Instagram) dentro dos botões de ação e ícone do
+// RetornoButton: 12px (h-3 w-3) × 1,29 = 15,48 → 15px. NÃO é mais usado
+// pelo chip de tipo (ver MOBILE_CHIP_ICON_SIZE abaixo, separado nesta
+// rodada pra poder encolher o chip sem mexer nos ícones dos botões).
+export const MOBILE_ICON_SIZE = "h-[15px] w-[15px] sm:h-3 sm:w-3";
 
 // Chip de tipo ----------------------------------------------------------
-
-// Largura 92 -> ×1,45=133,4→133px (ainda cabe ícone + a palavra numa
-// linha só, nenhum dos 3 rótulos — "Reativação"/"Faltou"/"Quente" — chega
-// a quebrar). Padding 6/2px -> ×1,45: 9/3px.
-export const MOBILE_CHIP_SIZE = "w-[133px] sm:w-[92px] px-[9px] py-[3px] sm:px-1.5 sm:py-0.5";
+//
+// Fonte e ícone PRÓPRIOS (não mais MOBILE_SECONDARY_TEXT/MOBILE_ICON_SIZE
+// — separados nesta rodada): pedido explícito pra reduzir o chip
+// especificamente, sem reduzir o motivo (que usa MOBILE_SECONDARY_TEXT,
+// mantido). Texto: 10px (text-caption) × 1,29 = 12,9 → 13px. Ícone: 12px
+// (h-3 w-3) × 1,29 = 15,48 → um pouco menor que o texto proporcionalmente
+// faria sentido num chip pequeno — 14px.
+export const MOBILE_CHIP_TEXT = "text-[13px] sm:text-caption";
+export const MOBILE_CHIP_ICON_SIZE = "h-[14px] w-[14px] sm:h-3 sm:w-3";
+// Largura: precisa caber "Reativação" (o rótulo mais longo dos 3) numa
+// linha só, no novo texto/ícone/padding menores — 96px (desktop
+// permanece 92px, quase igual: o texto/ícone móvel já ficou bem perto do
+// tamanho de desktop). Padding 6/2px (px-1.5/py-0.5) × 1,29 = 7,74/2,58
+// → 8px/3px.
+export const MOBILE_CHIP_SIZE = "w-[96px] sm:w-[92px] px-[8px] py-[3px] sm:px-1.5 sm:py-0.5";
 
 // Barra lateral colorida -------------------------------------------------
 
-// 3px -> ×1,45=4,35: 4, empata com o mínimo do pedido (4px).
+// 3px -> ×1,45=4,35: 4, empata com o mínimo do pedido (4px). Fora do
+// ajuste desta rodada (impacto de altura irrelevante, 1px).
 export const MOBILE_BAR_WIDTH = "w-[4px] sm:w-[3px]";
 
 // Avatar (LeadAvatar, SÓ o tamanho "md" — usado exclusivamente pelos dois
 // cards desta tela; Pipeline usa "lg" e o banner "precisa de humano" usa
 // "sm", nenhum dos dois é afetado) ----------------------------------------
 
-// 32px -> ×1,45=46,4→46px.
-export const MOBILE_AVATAR_SIZE = "h-[46px] w-[46px] sm:h-8 sm:w-8";
-// Ícone de fallback (sem foto): 16px -> ×1,45=23,2→23px.
-export const MOBILE_AVATAR_ICON_SIZE = "h-[23px] w-[23px] sm:h-4 sm:w-4";
-// Badge de origem (Instagram) sobreposto no avatar: 12px -> ×1,45=17,4→17px.
-export const MOBILE_AVATAR_BADGE_SIZE = "h-[17px] w-[17px] sm:h-3 sm:w-3";
+// 32px (h-8 w-8) × 1,29 = 41,28 → 41px.
+export const MOBILE_AVATAR_SIZE = "h-[41px] w-[41px] sm:h-8 sm:w-8";
+// Ícone de fallback (sem foto): 16px (h-4 w-4) × 1,29 = 20,64 → 21px.
+export const MOBILE_AVATAR_ICON_SIZE = "h-[21px] w-[21px] sm:h-4 sm:w-4";
+// Badge de origem (Instagram) sobreposto no avatar: 12px (h-3 w-3) ×
+// 1,29 = 15,48 → 15px.
+export const MOBILE_AVATAR_BADGE_SIZE = "h-[15px] w-[15px] sm:h-3 sm:w-3";
 
 // Botões de ação (WhatsApp/Instagram/retorno/"Retorno"/"Não compareceu") -
-// Mínimo de toque do pedido (48px) é maior que o escalado puro (23×1,45≈
-// 33px) — por isso altura/largura usam o mínimo fixo, não o fator.
-
-// Altura (WhatsApp/Instagram, retangular — a largura já passa de 48px só
-// com o texto do canal): 23px -> 48px (piso).
-export const MOBILE_ACTION_BUTTON_HEIGHT = "h-[48px] sm:h-[23px]";
-// Altura E largura (botão "✓" de desfazer, quadrado): 23px -> 48px (piso).
-export const MOBILE_ACTION_BUTTON_SQUARE = "h-[48px] w-[48px] sm:h-[23px] sm:w-[23px]";
+//
+// AJUSTE (2026-10-29, 2ª rodada): o piso de toque de 48px (WCAG 2.5.5)
+// virou **40px** — pedido explícito: "botões fáceis de tocar, altura
+// mínima razoável, sem exagero". 40px continua um alvo de toque
+// confortável (acima do mínimo de 44pt/48dp usado como referência em
+// iOS/Android só por segurança extra em listas densas como essa, onde
+// cada linha já tem espaço vertical reduzido de propósito) — não é um
+// valor de fator, é um piso deliberado, igual o 48px anterior era.
+export const MOBILE_ACTION_BUTTON_HEIGHT = "h-[40px] sm:h-[23px]";
+// Altura E largura (botão "✓" de desfazer, quadrado): mesmo piso acima.
+export const MOBILE_ACTION_BUTTON_SQUARE = "h-[40px] w-[40px] sm:h-[23px] sm:w-[23px]";
 // Padding horizontal dos botões de WhatsApp/Instagram (sem mínimo de
-// toque próprio — a altura já garante os 48px; aqui é só o fator): 6px ->
-// ×1,45=8,7→9px.
-export const MOBILE_ACTION_BUTTON_PADDING_X = "px-[9px] sm:px-1.5";
+// toque próprio — a altura já garante o piso; aqui é só o fator): 6px
+// (px-1.5) × 1,29 = 7,74 → 8px.
+export const MOBILE_ACTION_BUTTON_PADDING_X = "px-[8px] sm:px-1.5";
 // "Retorno"/"Não compareceu" não têm altura fixa (texto varia) — usam
-// min-h/min-w pra garantir os 48px de toque mesmo com o texto mais curto.
-export const MOBILE_TOGGLE_BUTTON_MIN = "min-h-[48px] min-w-[48px] sm:min-h-0 sm:min-w-0";
+// min-h/min-w pra garantir o mesmo piso de 40px mesmo com o texto mais
+// curto.
+export const MOBILE_TOGGLE_BUTTON_MIN = "min-h-[40px] min-w-[40px] sm:min-h-0 sm:min-w-0";
 
 // Reordenação SÓ CELULAR: nome/@ e chip/motivo trocam de posição -----------
 //

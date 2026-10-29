@@ -220,8 +220,20 @@ export async function ClientPanelView({
       <div className={standalone ? "mx-auto max-w-6xl" : undefined}>
         <div className="mb-8 flex items-start justify-between gap-3">
           <div>
-            <h1 className={`${MOBILE_TITLE_TEXT} font-semibold tracking-tight`}>Painel</h1>
-            <p className={`${MOBILE_SUBTITLE_TEXT} text-vexo-muted`}>Acompanhamento em tempo real das abordagens no Instagram.</p>
+            {/* SÓ CELULAR (pedido explícito, 2026-10-29, 2ª rodada):
+                leading-tight nos dois — sem isso, a entrelinha padrão
+                (1.5 do Preflight) deixa a quebra de linha do subtítulo
+                com espaço vertical grande demais, e o próprio título
+                empurra o subtítulo mais pra baixo (a entrelinha extra
+                conta pro espaço ABAIXO da linha de texto também).
+                mt-[2px] fixa um gap pequeno e controlado entre os dois,
+                em vez de depender da sobra da entrelinha do título.
+                `sm:leading-normal`/`sm:mt-0` revertem pro visual de
+                sempre em desktop (entrelinha 1.5 herdada, sem margem). */}
+            <h1 className={`${MOBILE_TITLE_TEXT} font-semibold leading-tight sm:leading-normal tracking-tight`}>Painel</h1>
+            <p className={`mt-[2px] sm:mt-0 ${MOBILE_SUBTITLE_TEXT} leading-tight sm:leading-normal text-vexo-muted`}>
+              Acompanhamento em tempo real das abordagens no Instagram.
+            </p>
           </div>
           {headerAction}
         </div>
