@@ -165,11 +165,21 @@ export const MOBILE_SECTION_COUNTER_TEXT = "text-[15px] sm:text-caption";
 // Linha de Reativação: padding 8/10px (p-2/pl-2.5) × 1,29 = 10,32/12,9 →
 // 10px/13px.
 export const MOBILE_REACTIVATION_ROW_PADDING = "p-[10px] pl-[13px] sm:p-2 sm:pl-2.5";
-// Linha de Agendamentos: reduzido mais uma vez (2026-10-29, 3ª rodada) —
-// pedido explícito pra ficar do tamanho de um card de métrica (ver
-// MOBILE_CARD_MIN_HEIGHT abaixo); 8px (p-2) não escala mais por fator
-// aqui, é o mesmo valor de desktop.
-export const MOBILE_APPOINTMENT_ROW_PADDING = "p-[8px] sm:p-2";
+// Linha de Agendamentos: reduzido na 3ª rodada (2026-10-29) pra ficar do
+// tamanho de um card de métrica — ficou um pouco BAIXO demais (~77px na
+// medição daquela rodada, contra ~90px do card de métrica, medido ao
+// vivo — ver PanelMetricCard). AJUSTE (2026-10-29, 4ª rodada, pedido
+// explícito "aumentar um pouquinho a altura"): padding VERTICAL
+// aumentado de 8 pra 20px (horizontal continua 8px — pedido explícito
+// "sem aumentar a largura dos botões", então só o vertical muda).
+// Medido ao vivo (app real, não mockup) com os valores finais: card de
+// 1 botão só (caso comum) ~87px — dentro do alvo (~85-90px). Card com os
+// DOIS botões juntos (Retorno + Não compareceu — ver comentário grande
+// em ClientPanelView.tsx sobre quando isso acontece) fica mais alto,
+// ~119px — empilhar os 2 botões (flex-col) precisa de espaço vertical de
+// verdade (2×32px + gap), não dá pra evitar sem violar "sem aumentar a
+// largura dos botões"; esse caso é a exceção, não a regra.
+export const MOBILE_APPOINTMENT_ROW_PADDING = "px-[8px] py-[20px] sm:p-2";
 // Altura mínima do card: AJUSTE (2026-10-29, 3ª rodada) — pedido
 // explícito pra medir contra a altura REAL (DOM) dos cards de métrica
 // (PanelMetricCard) e ficar parecido (tolerância de até +15%). Medido
@@ -210,8 +220,10 @@ export const MOBILE_CHIP_ROW_GAP = "gap-[8px] sm:gap-1.5";
 // precisa ser 0 (a margem já vem de fora, mt abaixo), só o horizontal
 // mantém espaço entre os grupos: 5px.
 export const MOBILE_DATE_ROW_GAP = "gap-x-[5px] gap-y-0 sm:gap-1";
-// Margem acima da linha data/status/telefone: 2px.
-export const MOBILE_DATE_ROW_MARGIN_TOP = "mt-[2px] sm:mt-0.5";
+// Margem acima da linha data/status/telefone — AJUSTE (2026-10-29, 4ª
+// rodada, pedido explícito "aumentar... espaçamento entre as duas
+// linhas"): 2px -> 6px.
+export const MOBILE_DATE_ROW_MARGIN_TOP = "mt-[6px] sm:mt-0.5";
 
 // Fontes dos cards ---------------------------------------------------------
 
@@ -315,12 +327,15 @@ export const MOBILE_ACTION_BUTTON_PADDING_X = "px-[8px] sm:px-1.5";
 // min-h/min-w pra garantir um piso de toque mesmo com o texto mais
 // curto. AJUSTE (2026-10-29, 3ª rodada): 40px -> 32px — pedido explícito
 // ("botões... compactos, altura ~32px"), pra caber no card do tamanho de
-// um card de métrica; ainda um alvo de toque razoável (os dois só
-// aparecem um de cada vez nessa linha — nunca os dois juntos, ver
-// comentário em ClientPanelView.tsx — então não competem por espaço
-// entre si). Exclusivo do Agendamentos (RetornoButton/NoShowButton), não
-// afeta os botões de WhatsApp/Instagram da Reativação (que usam
-// MOBILE_ACTION_BUTTON_HEIGHT/SQUARE, constante separada, inalterada).
+// um card de métrica; ainda um alvo de toque razoável. Exclusivo do
+// Agendamentos (RetornoButton/NoShowButton), não afeta os botões de
+// WhatsApp/Instagram da Reativação (que usam MOBILE_ACTION_BUTTON_HEIGHT/
+// SQUARE, constante separada, inalterada). Os dois PODEM aparecer juntos
+// na mesma linha (um agendamento vencido e ainda não marcado mostra os
+// dois — ver comentário grande em ClientPanelView.tsx); o wrapper deles
+// empilha em flex-col nesse caso, então esse piso de 32px nunca disputa
+// largura entre os dois, só altura (aceitável, ver AJUSTE de altura do
+// card logo abaixo).
 export const MOBILE_TOGGLE_BUTTON_MIN = "min-h-[32px] min-w-[32px] sm:min-h-0 sm:min-w-0";
 
 // Reordenação SÓ CELULAR: nome/@ e chip/motivo trocam de posição -----------
@@ -355,16 +370,17 @@ export const MOBILE_NAME_CLAMP = "line-clamp-2 sm:line-clamp-none sm:truncate";
 // Card de Agendamentos — layout de 2 linhas com botão ao lado -----------
 //
 // AJUSTE (2026-10-29, 3ª rodada): pedido explícito pra REVERTER a "linha
-// própria embaixo" da rodada anterior — o botão (Retorno OU Não
-// compareceu, nunca os dois juntos — COMPLETED, o único status que
-// mostra Retorno, nunca está em ACTIONABLE_STATUSES, o único grupo que
-// mostra Não compareceu) volta a ficar AO LADO do conteúdo, igual sempre
-// foi em desktop — por isso MOBILE_APPOINTMENT_BUTTON_ROW (a versão
-// "linha própria embaixo") foi removida: não tem mais nenhuma diferença
-// de layout entre mobile/desktop aqui além de tamanho, então o botão
-// pode usar o wrapper simples de sempre (`shrink-0 flex items-center`,
-// direto em ClientPanelView.tsx, sem precisar de uma constante — não há
-// nenhum valor que mude por breakpoint nesse wrapper específico).
+// própria embaixo" da rodada anterior — o(s) botão(ões) (Retorno e/ou
+// Não compareceu — PODEM aparecer os dois juntos, ver comentário grande
+// em ClientPanelView.tsx) voltam a ficar AO LADO do conteúdo, igual
+// sempre foi em desktop — por isso MOBILE_APPOINTMENT_BUTTON_ROW (a
+// versão "linha própria embaixo") foi removida: não tem mais nenhuma
+// diferença de layout entre mobile/desktop aqui além de tamanho, então o
+// wrapper usa classes simples direto em ClientPanelView.tsx (flex-col
+// pra empilhar os até-2 botões sem disputar largura com o conteúdo —
+// achado na validação ao vivo da 4ª rodada), sem precisar de constante
+// própria aqui — não há nenhum valor que mude por breakpoint nesse
+// wrapper específico.
 //
 // Nome/@ também pararam de empilhar (MOBILE_NAME_CLAMP, usada pela
 // Reativação, CONTINUA como está — não mexida nesta rodada; o antigo

@@ -18,13 +18,39 @@ import { triggerFollowUp, cancelPendingFollowUp } from "@/lib/follow-up";
 // outro prazo). Sem usuários reais ainda — mas a trava já vale desde já,
 // pra não depender de lembrar disso quando a Reativação entrar em uso de
 // verdade.
+//
+// "unset" (2026-10-29, 4ª rodada, pedido explícito) — volta pro estado
+// INICIAL (returnPeriodDays null, returnPeriodNone false: nenhuma escolha
+// manual, usa os prazos PADRÃO da clínica). Usado em duas situações pelo
+// RetornoButton: (1) clicar de novo num prazo já selecionado (alternância:
+// clicar "30d" quando 30d já está marcado desmarca, não troca pra outro);
+// (2) clicar "Sem retorno" quando "Sem retorno" já está marcado (mesma
+// alternância, agora pro outro extremo). Diferente de "none" ("Sem
+// retorno" explícito, returnPeriodNone true) — "unset" é "nenhuma escolha
+// nenhuma", não "escolhi não ter retorno".
+//
+// Cancelamento dos cards de Reativação futuros do prazo abandonado: não
+// precisa de nenhuma escrita extra aqui — ReactivationCardSlot (ver
+// getReactivationCards, reactivation.ts) já é montado de forma LAZY, a
+// partir do returnPeriodDays/returnPeriodNone ATUAIS do Appointment a
+// cada chamada; assim que esses campos mudam (any branch abaixo), a
+// próxima vez que a lista de Reativação for montada, o prazo antigo
+// simplesmente não gera mais candidato nenhum (buildReactivationCardCandidates
+// lê o valor atual, não o de quando o slot foi criado) — o card do prazo
+// abandonado para de aparecer sozinho, sem precisar apagar/marcar a linha
+// antiga de ReactivationCardSlot (mesma filosofia já documentada em
+// no-show-cards.ts: ler estado vivo em vez de escrever um flag de
+// "cancelado"). Um slot que JÁ foi enviado (sentAt preenchido) nunca é
+// tocado por isso — ele só existe pra esse prazo específico, que já está
+// travado (ver reactivationCardSlots.length > 0 abaixo) antes de chegar
+// aqui, então o histórico do envio já feito permanece intacto.
 export type SetAppointmentReturnPeriodResult =
   | { ok: true; appointmentId: string; returnPeriodDays: number | null; returnPeriodNone: boolean }
   | { ok: false; reason: "not_found" | "already_sent" };
 
 export async function setAppointmentReturnPeriod(
   appointmentId: string,
-  selection: number | "none"
+  selection: number | "none" | "unset"
 ): Promise<SetAppointmentReturnPeriodResult> {
   const appt = await prisma.appointment.findUnique({
     where: { id: appointmentId },
@@ -33,7 +59,12 @@ export async function setAppointmentReturnPeriod(
   if (!appt) return { ok: false, reason: "not_found" };
   if (appt.reactivationCardSlots.length > 0) return { ok: false, reason: "already_sent" };
 
-  const data = selection === "none" ? { returnPeriodDays: null, returnPeriodNone: true } : { returnPeriodDays: selection, returnPeriodNone: false };
+  const data =
+    selection === "none"
+      ? { returnPeriodDays: null, returnPeriodNone: true }
+      : selection === "unset"
+        ? { returnPeriodDays: null, returnPeriodNone: false }
+        : { returnPeriodDays: selection, returnPeriodNone: false };
 
   const updated = await prisma.appointment.update({
     where: { id: appointmentId },
