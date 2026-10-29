@@ -179,7 +179,14 @@ export const MOBILE_REACTIVATION_ROW_PADDING = "p-[10px] pl-[13px] sm:p-2 sm:pl-
 // ~119px — empilhar os 2 botões (flex-col) precisa de espaço vertical de
 // verdade (2×32px + gap), não dá pra evitar sem violar "sem aumentar a
 // largura dos botões"; esse caso é a exceção, não a regra.
-export const MOBILE_APPOINTMENT_ROW_PADDING = "px-[8px] py-[20px] sm:p-2";
+// AJUSTE (2026-10-29, 5ª rodada, pedido explícito "sobrando espaço em
+// cima e embaixo"): padding vertical reduzido de 20 pra 14px (horizontal
+// continua 8px, não mexido). Combinado com fonte maior + avatar maior
+// desta mesma rodada (ver seções "Fontes dos cards"/"Avatar" abaixo) — a
+// altura final do card foi conferida ao vivo (app real) pra continuar
+// dentro da margem de +15% contra o card de métrica (pedido explícito),
+// ver MOBILE_CARD_MIN_HEIGHT.
+export const MOBILE_APPOINTMENT_ROW_PADDING = "px-[8px] py-[14px] sm:p-2";
 // Altura mínima do card: AJUSTE (2026-10-29, 3ª rodada) — pedido
 // explícito pra medir contra a altura REAL (DOM) dos cards de métrica
 // (PanelMetricCard) e ficar parecido (tolerância de até +15%). Medido
@@ -222,8 +229,10 @@ export const MOBILE_CHIP_ROW_GAP = "gap-[8px] sm:gap-1.5";
 export const MOBILE_DATE_ROW_GAP = "gap-x-[5px] gap-y-0 sm:gap-1";
 // Margem acima da linha data/status/telefone — AJUSTE (2026-10-29, 4ª
 // rodada, pedido explícito "aumentar... espaçamento entre as duas
-// linhas"): 2px -> 6px.
-export const MOBILE_DATE_ROW_MARGIN_TOP = "mt-[6px] sm:mt-0.5";
+// linhas"): 2px -> 6px. AJUSTE (2026-10-29, 5ª rodada, pedido explícito
+// "reduza ~2px do espaçamento entre as linhas", junto da margem vertical
+// do card): 6px -> 4px.
+export const MOBILE_DATE_ROW_MARGIN_TOP = "mt-[4px] sm:mt-0.5";
 
 // Fontes dos cards ---------------------------------------------------------
 
@@ -233,21 +242,48 @@ export const MOBILE_NAME_TEXT_REACTIVATION = "text-[15px] sm:text-xs";
 // pra ficar do tamanho de um card de métrica — 14px, o MESMO valor de
 // desktop (não é mais maior que desktop nesse card específico; os outros
 // elementos do card já encolheram o bastante que não precisa de um
-// "boost" de fator aqui pra continuar legível).
-export const MOBILE_NAME_TEXT_APPOINTMENT = "text-[14px] sm:text-sm";
-// @ do lead — AJUSTE (2026-10-29, 3ª rodada): 12px (era 13px).
+// "boost" de fator aqui pra continuar legível). AJUSTE (2026-10-29, 5ª
+// rodada, pedido explícito "aumentar um pouquinho TUDO"): 14 -> 15px.
+export const MOBILE_NAME_TEXT_APPOINTMENT = "text-[15px] sm:text-sm";
+// @ do lead — AJUSTE (2026-10-29, 3ª rodada): 12px (era 13px). Usada pela
+// Reativação/Faltou/Quente (ReactivationRail.tsx) E pelo Agendamentos
+// (ClientPanelView.tsx) — ver MOBILE_APPOINTMENT_HANDLE_TEXT abaixo pro
+// valor PRÓPRIO do Agendamentos a partir da 5ª rodada (pedido "somente
+// isto" não pode mexer no tamanho da Reativação).
 export const MOBILE_HANDLE_TEXT = "text-[12px] sm:text-caption";
+// @ do lead — SÓ Agendamentos (2026-10-29, 5ª rodada, pedido explícito
+// "aumentar um pouquinho TUDO... exceto o texto dos botões"): constante
+// própria, separada de MOBILE_HANDLE_TEXT (que continua servindo só a
+// Reativação/Faltou/Quente, inalterada — pedido era "somente" o card de
+// Agendamentos). 12 -> 13px.
+export const MOBILE_APPOINTMENT_HANDLE_TEXT = "text-[13px] sm:text-caption";
 // Motivo/horário/status/telefone/rótulos ("Limite diário", "Sem
 // WhatsApp") — NÃO mudou nesta rodada de propósito (pedido explícito:
 // "mantenha motivo visível e sem cortar"; já está no mesmo nível do
 // rótulo do card de métrica, ver MOBILE_METRIC_LABEL_TEXT, ambos 15px):
 // 10px (text-caption) -> ×1,45=14,5→15px.
 export const MOBILE_SECONDARY_TEXT = "text-[15px] sm:text-caption";
-// Data/status/telefone/texto dos botões do card de Agendamentos —
-// NOVO (2026-10-29, 3ª rodada), separado de MOBILE_SECONDARY_TEXT de
-// propósito (motivo/data dos OUTROS cards não mudam, ver acima; só este
-// card ganhou fonte menor, pedido explícito "fonte pequena"): 12px.
+// Texto dos botões "Retorno"/"Não compareceu" (gatilho + opções do
+// popover de prazo) do card de Agendamentos — NOVO (2026-10-29, 3ª
+// rodada), separado de MOBILE_SECONDARY_TEXT de propósito (motivo/data
+// dos OUTROS cards não mudam, ver acima; só este card ganhou fonte menor,
+// pedido explícito "fonte pequena"): 12px. AJUSTE (2026-10-29, 5ª
+// rodada, pedido explícito "aumentar... EXCETO o texto dos botões
+// 'Retorno' e 'Não compareceu'"): fica INALTERADO — por isso a linha de
+// data/status/telefone e a tag de status, que usavam esta MESMA
+// constante, passaram a usar MOBILE_APPOINTMENT_INFO_TEXT (nova, abaixo)
+// em vez desta — só assim dá pra aumentar uma sem aumentar a outra, já
+// que RetornoButton.tsx/NoShowButton.tsx continuam usando esta aqui, sem
+// mudança nenhuma.
 export const MOBILE_APPOINTMENT_SECONDARY_TEXT = "text-[12px] sm:text-caption";
+// Data/status/telefone (linha embaixo do nome/@) e texto da tag de status
+// (AppointmentStatusBadge, modo compact) do card de Agendamentos — NOVO
+// (2026-10-29, 5ª rodada, pedido explícito "aumentar um pouquinho TUDO
+// ... EXCETO o texto dos botões"): separada de
+// MOBILE_APPOINTMENT_SECONDARY_TEXT (ver comentário acima) só pra poder
+// crescer sem arrastar o texto dos botões junto, que usa a mesma
+// constante antiga. 12 -> 13px.
+export const MOBILE_APPOINTMENT_INFO_TEXT = "text-[13px] sm:text-caption";
 // Texto dos botões de ação (WhatsApp/Instagram/"Enviando…"/"✓"): 11px
 // (text-card) × 1,29 = 14,19 → 14px.
 export const MOBILE_BUTTON_TEXT = "text-[14px] sm:text-card";
@@ -306,6 +342,18 @@ export const MOBILE_AVATAR_SIZE = "h-[28px] w-[28px] sm:h-8 sm:w-8";
 export const MOBILE_AVATAR_ICON_SIZE = "h-[14px] w-[14px] sm:h-4 sm:w-4";
 // Badge de origem (Instagram) sobreposto no avatar: 10px.
 export const MOBILE_AVATAR_BADGE_SIZE = "h-[10px] w-[10px] sm:h-3 sm:w-3";
+// Avatar — SÓ Agendamentos (2026-10-29, 5ª rodada, pedido explícito "a
+// foto... de 28 para ~34px"): o par acima (MOBILE_AVATAR_SIZE/ICON_SIZE)
+// continua servindo a Reativação/Faltou/Quente, inalterado ("somente" o
+// card de Agendamentos, ver LeadAvatar.tsx — novo size="appointment").
+// Ícone de fallback escalado na mesma proporção (14/28 = 0,5 → 34×0,5 =
+// 17px). Badge do canal (Instagram) REUSA MOBILE_AVATAR_BADGE_SIZE sem
+// mudança — pedido explícito "mantendo o ícone do canal posicionado no
+// canto como está" (a posição, já relativa ao canto do avatar via
+// -bottom-0.5/-right-0.5, acompanha o avatar maior sozinha; o tamanho do
+// badge em si não foi pedido pra mudar).
+export const MOBILE_APPOINTMENT_AVATAR_SIZE = "h-[34px] w-[34px] sm:h-8 sm:w-8";
+export const MOBILE_APPOINTMENT_AVATAR_ICON_SIZE = "h-[17px] w-[17px] sm:h-4 sm:w-4";
 
 // Botões de ação (WhatsApp/Instagram/retorno/"Retorno"/"Não compareceu") -
 //

@@ -28,9 +28,9 @@ import {
   MOBILE_DATE_ROW_GAP,
   MOBILE_DATE_ROW_MARGIN_TOP,
   MOBILE_NAME_TEXT_APPOINTMENT,
-  MOBILE_HANDLE_TEXT,
+  MOBILE_APPOINTMENT_HANDLE_TEXT,
   MOBILE_APPOINTMENT_HANDLE_CAP,
-  MOBILE_APPOINTMENT_SECONDARY_TEXT,
+  MOBILE_APPOINTMENT_INFO_TEXT,
   MOBILE_CARD_MIN_HEIGHT,
   MOBILE_TITLE_TEXT,
   MOBILE_SUBTITLE_TEXT,
@@ -373,7 +373,7 @@ export async function ClientPanelView({
                   className={`relative flex w-full items-center justify-between ${MOBILE_APPOINTMENT_ACTION_GAP} rounded-lg border border-vexo-border bg-vexo-surface ${MOBILE_APPOINTMENT_ROW_PADDING} ${MOBILE_CARD_MIN_HEIGHT}`}
                 >
                   <div className={`flex min-w-0 flex-1 items-center ${MOBILE_ROW_GAP}`}>
-                    <LeadAvatar profilePictureUrl={a.lead?.profilePictureUrl} name={primary} size="md" />
+                    <LeadAvatar profilePictureUrl={a.lead?.profilePictureUrl} name={primary} size="appointment" />
                     <div className="min-w-0 flex-1">
                       {/* Nome como elemento principal, @ do Instagram como
                           secundário — ver histórico do formato em
@@ -388,7 +388,7 @@ export async function ClientPanelView({
                       <div className="flex min-w-0 items-baseline gap-[5px]">
                         <p className={`min-w-0 flex-1 truncate ${MOBILE_NAME_TEXT_APPOINTMENT} font-medium`}>{primary}</p>
                         {handle && (
-                          <span className={`${MOBILE_APPOINTMENT_HANDLE_CAP} ${MOBILE_HANDLE_TEXT} text-vexo-muted`}>@{handle}</span>
+                          <span className={`${MOBILE_APPOINTMENT_HANDLE_CAP} ${MOBILE_APPOINTMENT_HANDLE_TEXT} text-vexo-muted`}>@{handle}</span>
                         )}
                       </div>
                       {/* Data, tag e telefone — AJUSTE (2026-10-29, 3ª
@@ -411,7 +411,7 @@ export async function ClientPanelView({
                           clicável ao próprio texto, sem precisar de
                           inline-flex. */}
                       <div
-                        className={`${MOBILE_DATE_ROW_MARGIN_TOP} flex flex-wrap items-center ${MOBILE_DATE_ROW_GAP} ${MOBILE_APPOINTMENT_SECONDARY_TEXT} text-vexo-muted`}
+                        className={`${MOBILE_DATE_ROW_MARGIN_TOP} flex flex-wrap items-center ${MOBILE_DATE_ROW_GAP} ${MOBILE_APPOINTMENT_INFO_TEXT} text-vexo-muted`}
                       >
                         <span className="shrink-0">
                           {a.scheduledAt.toLocaleString("pt-BR", {

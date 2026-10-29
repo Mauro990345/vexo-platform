@@ -3,7 +3,13 @@
 import { useState } from "react";
 import { User } from "lucide-react";
 import { InstagramGlyphIcon } from "@/components/BrandIcons";
-import { MOBILE_AVATAR_SIZE, MOBILE_AVATAR_ICON_SIZE, MOBILE_AVATAR_BADGE_SIZE } from "@/components/MobileCardScale";
+import {
+  MOBILE_AVATAR_SIZE,
+  MOBILE_AVATAR_ICON_SIZE,
+  MOBILE_AVATAR_BADGE_SIZE,
+  MOBILE_APPOINTMENT_AVATAR_SIZE,
+  MOBILE_APPOINTMENT_AVATAR_ICON_SIZE,
+} from "@/components/MobileCardScale";
 
 // "md" é o tamanho ESCALADO só-celular (abaixo de sm/640px, ver
 // MobileCardScale.ts) — pedido explícito, leitura pra público 45+. Seguro
@@ -13,14 +19,36 @@ import { MOBILE_AVATAR_SIZE, MOBILE_AVATAR_ICON_SIZE, MOBILE_AVATAR_BADGE_SIZE }
 // (crm/clinicas/[id]/page.tsx) e o banner "precisa de humano" usa "sm"
 // (NeedsHumanBanner.tsx) — nenhum dos dois é afetado. Em tablet/notebook/
 // desktop os três tamanhos ficam idênticos a antes.
-const SIZE_CLASSES = { sm: "h-6 w-6", md: MOBILE_AVATAR_SIZE, lg: "h-10 w-10" } as const;
-const ICON_SIZE_CLASSES = { sm: "h-3 w-3", md: MOBILE_AVATAR_ICON_SIZE, lg: "h-5 w-5" } as const;
+//
+// "appointment" — NOVO (2026-10-29, 5ª rodada, pedido explícito "somente"
+// o card de Agendamentos): usado EXCLUSIVAMENTE por ClientPanelView.tsx
+// (a lista de Agendamentos passou a pedir este size em vez de "md"); o
+// ReactivationRail.tsx continua em "md", inalterado. Badge do canal
+// reusa MOBILE_AVATAR_BADGE_SIZE (mesmo valor de "md") — só o avatar e o
+// ícone de fallback cresceram, ver comentário em MobileCardScale.ts.
+const SIZE_CLASSES = {
+  sm: "h-6 w-6",
+  md: MOBILE_AVATAR_SIZE,
+  lg: "h-10 w-10",
+  appointment: MOBILE_APPOINTMENT_AVATAR_SIZE,
+} as const;
+const ICON_SIZE_CLASSES = {
+  sm: "h-3 w-3",
+  md: MOBILE_AVATAR_ICON_SIZE,
+  lg: "h-5 w-5",
+  appointment: MOBILE_APPOINTMENT_AVATAR_ICON_SIZE,
+} as const;
 // Badge do Instagram, sobreposto no canto inferior direito — proporcional
 // ao tamanho do avatar (pequeno o bastante pra não tomar conta da foto,
 // mas legível). Mesmo padrão visual usado por outros CRMs de social
 // selling (Kommo, Clint) pra indicar o canal de origem do lead direto no
 // avatar, sem precisar de um selo/texto separado.
-const BADGE_SIZE_CLASSES = { sm: "h-2.5 w-2.5", md: MOBILE_AVATAR_BADGE_SIZE, lg: "h-3.5 w-3.5" } as const;
+const BADGE_SIZE_CLASSES = {
+  sm: "h-2.5 w-2.5",
+  md: MOBILE_AVATAR_BADGE_SIZE,
+  lg: "h-3.5 w-3.5",
+  appointment: MOBILE_AVATAR_BADGE_SIZE,
+} as const;
 
 // Avatar do lead (Painel e Pipeline) — <img> puro, não next/image: as URLs
 // vêm do CDN do Instagram, em subdomínios que mudam (scontent-*), então não
@@ -50,7 +78,7 @@ export function LeadAvatar({
 }: {
   profilePictureUrl?: string | null;
   name?: string | null;
-  size?: "sm" | "md" | "lg";
+  size?: "sm" | "md" | "lg" | "appointment";
 }) {
   const [failed, setFailed] = useState(false);
   const dimension = SIZE_CLASSES[size];

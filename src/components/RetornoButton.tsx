@@ -201,9 +201,26 @@ export function RetornoButton({
           explícito): antes usava o mesmo cinza neutro de "Não
           compareceu" (NoShowButton), os dois ficavam visualmente
           idênticos; agora só "Não compareceu" fica neutro — o contorno
-          azul destaca "Retorno" como a ação própria desse botão (mesmo
-          token vexo-accent já usado no estado "marcado", que continua
-          com o preenchimento azul/15 por cima do mesmo contorno). */}
+          azul destaca "Retorno" como a ação própria desse botão.
+          AJUSTE (2026-10-29, 5ª rodada, pedido explícito "contorno azul
+          está forte e aceso demais... minimalista... texto/ícone num
+          azul mais suave" — SÓ CELULAR, "em ≥640px nada muda"): contorno
+          vai pra border-vexo-accent/45 (dentro do 40-50% pedido, era
+          100%) nos DOIS estados (normal e marcado — "vale também pro
+          estado 'Sem retorno'", que é só uma variação do estado marcado
+          aqui, mesmo branco de código); texto/ícone (antes só azul no
+          estado marcado, cinza no normal) vira text-vexo-accent/70 nos
+          DOIS estados — um azul suave e CONSISTENTE o tempo todo (não
+          mais "acende" de cinza pra azul saturado ao marcar), ainda
+          nitidamente diferente do cinza puro de "Não compareceu"
+          (NoShowButton, text-vexo-muted). `sm:` reverte border/texto pro
+          valor cheio de sempre (border-vexo-accent 100%, text-vexo-accent/
+          text-vexo-muted) — desktop pixel/cor-idêntico a antes desta
+          rodada. O estado marcado continua com bg-vexo-accent/15 por
+          cima (distingue "selecionado" sem precisar de mais saturação no
+          texto, inalterado em ambas telas); hover do estado normal
+          (bg-vexo-accent/10) não mudou — já era sutil o bastante,
+          coerente com o tom novo. */}
       <button
         type="button"
         title={locked ? "Já enviado — prazo não pode mais ser alterado" : undefined}
@@ -211,8 +228,8 @@ export function RetornoButton({
         disabled={locked}
         className={`inline-flex items-center justify-center ${MOBILE_TOGGLE_BUTTON_MIN} ${MOBILE_INLINE_GAP} rounded-lg border px-[8px] py-[6px] sm:px-2 sm:py-1 ${MOBILE_APPOINTMENT_SECONDARY_TEXT} font-medium transition disabled:cursor-not-allowed disabled:opacity-60 ${
           marked
-            ? "border-vexo-accent bg-vexo-accent/15 text-vexo-accent"
-            : "border-vexo-accent text-vexo-muted hover:bg-vexo-accent/10"
+            ? "border-vexo-accent/45 bg-vexo-accent/15 text-vexo-accent/70 sm:border-vexo-accent sm:text-vexo-accent"
+            : "border-vexo-accent/45 text-vexo-accent/70 hover:bg-vexo-accent/10 sm:border-vexo-accent sm:text-vexo-muted"
         }`}
       >
         <CalendarArrowUp className={`${MOBILE_APPOINTMENT_BUTTON_ICON_SIZE} shrink-0`} strokeWidth={2.5} />

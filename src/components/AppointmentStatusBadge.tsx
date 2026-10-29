@@ -1,4 +1,4 @@
-import { MOBILE_APPOINTMENT_SECONDARY_TEXT } from "@/components/MobileCardScale";
+import { MOBILE_APPOINTMENT_INFO_TEXT } from "@/components/MobileCardScale";
 
 const STATUS_LABELS: Record<string, string> = {
   SCHEDULED: "Agendado",
@@ -81,15 +81,20 @@ export function AppointmentStatusBadge({ status, compact }: { status: string; co
     return (
       // SÓ CELULAR (lista de Agendamentos do Painel, ver
       // MobileCardScale.ts): padding/fonte alinhados com o resto da
-      // linha data/status/telefone (MOBILE_APPOINTMENT_SECONDARY_TEXT).
+      // linha data/status/telefone (MOBILE_APPOINTMENT_INFO_TEXT).
       // AJUSTE (2026-10-29, 3ª rodada): padding 9px/3px -> 5px/1px, fonte
       // 15px -> 12px — pedido explícito pra caber no card do tamanho de
-      // um card de métrica. `sm:` com os valores de sempre — essa é a
-      // versão `compact`, usada só no Painel (a não-compact, na tela de
-      // conversa do CRM interno, não muda em nada). Não é um botão (só
-      // texto informativo), por isso sem piso de toque.
+      // um card de métrica. AJUSTE (2026-10-29, 5ª rodada, pedido
+      // explícito "texto da tag de status +1px"): 12 -> 13px — trocou de
+      // MOBILE_APPOINTMENT_SECONDARY_TEXT (que ficou INALTERADA, pois
+      // também serve o texto dos botões "Retorno"/"Não compareceu", fora
+      // do pedido) pra MOBILE_APPOINTMENT_INFO_TEXT (nova). `sm:` com os
+      // valores de sempre — essa é a versão `compact`, usada só no Painel
+      // (a não-compact, na tela de conversa do CRM interno, não muda em
+      // nada). Não é um botão (só texto informativo), por isso sem piso
+      // de toque.
       <span
-        className={`inline-flex items-center gap-[2px] sm:gap-0.5 rounded-sm px-[5px] py-[1px] sm:px-1.5 sm:py-0.5 ${MOBILE_APPOINTMENT_SECONDARY_TEXT} font-medium leading-none ${tint.bg} ${tint.text} ${tint.border ?? ""}`}
+        className={`inline-flex items-center gap-[2px] sm:gap-0.5 rounded-sm px-[5px] py-[1px] sm:px-1.5 sm:py-0.5 ${MOBILE_APPOINTMENT_INFO_TEXT} font-medium leading-none ${tint.bg} ${tint.text} ${tint.border ?? ""}`}
       >
         {status === "COMPLETED" && <span aria-hidden="true">✓</span>}
         {label}
