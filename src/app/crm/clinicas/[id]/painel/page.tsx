@@ -3,6 +3,7 @@ import { ClientPanelView } from "@/components/ClientPanelView";
 import { ClientAccessModal } from "@/components/ClientAccessModal";
 import {
   setAppointmentAttendanceAction,
+  setAppointmentReturnPeriodAction,
   toggleReactivationCardSentAction,
   sendReactivationWhatsAppMessageAction,
   toggleNoShowCardSentAction,
@@ -52,6 +53,7 @@ export default async function ClinicPainelPage({
       week={searchParams.week}
       base={`/crm/clinicas/${params.id}/painel`}
       noShowAction={setAppointmentAttendanceAction}
+      returnPeriodAction={setAppointmentReturnPeriodAction}
       reactivationSentAction={toggleReactivationCardSentAction}
       reactivationSendWhatsappAction={sendReactivationWhatsAppMessageAction}
       noShowCardSentAction={toggleNoShowCardSentAction}

@@ -3,8 +3,13 @@
 import { revalidatePath } from "next/cache";
 import { requireClientSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
-import { setAppointmentAttendance } from "@/lib/appointments";
-import { toggleReactivationCardSent, sendReactivationWhatsAppMessage, type SendReactivationWhatsAppResult } from "@/lib/reactivation";
+import { setAppointmentAttendance, setAppointmentReturnPeriod, type SetAppointmentReturnPeriodResult } from "@/lib/appointments";
+import {
+  toggleReactivationCardSent,
+  sendReactivationWhatsAppMessage,
+  isValidReturnPeriodDays,
+  type SendReactivationWhatsAppResult,
+} from "@/lib/reactivation";
 import { toggleNoShowCardSent, sendNoShowCardWhatsAppMessage } from "@/lib/no-show-cards";
 import { toggleHotLeadCardSent, type ToggleHotLeadCardSentResult } from "@/lib/hot-lead-cards";
 
@@ -34,6 +39,33 @@ export async function setAppointmentAttendanceClientAction(
   await setAppointmentAttendance(appointmentId, status);
 
   revalidatePath("/dashboard");
+}
+
+// Botão "Retorno" do card de agendamento (ver RetornoButton.tsx) — mesmo
+// padrão de setAppointmentAttendanceClientAction acima: clinicId sempre
+// vem da sessão, confirma que o agendamento é mesmo dessa clínica antes de
+// gravar. Validação do prazo (lista fixa de dias) fica aqui, não em
+// setAppointmentReturnPeriod (appointments.ts), que só decide SE a troca
+// pode acontecer agora (trava: depois de enviado, não muda mais).
+export async function setAppointmentReturnPeriodClientAction(
+  appointmentId: string,
+  selection: number | "none"
+): Promise<SetAppointmentReturnPeriodResult> {
+  const session = await requireClientSession();
+  const clinicId = session.user.clinicId as string;
+
+  if (selection !== "none" && !isValidReturnPeriodDays(selection)) {
+    throw new Error("Prazo de retorno inválido.");
+  }
+
+  const appt = await prisma.appointment.findUnique({ where: { id: appointmentId }, select: { clinicId: true } });
+  if (!appt || appt.clinicId !== clinicId) {
+    throw new Error("Agendamento não encontrado.");
+  }
+
+  const result = await setAppointmentReturnPeriod(appointmentId, selection);
+  revalidatePath("/dashboard");
+  return result;
 }
 
 // Marca/desmarca um card da Reativação como enviado (ver ReactivationRail,
@@ -122,7 +154,7 @@ export async function sendNoShowCardWhatsAppMessageClientAction(
 
 // Card "Quente" (ver hot-lead-cards.ts) — nunca envia de verdade pelo
 // VEXO (só copiar + abrir o Instagram), então só precisa de UMA action.
-export async function toggleHotLeadCardSentClientAction(conversationId: string): Promise<ToggleHotLeadCardSentResult> {
+export async function toggleHotLeadCardSentClientAction(conversationId: string, step: number): Promise<ToggleHotLeadCardSentResult> {
   const session = await requireClientSession();
   const clinicId = session.user.clinicId as string;
 
@@ -131,7 +163,7 @@ export async function toggleHotLeadCardSentClientAction(conversationId: string):
     throw new Error("Conversa não encontrada.");
   }
 
-  const result = await toggleHotLeadCardSent(conversationId);
+  const result = await toggleHotLeadCardSent(conversationId, step);
   revalidatePath("/dashboard");
   return result;
 }

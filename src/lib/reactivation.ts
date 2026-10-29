@@ -10,70 +10,56 @@ import { renderMessageTemplate, normalizeFirstNameForTemplate } from "@/lib/mess
 // mesmo padrão de report-conversations-logic.ts/metrics.ts), wrapper com
 // Prisma embaixo.
 
-// Períodos só de TESTE — isolados nesta constante de propósito, pra poder
-// ser removidos depois mexendo numa linha só (esvaziar o array, ver pedido
-// explícito do usuário). REACTIVATION_THRESHOLD_OPTIONS espalha esta lista
-// na frente dos períodos "de verdade" (90/120/150) — tirar algo daqui tira
-// o chip da tela e da validação automaticamente, sem precisar editar mais
-// nada. Mesma lógica de período pra todos, só o rótulo "(teste)" muda (ver
-// automacoes/page.tsx).
-export const TEST_PERIOD_DAYS = [7, 10, 30, 60] as const;
-export const REACTIVATION_THRESHOLD_OPTIONS = [...TEST_PERIOD_DAYS, 90, 120, 150] as const;
-export type ReactivationThresholdDays = (typeof REACTIVATION_THRESHOLD_OPTIONS)[number];
-// Padrão: só 150 marcado. Lista VAZIA = Reativação desligada pra essa
-// clínica (pedido explícito) — nenhum período, nenhum card.
-export const DEFAULT_REACTIVATION_THRESHOLD_DAYS_LIST: ReactivationThresholdDays[] = [150];
+// Prazos de retorno que uma clínica pode marcar como "disponíveis" pro
+// botão "Retorno" do agendamento (ver RetornoButton.tsx) — lista FIXA de 9
+// valores (pedido explícito); ReactivationConfig.availablePeriods é sempre
+// um subconjunto desta lista. Substituiu os antigos "períodos de teste" +
+// 90/120/150 (um período único GLOBAL por clínica, de antes do botão
+// "Retorno" existir) — "fase de teste, sem usuários reais", dado antigo
+// descartado na mesma migration que trouxe o botão.
+export const RETURN_PERIOD_OPTIONS = [30, 60, 90, 120, 150, 180, 210, 240, 270] as const;
+export type ReturnPeriodDays = (typeof RETURN_PERIOD_OPTIONS)[number];
 
-// Validação pura (sem Prisma) usada por updateClinicReactivation
-// (src/app/crm/clinicas/actions.ts) pra filtrar os valores marcados nos
-// checkboxes — extraída pra poder testar "aceita os valores válidos,
-// rejeita valor inválido" sem precisar simular form/sessão/banco.
-export function isValidReactivationThresholdDays(value: number): value is ReactivationThresholdDays {
-  return (REACTIVATION_THRESHOLD_OPTIONS as readonly number[]).includes(value);
+// Validação pura (sem Prisma) usada pelas server actions de Automações pra
+// filtrar os valores marcados nos checkboxes — mesmo papel da antiga
+// isValidReactivationThresholdDays.
+export function isValidReturnPeriodDays(value: number): value is ReturnPeriodDays {
+  return (RETURN_PERIOD_OPTIONS as readonly number[]).includes(value);
 }
+
+// Mesmo valor do default do schema (ReactivationConfig.availablePeriods/
+// defaultPeriods) — usado como fallback quando a clínica ainda não tem
+// ReactivationConfig nenhuma (upsert cria com esses valores).
+export const DEFAULT_AVAILABLE_RETURN_PERIODS: ReturnPeriodDays[] = [...RETURN_PERIOD_OPTIONS];
+export const DEFAULT_RETURN_PERIODS: ReturnPeriodDays[] = [30, 60];
+export const DEFAULT_DAILY_WHATSAPP_LIMIT = 15;
 
 export type ReactivationChannel = "INSTAGRAM" | "WHATSAPP";
 
-// Qual canal cada período usa — isolado NUM SÓ LUGAR (pedido explícito),
-// fácil de ajustar sem tocar em nenhuma outra lógica. 7/30/60 = Instagram;
-// 10/90/120/150 = WhatsApp (7 e 10 são período de teste, só pra dar pra ver
-// os dois botões na tela).
-export const REACTIVATION_CHANNEL_BY_THRESHOLD: Record<ReactivationThresholdDays, ReactivationChannel> = {
-  7: "INSTAGRAM",
-  10: "WHATSAPP",
-  30: "INSTAGRAM",
-  60: "INSTAGRAM",
-  90: "WHATSAPP",
-  120: "WHATSAPP",
-  150: "WHATSAPP",
-};
-
-export function reactivationChannelForThreshold(thresholdDays: number): ReactivationChannel {
-  return REACTIVATION_CHANNEL_BY_THRESHOLD[thresholdDays as ReactivationThresholdDays] ?? "WHATSAPP";
+// Canal sempre o MESMO critério já usado pelo Faltou (ver no-show-cards.ts)
+// — WhatsApp quando o lead tem telefone cadastrado, Instagram (copiar +
+// abrir) como fallback quando não tem. WhatsApp desconectado NO MEIO do
+// envio (clínica perdeu a conexão depois do card já estar na tela) é um
+// caso à parte, já tratado pelo fallback manual existente (ver
+// useManualFallback, ReactivationRail.tsx — ativado quando
+// sendReactivationWhatsAppMessage devolve reason "disconnected").
+export function reactivationChannelForLead(phone: string | null): ReactivationChannel {
+  return phone ? "WHATSAPP" : "INSTAGRAM";
 }
 
 // Estilo de acompanhamento genérico ("como você está desde o seu
 // atendimento"), sem citar nenhum serviço/procedimento — pedido explícito.
-// Usado quando a clínica não personalizou nenhuma das 5 mensagens de
-// WHATSAPP (ver DEFAULT_INSTAGRAM_REACTIVATION_MESSAGES abaixo pro
-// conjunto, separado, do Instagram).
-export const DEFAULT_WHATSAPP_REACTIVATION_MESSAGES: readonly string[] = [
+// Usado quando a clínica não personalizou nenhuma das 5 mensagens —
+// conjunto ÚNICO pros dois canais agora (pedido explícito: "use os mesmos
+// textos no WhatsApp e no fallback de Instagram" — antes havia um segundo
+// conjunto, DEFAULT_INSTAGRAM_REACTIVATION_MESSAGES, só pro Instagram;
+// descartado na mesma migration, "fase de teste, sem usuários reais").
+export const DEFAULT_REACTIVATION_MESSAGES: readonly string[] = [
   "Oi! Passando aqui só pra saber como você está desde o seu atendimento. Se precisar de algo, é só chamar. 💙",
   "Oi! Faz um tempinho que a gente não se fala por aqui — como você está desde o seu atendimento?",
   "Oi! Lembramos de você 💙 Como você está desde o seu atendimento? Se quiser conversar, é só responder.",
   "Oi! Passando pra deixar um alô e saber como você está desde o seu atendimento. Pode contar com a gente.",
   "Oi! Ficamos pensando em você — como está desde o seu atendimento? Estamos à disposição por aqui.",
-];
-
-// Mesmo espírito (acompanhamento genérico, sem citar serviço/procedimento,
-// sem variável de nome), em tom de DM — mais curtas que as de WhatsApp de
-// propósito, como uma mensagem direta do Instagram costuma ser.
-export const DEFAULT_INSTAGRAM_REACTIVATION_MESSAGES: readonly string[] = [
-  "Oi! 💙 Passando aqui pra saber como você está desde o seu atendimento.",
-  "Oi! Faz um tempo que a gente não se fala por aqui — tudo bem com você?",
-  "Oi! Lembramos de você 💙 Como você está desde o seu atendimento?",
-  "Oi! Só passando pra dar um alô e saber como você está.",
-  "Oi! Ficamos pensando em você — como você está?",
 ];
 
 function isWeekend(brazilDay: Date): boolean {
@@ -113,18 +99,48 @@ export function isWithinReactivationWindow(window: ReactivationWindow, now: Date
   return today.getTime() >= window.start.getTime() && today.getTime() <= window.end.getTime();
 }
 
+// Janela em DIAS CORRIDOS (não dias úteis, ao contrário de
+// computeReactivationWindow acima) — ancorada em `anchor` + `offsetDays`,
+// visível de `offsetDays - beforeDays` até `offsetDays + afterDays`,
+// sempre por DIA civil em America/Sao_Paulo (startOfDay/addDays, mesmo
+// fuso de todo o resto do app). Genérica o bastante pra servir tanto o
+// botão "Retorno" (computeReturnContactWindow abaixo — beforeDays=3,
+// afterDays=3, "aparece 3 dias antes e fica até 3 dias depois") quanto a
+// cadência do Quente (hot-lead-cards.ts — beforeDays=0, afterDays=3, "no
+// dia exato, visível por até 3 dias"). isWithinReactivationWindow (acima)
+// já é genérica o bastante pra checar QUALQUER janela {start,end},
+// calculada em dias úteis ou em dias corridos — reaproveitada tal como
+// está, sem precisar de uma segunda função de "está dentro da janela".
+export function computeCalendarDayWindow(anchor: Date, offsetDays: number, beforeDays: number, afterDays: number): ReactivationWindow {
+  const targetDay = startOfDay(addDays(anchor, offsetDays));
+  return { start: addDays(targetDay, -beforeDays), end: addDays(targetDay, afterDays) };
+}
+
+// Data de contato = data do atendimento + prazo de retorno, em dias
+// corridos (pedido explícito — diferente da janela de 5 dias ÚTEIS do
+// Faltou, computeReactivationWindow acima, que continua intocada).
+// Visível 3 dias antes da data de contato até 3 dias depois (pedido
+// explícito), sempre por dia civil em America/Sao_Paulo.
+export function computeReturnContactWindow(scheduledAt: Date, periodDays: number): ReactivationWindow {
+  return computeCalendarDayWindow(scheduledAt, periodDays, 3, 3);
+}
+
 export type ReactivationSourceAppointment = {
   id: string;
   leadId: string | null;
   conversationId: string | null;
   scheduledAt: Date;
   status: string;
+  returnPeriodDays: number | null;
+  returnPeriodNone: boolean;
 };
 
 export type ReactivationCandidate = {
   appointmentId: string;
   leadId: string;
   scheduledAt: Date;
+  returnPeriodDays: number | null;
+  returnPeriodNone: boolean;
 };
 
 // Acha, por lead, o agendamento da IA mais recente (conversationId
@@ -152,9 +168,33 @@ export function selectReactivationCandidates(appointments: ReactivationSourceApp
   const candidates: ReactivationCandidate[] = [];
   for (const appt of latestByLead.values()) {
     if (appt.status === "NO_SHOW") continue;
-    candidates.push({ appointmentId: appt.id, leadId: appt.leadId!, scheduledAt: appt.scheduledAt });
+    candidates.push({
+      appointmentId: appt.id,
+      leadId: appt.leadId!,
+      scheduledAt: appt.scheduledAt,
+      returnPeriodDays: appt.returnPeriodDays,
+      returnPeriodNone: appt.returnPeriodNone,
+    });
   }
   return candidates;
+}
+
+// Quais prazos (dias) geram card pra ESTE agendamento — "Sem retorno"
+// marcado = nenhum; um prazo marcado = só esse (substitui os padrão,
+// pedido explícito: marcar um prazo cancela os cards padrão pendentes —
+// como eles nunca chegam a ser gerados de novo depois que o prazo manual
+// está marcado, "cancelar" aqui é simplesmente NUNCA MAIS incluir os
+// períodos padrão na lista de candidatos; um slot padrão já criado antes
+// da marcação, mas ainda não enviado, simplesmente para de aparecer —
+// nenhuma linha precisa ser apagada); nada marcado = os padrão da clínica
+// (pode ser mais de um, um card por padrão).
+export function resolveAppointmentReturnPeriods(
+  appt: { returnPeriodDays: number | null; returnPeriodNone: boolean },
+  clinicDefaultPeriods: readonly number[]
+): number[] {
+  if (appt.returnPeriodNone) return [];
+  if (appt.returnPeriodDays != null) return [appt.returnPeriodDays];
+  return [...clinicDefaultPeriods];
 }
 
 export type ReactivationCardCandidate = ReactivationCandidate & {
@@ -162,29 +202,29 @@ export type ReactivationCardCandidate = ReactivationCandidate & {
   window: ReactivationWindow;
 };
 
-// Cada período marcado (ver ReactivationConfig.thresholdDaysList) funciona
-// de forma INDEPENDENTE: o mesmo candidato (já filtrado por lead/voltou/
-// faltou/cancelado em selectReactivationCandidates) pode gerar um card por
-// período, cada um na janela daquele período específico — o mesmo
-// agendamento pode aparecer duas vezes, em momentos diferentes (pedido
-// explícito: "o mesmo paciente pode ter dois cards se completar dois
-// períodos marcados em momentos diferentes"). Lista de períodos vazia =
-// nenhum card, nenhuma iteração (Reativação desligada pra essa clínica).
+// Cada prazo de retorno de um agendamento (ver resolveAppointmentReturnPeriods
+// acima — um manual, ou vários padrão da clínica) funciona de forma
+// INDEPENDENTE: o mesmo candidato pode gerar mais de um card, cada um na
+// janela daquele prazo específico (pedido explícito: vários padrão podem
+// gerar vários cards, até a secretária marcar um prazo manual). Se a
+// janela de um prazo (manual ou padrão) já passou, isWithinReactivationWindow
+// simplesmente não inclui esse candidato — "não gerar card" pra janela já
+// vencida sai de graça, sem checagem própria.
 //
-// Ordenado GLOBALMENTE por quem completou primeiro, entre TODOS os
-// períodos juntos — a rotação de mensagens é uma sequência ÚNICA por
-// clínica (ver ReactivationConfig.sequenceCounter), independente do
-// período, então a ordem de atribuição de slot precisa ser essa ordem
-// global, não uma ordem separada por período.
+// Ordenado GLOBALMENTE por quem entrou na janela primeiro, entre TODOS os
+// agendamentos/prazos juntos — a rotação de mensagens é uma sequência
+// ÚNICA por clínica (ver ReactivationConfig.sequenceCounter), então a
+// ordem de atribuição de slot precisa ser essa ordem global.
 export function buildReactivationCardCandidates(
   candidates: ReactivationCandidate[],
-  thresholdDaysList: number[],
+  clinicDefaultPeriods: readonly number[],
   now: Date
 ): ReactivationCardCandidate[] {
   const result: ReactivationCardCandidate[] = [];
-  for (const thresholdDays of thresholdDaysList) {
-    for (const candidate of candidates) {
-      const window = computeReactivationWindow(candidate.scheduledAt, thresholdDays);
+  for (const candidate of candidates) {
+    const periods = resolveAppointmentReturnPeriods(candidate, clinicDefaultPeriods);
+    for (const thresholdDays of periods) {
+      const window = computeReturnContactWindow(candidate.scheduledAt, thresholdDays);
       if (isWithinReactivationWindow(window, now)) {
         result.push({ ...candidate, thresholdDays, window });
       }
@@ -289,6 +329,11 @@ export type ReactivationCard = {
   // Clique no botão de ação (WhatsApp/Instagram) daquele card — ver
   // toggleReactivationCardSent, mais abaixo. null = pendente (padrão).
   sentAt: Date | null;
+  // Limite diário de WhatsApp (Reativação + Faltou, ver ReactivationConfig.
+  // dailyWhatsappLimit/countTodaysWhatsappSends) já atingido — só É true
+  // pra card de canal WHATSAPP ainda pendente (mesmo mecanismo já usado
+  // pelo Quente, ver HotLeadCard.dailyLimitReached/panel-cards.ts).
+  dailyLimitReached: boolean;
 };
 
 // Chave composta (agendamento + período) — o mesmo agendamento pode ter um
@@ -335,70 +380,58 @@ export function assignReactivationCardSlots(
   return { cards, finalSequenceCounter: sequenceCounter, newlyAssigned };
 }
 
-export type ReactivationChannelCounters = { whatsapp: number; instagram: number };
+// Quantos envios de WhatsApp (Reativação + Faltou somados, pedido
+// explícito) já aconteceram HOJE pra uma clínica — conta sentAt de HOJE
+// nas duas tabelas (ReactivationCardSlot/NoShowCardSlot), restrito a cards
+// cujo lead tem telefone (mesmo critério de reactivationChannelForLead —
+// é o que decide se aquele sentAt correspondeu a um card de canal
+// WHATSAPP quando exibido; um clique no fallback manual wa.me, que também
+// grava sentAt pelo mesmo toggle, ainda é um envio de WhatsApp de verdade
+// do ponto de vista da clínica, então conta igual). Compartilhado por
+// reactivation.ts e no-show-cards.ts — mesma ideia de
+// isReactivationWhatsAppRateLimited acima, mas por DIA em vez de por
+// segundos.
+export async function countTodaysWhatsappSends(clinicId: string, now: Date): Promise<number> {
+  const todayStart = startOfDay(now);
+  const todayEnd = addDays(todayStart, 1);
+  const [reactivationCount, noShowCount] = await Promise.all([
+    prisma.reactivationCardSlot.count({
+      where: { sentAt: { gte: todayStart, lt: todayEnd }, appointment: { clinicId, lead: { phone: { not: null } } } },
+    }),
+    prisma.noShowCardSlot.count({
+      where: { sentAt: { gte: todayStart, lt: todayEnd }, appointment: { clinicId, lead: { phone: { not: null } } } },
+    }),
+  ]);
+  return reactivationCount + noShowCount;
+}
 
-// Particiona cardCandidates (já na ordem global de "quem completou
-// primeiro", ver buildReactivationCardCandidates) por CANAL — filter
-// preserva a ordem relativa, então cada grupo já sai na ordem certa de
-// "quem completou primeiro DENTRO daquele canal" — e roda
-// assignReactivationCardSlots separadamente pra cada um, com seu próprio
-// conjunto de slots disponíveis e seu próprio contador (pedido explícito:
-// "as mensagens do Instagram rodam entre si e as do WhatsApp entre si").
-// O resultado final (`cards`) sai na mesma ordem global de ENTRADA
-// (cardCandidates), só com o slot de cada um já resolvido — a atribuição
-// em si acontece por canal, a exibição continua ordenada globalmente.
-export function assignReactivationCardSlotsByChannel(
-  cardCandidates: ReactivationCardCandidate[],
-  whatsappAvailableSlots: number[],
-  instagramAvailableSlots: number[],
-  initialCounters: ReactivationChannelCounters,
-  existingSlots: Map<string, number>
-): { cards: AssignedReactivationCard[]; finalCounters: ReactivationChannelCounters; newlyAssigned: ReactivationSlotAssignment[] } {
-  const whatsappCandidates = cardCandidates.filter((c) => reactivationChannelForThreshold(c.thresholdDays) === "WHATSAPP");
-  const instagramCandidates = cardCandidates.filter((c) => reactivationChannelForThreshold(c.thresholdDays) === "INSTAGRAM");
-
-  const whatsappResult = assignReactivationCardSlots(whatsappCandidates, whatsappAvailableSlots, initialCounters.whatsapp, existingSlots);
-  const instagramResult = assignReactivationCardSlots(instagramCandidates, instagramAvailableSlots, initialCounters.instagram, existingSlots);
-
-  const slotByKey = new Map<string, number>();
-  for (const c of whatsappResult.cards) slotByKey.set(cardSlotKey(c.appointmentId, c.thresholdDays), c.slot);
-  for (const c of instagramResult.cards) slotByKey.set(cardSlotKey(c.appointmentId, c.thresholdDays), c.slot);
-
-  const cards = cardCandidates.map((c) => ({ ...c, slot: slotByKey.get(cardSlotKey(c.appointmentId, c.thresholdDays))! }));
-
-  return {
-    cards,
-    finalCounters: { whatsapp: whatsappResult.finalSequenceCounter, instagram: instagramResult.finalSequenceCounter },
-    newlyAssigned: [...whatsappResult.newlyAssigned, ...instagramResult.newlyAssigned],
-  };
+export function isDailyWhatsappLimitReached(sentTodayCount: number, dailyLimit: number): boolean {
+  return sentTodayCount >= dailyLimit;
 }
 
 export async function getReactivationCards(clinicId: string, now: Date = new Date()): Promise<ReactivationCard[]> {
   const config = await prisma.reactivationConfig.findUnique({ where: { clinicId } });
-  // Lista vazia (ou clínica sem nenhuma ReactivationConfig ainda) = nenhum
-  // período marcado = Reativação desligada pra essa clínica (pedido
-  // explícito) — nem vale a pena buscar agendamento nenhum.
-  const thresholdDaysList = config?.thresholdDaysList ?? [];
-  if (thresholdDaysList.length === 0) return [];
+  const defaultPeriods = config?.defaultPeriods?.length ? config.defaultPeriods : DEFAULT_RETURN_PERIODS;
+  const dailyLimit = config?.dailyWhatsappLimit ?? DEFAULT_DAILY_WHATSAPP_LIMIT;
 
-  const whatsappMessages = [config?.message1, config?.message2, config?.message3, config?.message4, config?.message5];
-  const instagramMessages = [
-    config?.instagramMessage1,
-    config?.instagramMessage2,
-    config?.instagramMessage3,
-    config?.instagramMessage4,
-    config?.instagramMessage5,
-  ];
-  const whatsappAvailableSlots = resolveAvailableReactivationSlots(whatsappMessages);
-  const instagramAvailableSlots = resolveAvailableReactivationSlots(instagramMessages);
+  const messages = [config?.message1, config?.message2, config?.message3, config?.message4, config?.message5];
+  const availableSlots = resolveAvailableReactivationSlots(messages);
 
   const appointments = await prisma.appointment.findMany({
     where: { clinicId, conversationId: { not: null } },
-    select: { id: true, leadId: true, conversationId: true, scheduledAt: true, status: true },
+    select: {
+      id: true,
+      leadId: true,
+      conversationId: true,
+      scheduledAt: true,
+      status: true,
+      returnPeriodDays: true,
+      returnPeriodNone: true,
+    },
   });
 
   const baseCandidates = selectReactivationCandidates(appointments);
-  const cardCandidates = buildReactivationCardCandidates(baseCandidates, thresholdDaysList, now);
+  const cardCandidates = buildReactivationCardCandidates(baseCandidates, defaultPeriods, now);
   if (cardCandidates.length === 0) return [];
 
   const existingSlotRows = await prisma.reactivationCardSlot.findMany({
@@ -407,15 +440,11 @@ export async function getReactivationCards(clinicId: string, now: Date = new Dat
   const existingSlots = new Map(existingSlotRows.map((s) => [cardSlotKey(s.appointmentId, s.thresholdDays), s.slot]));
   const sentAtBySlotKey = new Map(existingSlotRows.map((s) => [cardSlotKey(s.appointmentId, s.thresholdDays), s.sentAt]));
 
-  const initialCounters: ReactivationChannelCounters = {
-    whatsapp: config?.sequenceCounter ?? 0,
-    instagram: config?.instagramSequenceCounter ?? 0,
-  };
-  const { cards, finalCounters, newlyAssigned } = assignReactivationCardSlotsByChannel(
+  const initialSequenceCounter = config?.sequenceCounter ?? 0;
+  const { cards, finalSequenceCounter, newlyAssigned } = assignReactivationCardSlots(
     cardCandidates,
-    whatsappAvailableSlots,
-    instagramAvailableSlots,
-    initialCounters,
+    availableSlots,
+    initialSequenceCounter,
     existingSlots
   );
 
@@ -431,16 +460,11 @@ export async function getReactivationCards(clinicId: string, now: Date = new Dat
     });
   }
 
-  if (finalCounters.whatsapp !== initialCounters.whatsapp || finalCounters.instagram !== initialCounters.instagram) {
+  if (finalSequenceCounter !== initialSequenceCounter) {
     await prisma.reactivationConfig.upsert({
       where: { clinicId },
-      create: {
-        clinicId,
-        thresholdDaysList: DEFAULT_REACTIVATION_THRESHOLD_DAYS_LIST,
-        sequenceCounter: finalCounters.whatsapp,
-        instagramSequenceCounter: finalCounters.instagram,
-      },
-      update: { sequenceCounter: finalCounters.whatsapp, instagramSequenceCounter: finalCounters.instagram },
+      create: { clinicId, sequenceCounter: finalSequenceCounter },
+      update: { sequenceCounter: finalSequenceCounter },
     });
   }
 
@@ -454,7 +478,7 @@ export async function getReactivationCards(clinicId: string, now: Date = new Dat
   // configurado pela clínica saía LITERAL, sem nenhuma substituição).
   // Nome: mesma fonte de sempre (perfil do Instagram do lead) — busca e
   // cacheia em paralelo, uma vez por LEAD distinto (não por card: o mesmo
-  // lead pode ter cards em períodos diferentes), nunca o @ do Instagram
+  // lead pode ter cards em prazos diferentes), nunca o @ do Instagram
   // como nome (ver ensureLeadFirstNameFromInstagram/normalizeFirstNameForTemplate).
   const instagramAccount = await prisma.instagramAccount.findUnique({ where: { clinicId }, select: { accessTokenEnc: true } });
   const rawNameByLeadId = new Map<string, string | null>();
@@ -468,19 +492,20 @@ export async function getReactivationCards(clinicId: string, now: Date = new Dat
     for (const lead of leads) rawNameByLeadId.set(lead.id, lead.name);
   }
 
+  const sentTodayCount = await countTodaysWhatsappSends(clinicId, now);
+  const whatsappDailyLimitReached = isDailyWhatsappLimitReached(sentTodayCount, dailyLimit);
+
   return cards.map((c) => {
     const lead = leadById.get(c.leadId);
-    const channel = reactivationChannelForThreshold(c.thresholdDays);
-    const rawTemplate =
-      channel === "INSTAGRAM"
-        ? resolveReactivationMessageText(c.slot, instagramMessages, DEFAULT_INSTAGRAM_REACTIVATION_MESSAGES)
-        : resolveReactivationMessageText(c.slot, whatsappMessages, DEFAULT_WHATSAPP_REACTIVATION_MESSAGES);
+    const phone = lead?.phone ?? null;
+    const channel = reactivationChannelForLead(phone);
+    const rawTemplate = resolveReactivationMessageText(c.slot, messages, DEFAULT_REACTIVATION_MESSAGES);
     const message = renderMessageTemplate(rawTemplate, {
       primeiro_nome: normalizeFirstNameForTemplate(rawNameByLeadId.get(c.leadId) ?? null),
       data_horario: formatDateTimeLabel(c.scheduledAt, now),
     });
-    const phone = lead?.phone ?? null;
     const igUsername = lead?.igUsername ?? null;
+    const sentAt = sentAtBySlotKey.get(cardSlotKey(c.appointmentId, c.thresholdDays)) ?? null;
     return {
       appointmentId: c.appointmentId,
       leadId: c.leadId,
@@ -500,7 +525,8 @@ export async function getReactivationCards(clinicId: string, now: Date = new Dat
       // não tem linha em existingSlotRows ainda — get() devolve undefined,
       // ?? null normaliza pro mesmo "pendente" de um card já existente
       // nunca marcado.
-      sentAt: sentAtBySlotKey.get(cardSlotKey(c.appointmentId, c.thresholdDays)) ?? null,
+      sentAt,
+      dailyLimitReached: channel === "WHATSAPP" && !sentAt && whatsappDailyLimitReached,
     };
   });
 }
@@ -593,7 +619,14 @@ export type SendReactivationWhatsAppResult =
   | { ok: true; alreadySent: boolean }
   | {
       ok: false;
-      reason: "not_found" | "wrong_channel" | "rate_limited" | "invalid_phone" | "disconnected" | "send_failed" | "no_longer_eligible";
+      reason:
+        | "not_found"
+        | "rate_limited"
+        | "invalid_phone"
+        | "disconnected"
+        | "send_failed"
+        | "no_longer_eligible"
+        | "daily_limit_reached";
     };
 
 // Orquestração completa do clique no botão WhatsApp de um card — validação
@@ -645,26 +678,39 @@ export async function sendReactivationWhatsAppMessage(
 
   const clinicId = slot.appointment.clinicId;
 
-  // Defesa em profundidade — a UI nunca deveria chamar isto pra um
-  // período de canal Instagram, mas o servidor nunca confia só na tela
-  // pra decidir isso.
-  if (reactivationChannelForThreshold(thresholdDays) !== "WHATSAPP") {
-    return { ok: false, reason: "wrong_channel", clinicId };
-  }
-
   // Idempotência (pedido explícito): card já marcado, não manda de novo —
-  // nem chega a checar rate limit pra um card que não vai gerar envio
-  // nenhum.
+  // nem chega a checar rate limit/limite diário pra um card que não vai
+  // gerar envio nenhum.
   if (slot.sentAt) return { ok: true, alreadySent: true, clinicId };
 
-  const recentSentSlots = await prisma.reactivationCardSlot.findMany({
-    where: { sentAt: { not: null }, appointment: { clinicId } },
-    orderBy: { sentAt: "desc" },
-    take: 20,
-    select: { thresholdDays: true, sentAt: true },
-  });
+  // Defesa em profundidade pro limite diário (item 4, "travas") — cobre a
+  // corrida "limite batido entre o card aparecer na tela e o clique"; a UI
+  // já esconde o botão nesse caso (ver ReactivationCard.dailyLimitReached/
+  // ReactivationRail.tsx), mas o servidor nunca confia só na tela.
+  const [reactivationConfig, sentTodayCount] = await Promise.all([
+    prisma.reactivationConfig.findUnique({ where: { clinicId }, select: { dailyWhatsappLimit: true } }),
+    countTodaysWhatsappSends(clinicId, now),
+  ]);
+  const dailyLimit = reactivationConfig?.dailyWhatsappLimit ?? DEFAULT_DAILY_WHATSAPP_LIMIT;
+  if (isDailyWhatsappLimitReached(sentTodayCount, dailyLimit)) {
+    return { ok: false, reason: "daily_limit_reached", clinicId };
+  }
+
+  const [recentReactivationSent, recentNoShowSent] = await Promise.all([
+    prisma.reactivationCardSlot.findFirst({
+      where: { sentAt: { not: null }, appointment: { clinicId, lead: { phone: { not: null } } } },
+      orderBy: { sentAt: "desc" },
+      select: { sentAt: true },
+    }),
+    prisma.noShowCardSlot.findFirst({
+      where: { sentAt: { not: null }, appointment: { clinicId, lead: { phone: { not: null } } } },
+      orderBy: { sentAt: "desc" },
+      select: { sentAt: true },
+    }),
+  ]);
   const mostRecentWhatsappSentAt =
-    recentSentSlots.find((s) => reactivationChannelForThreshold(s.thresholdDays) === "WHATSAPP")?.sentAt ?? null;
+    [recentReactivationSent?.sentAt, recentNoShowSent?.sentAt].filter((d): d is Date => Boolean(d)).sort((a, b) => b.getTime() - a.getTime())[0] ??
+    null;
   if (isReactivationWhatsAppRateLimited(mostRecentWhatsappSentAt, now)) {
     return { ok: false, reason: "rate_limited", clinicId };
   }
@@ -703,8 +749,8 @@ export async function sendReactivationWhatsAppMessage(
   }
 
   const config = slot.appointment.clinic.reactivationConfig;
-  const whatsappMessages = [config?.message1, config?.message2, config?.message3, config?.message4, config?.message5];
-  const rawTemplate = resolveReactivationMessageText(slot.slot, whatsappMessages, DEFAULT_WHATSAPP_REACTIVATION_MESSAGES);
+  const messages = [config?.message1, config?.message2, config?.message3, config?.message4, config?.message5];
+  const rawTemplate = resolveReactivationMessageText(slot.slot, messages, DEFAULT_REACTIVATION_MESSAGES);
 
   // {{primeiro_nome}}/{{data_horario}} (mesmo mecanismo de getReactivationCards,
   // acima — nunca confia em texto pronto, sempre renderiza de novo aqui no
