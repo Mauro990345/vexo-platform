@@ -1,10 +1,13 @@
 // Lógica PURA (sem Prisma) do script prisma/seed-reactivation-showcase.ts
 // — mesmo padrão testável de clean-no-photo-demo-data-logic.ts. Decide
 // QUAIS agendamentos já existentes virar "showcase" (2 Instagram + 3
-// WhatsApp, prazos diferentes, 1 já enviado) e QUE data/prazo cada um
-// precisa pra o card cair na janela de exibição (computeReturnContactWindow,
-// reactivation.ts — scheduledAt + prazo, ±3 dias) HOJE, toda vez que o
-// script roda — nunca cria paciente novo, só re-marca os já existentes.
+// WhatsApp, prazos diferentes, 1 já enviado) e QUE prazo/canal cada um
+// recebe — nunca cria paciente novo, só re-marca os já existentes. Os
+// cards viram FIXOS (sempre visíveis, independente de scheduledAt/janela
+// de ±3 dias — ver getPinnedReactivationCandidates, src/lib/reactivation.ts)
+// a partir da marca gravada em ReactivationShowcaseBackup pelo próprio
+// script principal; esta lógica aqui não sabe nada sobre isso, só decide
+// seleção/prazo/canal.
 
 export type ShowcaseCandidate = {
   appointmentId: string;
@@ -90,16 +93,6 @@ export function assignShowcasePeriods(selection: ShowcaseSelection): ShowcaseAss
     periodDays: SHOWCASE_PERIODS[index % SHOWCASE_PERIODS.length]!,
     alreadySent: index === ALREADY_SENT_INDEX,
   }));
-}
-
-// scheduledAt necessário pra computeReturnContactWindow(scheduledAt, periodDays)
-// cair exatamente em cima de `now` (bem no meio da janela de ±3 dias, não
-// só raspando a borda) — SEMPRE recalculado a partir de `now`, nunca do
-// scheduledAt atual da linha: é isso que torna o script re-executável
-// (cada execução nova recentra a janela em cima do "agora" daquela
-// execução, não importa quantos dias se passaram desde a última vez).
-export function computeShowcaseScheduledAt(now: Date, periodDays: number): Date {
-  return new Date(now.getTime() - periodDays * 24 * 60 * 60 * 1000);
 }
 
 // Quando não existem (ou não existem o bastante) pacientes atendidos SEM

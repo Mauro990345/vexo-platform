@@ -3,6 +3,7 @@ import { startOfDay, addDays } from "@/lib/metrics";
 import { normalizeBrazilianWhatsappNumber, validateBrazilianPhone, sendWhatsappMessage, formatDateTimeLabel } from "@/lib/whatsapp";
 import { ensureLeadFirstNameFromInstagram } from "@/lib/instagram";
 import { renderMessageTemplate, normalizeFirstNameForTemplate } from "@/lib/message-template";
+import { DEMO_CLINIC_ID } from "@/lib/demo-clinic";
 
 // Faixa "Reativação" do Painel do cliente (ver ClientPanelView.tsx /
 // ReactivationRail.tsx) — pacientes cujo agendamento da IA completou o
@@ -409,6 +410,77 @@ export function isDailyWhatsappLimitReached(sentTodayCount: number, dailyLimit: 
   return sentTodayCount >= dailyLimit;
 }
 
+// Cards "fixos" da Clínica Demo VEXO (pedido explícito — usados em vídeos
+// e treinamentos, precisam ficar sempre visíveis e sempre funcionando,
+// sem depender de scheduledAt/janela de ±3 dias nem de ninguém rodar o
+// script de novo). Marca reaproveitada de uma estrutura JÁ EXISTENTE —
+// nenhuma migration nova: a mera EXISTÊNCIA de uma linha em
+// ReactivationShowcaseBackup (appointmentId) já identifica "este é um dos
+// cards fixos do showcase", porque só prisma/seed-reactivation-showcase.ts
+// escreve nessa tabela, e só pra esta clínica (assertDemoClinic). Mesmo
+// assim, a checagem de clinicId abaixo é EXPLÍCITA (não confia só em "a
+// tabela está vazia pras outras clínicas") — defesa em profundidade,
+// pedido explícito item 3 ("adicione teste que comprove isso").
+//
+// Um card fixo entra na lista final IGNORANDO por completo: a janela de
+// ±3 dias (computeReturnContactWindow é calculada só pra exibir a data,
+// nunca checada com isWithinReactivationWindow), qual foi o agendamento
+// MAIS RECENTE do lead (selectReactivationCandidates nunca roda pra estes
+// ids — ver exclusão em getReactivationCards, abaixo) e o status do
+// agendamento (CANCELLED/NO_SHOW não importam aqui). Por isso continua
+// aparecendo mesmo se esse agendamento for marcado "Retornou", cancelado,
+// ou o lead ganhar um agendamento mais novo depois (pedido explícito,
+// item 1).
+//
+// A partir daqui, o card percorre o MESMO caminho de sempre
+// (assignReactivationCardSlots reusa o ReactivationCardSlot já existente
+// pelo appointmentId+thresholdDays — criado pelo próprio script — então
+// nunca consome um slot novo da sequência; toggle/envio de WhatsApp
+// continuam sendo toggleReactivationCardSent/sendReactivationWhatsAppMessage,
+// inalterados, SEM NENHUMA validação de janela) — é isso que garante
+// "funcionando de verdade", pedido explícito item 2.
+async function getPinnedReactivationCandidates(
+  clinicId: string,
+  defaultPeriods: readonly number[]
+): Promise<{ candidates: ReactivationCardCandidate[]; pinnedAppointmentIds: Set<string> }> {
+  if (clinicId !== DEMO_CLINIC_ID) return { candidates: [], pinnedAppointmentIds: new Set() };
+
+  const backups = await prisma.reactivationShowcaseBackup.findMany({
+    where: { clinicId },
+    select: { appointmentId: true },
+  });
+  const pinnedAppointmentIds = new Set(backups.map((b) => b.appointmentId));
+  if (pinnedAppointmentIds.size === 0) return { candidates: [], pinnedAppointmentIds };
+
+  // Releitura DIRETA por id — de propósito sem os filtros normais
+  // (conversationId/status/"mais recente por lead"): um card fixo precisa
+  // continuar aparecendo mesmo que o agendamento tenha sido cancelado ou
+  // deixado de ser o mais recente do lead.
+  const appointments = await prisma.appointment.findMany({
+    where: { id: { in: [...pinnedAppointmentIds] } },
+    select: { id: true, leadId: true, scheduledAt: true, returnPeriodDays: true, returnPeriodNone: true },
+  });
+
+  const candidates: ReactivationCardCandidate[] = [];
+  for (const appt of appointments) {
+    if (!appt.leadId) continue;
+    for (const thresholdDays of resolveAppointmentReturnPeriods(appt, defaultPeriods)) {
+      candidates.push({
+        appointmentId: appt.id,
+        leadId: appt.leadId,
+        scheduledAt: appt.scheduledAt,
+        returnPeriodDays: appt.returnPeriodDays,
+        returnPeriodNone: appt.returnPeriodNone,
+        thresholdDays,
+        // Só informativo (completionDate exibido no card) — NUNCA checado
+        // com isWithinReactivationWindow pra estes candidatos.
+        window: computeReturnContactWindow(appt.scheduledAt, thresholdDays),
+      });
+    }
+  }
+  return { candidates, pinnedAppointmentIds };
+}
+
 export async function getReactivationCards(clinicId: string, now: Date = new Date()): Promise<ReactivationCard[]> {
   const config = await prisma.reactivationConfig.findUnique({ where: { clinicId } });
   const defaultPeriods = config?.defaultPeriods?.length ? config.defaultPeriods : DEFAULT_RETURN_PERIODS;
@@ -416,6 +488,8 @@ export async function getReactivationCards(clinicId: string, now: Date = new Dat
 
   const messages = [config?.message1, config?.message2, config?.message3, config?.message4, config?.message5];
   const availableSlots = resolveAvailableReactivationSlots(messages);
+
+  const { candidates: pinnedCardCandidates, pinnedAppointmentIds } = await getPinnedReactivationCandidates(clinicId, defaultPeriods);
 
   const appointments = await prisma.appointment.findMany({
     where: { clinicId, conversationId: { not: null } },
@@ -430,8 +504,15 @@ export async function getReactivationCards(clinicId: string, now: Date = new Dat
     },
   });
 
-  const baseCandidates = selectReactivationCandidates(appointments);
-  const cardCandidates = buildReactivationCardCandidates(baseCandidates, defaultPeriods, now);
+  // Ids fixos NUNCA passam pelo caminho normal (seleção por lead
+  // mais-recente + janela de ±3 dias, abaixo) — já entraram incondicionalmente
+  // via pinnedCardCandidates, acima. Excluir aqui evita duplicar o mesmo
+  // card e garante que status/"outro agendamento mais novo" nunca tirem um
+  // card fixo da lista (pedido explícito, item 1).
+  const baseCandidates = selectReactivationCandidates(
+    pinnedAppointmentIds.size === 0 ? appointments : appointments.filter((a) => !pinnedAppointmentIds.has(a.id))
+  );
+  const cardCandidates = [...buildReactivationCardCandidates(baseCandidates, defaultPeriods, now), ...pinnedCardCandidates];
   if (cardCandidates.length === 0) return [];
 
   const existingSlotRows = await prisma.reactivationCardSlot.findMany({

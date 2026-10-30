@@ -14,6 +14,7 @@ const noShowCardSlotFindFirstMock = vi.fn();
 const reactivationConfigUpsertMock = vi.fn();
 const leadFindManyMock = vi.fn();
 const instagramAccountFindUniqueMock = vi.fn();
+const reactivationShowcaseBackupFindManyMock = vi.fn();
 vi.mock("@/lib/prisma", () => ({
   prisma: {
     reactivationConfig: {
@@ -36,6 +37,10 @@ vi.mock("@/lib/prisma", () => ({
     },
     lead: { findMany: (...args: unknown[]) => leadFindManyMock(...args) },
     instagramAccount: { findUnique: (...args: unknown[]) => instagramAccountFindUniqueMock(...args) },
+    // Cards "fixos" da Clínica Demo VEXO (getPinnedReactivationCandidates,
+    // reactivation.ts) — vazio por padrão em todo teste (beforeEach abaixo),
+    // só preenchido nos testes da própria describe("cards fixos...").
+    reactivationShowcaseBackup: { findMany: (...args: unknown[]) => reactivationShowcaseBackupFindManyMock(...args) },
   },
 }));
 
@@ -63,6 +68,7 @@ vi.mock("@/lib/whatsapp", async (importOriginal) => {
   return { ...actual, sendWhatsappMessage: (...args: unknown[]) => sendWhatsappMessageMock(...args) };
 });
 
+import { DEMO_CLINIC_ID } from "@/lib/demo-clinic";
 import {
   computeReactivationWindow,
   isWithinReactivationWindow,
@@ -771,6 +777,166 @@ describe("getReactivationCards — sentAt, janela e limite diário", () => {
 
     expect(ensureLeadFirstNameFromInstagramMock).toHaveBeenCalledWith(expect.objectContaining({ id: "lead-1" }), "enc-token");
     expect(cards[0]!.message).toBe("Oi, João!");
+  });
+});
+
+// Cards "fixos" da Clínica Demo VEXO (pedido explícito — usados em vídeos
+// e treinamentos, precisam ficar sempre visíveis e funcionando de
+// verdade). Marca reaproveitada de ReactivationShowcaseBackup (nenhuma
+// migration nova) — ver getPinnedReactivationCandidates, reactivation.ts.
+describe("getReactivationCards — cards fixos da Clínica Demo VEXO", () => {
+  beforeEach(() => {
+    reactivationConfigFindUniqueMock.mockReset();
+    appointmentFindManyMock.mockReset();
+    reactivationCardSlotFindManyMock.mockReset();
+    reactivationCardSlotUpsertMock.mockReset();
+    reactivationConfigUpsertMock.mockReset();
+    reactivationCardSlotCountMock.mockReset();
+    noShowCardSlotCountMock.mockReset();
+    leadFindManyMock.mockReset();
+    instagramAccountFindUniqueMock.mockReset();
+    ensureLeadFirstNameFromInstagramMock.mockReset();
+    reactivationShowcaseBackupFindManyMock.mockReset();
+    instagramAccountFindUniqueMock.mockResolvedValue(null);
+    reactivationCardSlotCountMock.mockResolvedValue(0);
+    noShowCardSlotCountMock.mockResolvedValue(0);
+    reactivationConfigFindUniqueMock.mockResolvedValue({ defaultPeriods: [30, 60], dailyWhatsappLimit: 15 });
+  });
+
+  // Item 3 (pedido explícito): "adicione teste que comprove" que a marca
+  // de fixo é ignorada em qualquer clínica que não a Demo — mesmo que,
+  // hipoteticamente, existisse uma linha em ReactivationShowcaseBackup
+  // pra ela (nunca deveria acontecer, mas o código não deve CONFIAR
+  // nisso — ver checagem explícita de clinicId em
+  // getPinnedReactivationCandidates).
+  it("clínica QUALQUER (não a Demo): ReactivationShowcaseBackup nem é consultada, mesmo que exista linha nela", async () => {
+    const scheduledAt = new Date("2020-01-01T12:00:00.000Z"); // MUITO fora de qualquer janela
+    const now = new Date("2026-06-01T12:00:00.000Z");
+
+    appointmentFindManyMock.mockResolvedValue([
+      { id: "appt-fora-da-janela", leadId: "lead-1", conversationId: "conv-1", scheduledAt, status: "CANCELLED", returnPeriodDays: 30, returnPeriodNone: false },
+    ]);
+    reactivationCardSlotFindManyMock.mockResolvedValue([]);
+    leadFindManyMock.mockResolvedValue([]);
+    // Mesmo que, por engano, houvesse uma linha pra "clinic-1" aqui, a
+    // função nem deveria chegar a chamar findMany — ver asserção abaixo.
+    reactivationShowcaseBackupFindManyMock.mockResolvedValue([{ appointmentId: "appt-fora-da-janela" }]);
+
+    const cards = await getReactivationCards("clinic-1", now);
+
+    expect(reactivationShowcaseBackupFindManyMock).not.toHaveBeenCalled();
+    // CANCELLED + fora da janela, sem a marca de fixo valendo pra esta
+    // clínica: nenhum card — comportamento normal, intocado.
+    expect(cards).toEqual([]);
+  });
+
+  it("Clínica Demo, sem nenhum backup (nenhum card marcado como fixo ainda): comportamento 100% normal", async () => {
+    reactivationShowcaseBackupFindManyMock.mockResolvedValue([]);
+    const scheduledAt = new Date("2026-01-01T12:00:00.000Z");
+    const window30 = computeReturnContactWindow(scheduledAt, 30);
+    const now = window30.start;
+
+    appointmentFindManyMock.mockResolvedValue([
+      { id: "appt-1", leadId: "lead-1", conversationId: "conv-1", scheduledAt, status: "SCHEDULED", returnPeriodDays: 30, returnPeriodNone: false },
+    ]);
+    reactivationCardSlotFindManyMock.mockResolvedValue([]);
+    reactivationCardSlotUpsertMock.mockResolvedValue({});
+    leadFindManyMock.mockResolvedValue([
+      { id: "lead-1", name: "Fulana", igUsername: "fulana.ig", igScopedId: "ig-1", nameLookupAttempted: true, profilePictureUrl: null, phone: "11987654321" },
+    ]);
+
+    const cards = await getReactivationCards(DEMO_CLINIC_ID, now);
+
+    expect(cards).toHaveLength(1);
+  });
+
+  it("card fixo FORA da janela de ±3 dias (scheduledAt bem antigo): aparece mesmo assim", async () => {
+    reactivationShowcaseBackupFindManyMock.mockResolvedValue([{ appointmentId: "appt-fixo" }]);
+    const now = new Date("2026-06-01T12:00:00.000Z");
+    const scheduledAtAntigo = new Date("2020-01-01T12:00:00.000Z"); // prazo de 30 dias venceu há anos
+
+    appointmentFindManyMock
+      // 1ª chamada: getPinnedReactivationCandidates (releitura direta por id)
+      .mockResolvedValueOnce([{ id: "appt-fixo", leadId: "lead-1", scheduledAt: scheduledAtAntigo, returnPeriodDays: 30, returnPeriodNone: false }])
+      // 2ª chamada: appointments normais da clínica (nenhum aqui — só o fixo existe)
+      .mockResolvedValueOnce([]);
+    reactivationCardSlotFindManyMock.mockResolvedValue([{ appointmentId: "appt-fixo", thresholdDays: 30, slot: 1, sentAt: null }]);
+    leadFindManyMock.mockResolvedValue([
+      { id: "lead-1", name: "Paciente Fixo", igUsername: "paciente.fixo", igScopedId: "ig-1", nameLookupAttempted: true, profilePictureUrl: null, phone: "11987654321" },
+    ]);
+
+    const cards = await getReactivationCards(DEMO_CLINIC_ID, now);
+
+    expect(cards).toHaveLength(1);
+    expect(cards[0]!.appointmentId).toBe("appt-fixo");
+    expect(cards[0]!.thresholdDays).toBe(30);
+  });
+
+  it('card fixo CANCELLED: aparece mesmo assim (status nunca é checado pro caminho fixo)', async () => {
+    reactivationShowcaseBackupFindManyMock.mockResolvedValue([{ appointmentId: "appt-fixo" }]);
+    const now = new Date("2026-06-01T12:00:00.000Z");
+
+    appointmentFindManyMock
+      .mockResolvedValueOnce([{ id: "appt-fixo", leadId: "lead-1", scheduledAt: now, returnPeriodDays: 30, returnPeriodNone: false }])
+      // normal query já filtra CANCELLED fora da seleção de qualquer forma,
+      // mas nem chega a importar: appt-fixo nunca passa por ali.
+      .mockResolvedValueOnce([{ id: "appt-fixo", leadId: "lead-1", conversationId: "conv-1", scheduledAt: now, status: "CANCELLED", returnPeriodDays: 30, returnPeriodNone: false }]);
+    reactivationCardSlotFindManyMock.mockResolvedValue([{ appointmentId: "appt-fixo", thresholdDays: 30, slot: 1, sentAt: null }]);
+    leadFindManyMock.mockResolvedValue([
+      { id: "lead-1", name: "Paciente Fixo", igUsername: "paciente.fixo", igScopedId: "ig-1", nameLookupAttempted: true, profilePictureUrl: null, phone: "11987654321" },
+    ]);
+
+    const cards = await getReactivationCards(DEMO_CLINIC_ID, now);
+
+    expect(cards).toHaveLength(1);
+    expect(cards[0]!.appointmentId).toBe("appt-fixo");
+  });
+
+  it("card fixo cujo lead ganhou um agendamento mais novo depois: o fixo continua aparecendo, sem duplicar", async () => {
+    reactivationShowcaseBackupFindManyMock.mockResolvedValue([{ appointmentId: "appt-fixo-antigo" }]);
+    const now = new Date("2026-06-01T12:00:00.000Z");
+    const scheduledAtAntigo = new Date("2025-01-01T12:00:00.000Z");
+    const scheduledAtNovo = new Date("2026-05-20T12:00:00.000Z"); // recente, ainda não completou prazo nenhum
+
+    appointmentFindManyMock
+      .mockResolvedValueOnce([{ id: "appt-fixo-antigo", leadId: "lead-1", scheduledAt: scheduledAtAntigo, returnPeriodDays: 30, returnPeriodNone: false }])
+      .mockResolvedValueOnce([
+        { id: "appt-fixo-antigo", leadId: "lead-1", conversationId: "conv-1", scheduledAt: scheduledAtAntigo, status: "SCHEDULED", returnPeriodDays: 30, returnPeriodNone: false },
+        { id: "appt-novo", leadId: "lead-1", conversationId: "conv-2", scheduledAt: scheduledAtNovo, status: "SCHEDULED", returnPeriodDays: 30, returnPeriodNone: false },
+      ]);
+    reactivationCardSlotFindManyMock.mockResolvedValue([{ appointmentId: "appt-fixo-antigo", thresholdDays: 30, slot: 1, sentAt: null }]);
+    leadFindManyMock.mockResolvedValue([
+      { id: "lead-1", name: "Paciente Fixo", igUsername: "paciente.fixo", igScopedId: "ig-1", nameLookupAttempted: true, profilePictureUrl: null, phone: "11987654321" },
+    ]);
+
+    const cards = await getReactivationCards(DEMO_CLINIC_ID, now);
+
+    // Só o card fixo aparece (appt-novo ainda não completou o prazo de 30
+    // dias até `now`, então nem entraria pela via normal de qualquer
+    // forma) — o importante aqui é que appt-fixo-antigo NÃO foi excluído
+    // por não ser mais "o agendamento mais recente do lead".
+    expect(cards).toHaveLength(1);
+    expect(cards[0]!.appointmentId).toBe("appt-fixo-antigo");
+  });
+
+  it("card fixo reflete sentAt do ReactivationCardSlot já existente — mesmo mecanismo de toggle dos cards reais", async () => {
+    reactivationShowcaseBackupFindManyMock.mockResolvedValue([{ appointmentId: "appt-fixo" }]);
+    const now = new Date("2026-06-01T12:00:00.000Z");
+    const sentAt = new Date("2026-05-01T12:00:00.000Z");
+
+    appointmentFindManyMock
+      .mockResolvedValueOnce([{ id: "appt-fixo", leadId: "lead-1", scheduledAt: now, returnPeriodDays: 30, returnPeriodNone: false }])
+      .mockResolvedValueOnce([]);
+    reactivationCardSlotFindManyMock.mockResolvedValue([{ appointmentId: "appt-fixo", thresholdDays: 30, slot: 1, sentAt }]);
+    leadFindManyMock.mockResolvedValue([
+      { id: "lead-1", name: "Paciente Fixo", igUsername: "paciente.fixo", igScopedId: "ig-1", nameLookupAttempted: true, profilePictureUrl: null, phone: "11987654321" },
+    ]);
+
+    const cards = await getReactivationCards(DEMO_CLINIC_ID, now);
+
+    expect(cards[0]!.sentAt).toEqual(sentAt);
+    // Reusa o slot já existente — nunca cria um novo via upsert.
+    expect(reactivationCardSlotUpsertMock).not.toHaveBeenCalled();
   });
 });
 
