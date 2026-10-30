@@ -338,19 +338,18 @@ export async function updateClinicReactivationMessages(clinicId: string, formDat
 }
 
 // Botão "Retorno" do card de agendamento (ver RetornoButton.tsx) — grava
-// só o número de dias (ou "none" pra "Sem retorno") no próprio
-// Appointment, não em ReactivationConfig (é por AGENDAMENTO, não por
-// clínica). Validação do valor aqui (mesma lista fixa de
-// isValidReturnPeriodDays) — setAppointmentReturnPeriod (appointments.ts)
-// só decide SE a troca pode acontecer agora (trava: depois de enviado,
-// não muda mais).
+// só o número de dias no próprio Appointment, não em ReactivationConfig (é
+// por AGENDAMENTO, não por clínica). Validação do valor aqui (mesma lista
+// fixa de isValidReturnPeriodDays) — setAppointmentReturnPeriod
+// (appointments.ts) só decide SE a troca pode acontecer agora (trava:
+// depois de enviado, não muda mais).
 export async function setAppointmentReturnPeriodAction(
   appointmentId: string,
-  selection: number | "none" | "unset"
+  selection: number | "unset"
 ): Promise<SetAppointmentReturnPeriodResult> {
   await requireInternalSession();
 
-  if (selection !== "none" && selection !== "unset" && !isValidReturnPeriodDays(selection)) {
+  if (selection !== "unset" && !isValidReturnPeriodDays(selection)) {
     throw new Error("Prazo de retorno inválido.");
   }
 

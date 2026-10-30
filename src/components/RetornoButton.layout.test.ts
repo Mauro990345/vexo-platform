@@ -34,7 +34,6 @@ function buildPopoverHtml(cardWidthPx: number, compiledCss: string): string {
     createElement(ReturnPeriodOptions, {
       availablePeriods: [...RETURN_PERIOD_OPTIONS],
       localDays: null,
-      localNone: false,
       onPick: () => {},
     })
   );
@@ -108,8 +107,8 @@ describe("ReturnPeriodOptions — layout real (320/375/430px)", () => {
     }
     await page.close();
 
-    // Primeiras 9 = os botões de prazo (RETURN_PERIOD_OPTIONS); o último
-    // botão (índice 9) é "Sem retorno", full-width, fora desta medição.
+    // Todos os botões são de prazo agora (RETURN_PERIOD_OPTIONS — removida
+    // a opção "Sem retorno", que antes era um botão extra full-width).
     const periodBoxes = boxes.slice(0, RETURN_PERIOD_OPTIONS.length);
     const rowYs = [...new Set(periodBoxes.map((b) => Math.round(b.y)))].sort((a, b) => a - b);
     const rows = rowYs.map((y) => periodBoxes.filter((b) => Math.round(b.y) === y));
@@ -136,19 +135,16 @@ describe("ReturnPeriodOptions — layout real (320/375/430px)", () => {
     expect(rows[0]).toHaveLength(RETURN_PERIOD_OPTIONS.length);
   });
 
-  it("320px: se quebrar, NÃO é uma grade 3×3 (quebra real por falta de espaço, não layout fixo)", async () => {
+  // Pedido explícito (rodada em que "Sem retorno" foi removida): os 9
+  // prazos NUNCA quebram, em NENHUMA largura suportada — antes, 320px era
+  // tolerado quebrar em 2 linhas (o "Sem retorno" servia de reforço
+  // embaixo); sem min-w por botão (removido, ver ReturnPeriodOptions),
+  // flex-1 sozinho divide o espaço disponível em 9 partes iguais, sempre
+  // numa linha só.
+  it("320px: os 9 prazos ficam numa linha só (sem quebrar — não há mais 'Sem retorno' de reforço embaixo)", async () => {
     const { rows } = await measure(320);
-    expect(rows.length).toBeLessThanOrEqual(2);
-    if (rows.length === 2) {
-      // Uma grade 3×3 teria exatamente 3 itens em cada linha — a quebra
-      // real por espaço insuficiente encaixa o máximo possível na 1ª
-      // linha (bem mais que 3) e só o restante sobra pra 2ª.
-      const [row1, row2] = rows;
-      expect(row1).toBeDefined();
-      expect(row2).toBeDefined();
-      expect(row1!.length).toBeGreaterThan(3);
-      expect(row1!.length + row2!.length).toBe(RETURN_PERIOD_OPTIONS.length);
-    }
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toHaveLength(RETURN_PERIOD_OPTIONS.length);
   });
 
   it("320/375/430px: nenhum botão de prazo fica mais largo que o próximo card de métrica (sem esticar demais numa linha sobrando)", async () => {

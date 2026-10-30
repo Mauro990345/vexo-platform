@@ -15,7 +15,7 @@ import { InstagramGlyphIcon, WhatsAppGlyphIcon } from "@/components/BrandIcons";
 import { NeedsHumanBanner, type NeedsHumanLead } from "@/components/NeedsHumanBanner";
 import { ReactivationRail } from "@/components/ReactivationRail";
 import { getReactivationCards, RETURN_PERIOD_OPTIONS, type SendReactivationWhatsAppResult } from "@/lib/reactivation";
-import type { SetAppointmentReturnPeriodResult } from "@/lib/appointments";
+import { isAppointmentVisibleInList, type SetAppointmentReturnPeriodResult } from "@/lib/appointments";
 import { getNoShowCards } from "@/lib/no-show-cards";
 import { getHotLeadCards } from "@/lib/hot-lead-cards";
 import { mergePanelCards } from "@/lib/panel-cards";
@@ -109,7 +109,7 @@ export async function ClientPanelView({
   base: string;
   noShowAction?: (appointmentId: string, status: "COMPLETED" | "NO_SHOW") => Promise<unknown>;
   // Mesmo motivo de noShowAction — botão "Retorno" (ver RetornoButton.tsx).
-  returnPeriodAction?: (appointmentId: string, selection: number | "none" | "unset") => Promise<SetAppointmentReturnPeriodResult>;
+  returnPeriodAction?: (appointmentId: string, selection: number | "unset") => Promise<SetAppointmentReturnPeriodResult>;
   // Mesmo motivo de noShowAction acima (comentário grande logo abaixo) —
   // marcar/desmarcar um card da Reativação como enviado (ver
   // ReactivationRail) também precisa rodar sob uma sessão diferente em
@@ -208,6 +208,12 @@ export async function ClientPanelView({
   const panelCards = mergePanelCards({ hotLeadCards, noShowCards, reactivationCards });
   const availableReturnPeriods = clinic.reactivationConfig?.availablePeriods ?? [...RETURN_PERIOD_OPTIONS];
   const lockedReturnPeriodAppointmentIds = new Set(sentReactivationSlots.map((s) => s.appointmentId));
+  // Pedido explícito: "Compareceu" só fica visível aqui por
+  // ATTENDED_VISIBLE_DAYS dias (ver isAppointmentVisibleInList,
+  // appointments.ts) — só filtro de EXIBIÇÃO, nada é apagado (mesmo
+  // princípio do filtro de CANCELLED já aplicado na query acima); os
+  // demais status não têm prazo, continuam sempre.
+  const visibleAppointments = appointments.filter((a) => isAppointmentVisibleInList(a, now));
 
   const needsHumanLeads: NeedsHumanLead[] = needsHumanConversations.map((conv) => {
     const { primary } = leadDisplayParts(conv.lead, null);
@@ -343,7 +349,7 @@ export async function ClientPanelView({
             </div>
             <NeedsHumanBanner leads={needsHumanLeads} />
             <div className={MOBILE_LIST_GAP}>
-              {appointments.map((a) => {
+              {visibleAppointments.map((a) => {
                 const { primary, handle } = leadDisplayParts(a.lead, a.manualTitle);
                 return (
                 <div
@@ -480,7 +486,6 @@ export async function ClientPanelView({
                         appointmentId={a.id}
                         availablePeriods={availableReturnPeriods}
                         returnPeriodDays={a.returnPeriodDays}
-                        returnPeriodNone={a.returnPeriodNone}
                         locked={lockedReturnPeriodAppointmentIds.has(a.id)}
                         action={returnPeriodAction}
                       />
@@ -493,7 +498,7 @@ export async function ClientPanelView({
                 );
               })}
 
-              {appointments.length === 0 && (
+              {visibleAppointments.length === 0 && (
                 <p className="rounded-lg border border-vexo-border bg-vexo-surface p-4 text-center text-sm text-vexo-muted">
                   Nenhum agendamento ainda.
                 </p>

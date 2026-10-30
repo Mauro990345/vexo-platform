@@ -11,7 +11,8 @@ vi.mock("@/lib/prisma", () => ({
   },
 }));
 
-import { setAppointmentReturnPeriod } from "./appointments";
+import { setAppointmentReturnPeriod, isAppointmentVisibleInList, ATTENDED_VISIBLE_DAYS } from "./appointments";
+import { startOfDay, addDays } from "@/lib/metrics";
 
 // Botão "Retorno" (ver RetornoButton.tsx) — só testa setAppointmentReturnPeriod
 // aqui (setAppointmentAttendance já existia antes desta tarefa e não foi
@@ -41,20 +42,6 @@ describe("setAppointmentReturnPeriod", () => {
     expect(appointmentUpdateMock).toHaveBeenCalledWith({
       where: { id: "appt-1" },
       data: { returnPeriodDays: 120, returnPeriodNone: false },
-      select: { id: true, returnPeriodDays: true, returnPeriodNone: true },
-    });
-  });
-
-  it('marca "Sem retorno": returnPeriodDays null, returnPeriodNone true', async () => {
-    appointmentFindUniqueMock.mockResolvedValue({ id: "appt-1", reactivationCardSlots: [] });
-    appointmentUpdateMock.mockResolvedValue({ id: "appt-1", returnPeriodDays: null, returnPeriodNone: true });
-
-    const result = await setAppointmentReturnPeriod("appt-1", "none");
-
-    expect(result).toEqual({ ok: true, appointmentId: "appt-1", returnPeriodDays: null, returnPeriodNone: true });
-    expect(appointmentUpdateMock).toHaveBeenCalledWith({
-      where: { id: "appt-1" },
-      data: { returnPeriodDays: null, returnPeriodNone: true },
       select: { id: true, returnPeriodDays: true, returnPeriodNone: true },
     });
   });
@@ -99,5 +86,41 @@ describe("setAppointmentReturnPeriod", () => {
 
     expect(result).toEqual({ ok: false, reason: "already_sent" });
     expect(appointmentUpdateMock).not.toHaveBeenCalled();
+  });
+});
+
+// Lista de Agendamentos do Painel (ver ClientPanelView.tsx) — pedido
+// explícito: "Compareceu" (displayStatus COMPLETED) só fica visível por
+// ATTENDED_VISIBLE_DAYS dias civis depois do atendimento; "limite no dia
+// 3 e no dia 4" e "outros status" (futuros/Faltou seguem sempre visíveis).
+describe("isAppointmentVisibleInList", () => {
+  // scheduledAt fixo ao meio-dia UTC (longe da virada do dia civil em
+  // qualquer fuso), pra isolar o teste da contagem de dias em si — mesmo
+  // padrão de scheduledAt usado em reactivation.test.ts.
+  const scheduledAt = new Date("2026-01-10T12:00:00.000Z");
+
+  it(`dia ${ATTENDED_VISIBLE_DAYS} (limite): Compareceu ainda visível (prazo inclusivo)`, () => {
+    const now = addDays(startOfDay(scheduledAt), ATTENDED_VISIBLE_DAYS);
+    expect(isAppointmentVisibleInList({ status: "SCHEDULED", scheduledAt }, now)).toBe(true);
+  });
+
+  it(`dia ${ATTENDED_VISIBLE_DAYS + 1}: Compareceu some da lista (prazo excedido)`, () => {
+    const now = addDays(startOfDay(scheduledAt), ATTENDED_VISIBLE_DAYS + 1);
+    expect(isAppointmentVisibleInList({ status: "SCHEDULED", scheduledAt }, now)).toBe(false);
+  });
+
+  it("agendamento futuro (ainda não aconteceu): sempre visível, independente da idade", () => {
+    const now = new Date(scheduledAt.getTime() - 60 * 60 * 1000);
+    expect(isAppointmentVisibleInList({ status: "SCHEDULED", scheduledAt }, now)).toBe(true);
+  });
+
+  it(`"Não compareceu" (NO_SHOW): sempre visível, mesmo muito depois do prazo de ${ATTENDED_VISIBLE_DAYS} dias`, () => {
+    const now = addDays(startOfDay(scheduledAt), 100);
+    expect(isAppointmentVisibleInList({ status: "NO_SHOW", scheduledAt }, now)).toBe(true);
+  });
+
+  it("CONFIRMED (mesma regra de displayStatus que SCHEDULED) também some depois do prazo", () => {
+    const now = addDays(startOfDay(scheduledAt), ATTENDED_VISIBLE_DAYS + 1);
+    expect(isAppointmentVisibleInList({ status: "CONFIRMED", scheduledAt }, now)).toBe(false);
   });
 });

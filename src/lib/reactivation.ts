@@ -180,20 +180,33 @@ export function selectReactivationCandidates(appointments: ReactivationSourceApp
   return candidates;
 }
 
-// Quais prazos (dias) geram card pra ESTE agendamento — "Sem retorno"
-// marcado = nenhum; um prazo marcado = só esse (substitui os padrão,
-// pedido explícito: marcar um prazo cancela os cards padrão pendentes —
-// como eles nunca chegam a ser gerados de novo depois que o prazo manual
-// está marcado, "cancelar" aqui é simplesmente NUNCA MAIS incluir os
-// períodos padrão na lista de candidatos; um slot padrão já criado antes
-// da marcação, mas ainda não enviado, simplesmente para de aparecer —
-// nenhuma linha precisa ser apagada); nada marcado = os padrão da clínica
-// (pode ser mais de um, um card por padrão).
+// Quais prazos (dias) geram card pra ESTE agendamento — um prazo marcado =
+// só esse (substitui os padrão, pedido explícito: marcar um prazo cancela
+// os cards padrão pendentes — como eles nunca chegam a ser gerados de
+// novo depois que o prazo manual está marcado, "cancelar" aqui é
+// simplesmente NUNCA MAIS incluir os períodos padrão na lista de
+// candidatos; um slot padrão já criado antes da marcação, mas ainda não
+// enviado, simplesmente para de aparecer — nenhuma linha precisa ser
+// apagada); nada marcado = os padrão da clínica (pode ser mais de um, um
+// card por padrão).
+//
+// AJUSTE (pedido explícito — removida a opção "Sem retorno" do botão
+// Retorno, ver RetornoButton.tsx): `returnPeriodNone` deixou de ter
+// qualquer efeito aqui — "nada marcado" SEMPRE usa os padrão da clínica
+// agora, nunca mais "nenhum card" (era esse o papel de returnPeriodNone,
+// true). O campo continua existindo no banco (sem migration) por causa de
+// linhas antigas que já tinham sido marcadas "Sem retorno" antes desta
+// mudança — essas linhas passam a se comportar como "nada marcado" (usam
+// os padrão da clínica), em vez de continuar sem gerar card nenhum: é
+// exatamente o novo comportamento pedido ("se todos os prazos forem
+// desmarcados... vale o prazo padrão da clínica"), aplicado por igual a
+// elas. `appt.returnPeriodNone` continua no tipo só pra não exigir
+// mudança nos vários call-sites que já montam esse objeto com os dois
+// campos.
 export function resolveAppointmentReturnPeriods(
   appt: { returnPeriodDays: number | null; returnPeriodNone: boolean },
   clinicDefaultPeriods: readonly number[]
 ): number[] {
-  if (appt.returnPeriodNone) return [];
   if (appt.returnPeriodDays != null) return [appt.returnPeriodDays];
   return [...clinicDefaultPeriods];
 }

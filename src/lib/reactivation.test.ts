@@ -268,8 +268,16 @@ describe("selectReactivationCandidates", () => {
 });
 
 describe("resolveAppointmentReturnPeriods — qual prazo (ou prazos) gera card pra um agendamento", () => {
-  it('"Sem retorno" marcado: nenhum prazo, mesmo com padrões da clínica configurados', () => {
-    expect(resolveAppointmentReturnPeriods({ returnPeriodDays: null, returnPeriodNone: true }, [30, 60])).toEqual([]);
+  // Pedido explícito (removida a opção "Sem retorno" do botão Retorno):
+  // returnPeriodNone deixou de ter qualquer efeito — mesmo true (linha
+  // antiga, marcada antes desta mudança), "nada marcado" sempre usa os
+  // padrões da clínica agora.
+  it('returnPeriodNone=true (linha antiga, de antes da remoção de "Sem retorno"): usa os padrões da clínica, igual a "nada marcado"', () => {
+    expect(resolveAppointmentReturnPeriods({ returnPeriodDays: null, returnPeriodNone: true }, [30, 60])).toEqual([30, 60]);
+  });
+
+  it("prazo manual marcado: só esse, ignora os padrões da clínica — mesmo com returnPeriodNone true numa linha antiga", () => {
+    expect(resolveAppointmentReturnPeriods({ returnPeriodDays: 120, returnPeriodNone: true }, [30, 60])).toEqual([120]);
   });
 
   it("prazo manual marcado: só esse, ignora os padrões da clínica", () => {
@@ -303,11 +311,12 @@ describe("buildReactivationCardCandidates — manual vs. padrão da clínica", (
     expect(cards).toEqual([]);
   });
 
-  it('"Sem retorno" marcado: nenhum card, mesmo dentro da janela que os padrões gerariam', () => {
+  it("returnPeriodNone=true (linha antiga): gera card pelos padrões da clínica, igual a nada marcado", () => {
     const scheduledAt = new Date("2026-01-01T12:00:00.000Z");
     const window30 = computeReturnContactWindow(scheduledAt, 30);
     const cards = buildReactivationCardCandidates([candidate({ scheduledAt, returnPeriodNone: true })], [30, 60], window30.start);
-    expect(cards).toEqual([]);
+    expect(cards).toHaveLength(1);
+    expect(cards[0]!.thresholdDays).toBe(30);
   });
 
   it("prazo manual marcado: só um card, no prazo marcado — ignora os padrões", () => {
@@ -727,7 +736,11 @@ describe("getReactivationCards — sentAt, janela e limite diário", () => {
     expect(cards[0]!.thresholdDays).toBe(120);
   });
 
-  it('"Sem retorno" marcado: nenhum card, mesmo dentro da janela que os padrões gerariam', async () => {
+  // Pedido explícito (removida a opção "Sem retorno" do botão Retorno):
+  // returnPeriodNone=true numa linha antiga (de antes desta mudança) passa
+  // a se comportar como "nada marcado" — gera card pelos padrões da
+  // clínica, nunca mais zero cards.
+  it("returnPeriodNone=true (linha antiga): gera card pelos padrões da clínica, igual a nada marcado", async () => {
     const scheduledAt = new Date("2026-01-01T12:00:00.000Z");
     const window30 = computeReturnContactWindow(scheduledAt, 30);
     const now = window30.start;
@@ -737,10 +750,62 @@ describe("getReactivationCards — sentAt, janela e limite diário", () => {
       { id: "appt-1", leadId: "lead-1", conversationId: "conv-1", scheduledAt, status: "SCHEDULED", returnPeriodDays: null, returnPeriodNone: true },
     ]);
     reactivationCardSlotFindManyMock.mockResolvedValue([]);
+    reactivationCardSlotUpsertMock.mockResolvedValue({});
+
+    const cards = await getReactivationCards("clinic-1", now);
+
+    expect(cards).toHaveLength(1);
+    expect(cards[0]!.thresholdDays).toBe(30);
+  });
+
+  // Pedido explícito, "toggle do Retorno": desmarcar um prazo cancela o
+  // card daquele prazo se ainda não foi enviado — sem precisar apagar a
+  // linha antiga de ReactivationCardSlot (ver comentário grande em
+  // resolveAppointmentReturnPeriods/appointments.ts): ela simplesmente
+  // para de ser candidata na próxima montagem da lista.
+  it("desmarcar o prazo (returnPeriodDays volta a null): o card PENDENTE daquele prazo some, mesmo com a linha antiga de slot ainda no banco", async () => {
+    const scheduledAt = new Date("2026-01-01T12:00:00.000Z");
+    const window90 = computeReturnContactWindow(scheduledAt, 90);
+    const now = window90.start;
+
+    // Clínica sem padrões — se o prazo 90 abandonado ainda gerasse card,
+    // apareceria aqui; sem padrão nenhum, só prova que realmente sumiu.
+    reactivationConfigFindUniqueMock.mockResolvedValue({ defaultPeriods: [], dailyWhatsappLimit: 15 });
+    appointmentFindManyMock.mockResolvedValue([
+      { id: "appt-1", leadId: "lead-1", conversationId: "conv-1", scheduledAt, status: "SCHEDULED", returnPeriodDays: null, returnPeriodNone: false },
+    ]);
+    // Linha órfã, do prazo de 90 dias abandonado — ainda no banco, nunca
+    // apagada (mesmo princípio de sempre: nunca apagar histórico).
+    reactivationCardSlotFindManyMock.mockResolvedValue([{ appointmentId: "appt-1", thresholdDays: 90, slot: 1, sentAt: null }]);
 
     const cards = await getReactivationCards("clinic-1", now);
 
     expect(cards).toEqual([]);
+  });
+
+  it("desmarcar o prazo DEPOIS de já enviado: o histórico do envio permanece (setAppointmentReturnPeriod nem chega a rodar — ver appointments.test.ts, 'já enviado: unset também trava')", async () => {
+    // Confirma, do lado de getReactivationCards, que um slot JÁ ENVIADO
+    // nunca é afetado por mudança de returnPeriodDays — o teste principal
+    // da trava em si (a mudança nem é aceita) fica em appointments.test.ts;
+    // aqui só garante que, se o prazo enviado ainda bater com o
+    // returnPeriodDays atual (único jeito dele chegar até aqui, já que a
+    // troca é bloqueada), o card aparece normalmente, esmaecido (sentAt
+    // preenchido), nunca removido.
+    const scheduledAt = new Date("2026-01-01T12:00:00.000Z");
+    const window90 = computeReturnContactWindow(scheduledAt, 90);
+    const now = window90.start;
+    const sentAt = new Date(now.getTime() - 1000);
+
+    reactivationConfigFindUniqueMock.mockResolvedValue({ defaultPeriods: [], dailyWhatsappLimit: 15 });
+    appointmentFindManyMock.mockResolvedValue([
+      { id: "appt-1", leadId: "lead-1", conversationId: "conv-1", scheduledAt, status: "SCHEDULED", returnPeriodDays: 90, returnPeriodNone: false },
+    ]);
+    reactivationCardSlotFindManyMock.mockResolvedValue([{ appointmentId: "appt-1", thresholdDays: 90, slot: 1, sentAt }]);
+
+    const cards = await getReactivationCards("clinic-1", now);
+
+    expect(cards).toHaveLength(1);
+    expect(cards[0]!.sentAt).toEqual(sentAt);
   });
 
   it("sem telefone cadastrado: canal INSTAGRAM, sem link de WhatsApp", async () => {
