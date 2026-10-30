@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { triggerFollowUp, cancelPendingFollowUp } from "@/lib/follow-up";
 import { appointmentDisplayStatus, startOfDay, addDays } from "@/lib/metrics";
+import { DEMO_CLINIC_ID } from "@/lib/demo-clinic";
 
 // Pedido explícito: um agendamento "Compareceu" (displayStatus COMPLETED —
 // ver appointmentDisplayStatus, metrics.ts) só fica visível na lista de
@@ -18,12 +19,25 @@ import { appointmentDisplayStatus, startOfDay, addDays } from "@/lib/metrics";
 // ajustar depois do teste".
 export const ATTENDED_VISIBLE_DAYS = 3;
 
+// AJUSTE (pedido explícito, depois da PR original: "a Clínica Demo ficou
+// vazia"): DEMO_CLINIC_ID (src/lib/demo-clinic.ts) fica ISENTA da regra
+// acima — usada pra testes/vídeos, precisa continuar mostrando TODOS os
+// agendamentos (incluindo os "Compareceu" antigos, ex.: 09/10 e 12/10),
+// igual a antes desta feature existir. Nada aqui mexe nos 5 cards fixos
+// de Reativação (reactivation.ts, outra regra, outro mecanismo) nem no
+// WhatsApp. Todas as OUTRAS clínicas seguem a regra normal, sem mudança.
+//
 // "3 dias depois" é um prazo INCLUSIVO em dias civis: visível no dia do
 // atendimento e nos ATTENDED_VISIBLE_DAYS dias seguintes (dia 3 ainda
 // visível), sai a partir do dia seguinte a esse (dia 4 já não aparece) —
 // mesma semântica de janela em dias corridos já usada em
 // computeCalendarDayWindow/computeReturnContactWindow (reactivation.ts).
-export function isAppointmentVisibleInList(appt: { status: string; scheduledAt: Date }, now: Date): boolean {
+export function isAppointmentVisibleInList(
+  appt: { status: string; scheduledAt: Date },
+  now: Date,
+  clinicId?: string
+): boolean {
+  if (clinicId === DEMO_CLINIC_ID) return true;
   if (appointmentDisplayStatus(appt, now) !== "COMPLETED") return true;
   const visibleUntil = startOfDay(addDays(appt.scheduledAt, ATTENDED_VISIBLE_DAYS));
   return startOfDay(now).getTime() <= visibleUntil.getTime();
