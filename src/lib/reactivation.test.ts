@@ -86,6 +86,7 @@ import {
   buildInstagramDmLink,
   buildInstagramProfileLink,
   resolveInstagramDmLink,
+  INSTAGRAM_DM_LINK_MAX_LENGTH,
   reactivationChannelForLead,
   DEFAULT_REACTIVATION_MESSAGES,
   RETURN_PERIOD_OPTIONS,
@@ -483,7 +484,7 @@ describe("rotação em sequência das mensagens", () => {
 });
 
 describe("Instagram — links e botão desativado sem @", () => {
-  it("buildInstagramDmLink: gera o link ig.me/m/<@>", () => {
+  it("buildInstagramDmLink: sem mensagem, gera o link simples ig.me/m/<@>", () => {
     expect(buildInstagramDmLink("fulano.silva")).toBe("https://ig.me/m/fulano.silva");
   });
 
@@ -491,12 +492,101 @@ describe("Instagram — links e botão desativado sem @", () => {
     expect(buildInstagramProfileLink("fulano.silva")).toBe("https://www.instagram.com/fulano.silva/");
   });
 
-  it("resolveInstagramDmLink: devolve o link quando há @", () => {
+  it("resolveInstagramDmLink: devolve o link simples quando há @, sem mensagem", () => {
     expect(resolveInstagramDmLink("fulano.silva")).toBe("https://ig.me/m/fulano.silva");
   });
 
   it("resolveInstagramDmLink: null sem @ — é o que deixa o botão Instagram desativado", () => {
     expect(resolveInstagramDmLink(null)).toBeNull();
+  });
+
+  // Pedido explícito (item 1): pré-preencher o campo da conversa via
+  // ?text= (parâmetro NÃO documentado pela Meta — por isso a cópia pra
+  // área de transferência, ver InstagramDmButton.tsx, continua sempre
+  // acontecendo também, nunca só o link).
+  describe("buildInstagramDmLink com mensagem — ?text= codificado", () => {
+    it("mensagem simples: ?text=<mensagem codificada com encodeURIComponent>", () => {
+      const link = buildInstagramDmLink("fulano.silva", "Oi! Tudo bem?");
+      expect(link).toBe(`https://ig.me/m/fulano.silva?text=${encodeURIComponent("Oi! Tudo bem?")}`);
+    });
+
+    it("acentos: codificados corretamente, decodificam de volta pro texto original", () => {
+      const message = "Oi! Como você está desde o atendimento na clínica?";
+      const link = buildInstagramDmLink("fulano.silva", message);
+      const textParam = new URL(link).searchParams.get("text");
+      expect(textParam).toBe(message);
+    });
+
+    it("quebras de linha: preservadas (decodifica de volta igual)", () => {
+      const message = "Oi!\nTudo bem?\n\nPassando só pra saber como você está.";
+      const link = buildInstagramDmLink("fulano.silva", message);
+      const textParam = new URL(link).searchParams.get("text");
+      expect(textParam).toBe(message);
+    });
+
+    it("emoji: preservado (decodifica de volta igual, inclusive par substituto UTF-16)", () => {
+      const message = "Oi! 💙 Como você está?";
+      const link = buildInstagramDmLink("fulano.silva", message);
+      const textParam = new URL(link).searchParams.get("text");
+      expect(textParam).toBe(message);
+    });
+
+    it('aspas (simples e duplas): preservadas, nunca quebram a URL', () => {
+      const message = `Oi! A "promoção" de hoje é essa: não deixe pra amanhã.`;
+      const link = buildInstagramDmLink("fulano.silva", message);
+      expect(() => new URL(link)).not.toThrow();
+      const textParam = new URL(link).searchParams.get("text");
+      expect(textParam).toBe(message);
+    });
+
+    it("mensagem vazia: tratada como ausente, link simples sem ?text=", () => {
+      expect(buildInstagramDmLink("fulano.silva", "")).toBe("https://ig.me/m/fulano.silva");
+    });
+
+    it("resolveInstagramDmLink repassa a mensagem pra buildInstagramDmLink", () => {
+      const link = resolveInstagramDmLink("fulano.silva", "Oi!");
+      expect(link).toBe(`https://ig.me/m/fulano.silva?text=${encodeURIComponent("Oi!")}`);
+    });
+  });
+
+  // Pedido explícito (item 3): link muito longo cai pro fallback sem
+  // ?text= — só a cópia pra área de transferência resolve esse caso.
+  describe("buildInstagramDmLink — fallback quando a URL fica longa demais", () => {
+    it("mensagem curta: fica dentro do limite, mantém ?text=", () => {
+      const link = buildInstagramDmLink("fulano.silva", "Oi! Tudo bem?");
+      expect(link).toContain("?text=");
+      expect(link.length).toBeLessThanOrEqual(INSTAGRAM_DM_LINK_MAX_LENGTH);
+    });
+
+    it("mensagem longa o bastante pra ultrapassar o teto: cai pro link SEM ?text=", () => {
+      // Repetição simples, bem acima do teto mesmo depois de codificada.
+      const longMessage = "Oi! Como você está desde o seu atendimento? ".repeat(80);
+      const withoutText = buildInstagramDmLink("fulano.silva", longMessage);
+      expect(withoutText).toBe("https://ig.me/m/fulano.silva");
+      expect(withoutText).not.toContain("?text=");
+      // Confirma que a mensagem realmente excederia o teto se tivesse ido
+      // pro link — não é só "qualquer mensagem longa cai no fallback".
+      const wouldBeLink = `https://ig.me/m/fulano.silva?text=${encodeURIComponent(longMessage)}`;
+      expect(wouldBeLink.length).toBeGreaterThan(INSTAGRAM_DM_LINK_MAX_LENGTH);
+    });
+
+    it("exatamente no limite: mantém ?text= (limite é inclusivo)", () => {
+      // Monta uma mensagem cujo link com ?text= fica EXATAMENTE no teto.
+      const base = "https://ig.me/m/fulano.silva?text=";
+      const budget = INSTAGRAM_DM_LINK_MAX_LENGTH - base.length;
+      const message = "a".repeat(budget); // 'a' não precisa de encoding, 1 char = 1 char codificado
+      const link = buildInstagramDmLink("fulano.silva", message);
+      expect(link.length).toBe(INSTAGRAM_DM_LINK_MAX_LENGTH);
+      expect(link).toContain("?text=");
+    });
+
+    it("1 caractere acima do limite: cai pro fallback", () => {
+      const base = "https://ig.me/m/fulano.silva?text=";
+      const budget = INSTAGRAM_DM_LINK_MAX_LENGTH - base.length + 1;
+      const message = "a".repeat(budget);
+      const link = buildInstagramDmLink("fulano.silva", message);
+      expect(link).toBe("https://ig.me/m/fulano.silva");
+    });
   });
 });
 
@@ -672,7 +762,12 @@ describe("getReactivationCards — sentAt, janela e limite diário", () => {
 
     expect(cards[0]!.channel).toBe("INSTAGRAM");
     expect(cards[0]!.whatsappLink).toBeNull();
-    expect(cards[0]!.instagramDmLink).toBe("https://ig.me/m/fulana.ig");
+    // Pedido explícito (item 1, rodada seguinte): instagramDmLink agora
+    // carrega ?text=<mensagem> pra pré-preencher o campo — ver
+    // describe("buildInstagramDmLink com mensagem...") pros testes
+    // focados nisso; aqui só confirma que getReactivationCards repassa a
+    // mensagem do card pra resolveInstagramDmLink.
+    expect(cards[0]!.instagramDmLink).toBe(`https://ig.me/m/fulana.ig?text=${encodeURIComponent(cards[0]!.message)}`);
   });
 
   it("limite diário de WhatsApp atingido: card de canal WHATSAPP ainda pendente sai com dailyLimitReached", async () => {

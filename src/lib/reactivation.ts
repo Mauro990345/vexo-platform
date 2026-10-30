@@ -290,13 +290,30 @@ export function buildReactivationWhatsAppLink(phone: string, message: string): s
   return `https://wa.me/${normalized}?text=${encodeURIComponent(message)}`;
 }
 
+// Teto de segurança pro tamanho da URL com ?text= (pedido explícito: "se a
+// mensagem codificada deixar o link muito longo, usar só a cópia e abrir
+// ig.me sem o parâmetro"). O ?text= do ig.me/m/<usuário> NÃO é documentado
+// pela Meta (ao contrário do wa.me, que documenta e aceita texto de
+// qualquer tamanho) — pode não ser aceito por toda versão do app/webview
+// que abre o link. 2000 caracteres pra URL inteira é um teto conservador,
+// bem abaixo do que navegadores modernos toleram (tipicamente >8000), com
+// folga pro caso de o app do Instagram ser mais restritivo.
+export const INSTAGRAM_DM_LINK_MAX_LENGTH = 2000;
+
 // ig.me abre a conversa no Instagram direto (sem precisar já ter o
-// contato salvo, diferente do wa.me que precisa de telefone) — a mensagem
-// NUNCA vai colada na URL (a Meta não expõe esse parâmetro pro Direct):
-// o texto é copiado pra área de transferência separadamente (ver
-// InstagramDmButton.tsx), a secretária cola e envia manualmente.
-export function buildInstagramDmLink(igUsername: string): string {
-  return `https://ig.me/m/${igUsername}`;
+// contato salvo, diferente do wa.me que precisa de telefone). `message`
+// tenta pré-preencher o campo via ?text= — parâmetro NÃO documentado pela
+// Meta, então NUNCA é a única forma: a mensagem também é sempre copiada
+// pra área de transferência à parte (ver InstagramDmButton.tsx) no mesmo
+// toque, e se o texto não aparecer preenchido a secretária só cola. Sem
+// `message` (ou URL resultante grande demais, ver INSTAGRAM_DM_LINK_MAX_LENGTH
+// acima), devolve o link simples, sem o parâmetro — só a cópia resolve
+// esse caso.
+export function buildInstagramDmLink(igUsername: string, message?: string): string {
+  const base = `https://ig.me/m/${igUsername}`;
+  if (!message) return base;
+  const withText = `${base}?text=${encodeURIComponent(message)}`;
+  return withText.length <= INSTAGRAM_DM_LINK_MAX_LENGTH ? withText : base;
 }
 
 // Perfil público — mesmo formato já usado em NeedsHumanBanner.tsx, só pro
@@ -309,9 +326,10 @@ export function buildInstagramProfileLink(igUsername: string): string {
 // Decide se o botão "Instagram" do card tem o que fazer — null sem @
 // (pedido explícito: "se o lead não tiver @ do Instagram, o botão fica
 // desativado"), é exatamente o que InstagramDmButton.tsx usa como
-// `disabled={!dmLink}`.
-export function resolveInstagramDmLink(igUsername: string | null): string | null {
-  return igUsername ? buildInstagramDmLink(igUsername) : null;
+// `disabled={!dmLink}`. `message` é repassado pra buildInstagramDmLink
+// pré-preencher o campo via ?text= (ver lá).
+export function resolveInstagramDmLink(igUsername: string | null, message?: string): string | null {
+  return igUsername ? buildInstagramDmLink(igUsername, message) : null;
 }
 
 export type ReactivationCard = {
@@ -596,7 +614,7 @@ export async function getReactivationCards(clinicId: string, now: Date = new Dat
       message,
       channel,
       whatsappLink: channel === "WHATSAPP" && phone ? buildReactivationWhatsAppLink(phone, message) : null,
-      instagramDmLink: channel === "INSTAGRAM" ? resolveInstagramDmLink(igUsername) : null,
+      instagramDmLink: channel === "INSTAGRAM" ? resolveInstagramDmLink(igUsername, message) : null,
       // @ só vira link de perfil nas linhas de Instagram (pedido
       // explícito) — nas de WhatsApp continua texto puro.
       instagramProfileLink: channel === "INSTAGRAM" && igUsername ? buildInstagramProfileLink(igUsername) : null,
