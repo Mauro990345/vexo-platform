@@ -45,6 +45,7 @@ export function WhatsappConnectionPanel({
   status: initialStatus,
   qrBase64,
   statusError,
+  recoveredMessage,
   refreshHref,
   description,
   disconnectAction,
@@ -57,6 +58,10 @@ export function WhatsappConnectionPanel({
   status: WhatsappConnectionState;
   qrBase64: string | null;
   statusError: string | null;
+  // Pedido explícito (item "d"): avisa quando ensureWhatsappQrForClinic se
+  // recuperou sozinho de uma instância quebrada (ver whatsapp-connection.ts)
+  // — não é um erro, estilo neutro (não vermelho), separado de statusError.
+  recoveredMessage: string | null;
   refreshHref: string;
   description: string;
   // "Desconectar" (status "open") — só solta o número, instância continua.
@@ -169,6 +174,14 @@ export function WhatsappConnectionPanel({
         <p className="rounded-lg border border-vexo-error/30 bg-vexo-error/10 p-2 text-xs text-vexo-error">{statusError}</p>
       )}
 
+      {/* Pedido explícito (item "d"): "a instância anterior tinha um
+          problema e foi recriada sozinha" — estilo neutro (accent, não
+          error), nunca junto de statusError (um exclui o outro: ou a
+          recuperação funcionou, ou deu erro — ver page.tsx). */}
+      {recoveredMessage && !statusError && (
+        <p className="rounded-lg border border-vexo-accent/30 bg-vexo-accent/10 p-2 text-xs text-vexo-accent">{recoveredMessage}</p>
+      )}
+
       {isOpen ? (
         <p className="text-xs">WhatsApp conectado e pronto para enviar notificações.</p>
       ) : (
@@ -187,8 +200,14 @@ export function WhatsappConnectionPanel({
               className="mx-auto h-[300px] w-[300px] rounded-lg border border-vexo-border bg-white p-5"
               style={{ imageRendering: "pixelated" }}
             />
-          ) : (
-            <p className="text-xs text-vexo-muted">Não foi possível gerar o QR code agora.</p>
+          ) : statusError ? null : (
+            // statusError, quando presente, já explica o motivo (item
+            // "d" — nunca duplica a mensagem); isto só aparece no caso
+            // raro de qrBase64 nulo sem nenhum erro reportado.
+            <p className="text-xs text-vexo-muted">
+              Não foi possível gerar o código agora. Clique em "Atualizar / verificar conexão" abaixo para tentar
+              de novo.
+            </p>
           )}
 
           <p className="text-card leading-normal text-vexo-muted">

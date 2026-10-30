@@ -10,6 +10,51 @@ import { evolutionBaseConfig } from "@/lib/whatsapp";
 
 export type WhatsappConnectionState = "open" | "connecting" | "close" | "unknown";
 
+// 8s por chamada (AbortSignal.timeout) — mesmo valor/padrão de
+// evolution-diagnostics.ts. Bug real investigado: a consulta de
+// /instance/fetchInstances ficou dando timeout em produção (Evolution nova,
+// v2.3.7) sem nenhum limite, o que deixava a tela de conexão pendurada
+// esperando. Com o limite, um timeout vira só mais um tipo de falha
+// (tratada como ambígua/indeterminada — ver whatsappInstanceExists abaixo),
+// nunca uma espera sem fim.
+const REQUEST_TIMEOUT_MS = 8_000;
+
+// Dois jeitos "a instância existe mas está quebrada" que a Evolution 2.3.7
+// devolve (bug real investigado em produção, depois da troca pra v2.3.7 com
+// patch do baileys): "instância fantasma" — existe no banco da Evolution e
+// aparece no Manager, mas não está carregada em memória, então
+// connect/connectionState/delete devolvem 404 OU 400 "The '<nome>' instance
+// does not exist" (a Evolution não é consistente sobre qual dos dois status
+// usa); e "nome já em uso" — o /instance/create de um nome que já existe
+// (tipicamente a MESMA instância fantasma barrando o nome de ser reusado).
+// ensureWhatsappQrForClinic (whatsapp-connection.ts) reage a cada um dos
+// dois pra se recuperar sozinho, sem precisar abrir o Manager.
+export class EvolutionInstanceNotFoundError extends Error {
+  constructor(instanceName: string) {
+    super(`A instância "${instanceName}" não existe (ou não está carregada) na Evolution API.`);
+    this.name = "EvolutionInstanceNotFoundError";
+  }
+}
+
+export class EvolutionInstanceNameInUseError extends Error {
+  constructor(instanceName: string) {
+    super(`O nome "${instanceName}" já está em uso na Evolution API.`);
+    this.name = "EvolutionInstanceNameInUseError";
+  }
+}
+
+// A Evolution 2.3.7 não é consistente entre 400 e 404 pra "essa instância
+// não existe" (confirmado em produção: os dois apareceram pro mesmo caso de
+// instância fantasma) — por isso checa os dois status, e só confia no texto
+// da mensagem quando o status for 400 (um 404 puro já é confiável sozinho).
+function isInstanceNotFoundResponse(status: number, body: string): boolean {
+  return status === 404 || (status === 400 && /does not exist/i.test(body));
+}
+
+function isNameInUseResponse(body: string): boolean {
+  return /already in use/i.test(body);
+}
+
 function normalizeQrBase64(value: unknown): string | null {
   if (typeof value !== "string" || !value) return null;
   return value.startsWith("data:") ? value : `data:image/png;base64,${value}`;
@@ -51,17 +96,23 @@ export function parseInstanceList(data: unknown): EvolutionInstanceInfo[] {
 // instância já criada). Consulta /instance/fetchInstances (mesmo endpoint
 // já usado por runEvolutionDiagnostics, evolution-diagnostics.ts) e só
 // diz "não existe" quando o nome salvo genuinamente não aparece na lista
-// devolvida pela Evolution — qualquer ambiguidade (erro de rede, resposta
-// em formato inesperado) devolve `true` (assume que existe): o custo de
-// pular uma criação desnecessária por engano é ZERO (createWhatsappInstance
-// continua tolerando 403/409 como rede de segurança, ver abaixo); o custo
-// de recriar por engano uma instância que já existia é o bug que motivou
-// esta função — por isso o lado seguro do empate é sempre "não criar".
+// devolvida pela Evolution — qualquer ambiguidade (timeout, erro de rede,
+// resposta em formato inesperado) devolve `true` ("talvez exista, não
+// force criação"). Isso NÃO significa "assume que está tudo bem": quem
+// chama (ensureWhatsappQrForClinic, whatsapp-connection.ts) sempre tenta o
+// /instance/connect de verdade logo em seguida e reage ao erro real que
+// vier de lá (inclusive recriando sozinho se a resposta for "não existe")
+// — é essa reação ao connect, não o palpite desta função, que decide de
+// fato (pedido explícito, item "c": "trate como indeterminado, tente o
+// connect, e aja pelo erro retornado").
 export async function whatsappInstanceExists(instanceName: string): Promise<boolean> {
   const { baseUrl, apiKey } = evolutionBaseConfig();
 
   try {
-    const res = await fetch(`${baseUrl}/instance/fetchInstances`, { headers: { apikey: apiKey } });
+    const res = await fetch(`${baseUrl}/instance/fetchInstances`, {
+      headers: { apikey: apiKey },
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
     if (!res.ok) return true;
     const data = await res.json();
     // parseInstanceList devolve [] tanto pra "lista vazia de verdade"
@@ -79,14 +130,25 @@ export async function whatsappInstanceExists(instanceName: string): Promise<bool
   }
 }
 
-// Idempotente: se a instância já existir, a Evolution API normalmente
-// responde 403/409 — não tratamos isso como falha. Hoje só é chamada
-// depois de whatsappInstanceExists confirmar que a instância NÃO existe
-// (ver ensureWhatsappQrForClinic, whatsapp-connection.ts); a tolerância a
-// 403/409 continua como rede de segurança pra uma corrida genuína (duas
-// abas abrindo a tela ao mesmo tempo, por exemplo), não como o caminho
-// principal.
-export async function createWhatsappInstance(instanceName: string): Promise<void> {
+// `tolerateConflict` (default true): se a instância já existir, a
+// Evolution API normalmente responde 403/409 — não tratamos isso como
+// falha no caminho NORMAL (chamada depois de whatsappInstanceExists
+// confirmar que a instância NÃO existe, ver ensureWhatsappQrForClinic);
+// continua como rede de segurança pra uma corrida genuína (duas abas
+// abrindo a tela ao mesmo tempo). Já "nome já em uso" (texto da
+// mensagem, não status) SEMPRE lança EvolutionInstanceNameInUseError,
+// mesmo com tolerateConflict=true — é o sinal que ensureWhatsappQrForClinic
+// usa pra saber quando desistir do nome atual e gerar um novo (pedido
+// explícito, item "a"). `tolerateConflict: false` é usado só no caminho de
+// recuperação (depois de um /instance/connect confirmar "não existe"):
+// ali, QUALQUER conflito (403/409 que não seja "already in use") também
+// deve subir como erro real, nunca ser silenciado — se a instância
+// realmente não existia, um create que falhe por outro motivo é
+// informação nova, não ruído a ignorar.
+export async function createWhatsappInstance(
+  instanceName: string,
+  { tolerateConflict = true }: { tolerateConflict?: boolean } = {}
+): Promise<void> {
   const { baseUrl, apiKey } = evolutionBaseConfig();
 
   const res = await fetch(`${baseUrl}/instance/create`, {
@@ -97,12 +159,20 @@ export async function createWhatsappInstance(instanceName: string): Promise<void
       qrcode: true,
       integration: "WHATSAPP-BAILEYS",
     }),
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   });
 
-  if (!res.ok && res.status !== 403 && res.status !== 409) {
-    const body = await res.text();
-    throw new Error(`Falha ao criar instância "${instanceName}" na Evolution API (${res.status}): ${body}`);
+  if (res.ok) return;
+
+  const body = await res.text();
+
+  if (isNameInUseResponse(body)) {
+    throw new EvolutionInstanceNameInUseError(instanceName);
   }
+
+  if (tolerateConflict && (res.status === 403 || res.status === 409)) return;
+
+  throw new Error(`Falha ao criar instância "${instanceName}" na Evolution API (${res.status}): ${body}`);
 }
 
 // O pareamento também retorna um "pairingCode" (equivalente a uma chave de
@@ -113,10 +183,14 @@ export async function fetchWhatsappQr(instanceName: string): Promise<{ qrBase64:
 
   const res = await fetch(`${baseUrl}/instance/connect/${instanceName}`, {
     headers: { apikey: apiKey },
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   });
 
   if (!res.ok) {
     const body = await res.text();
+    if (isInstanceNotFoundResponse(res.status, body)) {
+      throw new EvolutionInstanceNotFoundError(instanceName);
+    }
     throw new Error(`Falha ao buscar QR code da instância "${instanceName}" (${res.status}): ${body}`);
   }
 
@@ -129,6 +203,7 @@ export async function fetchWhatsappConnectionState(instanceName: string): Promis
 
   const res = await fetch(`${baseUrl}/instance/connectionState/${instanceName}`, {
     headers: { apikey: apiKey },
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   });
 
   if (!res.ok) return "unknown";
@@ -148,6 +223,7 @@ export async function logoutWhatsappInstance(instanceName: string): Promise<void
   const res = await fetch(`${baseUrl}/instance/logout/${instanceName}`, {
     method: "DELETE",
     headers: { apikey: apiKey },
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   });
 
   if (!res.ok && res.status !== 404) {
@@ -159,26 +235,31 @@ export async function logoutWhatsappInstance(instanceName: string): Promise<void
 // Apaga a instância de verdade (não só desloga) — endpoint confirmado
 // contra o código-fonte da Evolution API (src/api/routes/instance.router.ts,
 // rota DELETE routerPath('delete')). Usada pelo botão "Reiniciar
-// pareamento" (status "connecting" — sessão travada, ver
-// WhatsappConnectionPanel.tsx/resetWhatsappPairing em whatsapp-connection.ts):
-// logout sozinho NÃO limpa uma sessão/credenciais corrompidas do lado da
-// Evolution (é o próprio sintoma investigado — "Reiniciar pareamento"
-// antes só deslogava, e o pareamento seguinte continuava falhando do
-// mesmo jeito); apagar e deixar o próximo carregamento da tela recriar do
-// zero (ensureWhatsappQrForClinic, que já checa whatsappInstanceExists
-// antes de criar) é o que garante uma sessão genuinamente nova.
-// 404 (instância já não existe) é tratado como sucesso — exatamente o
-// estado final desejado, nunca um erro real.
-export async function deleteWhatsappInstance(instanceName: string): Promise<void> {
+// pareamento" (ver WhatsappConnectionPanel.tsx/resetWhatsappPairing em
+// whatsapp-connection.ts): logout sozinho NÃO limpa uma sessão/credenciais
+// corrompidas do lado da Evolution; apagar e deixar o próximo carregamento
+// da tela recriar do zero (ensureWhatsappQrForClinic) é o que garante uma
+// sessão genuinamente nova.
+// Devolve { notFound: true } (em vez de lançar) quando a Evolution diz que
+// a instância não existe (404, ou 400 "does not exist") — esse É o estado
+// final desejado (ela já não está lá), mas quem chama (resetWhatsappPairing)
+// usa esse sinal pra saber que o NOME atual pode estar "queimado" (a mesma
+// instância fantasma investigada — existe no banco da Evolution e no
+// Manager, mas não carregada em memória) e decidir gerar um nome novo em
+// vez de insistir no mesmo (pedido explícito, item "b").
+export async function deleteWhatsappInstance(instanceName: string): Promise<{ notFound: boolean }> {
   const { baseUrl, apiKey } = evolutionBaseConfig();
 
   const res = await fetch(`${baseUrl}/instance/delete/${instanceName}`, {
     method: "DELETE",
     headers: { apikey: apiKey },
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   });
 
-  if (!res.ok && res.status !== 404) {
-    const body = await res.text();
-    throw new Error(`Falha ao apagar instância "${instanceName}" na Evolution API (${res.status}): ${body}`);
-  }
+  if (res.ok) return { notFound: false };
+
+  const body = await res.text();
+  if (isInstanceNotFoundResponse(res.status, body)) return { notFound: true };
+
+  throw new Error(`Falha ao apagar instância "${instanceName}" na Evolution API (${res.status}): ${body}`);
 }
