@@ -1,14 +1,41 @@
 import { prisma } from "@/lib/prisma";
 import { triggerFollowUp, cancelPendingFollowUp } from "@/lib/follow-up";
+import { appointmentDisplayStatus, startOfDay, addDays } from "@/lib/metrics";
+
+// Pedido explícito: um agendamento "Compareceu" (displayStatus COMPLETED —
+// ver appointmentDisplayStatus, metrics.ts) só fica visível na lista de
+// Agendamentos do Painel por ATTENDED_VISIBLE_DAYS dias CIVIS
+// (America/Sao_Paulo, mesmo fuso de todo o resto do app — ver startOfDay)
+// depois do atendimento; passado isso, sai da lista — os dados e o
+// histórico continuam no banco e entrando nas métricas normalmente
+// (getClinicMetrics/getAttendanceMetrics, metrics.ts, nunca dependeram
+// desta lista nem mudam aqui). Futuros, "Não compareceu" e os demais
+// status seguem a regra de sempre (sempre visíveis, sem prazo) — só
+// COMPLETED tem validade. Não depende do filtro "Período" da tela: essa
+// lista já era independente dele antes desta mudança (só os cards de
+// métrica usam `from`/`to`, ver ClientPanelView.tsx) e continua sendo.
+// Constante NOMEADA (não um número solto) — pedido explícito: "vamos
+// ajustar depois do teste".
+export const ATTENDED_VISIBLE_DAYS = 3;
+
+// "3 dias depois" é um prazo INCLUSIVO em dias civis: visível no dia do
+// atendimento e nos ATTENDED_VISIBLE_DAYS dias seguintes (dia 3 ainda
+// visível), sai a partir do dia seguinte a esse (dia 4 já não aparece) —
+// mesma semântica de janela em dias corridos já usada em
+// computeCalendarDayWindow/computeReturnContactWindow (reactivation.ts).
+export function isAppointmentVisibleInList(appt: { status: string; scheduledAt: Date }, now: Date): boolean {
+  if (appointmentDisplayStatus(appt, now) !== "COMPLETED") return true;
+  const visibleUntil = startOfDay(addDays(appt.scheduledAt, ATTENDED_VISIBLE_DAYS));
+  return startOfDay(now).getTime() <= visibleUntil.getTime();
+}
 
 // Botão "Retorno" do card de agendamento atendido (ver RetornoButton.tsx)
-// — grava só o NÚMERO de dias (ou "nenhum"), nunca texto livre nem
-// qualquer dado clínico (pedido explícito, LGPD — ver
-// Appointment.returnPeriodDays/returnPeriodNone, schema.prisma).
-// Validação de QUAL número é aceito (RETURN_PERIOD_OPTIONS) fica na server
-// action que chama isto (mesmo padrão de "dailyLimit < 1 throws" já usado
-// pelas outras configs de Automações) — esta função só decide SE a
-// mudança pode acontecer agora.
+// — grava só o NÚMERO de dias, nunca texto livre nem qualquer dado
+// clínico (pedido explícito, LGPD — ver Appointment.returnPeriodDays,
+// schema.prisma). Validação de QUAL número é aceito (RETURN_PERIOD_OPTIONS)
+// fica na server action que chama isto (mesmo padrão de "dailyLimit < 1
+// throws" já usado pelas outras configs de Automações) — esta função só
+// decide SE a mudança pode acontecer agora.
 //
 // "Pode trocar enquanto o envio não ocorreu" (pedido explícito) — depois
 // que QUALQUER card de Reativação deste agendamento já foi marcado
@@ -19,26 +46,33 @@ import { triggerFollowUp, cancelPendingFollowUp } from "@/lib/follow-up";
 // pra não depender de lembrar disso quando a Reativação entrar em uso de
 // verdade.
 //
-// "unset" (2026-10-29, 4ª rodada, pedido explícito) — volta pro estado
-// INICIAL (returnPeriodDays null, returnPeriodNone false: nenhuma escolha
-// manual, usa os prazos PADRÃO da clínica). Usado em duas situações pelo
-// RetornoButton: (1) clicar de novo num prazo já selecionado (alternância:
-// clicar "30d" quando 30d já está marcado desmarca, não troca pra outro);
-// (2) clicar "Sem retorno" quando "Sem retorno" já está marcado (mesma
-// alternância, agora pro outro extremo). Diferente de "none" ("Sem
-// retorno" explícito, returnPeriodNone true) — "unset" é "nenhuma escolha
-// nenhuma", não "escolhi não ter retorno".
+// "unset" (pedido explícito) — volta pro estado INICIAL (returnPeriodDays
+// null: nenhuma escolha manual, usa os prazos PADRÃO da clínica). Usado
+// quando a secretária clica de novo num prazo já selecionado (alternância:
+// clicar "30d" quando 30d já está marcado desmarca, não troca pra outro).
+// AJUSTE (pedido explícito — removida a opção "Sem retorno" do botão
+// Retorno/RetornoButton.tsx): a seleção "none" (returnPeriodNone=true,
+// "sem retorno" EXPLÍCITO — diferente de "unset", nenhuma escolha) deixou
+// de existir — desmarcar todos os prazos agora só tem UM resultado
+// possível, "unset", que já significava "usa os prazos padrão da
+// clínica" (exatamente o novo comportamento pedido: "se todos os prazos
+// forem desmarcados... vale o prazo padrão da clínica"). O campo
+// Appointment.returnPeriodNone continua no schema (sem migration) por
+// causa de linhas antigas já marcadas antes desta mudança — essas linhas
+// passam a se comportar como "nada marcado" também (ver
+// resolveAppointmentReturnPeriods, reactivation.ts), nunca mais escritas
+// por aqui.
 //
 // Cancelamento dos cards de Reativação futuros do prazo abandonado: não
 // precisa de nenhuma escrita extra aqui — ReactivationCardSlot (ver
 // getReactivationCards, reactivation.ts) já é montado de forma LAZY, a
-// partir do returnPeriodDays/returnPeriodNone ATUAIS do Appointment a
-// cada chamada; assim que esses campos mudam (any branch abaixo), a
-// próxima vez que a lista de Reativação for montada, o prazo antigo
-// simplesmente não gera mais candidato nenhum (buildReactivationCardCandidates
-// lê o valor atual, não o de quando o slot foi criado) — o card do prazo
-// abandonado para de aparecer sozinho, sem precisar apagar/marcar a linha
-// antiga de ReactivationCardSlot (mesma filosofia já documentada em
+// partir do returnPeriodDays ATUAL do Appointment a cada chamada; assim
+// que esse campo muda (branch abaixo), a próxima vez que a lista de
+// Reativação for montada, o prazo antigo simplesmente não gera mais
+// candidato nenhum (buildReactivationCardCandidates lê o valor atual, não
+// o de quando o slot foi criado) — o card do prazo abandonado para de
+// aparecer sozinho, sem precisar apagar/marcar a linha antiga de
+// ReactivationCardSlot (mesma filosofia já documentada em
 // no-show-cards.ts: ler estado vivo em vez de escrever um flag de
 // "cancelado"). Um slot que JÁ foi enviado (sentAt preenchido) nunca é
 // tocado por isso — ele só existe pra esse prazo específico, que já está
@@ -50,7 +84,7 @@ export type SetAppointmentReturnPeriodResult =
 
 export async function setAppointmentReturnPeriod(
   appointmentId: string,
-  selection: number | "none" | "unset"
+  selection: number | "unset"
 ): Promise<SetAppointmentReturnPeriodResult> {
   const appt = await prisma.appointment.findUnique({
     where: { id: appointmentId },
@@ -59,12 +93,7 @@ export async function setAppointmentReturnPeriod(
   if (!appt) return { ok: false, reason: "not_found" };
   if (appt.reactivationCardSlots.length > 0) return { ok: false, reason: "already_sent" };
 
-  const data =
-    selection === "none"
-      ? { returnPeriodDays: null, returnPeriodNone: true }
-      : selection === "unset"
-        ? { returnPeriodDays: null, returnPeriodNone: false }
-        : { returnPeriodDays: selection, returnPeriodNone: false };
+  const data = selection === "unset" ? { returnPeriodDays: null, returnPeriodNone: false } : { returnPeriodDays: selection, returnPeriodNone: false };
 
   const updated = await prisma.appointment.update({
     where: { id: appointmentId },
