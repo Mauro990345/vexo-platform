@@ -162,9 +162,16 @@ export const MOBILE_SECTION_COUNTER_TEXT = "text-[15px] sm:text-caption";
 // "mesmo nível" do rótulo do card de métrica, e o pedido foi "mantenha
 // motivo visível e sem cortar", não reduzir mais).
 
-// Linha de Reativação: padding 8/10px (p-2/pl-2.5) × 1,29 = 10,32/12,9 →
-// 10px/13px.
-export const MOBILE_REACTIVATION_ROW_PADDING = "p-[10px] pl-[13px] sm:p-2 sm:pl-2.5";
+// Linha de Reativação/Faltou/Quente — AJUSTE (2026-10-30, pedido
+// explícito "alinhe os três tipos ao mesmo padrão dos cards de
+// Agendamentos"): vertical igual ao de Agendamentos (14px, ver
+// MOBILE_APPOINTMENT_ROW_PADDING); horizontal direito também 8px, igual;
+// esquerdo fica em 12px (não 8px) — só este card tem a barra colorida
+// lateral (PanelCardTypeBar, 4px) encostada na borda, precisa de um
+// pouco mais de respiro pra não colar no conteúdo. `sm:` INALTERADO
+// (pedido explícito "em ≥640px nada muda") — continua p-2/pl-2.5 de
+// sempre, pixel-idêntico a antes desta rodada.
+export const MOBILE_REACTIVATION_ROW_PADDING = "py-[14px] pr-[8px] pl-[12px] sm:p-2 sm:pl-2.5";
 // Linha de Agendamentos: reduzido na 3ª rodada (2026-10-29) pra ficar do
 // tamanho de um card de métrica — ficou um pouco BAIXO demais (~77px na
 // medição daquela rodada, contra ~90px do card de métrica, medido ao
@@ -245,24 +252,28 @@ export const MOBILE_NAME_TEXT_REACTIVATION = "text-[15px] sm:text-xs";
 // "boost" de fator aqui pra continuar legível). AJUSTE (2026-10-29, 5ª
 // rodada, pedido explícito "aumentar um pouquinho TUDO"): 14 -> 15px.
 export const MOBILE_NAME_TEXT_APPOINTMENT = "text-[15px] sm:text-sm";
-// @ do lead — AJUSTE (2026-10-29, 3ª rodada): 12px (era 13px). Usada pela
-// Reativação/Faltou/Quente (ReactivationRail.tsx) E pelo Agendamentos
-// (ClientPanelView.tsx) — ver MOBILE_APPOINTMENT_HANDLE_TEXT abaixo pro
-// valor PRÓPRIO do Agendamentos a partir da 5ª rodada (pedido "somente
-// isto" não pode mexer no tamanho da Reativação).
-export const MOBILE_HANDLE_TEXT = "text-[12px] sm:text-caption";
+// @ do lead — AJUSTE (2026-10-29, 3ª rodada): 12px (era 13px). Usada só
+// pela Reativação/Faltou/Quente (ReactivationRail.tsx) desde a 5ª rodada
+// (ver MOBILE_APPOINTMENT_HANDLE_TEXT, valor próprio do Agendamentos).
+// AJUSTE (2026-10-30, pedido explícito "alinhe... ao mesmo padrão dos
+// cards de Agendamentos"): 12 -> 13px — mesmo valor mobile de
+// MOBILE_APPOINTMENT_HANDLE_TEXT agora (os dois já compartilhavam o
+// mesmo `sm:text-caption` de desktop, então só igualar o número mobile
+// já basta — não precisou virar a mesma constante).
+export const MOBILE_HANDLE_TEXT = "text-[13px] sm:text-caption";
 // @ do lead — SÓ Agendamentos (2026-10-29, 5ª rodada, pedido explícito
 // "aumentar um pouquinho TUDO... exceto o texto dos botões"): constante
 // própria, separada de MOBILE_HANDLE_TEXT (que continua servindo só a
 // Reativação/Faltou/Quente, inalterada — pedido era "somente" o card de
 // Agendamentos). 12 -> 13px.
 export const MOBILE_APPOINTMENT_HANDLE_TEXT = "text-[13px] sm:text-caption";
-// Motivo/horário/status/telefone/rótulos ("Limite diário", "Sem
-// WhatsApp") — NÃO mudou nesta rodada de propósito (pedido explícito:
-// "mantenha motivo visível e sem cortar"; já está no mesmo nível do
-// rótulo do card de métrica, ver MOBILE_METRIC_LABEL_TEXT, ambos 15px):
-// 10px (text-caption) -> ×1,45=14,5→15px.
-export const MOBILE_SECONDARY_TEXT = "text-[15px] sm:text-caption";
+// Motivo (Reativação/Faltou/Quente) e rótulos ("Limite diário", "Sem
+// WhatsApp") — 10px (text-caption) -> ×1,45=14,5→15px. AJUSTE
+// (2026-10-30, pedido explícito "alinhe... ao mesmo padrão dos cards de
+// Agendamentos... texto da linha 2 em 13px"): 15 -> 13px, mesmo valor
+// mobile de MOBILE_APPOINTMENT_INFO_TEXT (os dois já compartilhavam o
+// mesmo `sm:text-caption` de desktop).
+export const MOBILE_SECONDARY_TEXT = "text-[13px] sm:text-caption";
 // Texto dos botões "Retorno"/"Não compareceu" (gatilho + opções do
 // popover de prazo) do card de Agendamentos — NOVO (2026-10-29, 3ª
 // rodada), separado de MOBILE_SECONDARY_TEXT de propósito (motivo/data
@@ -285,8 +296,13 @@ export const MOBILE_APPOINTMENT_SECONDARY_TEXT = "text-[12px] sm:text-caption";
 // constante antiga. 12 -> 13px.
 export const MOBILE_APPOINTMENT_INFO_TEXT = "text-[13px] sm:text-caption";
 // Texto dos botões de ação (WhatsApp/Instagram/"Enviando…"/"✓"): 11px
-// (text-card) × 1,29 = 14,19 → 14px.
-export const MOBILE_BUTTON_TEXT = "text-[14px] sm:text-card";
+// (text-card) × 1,29 = 14,19 → 14px. AJUSTE (2026-10-30, pedido
+// explícito "texto igual" ao dos botões Retorno/Não compareceu): 14 ->
+// 12px, mesmo valor mobile de MOBILE_APPOINTMENT_SECONDARY_TEXT. `sm:`
+// inalterado (text-card de desktop, de sempre — diferente do `sm:`
+// de MOBILE_APPOINTMENT_SECONDARY_TEXT de propósito, cada botão mantém
+// seu PRÓPRIO desktop, só o mobile converge).
+export const MOBILE_BUTTON_TEXT = "text-[12px] sm:text-card";
 
 // @ do lead: SÓ CELULAR vira encolhível no layout empilhado (herda o
 // "truncate" ao lado — reticências de verdade quando um @ muito longo não
@@ -296,11 +312,15 @@ export const MOBILE_HANDLE_SHRINK = "min-w-0 shrink sm:shrink-0";
 
 // Ícones --------------------------------------------------------------------
 
-// Ícones mono (WhatsApp/Instagram) dentro dos botões de ação e ícone do
-// RetornoButton: 12px (h-3 w-3) × 1,29 = 15,48 → 15px. NÃO é mais usado
-// pelo chip de tipo (ver MOBILE_CHIP_ICON_SIZE abaixo, separado nesta
-// rodada pra poder encolher o chip sem mexer nos ícones dos botões).
-export const MOBILE_ICON_SIZE = "h-[15px] w-[15px] sm:h-3 sm:w-3";
+// Ícones mono (WhatsApp/Instagram) dentro dos botões de ação da
+// Reativação/Faltou/Quente — 12px (h-3 w-3) × 1,29 = 15,48 → 15px. NÃO é
+// mais usado pelo chip de tipo (ver MOBILE_CHIP_ICON_SIZE abaixo,
+// separado pra poder encolher o chip sem mexer nos ícones dos botões).
+// AJUSTE (2026-10-30, pedido explícito "mesmo estilo compacto dos
+// botões Retorno/Não compareceu"): 15 -> 12px — mesmo valor mobile do
+// ícone do RetornoButton (MOBILE_APPOINTMENT_BUTTON_ICON_SIZE), que já
+// usava o mesmo `sm:h-3 sm:w-3` de desktop.
+export const MOBILE_ICON_SIZE = "h-[12px] w-[12px] sm:h-3 sm:w-3";
 
 // Chip de tipo ----------------------------------------------------------
 //
@@ -317,7 +337,11 @@ export const MOBILE_CHIP_ICON_SIZE = "h-[14px] w-[14px] sm:h-3 sm:w-3";
 // permanece 92px, quase igual: o texto/ícone móvel já ficou bem perto do
 // tamanho de desktop). Padding 6/2px (px-1.5/py-0.5) × 1,29 = 7,74/2,58
 // → 8px/3px.
-export const MOBILE_CHIP_SIZE = "w-[96px] sm:w-[92px] px-[8px] py-[3px] sm:px-1.5 sm:py-0.5";
+// AJUSTE (2026-10-30, pedido explícito "chip mantido, só reduzido pro
+// novo tamanho"): padding 8/3px -> 6/2px (largura/texto/ícone inalterados
+// — já cabiam "Reativação", o rótulo mais longo, sem quebrar; reduzir
+// mais arriscava cortar). `sm:` inalterado.
+export const MOBILE_CHIP_SIZE = "w-[96px] sm:w-[92px] px-[6px] py-[2px] sm:px-1.5 sm:py-0.5";
 
 // Barra lateral colorida -------------------------------------------------
 
@@ -359,14 +383,13 @@ export const MOBILE_APPOINTMENT_AVATAR_ICON_SIZE = "h-[17px] w-[17px] sm:h-4 sm:
 //
 // AJUSTE (2026-10-29, 2ª rodada): o piso de toque de 48px (WCAG 2.5.5)
 // virou **40px** — pedido explícito: "botões fáceis de tocar, altura
-// mínima razoável, sem exagero". 40px continua um alvo de toque
-// confortável (acima do mínimo de 44pt/48dp usado como referência em
-// iOS/Android só por segurança extra em listas densas como essa, onde
-// cada linha já tem espaço vertical reduzido de propósito) — não é um
-// valor de fator, é um piso deliberado, igual o 48px anterior era.
-export const MOBILE_ACTION_BUTTON_HEIGHT = "h-[40px] sm:h-[23px]";
+// mínima razoável, sem exagero". AJUSTE (2026-10-30, pedido explícito
+// "mesma altura (~32px)... dos botões Retorno/Não compareceu"): 40 ->
+// 32px — mesmo piso de MOBILE_TOGGLE_BUTTON_MIN (botões de Agendamentos).
+// `sm:` inalterado (23px de desktop, de sempre).
+export const MOBILE_ACTION_BUTTON_HEIGHT = "h-[32px] sm:h-[23px]";
 // Altura E largura (botão "✓" de desfazer, quadrado): mesmo piso acima.
-export const MOBILE_ACTION_BUTTON_SQUARE = "h-[40px] w-[40px] sm:h-[23px] sm:w-[23px]";
+export const MOBILE_ACTION_BUTTON_SQUARE = "h-[32px] w-[32px] sm:h-[23px] sm:w-[23px]";
 // Padding horizontal dos botões de WhatsApp/Instagram (sem mínimo de
 // toque próprio — a altura já garante o piso; aqui é só o fator): 6px
 // (px-1.5) × 1,29 = 7,74 → 8px.
@@ -390,30 +413,33 @@ export const MOBILE_TOGGLE_BUTTON_MIN = "min-h-[32px] min-w-[32px] sm:min-h-0 sm
 //
 // Pedido explícito (nome longo): no celular, a linha do TOPO do card de
 // Reativação/Faltou/Quente passa a ser chip+motivo (1 linha); abaixo, o
-// nome (até 2 linhas, reticências só depois disso); abaixo dele, o @ (1
-// linha, reticências). Em desktop nada muda — a ordem volta a ser nome/@
-// primeiro, chip/motivo depois, exatamente como sempre foi.
+// nome+@ (1 linha cada, lado a lado como no Agendamentos — ver AJUSTE
+// abaixo). Em desktop nada muda — a ordem volta a ser nome/@ primeiro,
+// chip/motivo depois, exatamente como sempre foi.
 //
-// NÃO é um truque de CSS order: a verificação visual desta rodada achou
-// que, com CSS order (um contêiner só, dividindo largura com o botão de
-// WhatsApp/Instagram nas duas linhas), o motivo ficava sem nenhum espaço
-// sobrando em telas de 320-375px — avatar(46px) + chip(133px fixo) +
-// botão de texto completo ("WhatsApp"/"Instagram", ~135px) já esgotavam a
+// NÃO é um truque de CSS order: a verificação visual da rodada que criou
+// isso achou que, com CSS order (um contêiner só, dividindo largura com o
+// botão de WhatsApp/Instagram nas duas linhas), o motivo ficava sem
+// nenhum espaço sobrando em telas de 320-375px — avatar + chip (133px
+// fixo) + botão de texto completo ("WhatsApp"/"Instagram") já esgotavam a
 // largura da tela sozinhos, e o motivo sumia (0px, nem reticências).
 // ReactivationRail.tsx resolve isso com DOIS blocos de layout (um só
 // visível por vez, via sm:hidden/hidden sm:flex): no celular, chip+motivo
 // ganham uma linha cheia que NÃO divide espaço com o botão (motivo tem
-// que caber sempre, pedido explícito); nome (tolera 2 linhas) e @ (tolera
-// truncar) é que dividem a linha de baixo com o botão. Em desktop, o
-// segundo bloco reproduz a estrutura de sempre (nome/@ e chip/motivo
-// empilhados numa coluna só, ao lado do botão) sem nenhuma mudança.
-
-// Nome: até 2 linhas com reticências no celular (line-clamp-2); 1 linha
-// com reticências em desktop, igual sempre foi (line-clamp-none desfaz o
-// "display: -webkit-box" do line-clamp-2 antes do truncate de sempre
-// entrar — mesmo mecanismo já usado na linha de motivo da rodada
-// anterior, agora aplicado ao nome em vez do motivo).
-export const MOBILE_NAME_CLAMP = "line-clamp-2 sm:line-clamp-none sm:truncate";
+// que caber sempre, pedido explícito); nome/@ é que dividem a linha de
+// baixo com o botão. Em desktop, o segundo bloco reproduz a estrutura de
+// sempre (nome/@ e chip/motivo empilhados numa coluna só, ao lado do
+// botão) sem nenhuma mudança.
+//
+// AJUSTE (2026-10-30, pedido explícito "alinhe... ao mesmo padrão dos
+// cards de Agendamentos... o nome não pode quebrar em duas linhas"): o
+// nome deixou de tolerar 2 linhas (removido MOBILE_NAME_CLAMP, que dava
+// line-clamp-2 só no celular) — agora é sempre 1 linha com reticências
+// (`truncate` simples, aplicado direto em ReactivationRail.tsx), igual
+// ao Agendamentos, no celular E no desktop (desktop já truncava 1 linha
+// antes, nenhuma mudança lá). Nome e @ também pararam de empilhar
+// (flex-col) e passaram a dividir uma linha SÓ, lado a lado — mesma
+// estrutura de ClientPanelView.tsx (Agendamentos).
 
 // Card de Agendamentos — layout de 2 linhas com botão ao lado -----------
 //
@@ -430,13 +456,14 @@ export const MOBILE_NAME_CLAMP = "line-clamp-2 sm:line-clamp-none sm:truncate";
 // própria aqui — não há nenhum valor que mude por breakpoint nesse
 // wrapper específico.
 //
-// Nome/@ também pararam de empilhar (MOBILE_NAME_CLAMP, usada pela
-// Reativação, CONTINUA como está — não mexida nesta rodada; o antigo
-// MOBILE_NAME_HANDLE_STACK, que só o Agendamentos usava, foi removido
-// por ficar órfão): pedido explícito "nome + @ numa linha única, com
-// reticências se longo" — igual ao desktop já era, então o Agendamentos
-// passou a usar uma classe simples direto em ClientPanelView.tsx (mesma
-// estrutura de linha em mobile e desktop, só o tamanho muda por `sm:`).
+// Nome/@ também pararam de empilhar (o antigo MOBILE_NAME_HANDLE_STACK,
+// que só o Agendamentos usava, foi removido por ficar órfão — a
+// Reativação/Faltou/Quente adotou a MESMA estrutura numa rodada
+// posterior, ver AJUSTE acima): pedido explícito "nome + @ numa linha
+// única, com reticências se longo" — igual ao desktop já era, então o
+// Agendamentos passou a usar uma classe simples direto em
+// ClientPanelView.tsx (mesma estrutura de linha em mobile e desktop, só
+// o tamanho muda por `sm:`).
 //
 // @ do lead do Agendamentos — AJUSTE (2026-10-29, 3ª rodada): como nome
 // e @ dividem uma linha SÓ (e nome entra como flex-1, prioridade pra
