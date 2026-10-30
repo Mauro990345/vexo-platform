@@ -76,8 +76,11 @@ export const MOBILE_TITLE_TEXT = "text-[23px] sm:text-lg";
 // Texto abaixo do título: 14px (text-sm) × 1,29 = 18,06 → 18px. Entrelinha
 // e espaço até o título reduzidos à parte — ver leading-tight/mt no uso
 // em ClientPanelView.tsx (pedido explícito: "espaçamento entre linhas
-// grande demais").
-export const MOBILE_SUBTITLE_TEXT = "text-[18px] sm:text-sm";
+// grande demais"). AJUSTE (pedido explícito, só celular: "diminuir um
+// pouco, ~1-2px"): 18 -> 16px. Não mexe em altura de card nenhum — este
+// texto vive no cabeçalho do Painel, fora de qualquer card. `sm:`
+// inalterado ("em ≥640px nada muda").
+export const MOBILE_SUBTITLE_TEXT = "text-[16px] sm:text-sm";
 // Nome da clínica: 16px (text-base) × 1,29 = 20,64 → 21px.
 export const MOBILE_CLINIC_NAME_TEXT = "text-[21px] sm:text-base";
 // Badge de status (Instagram/Calendário/WhatsApp, ver ChannelStatusPill.tsx):
@@ -139,8 +142,13 @@ export const MOBILE_METRIC_VALUE_MARGIN_TOP = "mt-[6px] sm:mt-1";
 
 // Títulos de seção ("Reativação"/"Agendamentos") e contador --------------
 
-// 12px (text-xs) -> ×1,45=17,4: mínimo do pedido (20px) vale.
-export const MOBILE_SECTION_TITLE_TEXT = "text-[20px] sm:text-xs";
+// 12px (text-xs) -> ×1,45=17,4: mínimo do pedido (20px) vale. AJUSTE
+// (pedido explícito, só celular: "diminuir um pouco, ~1-2px", títulos
+// "Agendamentos"/"Reativação" — compartilham esta MESMA constante, ver
+// usos em ClientPanelView.tsx/ReactivationRail.tsx): 20 -> 18px. Fica
+// num h2 numa linha própria, acima da lista de cards — não altera
+// altura de nenhum card. `sm:` inalterado.
+export const MOBILE_SECTION_TITLE_TEXT = "text-[18px] sm:text-xs";
 // Contador ("3 pendências"): 10px (text-caption) -> ×1,45=14,5: 15,
 // empata com o mínimo (15px).
 export const MOBILE_SECTION_COUNTER_TEXT = "text-[15px] sm:text-caption";
