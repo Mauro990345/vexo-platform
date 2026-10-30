@@ -34,6 +34,37 @@ const CALENDAR_API_VERSION = "v3";
 
 export type SyncResult = { created: number; updated: number; cancelled: number };
 
+// Pura (sem Prisma/API) — decide o que o sync grava num Appointment JÁ
+// CONHECIDO (achado pelo googleEventId) ao ver o evento correspondente de
+// novo. Extraída do corpo de syncClinicCalendar (2026-10-29) só pra poder
+// testar essa decisão sem precisar mockar Prisma nem a API do Google —
+// ver google-calendar-sync.test.ts, que simula "o sync rodando depois do
+// script de showcase" chamando isto direto com skipGoogleCalendarSync:true.
+//
+// skipGoogleCalendarSync (Appointment, ver schema.prisma — usado só pelos
+// 5 agendamentos de demonstração de prisma/seed-reactivation-showcase.ts)
+// trava SÓ a sobrescrita de scheduledAt — o resto do comportamento
+// (reconhecer o evento, renomear manualTitle) continua idêntico, e o
+// evento "cancelled" (ver loop principal abaixo, fora desta função) nunca
+// é afetado por esta flag: um cancelamento de verdade no Google ainda
+// cancela o agendamento de demonstração normalmente.
+export function resolveGoogleCalendarSyncUpdate(
+  existing: { scheduledAt: Date; leadId: string | null; manualTitle: string | null; skipGoogleCalendarSync: boolean },
+  event: { scheduledAt: Date; summary?: string | null }
+): { scheduledAt?: Date; manualTitle?: string | null } {
+  const data: { scheduledAt?: Date; manualTitle?: string | null } = {};
+  if (!existing.skipGoogleCalendarSync && existing.scheduledAt.getTime() !== event.scheduledAt.getTime()) {
+    data.scheduledAt = event.scheduledAt;
+  }
+  // Só renomeia se for um agendamento manual — nunca sobrescreve o título
+  // de um agendamento com Lead (esse não usa manualTitle pra exibição,
+  // usa o nome do Lead).
+  if (!existing.leadId && existing.manualTitle !== (event.summary ?? null)) {
+    data.manualTitle = event.summary ?? null;
+  }
+  return data;
+}
+
 export async function syncClinicCalendar(clinicId: string): Promise<SyncResult> {
   const account = await prisma.googleCalendarAccount.findUnique({ where: { clinicId } });
   if (!account) return { created: 0, updated: 0, cancelled: 0 };
@@ -106,17 +137,13 @@ export async function syncClinicCalendar(clinicId: string): Promise<SyncResult> 
     if (!event.start?.dateTime) continue; // evento de dia inteiro (só "date", sem hora) — fora do escopo da v1
 
     const scheduledAt = new Date(event.start.dateTime);
-    const existing = await prisma.appointment.findFirst({ where: { clinicId, googleEventId: event.id } });
+    const existing = await prisma.appointment.findFirst({
+      where: { clinicId, googleEventId: event.id },
+      select: { id: true, scheduledAt: true, leadId: true, manualTitle: true, skipGoogleCalendarSync: true },
+    });
 
     if (existing) {
-      const data: { scheduledAt?: Date; manualTitle?: string | null } = {};
-      if (existing.scheduledAt.getTime() !== scheduledAt.getTime()) data.scheduledAt = scheduledAt;
-      // Só renomeia se for um agendamento manual — nunca sobrescreve o
-      // título de um agendamento com Lead (esse não usa manualTitle pra
-      // exibição, usa o nome do Lead).
-      if (!existing.leadId && existing.manualTitle !== (event.summary ?? null)) {
-        data.manualTitle = event.summary ?? null;
-      }
+      const data = resolveGoogleCalendarSyncUpdate(existing, { scheduledAt, summary: event.summary });
       if (Object.keys(data).length > 0) {
         await prisma.appointment.update({ where: { id: existing.id }, data });
         updated++;
