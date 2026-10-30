@@ -42,6 +42,7 @@ import {
   chooseHotLeadStep,
   buildHotLeadCardCandidates,
   buildHotLeadCardReason,
+  hotLeadCategoryLabel,
   isHotLeadDailyLimitReached,
   DEFAULT_HOT_LEAD_STEP_MESSAGES,
   getHotLeadCards,
@@ -243,6 +244,21 @@ describe("buildHotLeadCardReason", () => {
   it('"Perguntou preço/endereço · há 6 dias · passo 1 de 3"', () => {
     const anchor = new Date(NOW.getTime() - 6 * DAY_MS);
     expect(buildHotLeadCardReason("preco_endereco", anchor, NOW, 1)).toBe("Perguntou preço/endereço · há 6 dias · passo 1 de 3");
+  });
+});
+
+describe("hotLeadCategoryLabel", () => {
+  it('"horario" -> "Perguntou sobre horário"', () => {
+    expect(hotLeadCategoryLabel("horario")).toBe("Perguntou sobre horário");
+  });
+
+  it('"preco_endereco" -> "Perguntou preço/endereço"', () => {
+    expect(hotLeadCategoryLabel("preco_endereco")).toBe("Perguntou preço/endereço");
+  });
+
+  it("buildHotLeadCardReason continua usando o mesmo rótulo (reaproveitado, não duplicado)", () => {
+    const anchor = new Date(NOW.getTime() - 6 * DAY_MS);
+    expect(buildHotLeadCardReason("horario", anchor, NOW, 2)).toContain(hotLeadCategoryLabel("horario"));
   });
 });
 

@@ -171,7 +171,19 @@ export const MOBILE_SECTION_COUNTER_TEXT = "text-[15px] sm:text-caption";
 // pouco mais de respiro pra não colar no conteúdo. `sm:` INALTERADO
 // (pedido explícito "em ≥640px nada muda") — continua p-2/pl-2.5 de
 // sempre, pixel-idêntico a antes desta rodada.
-export const MOBILE_REACTIVATION_ROW_PADDING = "py-[14px] pr-[8px] pl-[12px] sm:p-2 sm:pl-2.5";
+// AJUSTE 2 (mesmo pedido, novo layout de 3 linhas, medição ao vivo):
+// pr 8->5px, pl 12->10px — SÓ este card (constante própria, não
+// compartilhada com Agendamentos, então não viola "não mexa nos cards de
+// Agendamentos"); nome truncado a 2 palavras (truncateNameToTwoWords)
+// ainda estourava a linha por ~3,7px no caso extremo de 2 palavras bem
+// longas (ex. do próprio pedido, "Espaçolaser Depilação…") — o `truncate`
+// de CSS cortava DENTRO da 2ª palavra em vez de mostrar as 2 palavras
+// inteiras + reticências. 5px a mais na coluna de conteúdo (com folga
+// real, não só no arredondamento — ver AJUSTE 3 de MOBILE_CHIP_ROW_GAP
+// acima pro mesmo tipo de problema) resolve esse caso sem tocar no
+// botão, no avatar, nem em nenhuma constante compartilhada com
+// Agendamentos.
+export const MOBILE_REACTIVATION_ROW_PADDING = "py-[14px] pr-[5px] pl-[10px] sm:p-2 sm:pl-2.5";
 // Linha de Agendamentos: reduzido na 3ª rodada (2026-10-29) pra ficar do
 // tamanho de um card de métrica — ficou um pouco BAIXO demais (~77px na
 // medição daquela rodada, contra ~90px do card de métrica, medido ao
@@ -217,15 +229,36 @@ export const MOBILE_ROW_GAP = "gap-[8px] sm:gap-2";
 export const MOBILE_APPOINTMENT_ACTION_GAP = "gap-[6px] sm:gap-2";
 // Gap entre as linhas da lista: 6px (space-y-1.5) × 1,29 = 7,74 → 8px.
 export const MOBILE_LIST_GAP = "space-y-[8px] sm:space-y-1.5";
-// Gap vertical entre a linha nome/@ e a linha chip/motivo: 2px
-// (space-y-0.5) × 1,29 = 2,58 → 3px.
-export const MOBILE_STACK_GAP = "space-y-[3px] sm:space-y-0.5";
+// Gap vertical entre as linhas do conteúdo (chip+motivo / nome / @): 2px
+// (space-y-0.5) × 1,29 = 2,58 → 3px. AJUSTE (2026-10-30, mesmo pedido,
+// medição ao vivo): 3 -> 2px — com a coluna virando 3 linhas (não mais
+// 2) no novo layout, a altura final do card ficou ~94,5px, 1,5px acima
+// do teto medido do card de Agendamentos (93px, ver MOBILE_CARD_MIN_HEIGHT);
+// esse gap é só decorativo (2 ocorrências entre as 3 linhas), por isso
+// cedeu os ~2-4px que faltavam pra encaixar na mesma faixa.
+export const MOBILE_STACK_GAP = "space-y-[2px] sm:space-y-0.5";
 // Gap nome/@ (quando lado a lado, desktop) e ícone/texto dos botões: 4px
 // (gap-1) × 1,29 = 5,16 → 5px.
 export const MOBILE_INLINE_GAP = "gap-[5px] sm:gap-1";
 // Gap entre o chip de tipo e a linha de motivo: 6px (gap-1.5) × 1,29 =
-// 7,74 → 8px.
-export const MOBILE_CHIP_ROW_GAP = "gap-[8px] sm:gap-1.5";
+// 7,74 → 8px. AJUSTE (2026-10-30, pedido explícito "tag... e, logo ao
+// lado, um texto curto de motivo" — novo layout de 3 linhas): 8 -> 5px —
+// a coluna de conteúdo ficou mais estreita dividindo espaço com o botão
+// (que não pode mudar de tamanho, pedido explícito), então todo pixel
+// sobrando pro motivo importa. AJUSTE 2 (mesmo pedido, medição ao vivo):
+// 5 -> 2px — "120 dias após" (o maior dos motivos curtos de Reativação,
+// por ter 3 dígitos) ainda cortava por 3px faltantes mesmo depois do chip
+// virar w-fit e encolher ícone/padding; não dá pra tirar esses 3px de
+// MOBILE_APPOINTMENT_ACTION_GAP (constante compartilhada com o espaço
+// conteúdo↔botão do card de Agendamentos, intocável) nem de
+// MOBILE_CHIP_SIZE sem arriscar o chip ficar espremido demais, então o
+// gap entre chip e motivo (que já é só decorativo, não precisa ser
+// grande) cedeu o espaço que faltava. AJUSTE 3 (mesma medição, checagem
+// em subpixel): a 2px "120 dias após" batia clientWidth===scrollWidth em
+// pixel inteiro, mas o layout real (fracionário) ainda cortava por
+// ~0,1px — margem zero é frágil a arredondamento de fonte; 2 -> 1px dá
+// uma folga de verdade. `sm:` inalterado.
+export const MOBILE_CHIP_ROW_GAP = "gap-[1px] sm:gap-1.5";
 // Gap na linha data · status · telefone dos Agendamentos — AJUSTE
 // (2026-10-29, 3ª rodada): a linha virou flex-wrap (pedido explícito, só
 // quebra quando não cabe — ver ClientPanelView.tsx, agrupado em "data ·"
@@ -274,6 +307,19 @@ export const MOBILE_APPOINTMENT_HANDLE_TEXT = "text-[13px] sm:text-caption";
 // mobile de MOBILE_APPOINTMENT_INFO_TEXT (os dois já compartilhavam o
 // mesmo `sm:text-caption` de desktop).
 export const MOBILE_SECONDARY_TEXT = "text-[13px] sm:text-caption";
+// Motivo CURTO da linha 1 (chip + texto), SÓ celular — AJUSTE (2026-10-30,
+// pedido explícito, novo layout de 3 linhas): constante própria,
+// separada de MOBILE_SECONDARY_TEXT (que continua em 13px, usada pelo
+// `reason` completo do desktop via PanelCardReasonLine, e pelos rótulos
+// "Limite diário"/"Sem WhatsApp", que aparecem nos dois tamanhos de
+// tela). 13 -> 12px: a coluna de conteúdo deste layout é bem mais
+// estreita (divide espaço com o botão de ação, que não muda de
+// tamanho), e mesmo o texto já encurtado (ex. "30 dias após") só cabe
+// inteiro com esse ajuste fino de fonte. `sm:` nunca é alcançado de
+// verdade (este elemento só existe dentro do bloco `sm:hidden`) — mantido
+// por consistência com o padrão de todas as outras constantes do
+// arquivo, não por necessidade funcional.
+export const MOBILE_REACTIVATION_REASON_SHORT_TEXT = "text-[12px] sm:text-caption";
 // Texto dos botões "Retorno"/"Não compareceu" (gatilho + opções do
 // popover de prazo) do card de Agendamentos — NOVO (2026-10-29, 3ª
 // rodada), separado de MOBILE_SECONDARY_TEXT de propósito (motivo/data
@@ -331,17 +377,32 @@ export const MOBILE_ICON_SIZE = "h-[12px] w-[12px] sm:h-3 sm:w-3";
 // (h-3 w-3) × 1,29 = 15,48 → um pouco menor que o texto proporcionalmente
 // faria sentido num chip pequeno — 14px.
 export const MOBILE_CHIP_TEXT = "text-[13px] sm:text-caption";
-export const MOBILE_CHIP_ICON_SIZE = "h-[14px] w-[14px] sm:h-3 sm:w-3";
+// AJUSTE (2026-10-30, pedido explícito — novo layout de 3 linhas): 14 ->
+// 12px — mesmo valor de desktop (sm:h-3), libera ~2px a mais pro texto
+// de motivo ao lado, que agora divide uma linha bem mais estreita (ver
+// MOBILE_CHIP_SIZE acima).
+export const MOBILE_CHIP_ICON_SIZE = "h-[12px] w-[12px] sm:h-3 sm:w-3";
 // Largura: precisa caber "Reativação" (o rótulo mais longo dos 3) numa
 // linha só, no novo texto/ícone/padding menores — 96px (desktop
 // permanece 92px, quase igual: o texto/ícone móvel já ficou bem perto do
 // tamanho de desktop). Padding 6/2px (px-1.5/py-0.5) × 1,29 = 7,74/2,58
 // → 8px/3px.
-// AJUSTE (2026-10-30, pedido explícito "chip mantido, só reduzido pro
-// novo tamanho"): padding 8/3px -> 6/2px (largura/texto/ícone inalterados
-// — já cabiam "Reativação", o rótulo mais longo, sem quebrar; reduzir
-// mais arriscava cortar). `sm:` inalterado.
-export const MOBILE_CHIP_SIZE = "w-[96px] sm:w-[92px] px-[6px] py-[2px] sm:px-1.5 sm:py-0.5";
+// AJUSTE (2026-10-30, rodada anterior, pedido "chip mantido, só reduzido
+// pro novo tamanho"): padding 8/3px -> 6/2px. AJUSTE (2026-10-30, pedido
+// explícito "logo ao lado, um texto curto de motivo" — novo layout de 3
+// linhas): largura mobile deixa de ser FIXA (96px, dimensionada pro
+// rótulo mais longo, "Reativação") e vira `w-fit` (abraça o conteúdo) —
+// no layout novo o chip divide uma linha BEM mais estreita com o texto
+// de motivo (a coluna de conteúdo inteira já compete por espaço com o
+// botão de ação, que não muda de tamanho); com largura fixa de 96px,
+// "Faltou"/"Quente" (rótulos mais curtos) desperdiçavam espaço que o
+// motivo loga ao lado precisa. `whitespace-nowrap` garante que o rótulo
+// nunca quebra linha dentro do chip, mesmo sem a largura mínima de
+// antes. `sm:` inalterado (continua w-[92px] fixo — não é o alvo deste
+// ajuste, "em ≥640px nada muda"). AJUSTE 2 (mesma medição em subpixel que
+// MOBILE_CHIP_ROW_GAP acima): padding horizontal 4 -> 3px — folga extra
+// pro motivo de "120 dias após" não cortar por fração de pixel.
+export const MOBILE_CHIP_SIZE = "w-fit whitespace-nowrap sm:w-[92px] px-[3px] py-[2px] sm:px-1.5 sm:py-0.5";
 
 // Barra lateral colorida -------------------------------------------------
 

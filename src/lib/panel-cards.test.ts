@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { mergePanelCards, reactivationCardReason } from "./panel-cards";
+import { mergePanelCards, reactivationCardReason, reactivationCardReasonShort, truncateNameToTwoWords } from "./panel-cards";
 import type { ReactivationCard } from "./reactivation";
 import type { NoShowCard } from "./no-show-cards";
 import type { HotLeadCard } from "./hot-lead-cards";
@@ -66,8 +66,40 @@ function reactivationCard(overrides: Partial<ReactivationCard> = {}): Reactivati
 }
 
 describe("reactivationCardReason", () => {
-  it('"120 dias após o procedimento" (exemplo do pedido)', () => {
+  it('"120 dias após o procedimento" (exemplo do pedido) — intocado, serve o desktop', () => {
     expect(reactivationCardReason(120)).toBe("120 dias após o procedimento");
+  });
+});
+
+describe("reactivationCardReasonShort", () => {
+  it('"120 dias após" — sem "o procedimento" (pedido explícito, só celular)', () => {
+    expect(reactivationCardReasonShort(120)).toBe("120 dias após");
+  });
+
+  it('"30 dias após" (outro exemplo do pedido)', () => {
+    expect(reactivationCardReasonShort(30)).toBe("30 dias após");
+  });
+});
+
+describe("truncateNameToTwoWords", () => {
+  it('"Espaçolaser Depilação a Laser" -> "Espaçolaser Depilação…" (exemplo do pedido)', () => {
+    expect(truncateNameToTwoWords("Espaçolaser Depilação a Laser")).toBe("Espaçolaser Depilação…");
+  });
+
+  it("nome de 1 palavra: devolve igual, sem reticências", () => {
+    expect(truncateNameToTwoWords("Ana")).toBe("Ana");
+  });
+
+  it("nome de exatamente 2 palavras: devolve igual, sem reticências", () => {
+    expect(truncateNameToTwoWords("Ana Silva")).toBe("Ana Silva");
+  });
+
+  it("nome de 4 palavras: primeiras 2 + reticências", () => {
+    expect(truncateNameToTwoWords("Ana Beatriz Silva Santos")).toBe("Ana Beatriz…");
+  });
+
+  it("espaços extras entre palavras: não afeta o resultado", () => {
+    expect(truncateNameToTwoWords("Ana   Beatriz   Silva")).toBe("Ana Beatriz…");
   });
 });
 
@@ -145,5 +177,44 @@ describe("mergePanelCards", () => {
 
   it("listas vazias: lista vazia", () => {
     expect(mergePanelCards({ hotLeadCards: [], noShowCards: [], reactivationCards: [] })).toEqual([]);
+  });
+
+  it('reasonShort do Quente: só a categoria, sem "· há N dias · passo X de Y" (pedido explícito, só celular)', () => {
+    const merged = mergePanelCards({
+      hotLeadCards: [hotLeadCard({ category: "horario", reason: "Perguntou sobre horário · há 6 dias · passo 1 de 3" })],
+      noShowCards: [],
+      reactivationCards: [],
+    });
+    expect(merged[0]!.reasonShort).toBe("Perguntou sobre horário");
+    expect(merged[0]!.reason).toBe("Perguntou sobre horário · há 6 dias · passo 1 de 3"); // reason (desktop) intocado
+  });
+
+  it("reasonShort do Quente: categoria preco_endereco", () => {
+    const merged = mergePanelCards({
+      hotLeadCards: [hotLeadCard({ category: "preco_endereco" })],
+      noShowCards: [],
+      reactivationCards: [],
+    });
+    expect(merged[0]!.reasonShort).toBe("Perguntou preço/endereço");
+  });
+
+  it("reasonShort do Faltou: igual ao reason completo (pedido explícito, nada a encurtar)", () => {
+    const merged = mergePanelCards({
+      hotLeadCards: [],
+      noShowCards: [noShowCard({ reason: "Faltou há 3 dias · mensagem 1 de 2" })],
+      reactivationCards: [],
+    });
+    expect(merged[0]!.reasonShort).toBe("Faltou há 3 dias · mensagem 1 de 2");
+    expect(merged[0]!.reasonShort).toBe(merged[0]!.reason);
+  });
+
+  it('reasonShort da Reativação: "N dias após", sem "o procedimento"', () => {
+    const merged = mergePanelCards({
+      hotLeadCards: [],
+      noShowCards: [],
+      reactivationCards: [reactivationCard({ thresholdDays: 90 })],
+    });
+    expect(merged[0]!.reasonShort).toBe("90 dias após");
+    expect(merged[0]!.reason).toBe("90 dias após o procedimento"); // reason (desktop) intocado
   });
 });

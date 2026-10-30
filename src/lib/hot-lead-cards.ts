@@ -161,11 +161,20 @@ export function buildHotLeadCardCandidates(conversations: HotLeadConversationInp
   );
 }
 
+// Rótulo curto por categoria — extraído de buildHotLeadCardReason (abaixo)
+// pra ser reaproveitado como está pelo motivo CURTO do card no celular
+// (ver panel-cards.ts/ReactivationRail.tsx, pedido explícito "use as
+// frases que o sistema já gera", sem o "· há N dias · passo X de Y").
+// Só estas duas categorias existem (ver HotLeadSignalCategory,
+// hot-lead-detection.ts) — não é um "exemplo", é a lista completa.
+export function hotLeadCategoryLabel(category: HotLeadSignalCategory): string {
+  return category === "horario" ? "Perguntou sobre horário" : "Perguntou preço/endereço";
+}
+
 export function buildHotLeadCardReason(category: HotLeadSignalCategory, anchorAt: Date, now: Date, step: number): string {
   const days = Math.max(0, Math.floor((now.getTime() - anchorAt.getTime()) / DAY_MS));
   const dayLabel = days === 1 ? "1 dia" : `${days} dias`;
-  const label = category === "horario" ? "Perguntou sobre horário" : "Perguntou preço/endereço";
-  return `${label} · há ${dayLabel} · passo ${step} de ${HOT_LEAD_STEP_COUNT}`;
+  return `${hotLeadCategoryLabel(category)} · há ${dayLabel} · passo ${step} de ${HOT_LEAD_STEP_COUNT}`;
 }
 
 // Limite diário de cliques (envios de verdade pelo Instagram) por clínica
