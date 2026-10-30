@@ -214,7 +214,7 @@ export async function getNoShowCards(clinicId: string, now: Date = new Date()): 
       // Reativação já trata (clínica desconectada no meio do fluxo — ver
       // ReactivationRail.tsx, useManualFallback).
       whatsappLink: channel === "WHATSAPP" && phone ? buildReactivationWhatsAppLink(phone, message) : null,
-      instagramDmLink: channel === "INSTAGRAM" ? resolveInstagramDmLink(igUsername) : null,
+      instagramDmLink: channel === "INSTAGRAM" ? resolveInstagramDmLink(igUsername, message) : null,
       instagramProfileLink: igUsername ? buildInstagramProfileLink(igUsername) : null,
       reason: buildNoShowCardReason(c.noShowTriggeredAt, now, c.step),
       noShowTriggeredAt: c.noShowTriggeredAt,

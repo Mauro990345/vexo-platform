@@ -349,7 +349,7 @@ export async function getHotLeadCards(clinicId: string, now: Date = new Date()):
       igUsername,
       profilePictureUrl: lead?.profilePictureUrl ?? null,
       message,
-      instagramDmLink: resolveInstagramDmLink(igUsername),
+      instagramDmLink: resolveInstagramDmLink(igUsername, message),
       instagramProfileLink: igUsername ? buildInstagramProfileLink(igUsername) : null,
       reason: buildHotLeadCardReason(c.category, c.anchorAt, now, c.step),
       sentAt: existingStep?.sentAt ?? null,
