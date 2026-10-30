@@ -12,12 +12,12 @@ import {
   MOBILE_APPOINTMENT_ACTION_GAP,
   MOBILE_LIST_GAP,
   MOBILE_STACK_GAP,
-  MOBILE_INLINE_GAP,
   MOBILE_CHIP_ROW_GAP,
   MOBILE_NAME_TEXT_REACTIVATION,
   MOBILE_HANDLE_TEXT,
   MOBILE_HANDLE_SHRINK,
   MOBILE_SECONDARY_TEXT,
+  MOBILE_REACTIVATION_REASON_SHORT_TEXT,
   MOBILE_ICON_SIZE,
   MOBILE_CARD_MIN_HEIGHT,
   MOBILE_SECTION_TITLE_TEXT,
@@ -33,7 +33,7 @@ import {
 } from "@/app/dashboard/actions";
 import { sortReactivationCardsForDisplay, countPendingReactivationCards, type SendReactivationWhatsAppResult } from "@/lib/reactivation";
 import type { ToggleHotLeadCardSentResult } from "@/lib/hot-lead-cards";
-import type { PanelCard } from "@/lib/panel-cards";
+import { truncateNameToTwoWords, type PanelCard } from "@/lib/panel-cards";
 
 function pendingCountLabel(n: number): string {
   return n === 1 ? "1 pendente" : `${n} pendentes`;
@@ -358,32 +358,56 @@ export function ReactivationRail({
                   reusam o MESMO valor de desktop, só o celular mudou. */}
               <LeadAvatar profilePictureUrl={card.profilePictureUrl} name={card.name} size="appointment" />
 
-              {/* SÓ CELULAR — chip+motivo ganham a linha de cima INTEIRA
-                  (não dividem espaço com o botão de ação à direita): o
-                  motivo precisa sempre caber em 1 linha visível (pedido
-                  explícito), e com avatar + chip(133px fixo) + botão
-                  "WhatsApp"/"Instagram" disputando a MESMA linha, não
-                  sobrava nenhum espaço pro motivo numa tela de 320-375px
-                  (bug visto na verificação visual de uma rodada anterior:
-                  motivo ficava 0px de largura, sumia). Nome+@ (ambos 1
-                  linha, com reticências — AJUSTE 2026-10-30, pedido
-                  explícito "nome/@ na linha de baixo... mas compactos",
-                  mesma estrutura de ClientPanelView.tsx/Agendamentos)
-                  dividem a linha de baixo com o botão. Botão continua com
-                  a mesma aparência/posição à direita de sempre, só muda
-                  com qual linha ele compartilha. */}
-              <div className={`flex min-w-0 flex-1 flex-col sm:hidden ${MOBILE_STACK_GAP}`}>
-                <div className={`flex items-center ${MOBILE_CHIP_ROW_GAP}`}>{chipAndReason}</div>
-                <div className={`flex items-center justify-between ${MOBILE_APPOINTMENT_ACTION_GAP}`}>
-                  {/* nome e @ lado a lado (items-baseline), igual
-                      Agendamentos — AJUSTE 2026-10-30: antes era flex-col
-                      (nome em cima, @ embaixo), pra abrir espaço pro nome
-                      quebrar em 2 linhas; como o nome agora é sempre 1
-                      linha (ver nameAndHandle acima), não precisa mais
-                      empilhar. */}
-                  <div className={`flex min-w-0 flex-1 items-baseline ${MOBILE_INLINE_GAP}`}>{nameAndHandle}</div>
-                  {actionNode}
+              {/* SÓ CELULAR — AJUSTE (2026-10-30, pedido explícito "novo
+                  layout: 3 linhas à esquerda e o botão à direita,
+                  centralizado na altura"): 3 linhas empilhadas (chip+
+                  motivo CURTO / nome até 2 palavras / só o @) como
+                  irmãs diretas do botão — não mais aninhadas numa
+                  sub-linha própria compartilhando espaço só com o nome/@
+                  como antes. `items-center` no pai (de sempre, nunca
+                  mudou) centraliza o botão na altura do bloco de 3
+                  linhas; MOBILE_APPOINTMENT_ACTION_GAP é o "espaço fixo"
+                  pedido entre o conteúdo e o botão (mesmo valor já usado
+                  pelo Agendamentos) — como as 3 linhas ficam dentro de um
+                  min-w-0 flex-1 PRÓPRIO, nenhuma delas passa por cima da
+                  área do botão (shrink-0, largura garantida pelo próprio
+                  conteúdo do botão).
+                  Motivo curto por tipo (reasonShort, ver panel-cards.ts):
+                  Reativação "N dias após" (sem "o procedimento"); Quente
+                  só a categoria ("Perguntou sobre horário"/"Perguntou
+                  preço/endereço", sem "· há N dias · passo X de Y");
+                  Faltou = o mesmo `reason` de sempre (pedido explícito,
+                  nada a encurtar). Nome: truncateNameToTwoWords (2
+                  primeiras palavras + "…" se tiver mais — ex. do pedido,
+                  "Espaçolaser Depilação a Laser" -> "Espaçolaser
+                  Depilação…"); `truncate` continua de reforço pro caso
+                  raro de 1-2 palavras compridas demais pra largura da
+                  linha. @ sozinho na 3ª linha (antes dividia a linha com
+                  o nome) — `nameAndHandle`/`chipAndReason` (acima)
+                  continuam servindo SÓ o bloco desktop logo abaixo, sem
+                  nenhuma mudança lá. */}
+              <div className={`flex min-w-0 flex-1 items-center sm:hidden ${MOBILE_APPOINTMENT_ACTION_GAP}`}>
+                <div className={`flex min-w-0 flex-1 flex-col ${MOBILE_STACK_GAP}`}>
+                  <div className={`flex items-center ${MOBILE_CHIP_ROW_GAP}`}>
+                    <PanelCardTypeChip kind={card.kind} />
+                    <p className={`min-w-0 flex-1 truncate leading-tight ${MOBILE_REACTIVATION_REASON_SHORT_TEXT} text-vexo-muted`}>{card.reasonShort}</p>
+                  </div>
+                  <p className={`truncate leading-tight ${MOBILE_NAME_TEXT_REACTIVATION} font-medium`}>{truncateNameToTwoWords(card.name)}</p>
+                  {card.igUsername &&
+                    (card.instagramProfileLink ? (
+                      <a
+                        href={card.instagramProfileLink}
+                        target="_blank"
+                        rel="noreferrer"
+                        className={`truncate leading-tight ${MOBILE_HANDLE_TEXT} text-vexo-muted hover:text-vexo-accent hover:underline`}
+                      >
+                        @{card.igUsername}
+                      </a>
+                    ) : (
+                      <span className={`truncate leading-tight ${MOBILE_HANDLE_TEXT} text-vexo-muted`}>@{card.igUsername}</span>
+                    ))}
                 </div>
+                {actionNode}
               </div>
 
               {/* >=640px — estrutura de sempre, intocada: nome/@ e

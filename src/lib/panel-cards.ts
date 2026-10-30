@@ -1,6 +1,7 @@
 import type { ReactivationCard } from "@/lib/reactivation";
 import type { NoShowCard } from "@/lib/no-show-cards";
 import type { HotLeadCard } from "@/lib/hot-lead-cards";
+import { hotLeadCategoryLabel } from "@/lib/hot-lead-cards";
 
 // Une os três tipos de card da faixa de Reativação do Painel num único
 // formato pra exibição (ver PanelCardBadge.tsx/ReactivationRail.tsx) — a
@@ -28,6 +29,14 @@ export type PanelCard = {
   instagramDmLink: string | null;
   instagramProfileLink: string | null;
   reason: string;
+  // Versão CURTA do motivo — SÓ pro layout celular (ver ReactivationRail.tsx,
+  // pedido explícito "quero uma linha de motivo curta"); `reason` acima
+  // continua servindo o desktop sem nenhuma mudança. Quente: o rótulo da
+  // categoria sozinho (hotLeadCategoryLabel), sem "· há N dias · passo X
+  // de Y". Reativação: "N dias após" (sem "o procedimento"). Faltou: o
+  // MESMO texto de `reason` — pedido explícito "mantenha o texto curto
+  // que já existe, na mesma posição", nada pra encurtar aqui.
+  reasonShort: string;
   sentAt: Date | null;
   actionKey: PanelCardActionKey;
   // Limite diário por clínica atingido (ver *.dailyLimitReached em cada
@@ -41,9 +50,31 @@ export type PanelCard = {
 // "120 dias após o procedimento" (exemplo do pedido, item 1) — único
 // campo de exibição que a Reativação em si não produzia antes (card.message/
 // card.channel/etc já existiam em ReactivationCard; só faltava o texto do
-// MOTIVO em cinza).
+// MOTIVO em cinza). Usado pro `reason` (desktop, intocado) — ver
+// reactivationCardReasonShort abaixo pro `reasonShort` (só celular).
 export function reactivationCardReason(thresholdDays: number): string {
   return `${thresholdDays} dias após o procedimento`;
+}
+
+// "120 dias após" — motivo CURTO da Reativação, só pro layout celular
+// (pedido explícito "não escreva 'após o procedimento'"). Separada de
+// reactivationCardReason acima de propósito: o desktop continua
+// mostrando o texto completo, sem nenhuma mudança.
+export function reactivationCardReasonShort(thresholdDays: number): string {
+  return `${thresholdDays} dias após`;
+}
+
+// Duas primeiras palavras + "…" quando o nome tem mais que isso (ex. do
+// pedido: "Espaçolaser Depilação a Laser" -> "Espaçolaser Depilação…") —
+// só pro layout celular da Reativação/Faltou/Quente (ReactivationRail.tsx;
+// Agendamentos continua com truncamento por largura via CSS, não mexido).
+// Nome com 1 ou 2 palavras volta inalterado (o `truncate` de CSS no
+// componente ainda cobre o caso raro de 1-2 palavras compridas demais pra
+// largura da linha).
+export function truncateNameToTwoWords(name: string): string {
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  if (words.length <= 2) return name;
+  return `${words.slice(0, 2).join(" ")}…`;
 }
 
 // Pura — recebe os três resultados JÁ PRONTOS (cada um vindo da sua
@@ -76,6 +107,7 @@ export function mergePanelCards(input: {
     instagramDmLink: c.instagramDmLink,
     instagramProfileLink: c.instagramProfileLink,
     reason: c.reason,
+    reasonShort: hotLeadCategoryLabel(c.category),
     sentAt: c.sentAt,
     actionKey: { kind: "HOT_LEAD", conversationId: c.conversationId, step: c.step },
     disabledReason: !c.sentAt && c.dailyLimitReached ? "Limite diário atingido" : undefined,
@@ -94,6 +126,7 @@ export function mergePanelCards(input: {
     instagramDmLink: c.instagramDmLink,
     instagramProfileLink: c.instagramProfileLink,
     reason: c.reason,
+    reasonShort: c.reason,
     sentAt: c.sentAt,
     actionKey: { kind: "NO_SHOW", appointmentId: c.appointmentId, step: c.step },
     disabledReason: !c.sentAt && c.dailyLimitReached ? "Limite diário atingido" : undefined,
@@ -112,6 +145,7 @@ export function mergePanelCards(input: {
     instagramDmLink: c.instagramDmLink,
     instagramProfileLink: c.instagramProfileLink,
     reason: reactivationCardReason(c.thresholdDays),
+    reasonShort: reactivationCardReasonShort(c.thresholdDays),
     sentAt: c.sentAt,
     actionKey: { kind: "REACTIVATION", appointmentId: c.appointmentId, thresholdDays: c.thresholdDays },
     disabledReason: !c.sentAt && c.dailyLimitReached ? "Limite diário atingido" : undefined,
