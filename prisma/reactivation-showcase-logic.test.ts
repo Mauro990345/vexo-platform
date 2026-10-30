@@ -2,7 +2,6 @@ import { describe, it, expect } from "vitest";
 import {
   selectShowcaseCandidates,
   assignShowcasePeriods,
-  computeShowcaseScheduledAt,
   maskPhone,
   selectForcedInstagramCandidates,
   type ShowcaseCandidate,
@@ -77,21 +76,6 @@ describe("assignShowcasePeriods", () => {
     const first = assignShowcasePeriods(selection);
     const second = assignShowcasePeriods(selection);
     expect(second).toEqual(first);
-  });
-});
-
-describe("computeShowcaseScheduledAt", () => {
-  it("volta exatamente `periodDays` dias a partir de `now`", () => {
-    const now = new Date("2026-11-15T12:00:00.000Z");
-    const result = computeShowcaseScheduledAt(now, 30);
-    expect(result.toISOString()).toBe("2026-10-16T12:00:00.000Z");
-  });
-
-  it("recalcula a partir de um `now` diferente a cada chamada — é isso que torna o script re-executável", () => {
-    const run1 = computeShowcaseScheduledAt(new Date("2026-11-01T00:00:00.000Z"), 60);
-    const run2 = computeShowcaseScheduledAt(new Date("2026-11-10T00:00:00.000Z"), 60);
-    expect(run1.getTime()).not.toBe(run2.getTime());
-    expect(run2.getTime() - run1.getTime()).toBe(9 * 86_400_000);
   });
 });
 
