@@ -212,8 +212,11 @@ export async function ClientPanelView({
   // ATTENDED_VISIBLE_DAYS dias (ver isAppointmentVisibleInList,
   // appointments.ts) — só filtro de EXIBIÇÃO, nada é apagado (mesmo
   // princípio do filtro de CANCELLED já aplicado na query acima); os
-  // demais status não têm prazo, continuam sempre.
-  const visibleAppointments = appointments.filter((a) => isAppointmentVisibleInList(a, now));
+  // demais status não têm prazo, continuam sempre. clinicId passado pra
+  // isAppointmentVisibleInList isentar a Clínica Demo (DEMO_CLINIC_ID) da
+  // regra — lá, todos os agendamentos continuam aparecendo, pra
+  // testes/vídeos; nas demais clínicas, nada muda.
+  const visibleAppointments = appointments.filter((a) => isAppointmentVisibleInList(a, now, clinicId));
 
   const needsHumanLeads: NeedsHumanLead[] = needsHumanConversations.map((conv) => {
     const { primary } = leadDisplayParts(conv.lead, null);

@@ -13,6 +13,7 @@ vi.mock("@/lib/prisma", () => ({
 
 import { setAppointmentReturnPeriod, isAppointmentVisibleInList, ATTENDED_VISIBLE_DAYS } from "./appointments";
 import { startOfDay, addDays } from "@/lib/metrics";
+import { DEMO_CLINIC_ID } from "@/lib/demo-clinic";
 
 // Botão "Retorno" (ver RetornoButton.tsx) — só testa setAppointmentReturnPeriod
 // aqui (setAppointmentAttendance já existia antes desta tarefa e não foi
@@ -117,6 +118,20 @@ describe("isAppointmentVisibleInList", () => {
   it(`"Não compareceu" (NO_SHOW): sempre visível, mesmo muito depois do prazo de ${ATTENDED_VISIBLE_DAYS} dias`, () => {
     const now = addDays(startOfDay(scheduledAt), 100);
     expect(isAppointmentVisibleInList({ status: "NO_SHOW", scheduledAt }, now)).toBe(true);
+  });
+
+  // Pedido explícito (depois da PR original: "a Clínica Demo ficou
+  // vazia" — Compareceu antigos, ex.: 09/10 e 12/10, sumiram): a Clínica
+  // Demo (DEMO_CLINIC_ID) fica ISENTA da regra, pra sempre mostrar todos
+  // os agendamentos (testes/vídeos). Outras clínicas seguem a regra normal.
+  it("Clínica Demo (DEMO_CLINIC_ID): Compareceu bem antigo continua visível, isenta da regra dos 3 dias", () => {
+    const now = addDays(startOfDay(scheduledAt), 100);
+    expect(isAppointmentVisibleInList({ status: "SCHEDULED", scheduledAt }, now, DEMO_CLINIC_ID)).toBe(true);
+  });
+
+  it("outra clínica (não-Demo): continua escondendo Compareceu depois do prazo, sem mudança", () => {
+    const now = addDays(startOfDay(scheduledAt), ATTENDED_VISIBLE_DAYS + 1);
+    expect(isAppointmentVisibleInList({ status: "SCHEDULED", scheduledAt }, now, "clinic-outra-qualquer")).toBe(false);
   });
 
   it("CONFIRMED (mesma regra de displayStatus que SCHEDULED) também some depois do prazo", () => {
