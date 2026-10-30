@@ -9,6 +9,7 @@ import { WHATSAPP_ACTION_BUTTON_CLASS, REACTIVATION_UNDO_BUTTON_CLASS } from "@/
 import {
   MOBILE_REACTIVATION_ROW_PADDING,
   MOBILE_ROW_GAP,
+  MOBILE_APPOINTMENT_ACTION_GAP,
   MOBILE_LIST_GAP,
   MOBILE_STACK_GAP,
   MOBILE_INLINE_GAP,
@@ -19,7 +20,6 @@ import {
   MOBILE_SECONDARY_TEXT,
   MOBILE_ICON_SIZE,
   MOBILE_CARD_MIN_HEIGHT,
-  MOBILE_NAME_CLAMP,
   MOBILE_SECTION_TITLE_TEXT,
   MOBILE_SECTION_COUNTER_TEXT,
   MOBILE_SECTION_DOT_SIZE,
@@ -301,7 +301,15 @@ export function ReactivationRail({
 
           const nameAndHandle = (
             <>
-              <p className={`min-w-0 shrink ${MOBILE_NAME_CLAMP} ${MOBILE_NAME_TEXT_REACTIVATION} font-medium`}>{card.name}</p>
+              {/* truncate (2026-10-30, pedido explícito "o nome não pode
+                  quebrar em duas linhas... uma linha, com reticências") —
+                  SEMPRE 1 linha, mobile e desktop (antes só o desktop
+                  truncava; o celular tolerava até 2 linhas via
+                  line-clamp-2, removido). min-w-0 + flex-1: mesmo
+                  mecanismo de ClientPanelView.tsx (Agendamentos) —
+                  precisa ser flex-1 (não só shrink) pro truncamento
+                  funcionar dividindo espaço com o @ ao lado. */}
+              <p className={`min-w-0 flex-1 truncate ${MOBILE_NAME_TEXT_REACTIVATION} font-medium`}>{card.name}</p>
               {card.igUsername &&
                 (card.instagramProfileLink ? (
                   <a
@@ -328,37 +336,52 @@ export function ReactivationRail({
           return (
             <div
               key={key}
-              // SÓ CELULAR (abaixo de sm/640px, pedido explícito — fator
-              // 1,45 sobre os valores de desktop, ver MobileCardScale.ts):
-              // padding 8px/10px -> 14px/15px, gap 8px -> 12px, altura
-              // mínima ~100px. `sm:` com os valores de sempre — em tablet/
-              // notebook/desktop fica idêntico a antes.
+              // SÓ CELULAR (abaixo de sm/640px) — AJUSTE (2026-10-30,
+              // pedido explícito "alinhe os três tipos ao mesmo padrão
+              // dos cards de Agendamentos"): padding/altura mínima
+              // alinhados ao card de Agendamentos (ver
+              // MOBILE_REACTIVATION_ROW_PADDING/MOBILE_CARD_MIN_HEIGHT,
+              // MobileCardScale.ts — MOBILE_CARD_MIN_HEIGHT já era
+              // compartilhada entre os dois tipos de card). `sm:` com os
+              // valores de sempre — em tablet/notebook/desktop fica
+              // idêntico a antes desta rodada.
               className={`relative flex items-center ${MOBILE_ROW_GAP} overflow-hidden rounded-lg border border-vexo-border bg-vexo-surface ${MOBILE_REACTIVATION_ROW_PADDING} ${MOBILE_CARD_MIN_HEIGHT} transition-opacity duration-150 ${isSent ? "opacity-50" : ""}`}
             >
               <PanelCardTypeBar kind={card.kind} />
-              <LeadAvatar profilePictureUrl={card.profilePictureUrl} name={card.name} size="md" />
+              {/* size="appointment" (2026-10-30, pedido explícito "mesmo
+                  tamanho de avatar... dos cards de Agendamentos") — SÓ
+                  CELULAR fica do mesmo tamanho do avatar de Agendamentos
+                  (34px, ver MOBILE_APPOINTMENT_AVATAR_SIZE/LeadAvatar.tsx);
+                  o badge do canal (Instagram) acompanha automaticamente,
+                  mesmo tamanho/posição de sempre. Em desktop (`sm:h-8
+                  sm:w-8`) é pixel-idêntico ao antigo size="md" — os dois
+                  reusam o MESMO valor de desktop, só o celular mudou. */}
+              <LeadAvatar profilePictureUrl={card.profilePictureUrl} name={card.name} size="appointment" />
 
               {/* SÓ CELULAR — chip+motivo ganham a linha de cima INTEIRA
                   (não dividem espaço com o botão de ação à direita): o
                   motivo precisa sempre caber em 1 linha visível (pedido
-                  explícito), e com avatar(46px) + chip(133px fixo) +
-                  botão "WhatsApp"/"Instagram" (~135px, nunca varia — ver
-                  actionNode acima) disputando a MESMA linha, não sobrava
-                  nenhum espaço pro motivo numa tela de 320-375px (bug
-                  visto na verificação visual desta rodada: motivo ficava
-                  0px de largura, sumia). Nome (até 2 linhas) e @ (1 linha
-                  com reticências) dividem a linha de baixo com o botão —
-                  tolerável, os dois já são feitos pra ceder espaço (nome
-                  quebra, @ trunca) sem perder informação essencial. Botão
-                  continua com a mesma aparência/posição à direita de
-                  sempre, só muda com qual linha ele compartilha. */}
+                  explícito), e com avatar + chip(133px fixo) + botão
+                  "WhatsApp"/"Instagram" disputando a MESMA linha, não
+                  sobrava nenhum espaço pro motivo numa tela de 320-375px
+                  (bug visto na verificação visual de uma rodada anterior:
+                  motivo ficava 0px de largura, sumia). Nome+@ (ambos 1
+                  linha, com reticências — AJUSTE 2026-10-30, pedido
+                  explícito "nome/@ na linha de baixo... mas compactos",
+                  mesma estrutura de ClientPanelView.tsx/Agendamentos)
+                  dividem a linha de baixo com o botão. Botão continua com
+                  a mesma aparência/posição à direita de sempre, só muda
+                  com qual linha ele compartilha. */}
               <div className={`flex min-w-0 flex-1 flex-col sm:hidden ${MOBILE_STACK_GAP}`}>
                 <div className={`flex items-center ${MOBILE_CHIP_ROW_GAP}`}>{chipAndReason}</div>
-                <div className={`flex items-center justify-between ${MOBILE_ROW_GAP}`}>
-                  {/* nome em cima (até 2 linhas) / @ embaixo (1 linha) —
-                      pedido explícito ("abaixo dele, o @ em 1 linha"), por
-                      isso flex-col aqui (não items-baseline lado a lado). */}
-                  <div className={`flex min-w-0 flex-1 flex-col ${MOBILE_INLINE_GAP}`}>{nameAndHandle}</div>
+                <div className={`flex items-center justify-between ${MOBILE_APPOINTMENT_ACTION_GAP}`}>
+                  {/* nome e @ lado a lado (items-baseline), igual
+                      Agendamentos — AJUSTE 2026-10-30: antes era flex-col
+                      (nome em cima, @ embaixo), pra abrir espaço pro nome
+                      quebrar em 2 linhas; como o nome agora é sempre 1
+                      linha (ver nameAndHandle acima), não precisa mais
+                      empilhar. */}
+                  <div className={`flex min-w-0 flex-1 items-baseline ${MOBILE_INLINE_GAP}`}>{nameAndHandle}</div>
                   {actionNode}
                 </div>
               </div>
