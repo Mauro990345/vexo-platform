@@ -47,27 +47,107 @@ function slugify(name: string): string {
     .replace(/(^-|-$)/g, "");
 }
 
+// Snapshot opcional (item 1 do pedido, "copiar configurações de outra
+// clínica pra acelerar o setup") — campo "Copiar configurações de:" na
+// tela Nova clínica (clinicas/nova/page.tsx), padrão "Nenhuma".
+//
+// O QUE É COPIADO (configurações EDITÁVEIS, nunca dado específico — pedido
+// explícito, itens 2/3):
+//   - aiSystemPrompt (Clinic): prompt da IA.
+//   - firstBandDelaySeconds (Clinic): delay "até 1h" do Agente de IA —
+//     também é "configuração do agente" (pedido explícito "e demais
+//     configurações do agente"), não dado específico.
+//   - ReminderConfig: hoursBefore (horários) + firstMessageTemplate/
+//     secondMessageTemplate (textos dos 2 lembretes).
+//   - ReactivationConfig: availablePeriods/defaultPeriods (prazos de
+//     retorno) + dailyWhatsappLimit (limite diário Reativação+Faltou).
+//     NUNCA message1-5 nem sequenceCounter — ver "o que NÃO é copiado"
+//     abaixo.
+//   - HotLeadConfig: dailyLimit (limite diário do Quente — "tentativas do
+//     card Quente" do pedido é a cadência fixa 2/4/30 dias, código, não
+//     dado por clínica; o que existe de configurável por clínica aqui é
+//     só o limite diário). NUNCA stepXMessageY nem stepXSequenceCounter.
+//
+// O QUE NÃO É COPIADO (pedido explícito, item 3, + achados meus — ver
+// resposta dada ao pedido original pra essa lista completa explicada):
+//   - Dado específico da clínica: name/slug, address, clientWhatsappNumber,
+//     active (sempre nasce true, o default do schema), confirmationVideoUrl/
+//     confirmationVideoCaption, attendanceTipMessage/attendanceFinalMessage
+//     (mesmo texto/sequência do vídeo de confirmação — mesma categoria,
+//     mesmo tratamento), Briefing/BriefingLink.
+//   - Conexões/credenciais: InstagramAccount, GoogleCalendarAccount,
+//     whatsappInstanceName (cada clínica recebe o PRÓPRIO, derivado do seu
+//     slug, nunca o da origem — instância da Evolution é por clínica, não
+//     reaproveitável), ConnectionLink/ConnectionBundle, ClientPanelLink,
+//     User (login do painel do cliente).
+//   - Dado específico/histórico: Lead, Conversation, Appointment, Message,
+//     FollowUpLog, ApproachLog, ResultPhoto (fotos reais de procedimentos
+//     da clínica de origem), WeeklySummary, ReactivationShowcaseBackup (só
+//     existe pra Clínica Demo).
+//   - Contadores de rotação (ReactivationConfig.sequenceCounter,
+//     HotLeadConfig.stepXSequenceCounter): estado de progresso de rodízio,
+//     não configuração — a clínica nova começa do zero.
+//   - message1-5/stepXMessageY (ReactivationConfig/HotLeadConfig): inertes
+//     desde que os textos de Reativação/Quente viraram GLOBAIS (ver
+//     ReactivationMessagesConfig/HotLeadMessagesConfig) — não haveria o
+//     que copiar aí mesmo.
+//   - Já são globais, não precisam de cópia nenhuma: os 4 textos dos cards
+//     do Painel (Faltou/Não agendou/Reativação/Quente) e as 2 sequências
+//     de Follow-up (Parou de responder/Não compareceu) — valem pra todas
+//     as clínicas, inclusive a nova, sem nenhuma ação aqui.
 export async function createClinic(formData: FormData) {
   await requireInternalSession();
 
   const name = String(formData.get("name") ?? "").trim();
   if (!name) throw new Error("Nome da clínica é obrigatório.");
   const address = String(formData.get("address") ?? "").trim() || null;
+  const copyFromClinicId = String(formData.get("copyFromClinicId") ?? "").trim() || null;
 
   const slug = slugify(name) + "-" + Math.random().toString(36).slice(2, 6);
+
+  // null quando "Nenhuma" (padrão) ou se o id escolhido não existir mais
+  // (corrida rara — a lista vem da mesma consulta que populou o <select>)
+  // — nesse caso cai de volta pro comportamento de sempre, sem erro.
+  const source = copyFromClinicId
+    ? await prisma.clinic.findUnique({
+        where: { id: copyFromClinicId },
+        select: {
+          aiSystemPrompt: true,
+          firstBandDelaySeconds: true,
+          reminderConfig: { select: { hoursBefore: true, firstMessageTemplate: true, secondMessageTemplate: true } },
+          reactivationConfig: { select: { availablePeriods: true, defaultPeriods: true, dailyWhatsappLimit: true } },
+          hotLeadConfig: { select: { dailyLimit: true } },
+        },
+      })
+    : null;
 
   const clinic = await prisma.clinic.create({
     data: {
       name,
       slug,
       address,
-      // Nome padrão da instância na Evolution API — pode ser trocado antes
-      // do primeiro pareamento em /crm/clinicas/[id]/whatsapp (ex. pra
-      // reaproveitar uma instância já validada).
+      // Nome padrão da instância na Evolution API — SEMPRE derivado do
+      // slug desta clínica nova, nunca copiado da origem (uma instância
+      // WhatsApp é por clínica, não reaproveitável — ver "conexões" acima).
+      // Pode ser trocado antes do primeiro pareamento em
+      // /crm/clinicas/[id]/whatsapp (ex. pra reaproveitar uma instância já
+      // validada).
       whatsappInstanceName: slug,
       pilotStartedAt: new Date(),
       pilotEndsAt: new Date(Date.now() + 21 * 24 * 60 * 60 * 1000),
-      reminderConfig: { create: { hoursBefore: [24, 3] } },
+      ...(source?.aiSystemPrompt != null ? { aiSystemPrompt: source.aiSystemPrompt } : {}),
+      ...(source ? { firstBandDelaySeconds: source.firstBandDelaySeconds } : {}),
+      // hoursBefore sempre criado (comportamento de sempre, com ou sem
+      // snapshot) — só os valores mudam quando há origem com reminderConfig
+      // próprio; sem origem (ou origem sem reminderConfig ainda salvo), cai
+      // no default de sempre [24, 3].
+      reminderConfig: {
+        create: source?.reminderConfig
+          ? { ...source.reminderConfig }
+          : { hoursBefore: [24, 3] },
+      },
+      ...(source?.reactivationConfig ? { reactivationConfig: { create: { ...source.reactivationConfig } } } : {}),
+      ...(source?.hotLeadConfig ? { hotLeadConfig: { create: { ...source.hotLeadConfig } } } : {}),
     },
   });
 
