@@ -580,6 +580,10 @@ model Conversation {
   // 3 por conversa, um por passo da cadência.
   hotLeadCardSlots HotLeadCardSlot[]
 
+  // Cards "Não agendou" (ver NeverScheduledCardSlot acima e
+  // never-scheduled-cards.ts) — até 2 por conversa (D30/D60).
+  neverScheduledCardSlots NeverScheduledCardSlot[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -1041,6 +1045,47 @@ model NoShowCardSlot {
   createdAt DateTime @default(now())
 
   @@unique([appointmentId, step])
+}
+
+// Textos do card "Não agendou" (ver never-scheduled-cards.ts) — mesmo
+// padrão de NoShowCardSettings acima (GLOBAL, singleton, vazio usa o
+// texto padrão), tabela PRÓPRIA em vez de reaproveitar
+// NoShowCardSettings pra não acoplar dois cards com regras de
+// elegibilidade bem diferentes (um é por agendamento faltado, o outro é
+// por conversa sem nenhum agendamento) só porque a tela os agrupa visualmente
+// (aba "Cards do Painel", FollowUpView.tsx) — a tela chama as duas
+// upserts na mesma submissão de formulário, sem precisar que sejam a
+// mesma tabela.
+model NeverScheduledCardSettings {
+  id String @id @default("singleton")
+
+  day30Content String? @db.Text
+  day60Content String? @db.Text
+
+  updatedAt DateTime @updatedAt
+}
+
+// Estado (enviado/pendente) de cada um dos dois passos do card "Não
+// agendou" pra uma CONVERSA específica — mesmo papel de NoShowCardSlot
+// acima, só que chaveado por conversationId (não existe nenhum
+// Appointment pra este card: é exatamente a definição dele, "nunca
+// agendou" — ver getNeverScheduledCards, never-scheduled-cards.ts). step
+// 1 = D30, step 2 = D60.
+model NeverScheduledCardSlot {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  step Int
+
+  // Mesma semântica de NoShowCardSlot.sentAt — null = pendente; nunca
+  // afeta elegibilidade (a janela de 5 dias úteis, ancorada em
+  // Conversation.lastMessageAt + 30/60 dias, decide isso).
+  sentAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@unique([conversationId, step])
 }
 
 // Configuração do card "Quente" (lead que nunca agendou, parado, com sinal

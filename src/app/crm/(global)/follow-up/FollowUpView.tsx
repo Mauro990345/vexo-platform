@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import type { FollowUpStep, FollowUpTrigger } from "@prisma/client";
-import { Clock, CalendarX } from "lucide-react";
+import { Clock, CalendarX, LayoutPanelTop } from "lucide-react";
 import { Tabs } from "@/components/Tabs";
 import { TemplateMessageField } from "@/components/TemplateMessageField";
 import { AttachmentField } from "@/components/AttachmentField";
@@ -11,7 +11,7 @@ import {
   moveFollowUpStep,
   updateFollowUpSettings,
   updateNoShowFirstStepDelay,
-  updateNoShowCardSettings,
+  updatePanelCardSettings,
 } from "./actions";
 
 function preview(text: string, max = 70): string {
@@ -231,11 +231,12 @@ function StepList({
 // (FollowUpStep/FollowUpSettings não têm clinicId, é compartilhada por
 // todas as clínicas) — só muda a sidebar em volta, não o conteúdo.
 export async function FollowUpView() {
-  const [silenceSteps, noShowSteps, settings, noShowCardSettings] = await Promise.all([
+  const [silenceSteps, noShowSteps, settings, noShowCardSettings, neverScheduledCardSettings] = await Promise.all([
     prisma.followUpStep.findMany({ where: { trigger: "SILENCE" }, orderBy: { order: "asc" } }),
     prisma.followUpStep.findMany({ where: { trigger: "NO_SHOW" }, orderBy: { order: "asc" } }),
     prisma.followUpSettings.findUnique({ where: { id: "singleton" } }),
     prisma.noShowCardSettings.findUnique({ where: { id: "singleton" } }),
+    prisma.neverScheduledCardSettings.findUnique({ where: { id: "singleton" } }),
   ]);
   const silenceHours = settings?.silenceHours ?? 24;
 
@@ -244,8 +245,9 @@ export async function FollowUpView() {
       <div>
         <h1 className="text-base font-semibold tracking-tight">Follow-up</h1>
         <p className="mt-1 text-xs text-vexo-muted">
-          Duas sequências independentes, cada uma com seus próprios passos. Vale pra todas as
-          clínicas. Clique num passo pra editar.
+          Duas sequências automáticas independentes, cada uma com seus próprios passos, e os
+          textos dos cards manuais do Painel. Vale pra todas as clínicas. Clique num passo pra
+          editar.
         </p>
       </div>
 
@@ -353,57 +355,87 @@ export async function FollowUpView() {
                     firstStepLabel="Enviado quantas horas após marcar como não compareceu"
                   />
                 </div>
+              </section>
+            ),
+          },
+          {
+            id: "panel-cards",
+            label: "Cards do Painel",
+            icon: <LayoutPanelTop className="h-3.5 w-3.5 shrink-0" strokeWidth={2} />,
+            content: (
+              <section>
+                <p className="text-xs text-vexo-muted">
+                  Cards manuais do Painel (copiar + abrir o Instagram, ou WhatsApp direto no
+                  "Faltou") — sem envio automático.
+                </p>
 
                 {/* Card "Faltou" (ver ReactivationRail.tsx/no-show-cards.ts)
-                    — DIFERENTE da sequência automática acima: aparece como
-                    CARD no Painel (WhatsApp direto, ou Instagram sem
-                    telefone), não como mensagem automática. D3/D10 fixos
-                    (não configuráveis, só o texto de cada um) — pedido
-                    explícito. Vazio usa o texto padrão. */}
-                <div className="mt-5">
-                  <h2 className="text-xs font-semibold">Card "Faltou" no Painel</h2>
-                  <p className="mt-1 text-caption text-vexo-muted">
-                    Aparece no Painel pros leads que faltaram e não responderam nem remarcaram — um
-                    card no 3º dia e outro no 10º dia após a falta, em paralelo à sequência
-                    automática acima.
-                  </p>
-
-                  <form
-                    action={updateNoShowCardSettings}
-                    className="mt-2 space-y-2.5 rounded-xl border border-vexo-border bg-vexo-surface p-3.5"
+                    — DIFERENTE das sequências automáticas das outras duas
+                    abas: aparece como CARD no Painel (WhatsApp direto, ou
+                    Instagram sem telefone), não como mensagem automática.
+                    D3/D10 fixos (não configuráveis, só o texto de cada um)
+                    — pedido explícito. Vazio usa o texto padrão.
+                    Card "Não agendou" (ver never-scheduled-cards.ts) — lead
+                    que nunca agendou, sem atividade na conversa há 30 (D30)
+                    ou 60 (D60) dias. SÓ Instagram, sempre manual, nunca
+                    WhatsApp (pedido explícito). D30/D60 fixos, mesmo
+                    padrão do Faltou. Os 4 campos num ÚNICO formulário, UM
+                    botão "Salvar textos" (pedido explícito) — ver
+                    updatePanelCardSettings, actions.ts, que grava as duas
+                    tabelas de configuração na mesma submissão. */}
+                <form
+                  action={updatePanelCardSettings}
+                  className="mt-3 space-y-2.5 rounded-xl border border-vexo-border bg-vexo-surface p-3.5"
+                >
+                  <TemplateMessageField
+                    name="day3Content"
+                    label="Faltou · 3º dia (D3)"
+                    required={false}
+                    rows={2}
+                    variables={[
+                      { token: "{{primeiro_nome}}", label: "+ Nome do lead" },
+                      { token: "{{data_horario}}", label: "+ Data e horário perdidos" },
+                    ]}
+                    defaultValue={noShowCardSettings?.day3Content ?? ""}
+                    placeholder="Vazio usa o texto padrão."
+                  />
+                  <TemplateMessageField
+                    name="day10Content"
+                    label="Faltou · 10º dia (D10)"
+                    required={false}
+                    rows={2}
+                    variables={[
+                      { token: "{{primeiro_nome}}", label: "+ Nome do lead" },
+                      { token: "{{data_horario}}", label: "+ Data e horário perdidos" },
+                    ]}
+                    defaultValue={noShowCardSettings?.day10Content ?? ""}
+                    placeholder="Vazio usa o texto padrão."
+                  />
+                  <TemplateMessageField
+                    name="day30Content"
+                    label="Não agendou · 30º dia (D30)"
+                    required={false}
+                    rows={2}
+                    variables={[{ token: "{{primeiro_nome}}", label: "+ Nome do lead" }]}
+                    defaultValue={neverScheduledCardSettings?.day30Content ?? ""}
+                    placeholder="Vazio usa o texto padrão."
+                  />
+                  <TemplateMessageField
+                    name="day60Content"
+                    label="Não agendou · 60º dia (D60)"
+                    required={false}
+                    rows={2}
+                    variables={[{ token: "{{primeiro_nome}}", label: "+ Nome do lead" }]}
+                    defaultValue={neverScheduledCardSettings?.day60Content ?? ""}
+                    placeholder="Vazio usa o texto padrão."
+                  />
+                  <button
+                    type="submit"
+                    className="rounded-lg border border-vexo-accent px-2.5 py-1.5 text-xs font-medium text-vexo-accent hover:bg-vexo-accent/10"
                   >
-                    <TemplateMessageField
-                      name="day3Content"
-                      label="Card do 3º dia (D3)"
-                      required={false}
-                      rows={2}
-                      variables={[
-                        { token: "{{primeiro_nome}}", label: "+ Nome do lead" },
-                        { token: "{{data_horario}}", label: "+ Data e horário perdidos" },
-                      ]}
-                      defaultValue={noShowCardSettings?.day3Content ?? ""}
-                      placeholder="Vazio usa o texto padrão."
-                    />
-                    <TemplateMessageField
-                      name="day10Content"
-                      label="Card do 10º dia (D10)"
-                      required={false}
-                      rows={2}
-                      variables={[
-                        { token: "{{primeiro_nome}}", label: "+ Nome do lead" },
-                        { token: "{{data_horario}}", label: "+ Data e horário perdidos" },
-                      ]}
-                      defaultValue={noShowCardSettings?.day10Content ?? ""}
-                      placeholder="Vazio usa o texto padrão."
-                    />
-                    <button
-                      type="submit"
-                      className="rounded-lg border border-vexo-accent px-2.5 py-1.5 text-xs font-medium text-vexo-accent hover:bg-vexo-accent/10"
-                    >
-                      Salvar textos
-                    </button>
-                  </form>
-                </div>
+                    Salvar textos
+                  </button>
+                </form>
               </section>
             ),
           },

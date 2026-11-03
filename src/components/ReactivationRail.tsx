@@ -30,6 +30,7 @@ import {
   toggleNoShowCardSentClientAction,
   sendNoShowCardWhatsAppMessageClientAction,
   toggleHotLeadCardSentClientAction,
+  toggleNeverScheduledCardSentClientAction,
 } from "@/app/dashboard/actions";
 import { sortReactivationCardsForDisplay, countPendingReactivationCards, type SendReactivationWhatsAppResult } from "@/lib/reactivation";
 import type { ToggleHotLeadCardSentResult } from "@/lib/hot-lead-cards";
@@ -84,6 +85,7 @@ export function ReactivationRail({
   noShowToggleAction = toggleNoShowCardSentClientAction,
   noShowSendWhatsappAction = sendNoShowCardWhatsAppMessageClientAction,
   hotLeadToggleAction = toggleHotLeadCardSentClientAction,
+  neverScheduledToggleAction = toggleNeverScheduledCardSentClientAction,
 }: {
   cards: PanelCard[];
   action?: (appointmentId: string, thresholdDays: number) => Promise<unknown>;
@@ -91,6 +93,7 @@ export function ReactivationRail({
   noShowToggleAction?: (appointmentId: string, step: number) => Promise<unknown>;
   noShowSendWhatsappAction?: (appointmentId: string, step: number) => Promise<SendReactivationWhatsAppResult>;
   hotLeadToggleAction?: (conversationId: string, step: number) => Promise<ToggleHotLeadCardSentResult>;
+  neverScheduledToggleAction?: (conversationId: string, step: number) => Promise<unknown>;
 }) {
   const [localCards, setLocalCards] = useState(cards);
   useEffect(() => setLocalCards(cards), [cards]);
@@ -135,7 +138,9 @@ export function ReactivationRail({
         ? action(card.actionKey.appointmentId, card.actionKey.thresholdDays)
         : card.actionKey.kind === "NO_SHOW"
           ? noShowToggleAction(card.actionKey.appointmentId, card.actionKey.step)
-          : Promise.resolve();
+          : card.actionKey.kind === "NEVER_SCHEDULED"
+            ? neverScheduledToggleAction(card.actionKey.conversationId, card.actionKey.step)
+            : Promise.resolve();
 
     promise.catch((err) => {
       console.error("[vexo] Falha ao marcar/desmarcar card como enviado:", err);
@@ -167,7 +172,12 @@ export function ReactivationRail({
       return;
     }
 
-    const promise = card.actionKey.kind === "REACTIVATION" ? action(card.actionKey.appointmentId, card.actionKey.thresholdDays) : noShowToggleAction(card.actionKey.appointmentId, card.actionKey.step);
+    const promise =
+      card.actionKey.kind === "REACTIVATION"
+        ? action(card.actionKey.appointmentId, card.actionKey.thresholdDays)
+        : card.actionKey.kind === "NEVER_SCHEDULED"
+          ? neverScheduledToggleAction(card.actionKey.conversationId, card.actionKey.step)
+          : noShowToggleAction(card.actionKey.appointmentId, card.actionKey.step);
     promise.catch((err) => console.error("[vexo] Falha ao marcar card (Instagram) como enviado:", err));
   }
 
@@ -176,7 +186,7 @@ export function ReactivationRail({
   // uma mensagem; nunca reenvia enquanto já está "Enviando…" pra este
   // mesmo card. Só confirma sentAt depois do servidor confirmar sucesso.
   async function handleSendWhatsapp(card: PanelCard) {
-    if (card.actionKey.kind === "HOT_LEAD") return; // Quente nunca envia WhatsApp
+    if (card.actionKey.kind === "HOT_LEAD" || card.actionKey.kind === "NEVER_SCHEDULED") return; // Quente e Não agendou nunca enviam WhatsApp
     const key = card.cardKey;
     if (sendingKeys.has(key)) return;
 

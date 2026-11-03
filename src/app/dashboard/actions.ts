@@ -12,6 +12,7 @@ import {
 } from "@/lib/reactivation";
 import { toggleNoShowCardSent, sendNoShowCardWhatsAppMessage } from "@/lib/no-show-cards";
 import { toggleHotLeadCardSent, type ToggleHotLeadCardSentResult } from "@/lib/hot-lead-cards";
+import { toggleNeverScheduledCardSent } from "@/lib/never-scheduled-cards";
 
 // Única ação que o cliente pode fazer no Painel — mesma function de base
 // (setAppointmentAttendance, em src/lib/appointments.ts) usada pela versão
@@ -164,6 +165,24 @@ export async function toggleHotLeadCardSentClientAction(conversationId: string, 
   }
 
   const result = await toggleHotLeadCardSent(conversationId, step);
+  revalidatePath("/dashboard");
+  return result;
+}
+
+// Card "Não agendou" (ver never-scheduled-cards.ts) — nunca envia de
+// verdade pelo VEXO (só copiar + abrir o Instagram, canal sempre
+// Instagram, nunca WhatsApp), então só precisa de UMA action (toggle),
+// mesmo padrão exato de toggleHotLeadCardSentClientAction acima.
+export async function toggleNeverScheduledCardSentClientAction(conversationId: string, step: number) {
+  const session = await requireClientSession();
+  const clinicId = session.user.clinicId as string;
+
+  const conversation = await prisma.conversation.findUnique({ where: { id: conversationId }, select: { clinicId: true } });
+  if (!conversation || conversation.clinicId !== clinicId) {
+    throw new Error("Conversa não encontrada.");
+  }
+
+  const result = await toggleNeverScheduledCardSent(conversationId, step);
   revalidatePath("/dashboard");
   return result;
 }

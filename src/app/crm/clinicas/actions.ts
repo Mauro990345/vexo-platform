@@ -34,6 +34,7 @@ import {
 } from "@/lib/reactivation";
 import { toggleNoShowCardSent, sendNoShowCardWhatsAppMessage } from "@/lib/no-show-cards";
 import { toggleHotLeadCardSent, type ToggleHotLeadCardSentResult } from "@/lib/hot-lead-cards";
+import { toggleNeverScheduledCardSent } from "@/lib/never-scheduled-cards";
 
 const CONNECTION_LINK_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 dias
 
@@ -740,6 +741,16 @@ export async function toggleHotLeadCardSentAction(conversationId: string, step: 
   await requireInternalSession();
   const result = await toggleHotLeadCardSent(conversationId, step);
   if (result.clinicId) revalidatePath(`/crm/clinicas/${result.clinicId}`);
+  return result;
+}
+
+// Card "Não agendou" (ver never-scheduled-cards.ts) — mesmo padrão exato
+// de toggleHotLeadCardSentAction acima, só uma action (toggle), nunca
+// envia de verdade pelo VEXO.
+export async function toggleNeverScheduledCardSentAction(conversationId: string, step: number) {
+  await requireInternalSession();
+  const result = await toggleNeverScheduledCardSent(conversationId, step);
+  if (result?.clinicId) revalidatePath(`/crm/clinicas/${result.clinicId}`);
   return result;
 }
 

@@ -1,4 +1,4 @@
-import { UserCheck, CalendarX, Flame } from "lucide-react";
+import { UserCheck, CalendarX, Flame, UserX } from "lucide-react";
 import type { PanelCardKind } from "@/lib/panel-cards";
 import {
   MOBILE_BAR_WIDTH,
@@ -14,18 +14,21 @@ import {
 // os botões de ação do lado direito (WhatsApp/Instagram) continuam
 // exatamente como eram, sem nenhuma mudança (ver ReactivationRail.tsx).
 //
-// Cores por Tailwind direto (blue/purple/orange), mesmo padrão já usado
-// em ClientPanelView.tsx pro ícone do Google Calendar (iconBg="bg-blue-500")
-// — não são tokens vexo-* porque são cores NOVAS, específicas destes 3
-// tipos, sem overlap com nenhum token semântico já existente
-// (vexo-success/error/accent já significam outra coisa). Tom 500 sólido
-// pra barra, 500/10 + 400 pro chip (fundo suave, texto na mesma família de
-// cor, legível tanto no fundo claro quanto no escuro — vexo-surface é
-// escuro por padrão neste app).
+// Cores por Tailwind direto (blue/purple/orange/teal), mesmo padrão já
+// usado em ClientPanelView.tsx pro ícone do Google Calendar
+// (iconBg="bg-blue-500") — não são tokens vexo-* porque são cores NOVAS,
+// específicas destes 4 tipos, sem overlap com nenhum token semântico já
+// existente (vexo-success/error/accent já significam outra coisa). Tom
+// 500 sólido pra barra, 500/10 + 400 pro chip (fundo suave, texto na
+// mesma família de cor, legível tanto no fundo claro quanto no escuro —
+// vexo-surface é escuro por padrão neste app). "Não agendou" (teal) é a
+// cor NOVA desta rodada — nenhuma das 3 cores existentes era reaproveitada
+// de propósito, pra manter a identificação visual por tipo inequívoca.
 const KIND_STYLE: Record<PanelCardKind, { bar: string; chipBg: string; chipText: string; icon: typeof UserCheck; label: string }> = {
   REACTIVATION: { bar: "bg-blue-500", chipBg: "bg-blue-500/10", chipText: "text-blue-400", icon: UserCheck, label: "Reativação" },
   NO_SHOW: { bar: "bg-purple-500", chipBg: "bg-purple-500/10", chipText: "text-purple-400", icon: CalendarX, label: "Faltou" },
   HOT_LEAD: { bar: "bg-orange-500", chipBg: "bg-orange-500/10", chipText: "text-orange-400", icon: Flame, label: "Quente" },
+  NEVER_SCHEDULED: { bar: "bg-teal-500", chipBg: "bg-teal-500/10", chipText: "text-teal-400", icon: UserX, label: "Não agendou" },
 };
 
 // Barra vertical de 3px — pedido explícito "sem arredondar": fica DENTRO
