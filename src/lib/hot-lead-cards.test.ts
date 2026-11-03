@@ -71,9 +71,9 @@ function input(overrides: Partial<HotLeadConversationInput> = {}): HotLeadConver
   };
 }
 
-describe("HOT_LEAD_STEP_DAYS — cadência fixa 2/4/30", () => {
+describe("HOT_LEAD_STEP_DAYS — cadência fixa 2/4/15 (item 3, rodada atual — era 2/4/30)", () => {
   it("3 passos, nessa ordem", () => {
-    expect(HOT_LEAD_STEP_DAYS).toEqual([2, 4, 30]);
+    expect(HOT_LEAD_STEP_DAYS).toEqual([2, 4, 15]);
     expect(HOT_LEAD_STEP_COUNT).toBe(3);
     expect(HOT_LEAD_WINDOW_AFTER_DAYS).toBe(3);
   });
@@ -125,13 +125,13 @@ describe("chooseHotLeadStep — qual passo mostrar agora (sequência nova)", () 
     expect(choice).toBeNull();
   });
 
-  it("30 dias (passo 3 no dia exato): elegível no passo 3", () => {
-    const choice = chooseHotLeadStep(input({ lastLeadMessageAt: new Date(NOW.getTime() - 30 * DAY_MS) }), NOW);
+  it("15 dias (passo 3 no dia exato): elegível no passo 3 (item 3 — era 30 dias)", () => {
+    const choice = chooseHotLeadStep(input({ lastLeadMessageAt: new Date(NOW.getTime() - 15 * DAY_MS) }), NOW);
     expect(choice?.step).toBe(3);
   });
 
-  it("34 dias (depois da janela do passo 3): nada — sequência encerrada, nenhuma nova tentativa", () => {
-    const choice = chooseHotLeadStep(input({ lastLeadMessageAt: new Date(NOW.getTime() - 34 * DAY_MS) }), NOW);
+  it("19 dias (depois da janela do passo 3): nada — sequência encerrada, nenhuma nova tentativa", () => {
+    const choice = chooseHotLeadStep(input({ lastLeadMessageAt: new Date(NOW.getTime() - 19 * DAY_MS) }), NOW);
     expect(choice).toBeNull();
   });
 

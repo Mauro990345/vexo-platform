@@ -17,21 +17,29 @@ import { sendWhatsappMessage, validateBrazilianPhone, formatDateTimeLabel } from
 import { ensureLeadFirstNameFromInstagram } from "@/lib/instagram";
 import { renderMessageTemplate, normalizeFirstNameForTemplate } from "@/lib/message-template";
 
-// Card "Faltou" — item 2 do pedido. Para um lead que agendou e foi marcado
-// "Não compareceu" (ver setAppointmentAttendance, appointments.ts) sem ter
-// respondido nem remarcado desde então, aparece um card no D3 e outro no
-// D10 após a falta.
+// Card "Faltou" — item 2 do pedido (rodada anterior) + item 1 (rodada
+// atual, D30). Para um lead que agendou e foi marcado "Não compareceu"
+// (ver setAppointmentAttendance, appointments.ts) sem ter remarcado desde
+// então, aparece um card no D3, outro no D10 e outro no D30 após a falta.
 //
-// Reaproveita a MESMA sequência já existente (FollowUpLog trigger NO_SHOW,
-// ver triggerFollowUp/cancelPendingFollowUp em follow-up.ts) pra decidir
-// elegibilidade — NÃO cria nenhum rastreamento novo de "respondeu/
-// remarcou": um log com respondedAt=null É exatamente "sem ter respondido
-// nem remarcado" (cancelPendingFollowUp fecha o log na primeira resposta
-// do lead, de qualquer teor, e também quando ele agenda de novo — ver
-// conversation-pipeline.ts). A sequência automática de mensagens
-// (dispatchFollowUpSteps) continua funcionando exatamente como antes,
-// completamente em paralelo — este módulo só LÊ o mesmo estado, nunca
-// escreve nele.
+// Elegibilidade (item 4, rodada atual — AJUSTE): o card só pode sumir
+// quando o lead AGENDAR/REMARCAR ou for marcado como perdido — uma
+// resposta dele sem agendar não some o card nem reinicia os prazos.
+// ANTES disso era "log NO_SHOW ainda aberto" (FollowUpLog.respondedAt ===
+// null), que fechava na primeira resposta de QUALQUER teor — pedido
+// explícito desta rodada pra separar "respondeu" de "agendou/remarcou"
+// aqui, SEM alterar a sequência automática (que continua usando
+// respondedAt normalmente, ver cancelPendingFollowUp/follow-up.ts; item 5
+// do pedido — verificação apenas, não é pra mudar essa parte). Elegível
+// agora: o agendamento ainda está NO_SHOW *e* continua sendo o mais
+// recente do lead (nenhum Appointment mais novo, de nenhum status —
+// mesmo critério de "mais recente por lead" já usado por
+// selectReactivationCandidates, reactivation.ts) *e* a conversa não está
+// LOST. A âncora de dias continua FollowUpLog.triggeredAt (nunca
+// reescrito por nenhum código — ver comentário grande em triggerFollowUp,
+// follow-up.ts), o mais recente da conversa com trigger NO_SHOW — só um
+// agendamento NO_SHOW pode ser "o mais recente do lead" por vez, então
+// nunca há ambiguidade sobre qual log corresponde à falta atual.
 //
 // Ancorado em FollowUpLog.triggeredAt (o momento do CLIQUE em "Não
 // compareceu", não o horário agendado da consulta — mesmo motivo de
@@ -43,11 +51,17 @@ import { renderMessageTemplate, normalizeFirstNameForTemplate } from "@/lib/mess
 export const NO_SHOW_CARD_STEPS = [
   { step: 1, offsetDays: 3 },
   { step: 2, offsetDays: 10 },
+  { step: 3, offsetDays: 30 },
 ] as const;
 
-export const DEFAULT_NO_SHOW_CARD_MESSAGES: readonly [string, string] = [
+export const DEFAULT_NO_SHOW_CARD_MESSAGES: readonly [string, string, string] = [
   "Oi, {{primeiro_nome}}! Notamos que você não pôde vir na sua avaliação {{data_horario}}. Quer remarcar? Estamos à disposição.",
   "Oi! Ainda dá tempo de remarcar sua avaliação — é só nos avisar o melhor dia pra você.",
+  // D30 (item 1, rodada atual) — sem variável de nome da Dra. disponível
+  // (ver KNOWN_VARIABLE_NAMES, message-template.ts: só primeiro_nome/
+  // data_horario existem) — pedido explícito: escrever sem o nome quando
+  // não houver a variável ("a nossa agenda").
+  "Oi, {{primeiro_nome}}. Passando para avisar que a nossa agenda segue com horários abertos. Quando fizer sentido, é só me chamar por aqui.",
 ];
 
 export type NoShowCandidate = {
@@ -78,19 +92,23 @@ export function buildNoShowCardCandidates(candidates: NoShowCandidate[], now: Da
   );
 }
 
-export function resolveNoShowCardMessageTemplate(step: number, settings: { day3Content?: string | null; day10Content?: string | null }): string {
-  const custom = step === 1 ? settings.day3Content : settings.day10Content;
+export function resolveNoShowCardMessageTemplate(
+  step: number,
+  settings: { day3Content?: string | null; day10Content?: string | null; day30Content?: string | null }
+): string {
+  const custom = step === 1 ? settings.day3Content : step === 2 ? settings.day10Content : settings.day30Content;
   if (custom && custom.trim()) return custom.trim();
   return DEFAULT_NO_SHOW_CARD_MESSAGES[step - 1]!;
 }
 
-// "Faltou há 3 dias · mensagem 1 de 2" (exemplo do pedido) — dias contados
-// a partir do clique em "Não compareceu" (noShowTriggeredAt), não do
-// horário agendado perdido.
+// "Faltou há 3 dias · mensagem 1 de 3" (exemplo do pedido, "de 3" após o
+// item 1 desta rodada adicionar o D30) — dias contados a partir do clique
+// em "Não compareceu" (noShowTriggeredAt), não do horário agendado
+// perdido.
 export function buildNoShowCardReason(noShowTriggeredAt: Date, now: Date, step: number): string {
   const days = Math.max(0, Math.floor((now.getTime() - noShowTriggeredAt.getTime()) / (24 * 60 * 60 * 1000)));
   const dayLabel = days === 1 ? "1 dia" : `${days} dias`;
-  return `Faltou há ${dayLabel} · mensagem ${step} de 2`;
+  return `Faltou há ${dayLabel} · mensagem ${step} de ${NO_SHOW_CARD_STEPS.length}`;
 }
 
 export type NoShowCard = {
@@ -116,25 +134,30 @@ export type NoShowCard = {
 };
 
 export async function getNoShowCards(clinicId: string, now: Date = new Date()): Promise<NoShowCard[]> {
+  // Elegibilidade (item 4 — ver comentário grande no topo do arquivo):
+  // ainda NO_SHOW, conversa não perdida, e — pra decidir "ainda não
+  // agendou/remarcou desde a falta" sem depender de respondedAt (que a
+  // sequência automática usa pra outro fim) — busca TODOS os
+  // agendamentos não cancelados do lead, não só o NO_SHOW, pra achar qual
+  // é o mais recente de cada um.
   const appointments = await prisma.appointment.findMany({
     where: {
       clinicId,
-      status: "NO_SHOW",
+      status: { not: "CANCELLED" },
       leadId: { not: null },
       conversationId: { not: null },
-      // "sem ter respondido nem remarcado" — log NO_SHOW ainda aberto
-      // nesta conversa (ver comentário grande no topo do arquivo).
-      conversation: { followUps: { some: { trigger: "NO_SHOW", respondedAt: null } } },
     },
     select: {
       id: true,
       leadId: true,
       conversationId: true,
       scheduledAt: true,
+      status: true,
       conversation: {
         select: {
+          status: true,
           followUps: {
-            where: { trigger: "NO_SHOW", respondedAt: null },
+            where: { trigger: "NO_SHOW" },
             orderBy: { triggeredAt: "desc" },
             take: 1,
             select: { triggeredAt: true },
@@ -144,15 +167,31 @@ export async function getNoShowCards(clinicId: string, now: Date = new Date()): 
     },
   });
 
-  const candidates: NoShowCandidate[] = appointments
-    .filter((a) => a.conversation?.followUps[0])
-    .map((a) => ({
-      appointmentId: a.id,
-      leadId: a.leadId!,
-      conversationId: a.conversationId!,
-      scheduledAt: a.scheduledAt,
-      noShowTriggeredAt: a.conversation!.followUps[0]!.triggeredAt,
-    }));
+  // Só o agendamento MAIS RECENTE de cada lead conta — mesmo critério
+  // usado por selectReactivationCandidates (reactivation.ts), aplicado ao
+  // inverso: um NO_SHOW só é candidato se ainda for o mais recente (nada
+  // mais novo criado por remarcação/novo agendamento desde a falta).
+  const latestByLead = new Map<string, (typeof appointments)[number]>();
+  for (const appt of appointments) {
+    if (!appt.leadId) continue;
+    const current = latestByLead.get(appt.leadId);
+    if (!current || appt.scheduledAt.getTime() > current.scheduledAt.getTime()) latestByLead.set(appt.leadId, appt);
+  }
+
+  const candidates: NoShowCandidate[] = [];
+  for (const appt of latestByLead.values()) {
+    if (appt.status !== "NO_SHOW") continue;
+    if (appt.conversation?.status === "LOST") continue;
+    const log = appt.conversation?.followUps[0];
+    if (!log) continue; // defesa — toda marcação de NO_SHOW cria um log (triggerFollowUp, appointments.ts)
+    candidates.push({
+      appointmentId: appt.id,
+      leadId: appt.leadId!,
+      conversationId: appt.conversationId!,
+      scheduledAt: appt.scheduledAt,
+      noShowTriggeredAt: log.triggeredAt,
+    });
+  }
 
   const cardCandidates = buildNoShowCardCandidates(candidates, now);
   if (cardCandidates.length === 0) return [];
@@ -196,9 +235,10 @@ export async function getNoShowCards(clinicId: string, now: Date = new Date()): 
 
     const phone = lead?.phone ?? null;
     const igUsername = lead?.igUsername ?? null;
-    // Item 2: sem telefone, o card usa o botão do Instagram (mesmo
-    // visual "Faltou", só troca o canal de ação).
-    const channel: "WHATSAPP" | "INSTAGRAM" = phone ? "WHATSAPP" : "INSTAGRAM";
+    // Item 2 (rodada anterior): sem telefone, o card usa o botão do
+    // Instagram. Item 1 (rodada atual): o passo 3 (D30) é SEMPRE
+    // Instagram, manual — independente de o lead ter telefone ou não.
+    const channel: "WHATSAPP" | "INSTAGRAM" = c.step === 3 ? "INSTAGRAM" : phone ? "WHATSAPP" : "INSTAGRAM";
 
     return {
       appointmentId: c.appointmentId,
@@ -266,10 +306,11 @@ export async function sendNoShowCardWhatsAppMessage(
       clinicId: true,
       scheduledAt: true,
       status: true,
+      leadId: true,
       lead: { select: { id: true, name: true, igScopedId: true, nameLookupAttempted: true, phone: true } },
       clinic: { select: { whatsappInstanceName: true, instagramAccount: { select: { accessTokenEnc: true } } } },
       conversation: {
-        select: { followUps: { where: { trigger: "NO_SHOW", respondedAt: null }, orderBy: { triggeredAt: "desc" }, take: 1, select: { triggeredAt: true } } },
+        select: { status: true, followUps: { where: { trigger: "NO_SHOW" }, orderBy: { triggeredAt: "desc" }, take: 1, select: { triggeredAt: true } } },
       },
     },
   });
@@ -278,11 +319,22 @@ export async function sendNoShowCardWhatsAppMessage(
   const clinicId = appointment.clinicId;
 
   // Defesa em profundidade — reconfere aqui o que getNoShowCards já exige
-  // pra sequer mostrar o card: ainda NO_SHOW e ainda com o log aberto (sem
-  // resposta/remarcação desde então) — cobre a corrida "entre o card
-  // aparecer e o clique" (pedido explícito, item 4).
-  const openNoShowLog = appointment.conversation?.followUps[0];
-  if (appointment.status !== "NO_SHOW" || !openNoShowLog) {
+  // pra sequer mostrar o card (item 4: ainda NO_SHOW, conversa não
+  // perdida, e ainda o agendamento mais recente do lead — nenhuma
+  // remarcação/novo agendamento desde a falta) — cobre a corrida "entre o
+  // card aparecer e o clique".
+  const noShowLog = appointment.conversation?.followUps[0];
+  const newerAppointmentExists = appointment.leadId
+    ? (await prisma.appointment.count({
+        where: { leadId: appointment.leadId, status: { not: "CANCELLED" }, scheduledAt: { gt: appointment.scheduledAt } },
+      })) > 0
+    : false;
+  if (
+    appointment.status !== "NO_SHOW" ||
+    !noShowLog ||
+    appointment.conversation?.status === "LOST" ||
+    newerAppointmentExists
+  ) {
     return { ok: false, reason: "no_longer_eligible", clinicId };
   }
 

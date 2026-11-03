@@ -23,10 +23,16 @@ function StepList({
   steps,
   trigger,
   firstStepLabel,
+  allowAddStep = true,
 }: {
   steps: FollowUpStep[];
   trigger: FollowUpTrigger;
   firstStepLabel: string;
+  // Item 7 (rodada atual) — "Não compareceu" perde o bloco "Adicionar
+  // passo" por completo (fica só com os 2 passos já existentes, editáveis
+  // normalmente); "Parou de responder" continua podendo adicionar passos,
+  // sem nenhuma mudança.
+  allowAddStep?: boolean;
 }) {
   return (
     <div className="space-y-3">
@@ -172,55 +178,57 @@ function StepList({
         ))}
       </div>
 
-      <form action={addFollowUpStep.bind(null, trigger)} className="space-y-2.5 rounded-xl border border-dashed border-vexo-border p-3.5">
-        <h3 className="text-xs font-medium text-vexo-muted">Adicionar passo {steps.length + 1}</h3>
+      {allowAddStep && (
+        <form action={addFollowUpStep.bind(null, trigger)} className="space-y-2.5 rounded-xl border border-dashed border-vexo-border p-3.5">
+          <h3 className="text-xs font-medium text-vexo-muted">Adicionar passo {steps.length + 1}</h3>
 
-        <div>
-          <label className="mb-1 block text-xs text-vexo-muted">
-            {steps.length === 0 ? firstStepLabel : "Enviado quantas horas após o passo anterior"}
-          </label>
-          <input
-            name="offsetHours"
-            type="number"
-            min={trigger === "NO_SHOW" && steps.length === 0 ? 1 : 0}
-            required
-            defaultValue={trigger === "NO_SHOW" && steps.length === 0 ? 1 : 0}
-            className="w-24 rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5 text-xs outline-none focus:border-vexo-accent"
-          />
-        </div>
-
-        <TemplateMessageField placeholder="Ex: Oi! Ainda tem interesse em agendar sua avaliação?" />
-
-        {trigger === "NO_SHOW" && (
           <div>
-            <label className="mb-1 block text-xs text-vexo-muted">Canal</label>
-            <select
-              name="channel"
-              defaultValue="INSTAGRAM"
-              className="w-full rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5 text-xs outline-none focus:border-vexo-accent"
-            >
-              <option value="INSTAGRAM">Instagram (Direct)</option>
-              <option value="WHATSAPP">WhatsApp — reengajamento extra, só se o lead tiver telefone</option>
-            </select>
-            <p className="mt-1 text-card text-vexo-muted">
-              WhatsApp é complementar às mensagens do Instagram (não substitui), sem anexo e sem a
-              janela de 24h — o anexo abaixo é ignorado se escolher esse canal.
-            </p>
+            <label className="mb-1 block text-xs text-vexo-muted">
+              {steps.length === 0 ? firstStepLabel : "Enviado quantas horas após o passo anterior"}
+            </label>
+            <input
+              name="offsetHours"
+              type="number"
+              min={trigger === "NO_SHOW" && steps.length === 0 ? 1 : 0}
+              required
+              defaultValue={trigger === "NO_SHOW" && steps.length === 0 ? 1 : 0}
+              className="w-24 rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5 text-xs outline-none focus:border-vexo-accent"
+            />
           </div>
-        )}
 
-        <div>
-          <label className="mb-1 block text-xs text-vexo-muted">Anexo (opcional — imagem ou vídeo)</label>
-          <AttachmentField key={steps.length} helpText="JPG, PNG, WEBP, GIF, MP4, MOV ou WEBM — até 25MB." />
-        </div>
+          <TemplateMessageField placeholder="Ex: Oi! Ainda tem interesse em agendar sua avaliação?" />
 
-        <button
-          type="submit"
-          className="rounded-lg bg-vexo-accent px-2.5 py-1.5 text-xs font-medium text-vexo-accentFg hover:opacity-90"
-        >
-          Adicionar passo
-        </button>
-      </form>
+          {trigger === "NO_SHOW" && (
+            <div>
+              <label className="mb-1 block text-xs text-vexo-muted">Canal</label>
+              <select
+                name="channel"
+                defaultValue="INSTAGRAM"
+                className="w-full rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5 text-xs outline-none focus:border-vexo-accent"
+              >
+                <option value="INSTAGRAM">Instagram (Direct)</option>
+                <option value="WHATSAPP">WhatsApp — reengajamento extra, só se o lead tiver telefone</option>
+              </select>
+              <p className="mt-1 text-card text-vexo-muted">
+                WhatsApp é complementar às mensagens do Instagram (não substitui), sem anexo e sem a
+                janela de 24h — o anexo abaixo é ignorado se escolher esse canal.
+              </p>
+            </div>
+          )}
+
+          <div>
+            <label className="mb-1 block text-xs text-vexo-muted">Anexo (opcional — imagem ou vídeo)</label>
+            <AttachmentField key={steps.length} helpText="JPG, PNG, WEBP, GIF, MP4, MOV ou WEBM — até 25MB." />
+          </div>
+
+          <button
+            type="submit"
+            className="rounded-lg bg-vexo-accent px-2.5 py-1.5 text-xs font-medium text-vexo-accentFg hover:opacity-90"
+          >
+            Adicionar passo
+          </button>
+        </form>
+      )}
     </div>
   );
 }
@@ -262,7 +270,7 @@ export async function FollowUpView() {
     [hotLeadMessagesConfig?.step3Message1, hotLeadMessagesConfig?.step3Message2, hotLeadMessagesConfig?.step3Message3],
   ];
   const hotLeadFilledCount = hotLeadStepMessages.flat().filter((m) => m?.trim()).length;
-  const HOT_LEAD_STEP_LABELS = ["Passo 1 · 2 dias", "Passo 2 · 4 dias", "Passo 3 · 30 dias"];
+  const HOT_LEAD_STEP_LABELS = ["Passo 1 · 2 dias", "Passo 2 · 4 dias", "Passo 3 · 15 dias"];
 
   return (
     <div className="max-w-lg space-y-8">
@@ -377,6 +385,7 @@ export async function FollowUpView() {
                     steps={noShowSteps}
                     trigger="NO_SHOW"
                     firstStepLabel="Enviado quantas horas após marcar como não compareceu"
+                    allowAddStep={false}
                   />
                 </div>
               </section>
@@ -444,6 +453,26 @@ export async function FollowUpView() {
                         defaultValue={noShowCardSettings?.day10Content ?? ""}
                         placeholder="Vazio usa o texto padrão."
                       />
+                      {/* Item 1 (rodada atual) — 3º passo do Faltou, só
+                          Instagram, manual, independente de o lead ter
+                          telefone (ver no-show-cards.ts). */}
+                      {/* Nome do campo prefixado ("noShowDay30Content",
+                          não "day30Content") pra não colidir com o campo
+                          de mesmo nome "day30Content" do grupo "Não
+                          agendou" abaixo — os dois ficam no MESMO <form>
+                          (pedido explícito, "um único botão"). */}
+                      <TemplateMessageField
+                        name="noShowDay30Content"
+                        label="30º dia (D30) · só Instagram"
+                        required={false}
+                        rows={2}
+                        variables={[
+                          { token: "{{primeiro_nome}}", label: "+ Nome do lead" },
+                          { token: "{{data_horario}}", label: "+ Data e horário perdidos" },
+                        ]}
+                        defaultValue={noShowCardSettings?.day30Content ?? ""}
+                        placeholder="Vazio usa o texto padrão."
+                      />
                     </div>
                   </details>
 
@@ -456,6 +485,21 @@ export async function FollowUpView() {
                       <span className="shrink-0 text-card text-vexo-muted transition group-open:rotate-180">▾</span>
                     </summary>
                     <div className="space-y-2.5 border-t border-vexo-border px-3 pb-3 pt-2.5">
+                      {/* Item 2 (rodada atual) — novo 3º passo (D10), antes
+                          do D30/D60 já existentes (ordem cronológica na
+                          tela; internamente é step=3, ver
+                          never-scheduled-cards.ts). */}
+                      {/* Mesmo motivo do comentário acima — "day10Content"
+                          colidiria com o campo do grupo "Faltou". */}
+                      <TemplateMessageField
+                        name="neverScheduledDay10Content"
+                        label="10º dia (D10)"
+                        required={false}
+                        rows={2}
+                        variables={[{ token: "{{primeiro_nome}}", label: "+ Nome do lead" }]}
+                        defaultValue={neverScheduledCardSettings?.day10Content ?? ""}
+                        placeholder="Vazio usa o texto padrão."
+                      />
                       <TemplateMessageField
                         name="day30Content"
                         label="30º dia (D30)"
@@ -486,6 +530,16 @@ export async function FollowUpView() {
                       <span className="shrink-0 text-card text-vexo-muted transition group-open:rotate-180">▾</span>
                     </summary>
                     <div className="space-y-2.5 border-t border-vexo-border px-3 pb-3 pt-2.5">
+                      {/* Item 6 (rodada atual) — Reativação não tem dia
+                          fixo por texto (a secretária escolhe o prazo por
+                          agendamento, ver ReturnPeriodChipsForm em
+                          automacoes/page.tsx), então não mostra "Dº dia"
+                          como Faltou/Não agendou acima — só esta linha
+                          curta explicando o rodízio. */}
+                      <p className="text-card text-vexo-muted">
+                        Sem dia fixo — o prazo é escolhido pela secretária por agendamento, e os 5
+                        textos abaixo giram em rodízio entre os leads.
+                      </p>
                       {[1, 2, 3, 4, 5].map((n) => (
                         <TemplateMessageField
                           key={n}

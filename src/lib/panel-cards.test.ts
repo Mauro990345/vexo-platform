@@ -78,7 +78,7 @@ function neverScheduledCard(overrides: Partial<NeverScheduledCard> = {}): NeverS
     instagramDmLink: "https://ig.me/m/daniela.ig",
     instagramProfileLink: "https://www.instagram.com/daniela.ig/",
     reason: "Sem agendamento há 31 dias · mensagem 1 de 2",
-    lastMessageAt: new Date(),
+    anchorAt: new Date(),
     sentAt: null,
     ...overrides,
   };

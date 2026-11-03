@@ -64,7 +64,7 @@ function slugify(name: string): string {
 //     NUNCA message1-5 nem sequenceCounter — ver "o que NÃO é copiado"
 //     abaixo.
 //   - HotLeadConfig: dailyLimit (limite diário do Quente — "tentativas do
-//     card Quente" do pedido é a cadência fixa 2/4/30 dias, código, não
+//     card Quente" do pedido é a cadência fixa 2/4/15 dias, código, não
 //     dado por clínica; o que existe de configurável por clínica aqui é
 //     só o limite diário). NUNCA stepXMessageY nem stepXSequenceCounter.
 //
