@@ -318,26 +318,6 @@ export async function updateClinicDailyWhatsappLimit(clinicId: string, formData:
   revalidatePath(`/crm/clinicas/${clinicId}/automacoes`);
 }
 
-// Conjunto ÚNICO de até 5 mensagens — usado tanto no envio de WhatsApp
-// quanto no fallback de Instagram (pedido explícito, ver reactivation.ts).
-export async function updateClinicReactivationMessages(clinicId: string, formData: FormData) {
-  await requireInternalSession();
-
-  const message1 = String(formData.get("message1") ?? "").trim() || null;
-  const message2 = String(formData.get("message2") ?? "").trim() || null;
-  const message3 = String(formData.get("message3") ?? "").trim() || null;
-  const message4 = String(formData.get("message4") ?? "").trim() || null;
-  const message5 = String(formData.get("message5") ?? "").trim() || null;
-
-  await prisma.reactivationConfig.upsert({
-    where: { clinicId },
-    create: { clinicId, message1, message2, message3, message4, message5 },
-    update: { message1, message2, message3, message4, message5 },
-  });
-
-  revalidatePath(`/crm/clinicas/${clinicId}/automacoes`);
-}
-
 // Botão "Retorno" do card de agendamento (ver RetornoButton.tsx) — grava
 // só o número de dias no próprio Appointment, não em ReactivationConfig (é
 // por AGENDAMENTO, não por clínica). Validação do valor aqui (mesma lista
@@ -362,12 +342,14 @@ export async function setAppointmentReturnPeriodAction(
   return result;
 }
 
-// Card "Quente" (ver hot-lead-cards.ts) — mesmo padrão das ações acima:
-// upsert PARCIAL, nunca toca nos contadores de rotação (um por passo,
-// preserva a posição da rotação de cada um). dailyLimit sempre válido
-// (mínimo 1) — zero desligaria o card silenciosamente sem nenhuma forma de
-// a clínica saber por que nenhum card aparece.
-export async function updateClinicHotLeadConfig(clinicId: string, formData: FormData) {
+// Card "Quente" (ver hot-lead-cards.ts) — AJUSTE (pedido explícito,
+// "unificar os textos... numa única tela GLOBAL"): os 9 textos saíram
+// daqui (agora em HotLeadMessagesConfig, editados em Follow-up → "Cards
+// do Painel" — ver updatePanelCardSettings, follow-up/actions.ts); esta
+// action ficou só com o que continua POR CLÍNICA. dailyLimit sempre
+// válido (mínimo 1) — zero desligaria o card silenciosamente sem nenhuma
+// forma de a clínica saber por que nenhum card aparece.
+export async function updateClinicHotLeadDailyLimit(clinicId: string, formData: FormData) {
   await requireInternalSession();
 
   const dailyLimit = parseInt(String(formData.get("dailyLimit") ?? ""), 10);
@@ -375,27 +357,10 @@ export async function updateClinicHotLeadConfig(clinicId: string, formData: Form
     throw new Error("Informe um limite diário válido (1 ou mais).");
   }
 
-  function field(name: string): string | null {
-    return String(formData.get(name) ?? "").trim() || null;
-  }
-
-  const data = {
-    dailyLimit,
-    step1Message1: field("step1Message1"),
-    step1Message2: field("step1Message2"),
-    step1Message3: field("step1Message3"),
-    step2Message1: field("step2Message1"),
-    step2Message2: field("step2Message2"),
-    step2Message3: field("step2Message3"),
-    step3Message1: field("step3Message1"),
-    step3Message2: field("step3Message2"),
-    step3Message3: field("step3Message3"),
-  };
-
   await prisma.hotLeadConfig.upsert({
     where: { clinicId },
-    create: { clinicId, ...data },
-    update: data,
+    create: { clinicId, dailyLimit },
+    update: { dailyLimit },
   });
 
   revalidatePath(`/crm/clinicas/${clinicId}/automacoes`);

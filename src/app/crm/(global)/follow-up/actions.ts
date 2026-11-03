@@ -224,23 +224,47 @@ export async function updateNoShowFirstStepDelay(formData: FormData) {
 
 // Textos dos dois passos do card "Faltou" (D3/D10, ver NoShowCardSettings/
 // no-show-cards.ts) + "Não agendou" (D30/D60, ver never-scheduled-cards.ts)
-// — GLOBAL, mesmo motivo de FollowUpStep/FollowUpSettings (as duas
-// sequências de follow-up também são globais). Vazio = usa o texto
-// padrão de cada um (DEFAULT_NO_SHOW_CARD_MESSAGES/
-// DEFAULT_NEVER_SCHEDULED_CARD_MESSAGES). Aba "Cards do Painel"
-// (FollowUpView.tsx) pedido explícito: UM formulário, UM botão "Salvar
-// textos" pros 4 campos — por isso uma action só, gravando as DUAS
-// tabelas (NoShowCardSettings/NeverScheduledCardSettings continuam
-// separadas — cards com regra de elegibilidade bem diferente, ver
-// comentário em NeverScheduledCardSettings, schema.prisma — só a TELA os
-// agrupa).
+// + Reativação (5 textos em rodízio, reactivation.ts) + Quente (9
+// textos, 3 por passo, hot-lead-cards.ts) — AGORA TODOS GLOBAIS (pedido
+// explícito, "unificar os textos dos cards do Painel numa única tela
+// GLOBAL"); Reativação/Quente eram por clínica antes disso (ver
+// ReactivationConfig.message1-5/HotLeadConfig.stepXMessageY,
+// schema.prisma — colunas e dados antigos mantidos intactos, só pararam
+// de ser lidos). Vazio = usa o texto padrão de cada um. Aba "Cards do
+// Painel" (FollowUpView.tsx) pedido explícito: 4 grupos recolhíveis, UM
+// botão "Salvar textos" pros 4 juntos — por isso uma action só, gravando
+// as QUATRO tabelas de configuração numa transação (cada uma continua
+// separada — cards com regra de elegibilidade bem diferente — só a TELA
+// os agrupa).
 export async function updatePanelCardSettings(formData: FormData) {
   await requireInternalSession();
 
-  const day3Content = String(formData.get("day3Content") ?? "").trim() || null;
-  const day10Content = String(formData.get("day10Content") ?? "").trim() || null;
-  const day30Content = String(formData.get("day30Content") ?? "").trim() || null;
-  const day60Content = String(formData.get("day60Content") ?? "").trim() || null;
+  function field(name: string): string | null {
+    return String(formData.get(name) ?? "").trim() || null;
+  }
+
+  const day3Content = field("day3Content");
+  const day10Content = field("day10Content");
+  const day30Content = field("day30Content");
+  const day60Content = field("day60Content");
+
+  const message1 = field("message1");
+  const message2 = field("message2");
+  const message3 = field("message3");
+  const message4 = field("message4");
+  const message5 = field("message5");
+
+  const hotLeadFields = {
+    step1Message1: field("step1Message1"),
+    step1Message2: field("step1Message2"),
+    step1Message3: field("step1Message3"),
+    step2Message1: field("step2Message1"),
+    step2Message2: field("step2Message2"),
+    step2Message3: field("step2Message3"),
+    step3Message1: field("step3Message1"),
+    step3Message2: field("step3Message2"),
+    step3Message3: field("step3Message3"),
+  };
 
   await prisma.$transaction([
     prisma.noShowCardSettings.upsert({
@@ -252,6 +276,16 @@ export async function updatePanelCardSettings(formData: FormData) {
       where: { id: "singleton" },
       create: { id: "singleton", day30Content, day60Content },
       update: { day30Content, day60Content },
+    }),
+    prisma.reactivationMessagesConfig.upsert({
+      where: { id: "singleton" },
+      create: { id: "singleton", message1, message2, message3, message4, message5 },
+      update: { message1, message2, message3, message4, message5 },
+    }),
+    prisma.hotLeadMessagesConfig.upsert({
+      where: { id: "singleton" },
+      create: { id: "singleton", ...hotLeadFields },
+      update: hotLeadFields,
     }),
   ]);
 

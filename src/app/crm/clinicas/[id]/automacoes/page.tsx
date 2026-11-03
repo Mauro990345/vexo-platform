@@ -8,13 +8,12 @@ import {
   updateClinicSettings,
   updateClinicReminders,
   updateClinicReturnPeriods,
-  updateClinicReactivationMessages,
   updateClinicDailyWhatsappLimit,
-  updateClinicHotLeadConfig,
+  updateClinicHotLeadDailyLimit,
   logApproach,
 } from "../../actions";
 import { DEFAULT_AVAILABLE_RETURN_PERIODS, DEFAULT_RETURN_PERIODS, DEFAULT_DAILY_WHATSAPP_LIMIT } from "@/lib/reactivation";
-import { ReturnPeriodChipsForm, DailyWhatsappLimitForm, ReactivationMessageBlockForm, HotLeadConfigForm } from "@/components/ReactivationConfigForms";
+import { ReturnPeriodChipsForm, DailyWhatsappLimitForm, HotLeadDailyLimitForm } from "@/components/ReactivationConfigForms";
 
 const REMINDER_VARIABLES = [
   { token: "{{primeiro_nome}}", label: "+ Nome do lead" },
@@ -47,22 +46,6 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
   const availablePeriodsSet = new Set(clinic.reactivationConfig?.availablePeriods ?? DEFAULT_AVAILABLE_RETURN_PERIODS);
   const defaultPeriodsSet = new Set(clinic.reactivationConfig?.defaultPeriods ?? DEFAULT_RETURN_PERIODS);
   const dailyWhatsappLimit = clinic.reactivationConfig?.dailyWhatsappLimit ?? DEFAULT_DAILY_WHATSAPP_LIMIT;
-  const reactivationMessages = [
-    clinic.reactivationConfig?.message1,
-    clinic.reactivationConfig?.message2,
-    clinic.reactivationConfig?.message3,
-    clinic.reactivationConfig?.message4,
-    clinic.reactivationConfig?.message5,
-  ];
-  const reactivationSummary = `${reactivationMessages.filter((m) => m?.trim()).length} de 5 preenchidas · ${reminderPreview(reactivationMessages[0])}`;
-
-  const hotLeadStepMessages = [
-    [clinic.hotLeadConfig?.step1Message1, clinic.hotLeadConfig?.step1Message2, clinic.hotLeadConfig?.step1Message3],
-    [clinic.hotLeadConfig?.step2Message1, clinic.hotLeadConfig?.step2Message2, clinic.hotLeadConfig?.step2Message3],
-    [clinic.hotLeadConfig?.step3Message1, clinic.hotLeadConfig?.step3Message2, clinic.hotLeadConfig?.step3Message3],
-  ];
-  const hotLeadFilledCount = hotLeadStepMessages.flat().filter((m) => m?.trim()).length;
-  const hotLeadSummary = `${hotLeadFilledCount} de 9 preenchidas · ${reminderPreview(hotLeadStepMessages[0]![0])}`;
 
   return (
     <div className="max-w-3xl space-y-4">
@@ -253,14 +236,18 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
                     Painel dele). Controla o botão "Retorno" do card de
                     agendamento (ver RetornoButton.tsx) e a faixa
                     "Reativação" do Painel (ClientPanelView.tsx/
-                    ReactivationRail.tsx). QUATRO salvamentos INDEPENDENTES
-                    (pedido explícito): prazos disponíveis, prazos padrão,
-                    limite diário de WhatsApp e as mensagens — cada um com
-                    a própria ação/botão/"Salvo ✓", nunca um sobrescrevendo
+                    ReactivationRail.tsx). TRÊS salvamentos INDEPENDENTES
+                    (pedido explícito original): prazos disponíveis, prazos
+                    padrão e limite diário de WhatsApp — cada um com a
+                    própria ação/botão/"Salvo ✓", nunca um sobrescrevendo
                     o outro. Componentes client próprios
                     (ReactivationConfigForms.tsx) só por causa desse
                     feedback — um <form action={fn}> puro não dá gancho de
-                    "terminou com sucesso" pra mostrar o check. */}
+                    "terminou com sucesso" pra mostrar o check.
+                    AJUSTE (pedido explícito, "unificar os textos... numa
+                    única tela GLOBAL"): as mensagens de Reativação saíram
+                    daqui — agora globais, editadas em Follow-up → "Cards
+                    do Painel" (ver updatePanelCardSettings, actions.ts). */}
                 <div className="mt-5">
                   <h2 className="text-xs font-semibold">Prazos de retorno</h2>
                   <p className="mt-1 text-caption text-vexo-muted">
@@ -269,6 +256,7 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
                     abaixo. Na data de contato (atendimento + prazo), um card de Reativação
                     aparece no Painel com uma mensagem sugerida — por WhatsApp (com fallback
                     pra Instagram sem telefone/desconectado) — nada é enviado automaticamente.
+                    Os textos das mensagens são globais, em Follow-up → "Cards do Painel".
                   </p>
 
                   <div className="mt-2 space-y-3 rounded-xl border border-vexo-border bg-vexo-surface p-3">
@@ -287,22 +275,18 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
                     />
 
                     <DailyWhatsappLimitForm action={updateClinicDailyWhatsappLimit.bind(null, clinic.id)} dailyLimit={dailyWhatsappLimit} />
-
-                    <ReactivationMessageBlockForm
-                      action={updateClinicReactivationMessages.bind(null, clinic.id)}
-                      summary={reactivationSummary}
-                      defaultValues={reactivationMessages}
-                    />
                   </div>
                 </div>
 
                 {/* Card "Quente" (ver ReactivationRail.tsx/hot-lead-cards.ts)
                     — lead com conversa que nunca agendou, com sinal de
                     interesse nas mensagens dele. Cadência fixa de 3 passos
-                    (2/4/30 dias desde a última mensagem do lead) — limite
-                    diário + até 3 mensagens POR PASSO aqui (a detecção por
-                    palavra-chave não é configurável, mora em
-                    hot-lead-detection.ts). */}
+                    (2/4/30 dias desde a última mensagem do lead) — só o
+                    limite diário fica aqui (a detecção por palavra-chave
+                    não é configurável, mora em hot-lead-detection.ts).
+                    AJUSTE (mesmo pedido acima): as 9 mensagens (3 por
+                    passo) saíram daqui — agora globais, em Follow-up →
+                    "Cards do Painel". */}
                 <div className="mt-5">
                   <h2 className="text-xs font-semibold">Quente</h2>
                   <p className="mt-1 text-caption text-vexo-muted">
@@ -310,15 +294,14 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
                     aparece no Painel com um botão de Instagram (copiar e abrir a conversa) em 3
                     tentativas (2, 4 e 30 dias desde a última mensagem dele, uma sequência só por
                     lead). Limite diário de envios por clínica, pra evitar excesso de contato pela
-                    mesma conta.
+                    mesma conta. Os textos das mensagens são globais, em Follow-up → "Cards do
+                    Painel".
                   </p>
 
                   <div className="mt-2 space-y-2 rounded-xl border border-vexo-border bg-vexo-surface p-3">
-                    <HotLeadConfigForm
-                      action={updateClinicHotLeadConfig.bind(null, clinic.id)}
-                      summary={hotLeadSummary}
+                    <HotLeadDailyLimitForm
+                      action={updateClinicHotLeadDailyLimit.bind(null, clinic.id)}
                       dailyLimit={clinic.hotLeadConfig?.dailyLimit ?? 5}
-                      stepDefaultValues={hotLeadStepMessages}
                     />
                   </div>
                 </div>
