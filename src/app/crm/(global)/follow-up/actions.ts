@@ -223,20 +223,37 @@ export async function updateNoShowFirstStepDelay(formData: FormData) {
 }
 
 // Textos dos dois passos do card "Faltou" (D3/D10, ver NoShowCardSettings/
-// no-show-cards.ts) — GLOBAL, mesmo motivo de FollowUpStep/FollowUpSettings
-// (a sequência de não-comparecimento também é global). Vazio = usa o
-// texto padrão (DEFAULT_NO_SHOW_CARD_MESSAGES).
-export async function updateNoShowCardSettings(formData: FormData) {
+// no-show-cards.ts) + "Não agendou" (D30/D60, ver never-scheduled-cards.ts)
+// — GLOBAL, mesmo motivo de FollowUpStep/FollowUpSettings (as duas
+// sequências de follow-up também são globais). Vazio = usa o texto
+// padrão de cada um (DEFAULT_NO_SHOW_CARD_MESSAGES/
+// DEFAULT_NEVER_SCHEDULED_CARD_MESSAGES). Aba "Cards do Painel"
+// (FollowUpView.tsx) pedido explícito: UM formulário, UM botão "Salvar
+// textos" pros 4 campos — por isso uma action só, gravando as DUAS
+// tabelas (NoShowCardSettings/NeverScheduledCardSettings continuam
+// separadas — cards com regra de elegibilidade bem diferente, ver
+// comentário em NeverScheduledCardSettings, schema.prisma — só a TELA os
+// agrupa).
+export async function updatePanelCardSettings(formData: FormData) {
   await requireInternalSession();
 
   const day3Content = String(formData.get("day3Content") ?? "").trim() || null;
   const day10Content = String(formData.get("day10Content") ?? "").trim() || null;
+  const day30Content = String(formData.get("day30Content") ?? "").trim() || null;
+  const day60Content = String(formData.get("day60Content") ?? "").trim() || null;
 
-  await prisma.noShowCardSettings.upsert({
-    where: { id: "singleton" },
-    create: { id: "singleton", day3Content, day10Content },
-    update: { day3Content, day10Content },
-  });
+  await prisma.$transaction([
+    prisma.noShowCardSettings.upsert({
+      where: { id: "singleton" },
+      create: { id: "singleton", day3Content, day10Content },
+      update: { day3Content, day10Content },
+    }),
+    prisma.neverScheduledCardSettings.upsert({
+      where: { id: "singleton" },
+      create: { id: "singleton", day30Content, day60Content },
+      update: { day30Content, day60Content },
+    }),
+  ]);
 
   revalidatePath("/crm", "layout");
 }

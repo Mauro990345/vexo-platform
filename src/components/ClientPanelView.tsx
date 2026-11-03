@@ -18,6 +18,7 @@ import { getReactivationCards, RETURN_PERIOD_OPTIONS, type SendReactivationWhats
 import { isAppointmentVisibleInList, type SetAppointmentReturnPeriodResult } from "@/lib/appointments";
 import { getNoShowCards } from "@/lib/no-show-cards";
 import { getHotLeadCards } from "@/lib/hot-lead-cards";
+import { getNeverScheduledCards } from "@/lib/never-scheduled-cards";
 import { mergePanelCards } from "@/lib/panel-cards";
 import type { ToggleHotLeadCardSentResult } from "@/lib/hot-lead-cards";
 import {
@@ -101,6 +102,7 @@ export async function ClientPanelView({
   noShowCardSentAction,
   noShowCardSendWhatsappAction,
   hotLeadCardSentAction,
+  neverScheduledCardSentAction,
   standalone = true,
   headerAction,
 }: {
@@ -126,6 +128,10 @@ export async function ClientPanelView({
   noShowCardSentAction?: (appointmentId: string, step: number) => Promise<unknown>;
   noShowCardSendWhatsappAction?: (appointmentId: string, step: number) => Promise<SendReactivationWhatsAppResult>;
   hotLeadCardSentAction?: (conversationId: string, step: number) => Promise<ToggleHotLeadCardSentResult>;
+  // Card "Não agendou" (ver ReactivationRail/PanelCardBadge/
+  // never-scheduled-cards.ts) — mesmo motivo de injeção por contexto dos
+  // demais acima.
+  neverScheduledCardSentAction?: (conversationId: string, step: number) => Promise<unknown>;
   standalone?: boolean;
   headerAction?: React.ReactNode;
 }) {
@@ -135,7 +141,7 @@ export async function ClientPanelView({
   const parsedRef = week ? new Date(week) : now;
   const weekStart = startOfWeek(Number.isNaN(parsedRef.getTime()) ? now : parsedRef);
 
-  const [clinic, periods, appointments, dailyApproached, needsHumanConversations, reactivationCards, noShowCards, hotLeadCards, sentReactivationSlots] = await Promise.all([
+  const [clinic, periods, appointments, dailyApproached, needsHumanConversations, reactivationCards, noShowCards, hotLeadCards, neverScheduledCards, sentReactivationSlots] = await Promise.all([
     prisma.clinic.findUniqueOrThrow({
       where: { id: clinicId },
       select: {
@@ -196,6 +202,7 @@ export async function ClientPanelView({
     getReactivationCards(clinicId, now),
     getNoShowCards(clinicId, now),
     getHotLeadCards(clinicId, now),
+    getNeverScheduledCards(clinicId, now),
     // Agendamentos com o prazo de retorno TRAVADO (ver RetornoButton.tsx/
     // setAppointmentReturnPeriod, appointments.ts) — qualquer card de
     // Reativação já enviado pra aquele agendamento, em qualquer prazo.
@@ -205,7 +212,7 @@ export async function ClientPanelView({
     }),
   ]);
 
-  const panelCards = mergePanelCards({ hotLeadCards, noShowCards, reactivationCards });
+  const panelCards = mergePanelCards({ hotLeadCards, noShowCards, reactivationCards, neverScheduledCards });
   const availableReturnPeriods = clinic.reactivationConfig?.availablePeriods ?? [...RETURN_PERIOD_OPTIONS];
   const lockedReturnPeriodAppointmentIds = new Set(sentReactivationSlots.map((s) => s.appointmentId));
   // Pedido explícito: "Compareceu" só fica visível aqui por
@@ -341,6 +348,7 @@ export async function ClientPanelView({
               noShowToggleAction={noShowCardSentAction}
               noShowSendWhatsappAction={noShowCardSendWhatsappAction}
               hotLeadToggleAction={hotLeadCardSentAction}
+              neverScheduledToggleAction={neverScheduledCardSentAction}
             />
           </div>
 

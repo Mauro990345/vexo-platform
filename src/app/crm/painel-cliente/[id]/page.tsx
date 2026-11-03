@@ -10,6 +10,7 @@ import {
   toggleNoShowCardSentAction,
   sendNoShowCardWhatsAppMessageAction,
   toggleHotLeadCardSentAction,
+  toggleNeverScheduledCardSentAction,
 } from "@/app/crm/clinicas/actions";
 
 export const dynamic = "force-dynamic";
@@ -49,6 +50,7 @@ export default async function ClientPanelPreviewPage({
       noShowCardSentAction={toggleNoShowCardSentAction}
       noShowCardSendWhatsappAction={sendNoShowCardWhatsAppMessageAction}
       hotLeadCardSentAction={toggleHotLeadCardSentAction}
+      neverScheduledCardSentAction={toggleNeverScheduledCardSentAction}
     />
   );
 }
