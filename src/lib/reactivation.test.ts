@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const reactivationConfigFindUniqueMock = vi.fn();
+const reactivationMessagesConfigFindUniqueMock = vi.fn();
 const appointmentFindManyMock = vi.fn();
 const reactivationCardSlotFindManyMock = vi.fn();
 const reactivationCardSlotUpsertMock = vi.fn();
@@ -20,6 +21,12 @@ vi.mock("@/lib/prisma", () => ({
     reactivationConfig: {
       findUnique: (...args: unknown[]) => reactivationConfigFindUniqueMock(...args),
       upsert: (...args: unknown[]) => reactivationConfigUpsertMock(...args),
+    },
+    // GLOBAL agora (pedido explícito, "unificar os textos... numa única
+    // tela GLOBAL") — reactivationConfig acima ficou só com prazos/
+    // limite/rotação, POR CLÍNICA; os 5 textos vêm daqui.
+    reactivationMessagesConfig: {
+      findUnique: (...args: unknown[]) => reactivationMessagesConfigFindUniqueMock(...args),
     },
     appointment: { findMany: (...args: unknown[]) => appointmentFindManyMock(...args) },
     reactivationCardSlot: {
@@ -651,6 +658,7 @@ describe("isDailyWhatsappLimitReached", () => {
 describe("getReactivationCards — sentAt, janela e limite diário", () => {
   beforeEach(() => {
     reactivationConfigFindUniqueMock.mockReset();
+    reactivationMessagesConfigFindUniqueMock.mockReset();
     appointmentFindManyMock.mockReset();
     reactivationCardSlotFindManyMock.mockReset();
     reactivationCardSlotUpsertMock.mockReset();
@@ -669,6 +677,10 @@ describe("getReactivationCards — sentAt, janela e limite diário", () => {
     instagramAccountFindUniqueMock.mockResolvedValue(null);
     reactivationCardSlotCountMock.mockResolvedValue(0);
     noShowCardSlotCountMock.mockResolvedValue(0);
+    // Sem textos globais customizados, por padrão — cai pros defaults
+    // (DEFAULT_REACTIVATION_MESSAGES). Testes de mensagem customizada
+    // configuram isto explicitamente.
+    reactivationMessagesConfigFindUniqueMock.mockResolvedValue(null);
   });
 
   it('um card já marcado "enviado" continua desaparecendo sozinho quando a janela vence — sentAt nunca estende nem protege a elegibilidade', async () => {
@@ -899,9 +911,8 @@ describe("getReactivationCards — sentAt, janela e limite diário", () => {
     const window90 = computeReturnContactWindow(scheduledAt, 90);
     const now = window90.start;
 
-    reactivationConfigFindUniqueMock.mockResolvedValue({
-      defaultPeriods: [90],
-      dailyWhatsappLimit: 15,
+    reactivationConfigFindUniqueMock.mockResolvedValue({ defaultPeriods: [90], dailyWhatsappLimit: 15 });
+    reactivationMessagesConfigFindUniqueMock.mockResolvedValue({
       message1: "Oi, {{primeiro_nome}}! Faz tempo desde {{data_horario}}.",
     });
     appointmentFindManyMock.mockResolvedValue([
@@ -926,7 +937,8 @@ describe("getReactivationCards — sentAt, janela e limite diário", () => {
     ]);
     instagramAccountFindUniqueMock.mockResolvedValue({ accessTokenEnc: "enc-token" });
     ensureLeadFirstNameFromInstagramMock.mockResolvedValue("João Pedro");
-    reactivationConfigFindUniqueMock.mockResolvedValue({ defaultPeriods: [90], dailyWhatsappLimit: 15, message1: "Oi, {{primeiro_nome}}!" });
+    reactivationConfigFindUniqueMock.mockResolvedValue({ defaultPeriods: [90], dailyWhatsappLimit: 15 });
+    reactivationMessagesConfigFindUniqueMock.mockResolvedValue({ message1: "Oi, {{primeiro_nome}}!" });
     appointmentFindManyMock.mockResolvedValue([
       { id: "appt-1", leadId: "lead-1", conversationId: "conv-1", scheduledAt, status: "SCHEDULED", returnPeriodDays: null, returnPeriodNone: false },
     ]);
@@ -947,6 +959,7 @@ describe("getReactivationCards — sentAt, janela e limite diário", () => {
 describe("getReactivationCards — cards fixos da Clínica Demo VEXO", () => {
   beforeEach(() => {
     reactivationConfigFindUniqueMock.mockReset();
+    reactivationMessagesConfigFindUniqueMock.mockReset();
     appointmentFindManyMock.mockReset();
     reactivationCardSlotFindManyMock.mockReset();
     reactivationCardSlotUpsertMock.mockReset();
@@ -961,6 +974,7 @@ describe("getReactivationCards — cards fixos da Clínica Demo VEXO", () => {
     reactivationCardSlotCountMock.mockResolvedValue(0);
     noShowCardSlotCountMock.mockResolvedValue(0);
     reactivationConfigFindUniqueMock.mockResolvedValue({ defaultPeriods: [30, 60], dailyWhatsappLimit: 15 });
+    reactivationMessagesConfigFindUniqueMock.mockResolvedValue(null);
   });
 
   // Item 3 (pedido explícito): "adicione teste que comprove" que a marca
@@ -1170,13 +1184,6 @@ describe("sendReactivationWhatsAppMessage — envio direto pelo VEXO", () => {
         lead: { id: "lead-1", name: "Fulana", igScopedId: "ig-1", nameLookupAttempted: true, phone: "11987654321" },
         clinic: {
           whatsappInstanceName: "clinic-1-instance",
-          reactivationConfig: {
-            message1: null,
-            message2: "Mensagem customizada da clínica",
-            message3: null,
-            message4: null,
-            message5: null,
-          },
         },
       },
       ...overrides,
@@ -1192,6 +1199,7 @@ describe("sendReactivationWhatsAppMessage — envio direto pelo VEXO", () => {
     reactivationCardSlotCountMock.mockReset();
     noShowCardSlotCountMock.mockReset();
     reactivationConfigFindUniqueMock.mockReset();
+    reactivationMessagesConfigFindUniqueMock.mockReset();
     sendWhatsappMessageMock.mockReset();
     reactivationCardSlotFindFirstMock.mockResolvedValue(null); // sem envio anterior = sem rate limit, por padrão
     noShowCardSlotFindFirstMock.mockResolvedValue(null);
@@ -1199,6 +1207,10 @@ describe("sendReactivationWhatsAppMessage — envio direto pelo VEXO", () => {
     reactivationCardSlotCountMock.mockResolvedValue(0); // abaixo do limite diário, por padrão
     noShowCardSlotCountMock.mockResolvedValue(0);
     reactivationConfigFindUniqueMock.mockResolvedValue({ dailyWhatsappLimit: 15 });
+    // slot=2 (ver fakeSlot acima) -> message2 — mesmo texto que estava
+    // embutido em fakeSlot antes desta rodada (GLOBAL agora, não mais
+    // lido de appointment.clinic.reactivationConfig).
+    reactivationMessagesConfigFindUniqueMock.mockResolvedValue({ message2: "Mensagem customizada da clínica" });
   });
 
   it("sucesso: reserva, manda o texto certo (da config+slot, nunca do cliente) e marca enviado", async () => {
@@ -1314,17 +1326,8 @@ describe("sendReactivationWhatsAppMessage — envio direto pelo VEXO", () => {
   });
 
   it("mensagem customizada com {{primeiro_nome}}/{{data_horario}}: renderiza antes de mandar de verdade", async () => {
-    reactivationCardSlotFindUniqueMock.mockResolvedValue(
-      fakeSlot({
-        appointment: {
-          ...fakeSlot().appointment,
-          clinic: {
-            ...fakeSlot().appointment.clinic,
-            reactivationConfig: { message1: null, message2: "Oi, {{primeiro_nome}}! Em {{data_horario}}.", message3: null, message4: null, message5: null },
-          },
-        },
-      })
-    );
+    reactivationCardSlotFindUniqueMock.mockResolvedValue(fakeSlot());
+    reactivationMessagesConfigFindUniqueMock.mockResolvedValue({ message2: "Oi, {{primeiro_nome}}! Em {{data_horario}}." });
     sendWhatsappMessageMock.mockResolvedValue(undefined);
 
     await sendReactivationWhatsAppMessage("appt-1", 90, new Date("2026-04-01T12:00:00.000Z"));

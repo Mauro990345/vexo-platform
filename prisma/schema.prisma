@@ -930,6 +930,13 @@ model ReactivationConfig {
 
   dailyWhatsappLimit Int @default(15)
 
+  // AJUSTE (pedido explícito — "unificar os textos... numa única tela
+  // GLOBAL"): message1-5 PARARAM DE SER LIDOS pelo app (ver
+  // ReactivationMessagesConfig abaixo, que substituiu isto como fonte dos
+  // textos) — colunas e dados mantidos de propósito, sem migration de
+  // remoção ("não apague as colunas ou dados por clínica"). Só ficam
+  // paradas aqui como histórico de quando a Reativação ainda era
+  // configurável por clínica.
   message1 String? @db.Text
   message2 String? @db.Text
   message3 String? @db.Text
@@ -940,8 +947,29 @@ model ReactivationConfig {
   // assignNextReactivationSlot, reactivation.ts) — nunca é lido de volta
   // pra decidir o texto de um card já existente (isso vem de
   // ReactivationCardSlot, abaixo, fixo por agendamento+período desde o
-  // momento em que aquele card entra na faixa).
+  // momento em que aquele card entra na faixa). Continua POR CLÍNICA
+  // mesmo depois dos textos virarem globais — é só a posição da rotação,
+  // não o conteúdo.
   sequenceCounter Int @default(0)
+
+  updatedAt DateTime @updatedAt
+}
+
+// Textos da Reativação GLOBAIS (pedido explícito — antes eram por
+// clínica, em ReactivationConfig.message1-5 acima) — singleton, mesmo
+// padrão de NoShowCardSettings/NeverScheduledCardSettings. Editado na aba
+// "Cards do Painel" (Follow-up), não mais em Automações. Migration de
+// criação já semeia esta linha com os textos que estavam salvos na
+// Clínica Demo VEXO (ver migration.sql) — as colunas antigas em
+// ReactivationConfig continuam intactas, só pararam de ser lidas.
+model ReactivationMessagesConfig {
+  id String @id @default("singleton")
+
+  message1 String? @db.Text
+  message2 String? @db.Text
+  message3 String? @db.Text
+  message4 String? @db.Text
+  message5 String? @db.Text
 
   updatedAt DateTime @updatedAt
 }
@@ -1107,7 +1135,11 @@ model HotLeadConfig {
   // excesso de contato automatizado pela mesma conta (pedido explícito).
   dailyLimit Int @default(5)
 
-  // Passo 1 · 2 dias desde a última mensagem do lead.
+  // AJUSTE (pedido explícito — "unificar os textos... numa única tela
+  // GLOBAL"): os 9 textos abaixo PARARAM DE SER LIDOS pelo app (ver
+  // HotLeadMessagesConfig abaixo) — colunas e dados mantidos de
+  // propósito, sem migration de remoção. Passo 1 · 2 dias desde a última
+  // mensagem do lead.
   step1Message1 String? @db.Text
   step1Message2 String? @db.Text
   step1Message3 String? @db.Text
@@ -1125,9 +1157,35 @@ model HotLeadConfig {
 
   // Mesmo papel de ReactivationConfig.sequenceCounter, um por passo — só
   // decide a PRÓXIMA posição na rotação em sequência daquele passo.
+  // Continua POR CLÍNICA mesmo depois dos textos virarem globais (mesmo
+  // motivo de ReactivationConfig.sequenceCounter acima).
   step1SequenceCounter Int @default(0)
   step2SequenceCounter Int @default(0)
   step3SequenceCounter Int @default(0)
+
+  updatedAt DateTime @updatedAt
+}
+
+// Textos do "Quente" GLOBAIS (pedido explícito — antes eram por clínica,
+// em HotLeadConfig.stepXMessageY acima) — singleton, mesmo padrão de
+// ReactivationMessagesConfig acima. Editado na aba "Cards do Painel"
+// (Follow-up). Migration de criação semeia esta linha com os textos da
+// Clínica Demo VEXO — as colunas antigas em HotLeadConfig continuam
+// intactas, só pararam de ser lidas.
+model HotLeadMessagesConfig {
+  id String @id @default("singleton")
+
+  step1Message1 String? @db.Text
+  step1Message2 String? @db.Text
+  step1Message3 String? @db.Text
+
+  step2Message1 String? @db.Text
+  step2Message2 String? @db.Text
+  step2Message3 String? @db.Text
+
+  step3Message1 String? @db.Text
+  step3Message2 String? @db.Text
+  step3Message3 String? @db.Text
 
   updatedAt DateTime @updatedAt
 }

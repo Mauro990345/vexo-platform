@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 const conversationFindManyMock = vi.fn();
 const hotLeadConfigFindUniqueMock = vi.fn();
 const hotLeadConfigUpsertMock = vi.fn();
+const hotLeadMessagesConfigFindUniqueMock = vi.fn();
 const leadFindManyMock = vi.fn();
 const instagramAccountFindUniqueMock = vi.fn();
 const hotLeadCardSlotCountMock = vi.fn();
@@ -16,6 +17,12 @@ vi.mock("@/lib/prisma", () => ({
     hotLeadConfig: {
       findUnique: (...args: unknown[]) => hotLeadConfigFindUniqueMock(...args),
       upsert: (...args: unknown[]) => hotLeadConfigUpsertMock(...args),
+    },
+    // GLOBAL agora (pedido explícito, "unificar os textos... numa única
+    // tela GLOBAL") — hotLeadConfig acima ficou só com dailyLimit/
+    // contadores de rotação, POR CLÍNICA; os 9 textos vêm daqui.
+    hotLeadMessagesConfig: {
+      findUnique: (...args: unknown[]) => hotLeadMessagesConfigFindUniqueMock(...args),
     },
     lead: { findMany: (...args: unknown[]) => leadFindManyMock(...args) },
     instagramAccount: { findUnique: (...args: unknown[]) => instagramAccountFindUniqueMock(...args) },
@@ -289,6 +296,7 @@ describe("getHotLeadCards — wrapper Prisma", () => {
     conversationFindManyMock.mockReset();
     hotLeadConfigFindUniqueMock.mockReset();
     hotLeadConfigUpsertMock.mockReset();
+    hotLeadMessagesConfigFindUniqueMock.mockReset();
     leadFindManyMock.mockReset();
     instagramAccountFindUniqueMock.mockReset();
     hotLeadCardSlotCountMock.mockReset();
@@ -299,6 +307,7 @@ describe("getHotLeadCards — wrapper Prisma", () => {
     instagramAccountFindUniqueMock.mockResolvedValue(null);
     hotLeadCardSlotCountMock.mockResolvedValue(0);
     hotLeadConfigFindUniqueMock.mockResolvedValue({ dailyLimit: 5 });
+    hotLeadMessagesConfigFindUniqueMock.mockResolvedValue(null);
     transactionMock.mockResolvedValue([]);
   });
 

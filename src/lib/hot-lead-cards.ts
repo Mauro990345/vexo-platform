@@ -250,8 +250,14 @@ export async function getHotLeadCards(clinicId: string, now: Date = new Date()):
   const cardCandidates = buildHotLeadCardCandidates(inputs, now);
   if (cardCandidates.length === 0) return [];
 
-  const [config, leads, instagramAccount, sentTodayCount] = await Promise.all([
+  // AJUSTE (pedido explícito — "unificar os textos... numa única tela
+  // GLOBAL"): os 9 textos vêm de HotLeadMessagesConfig (singleton,
+  // GLOBAL, editado em Follow-up → "Cards do Painel"), não mais de
+  // HotLeadConfig (que continua só com dailyLimit/contadores de rotação,
+  // POR CLÍNICA, intocados).
+  const [config, messagesConfig, leads, instagramAccount, sentTodayCount] = await Promise.all([
     prisma.hotLeadConfig.findUnique({ where: { clinicId } }),
+    prisma.hotLeadMessagesConfig.findUnique({ where: { id: "singleton" } }),
     prisma.lead.findMany({
       where: { id: { in: cardCandidates.map((c) => c.leadId) } },
       select: { id: true, name: true, igUsername: true, igScopedId: true, nameLookupAttempted: true, profilePictureUrl: true },
@@ -278,7 +284,7 @@ export async function getHotLeadCards(clinicId: string, now: Date = new Date()):
       continue;
     }
     const stepIdx = c.step - 1;
-    const availableSlots = resolveAvailableReactivationSlots(stepMessagesFromConfig(config, c.step));
+    const availableSlots = resolveAvailableReactivationSlots(stepMessagesFromConfig(messagesConfig, c.step));
     const assigned = assignNextReactivationSlot(availableSlots, counters[stepIdx]!);
     counters[stepIdx] = assigned.nextSequenceCounter;
     slotByCandidate.set(key, assigned.slot);
@@ -329,7 +335,7 @@ export async function getHotLeadCards(clinicId: string, now: Date = new Date()):
   return cardCandidates.map((c) => {
     const lead = leadById.get(c.leadId);
     const slot = slotByCandidate.get(`${c.conversationId}:${c.step}`)!;
-    const messages = stepMessagesFromConfig(config, c.step);
+    const messages = stepMessagesFromConfig(messagesConfig, c.step);
     const defaults = DEFAULT_HOT_LEAD_STEP_MESSAGES[c.step - 1]!;
     const rawTemplate = resolveReactivationMessageText(slot, messages, defaults);
     const message = renderMessageTemplate(rawTemplate, {

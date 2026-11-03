@@ -513,11 +513,19 @@ async function getPinnedReactivationCandidates(
 }
 
 export async function getReactivationCards(clinicId: string, now: Date = new Date()): Promise<ReactivationCard[]> {
-  const config = await prisma.reactivationConfig.findUnique({ where: { clinicId } });
+  // AJUSTE (pedido explícito — "unificar os textos... numa única tela
+  // GLOBAL"): os 5 textos vêm de ReactivationMessagesConfig (singleton,
+  // GLOBAL, editado em Follow-up → "Cards do Painel"), não mais de
+  // ReactivationConfig (que continua só com prazos/limite/rotação, POR
+  // CLÍNICA, intocados).
+  const [config, messagesConfig] = await Promise.all([
+    prisma.reactivationConfig.findUnique({ where: { clinicId } }),
+    prisma.reactivationMessagesConfig.findUnique({ where: { id: "singleton" } }),
+  ]);
   const defaultPeriods = config?.defaultPeriods?.length ? config.defaultPeriods : DEFAULT_RETURN_PERIODS;
   const dailyLimit = config?.dailyWhatsappLimit ?? DEFAULT_DAILY_WHATSAPP_LIMIT;
 
-  const messages = [config?.message1, config?.message2, config?.message3, config?.message4, config?.message5];
+  const messages = [messagesConfig?.message1, messagesConfig?.message2, messagesConfig?.message3, messagesConfig?.message4, messagesConfig?.message5];
   const availableSlots = resolveAvailableReactivationSlots(messages);
 
   const { candidates: pinnedCardCandidates, pinnedAppointmentIds } = await getPinnedReactivationCandidates(clinicId, defaultPeriods);
@@ -777,9 +785,6 @@ export async function sendReactivationWhatsAppMessage(
             select: {
               whatsappInstanceName: true,
               instagramAccount: { select: { accessTokenEnc: true } },
-              reactivationConfig: {
-                select: { message1: true, message2: true, message3: true, message4: true, message5: true },
-              },
             },
           },
         },
@@ -799,8 +804,13 @@ export async function sendReactivationWhatsAppMessage(
   // corrida "limite batido entre o card aparecer na tela e o clique"; a UI
   // já esconde o botão nesse caso (ver ReactivationCard.dailyLimitReached/
   // ReactivationRail.tsx), mas o servidor nunca confia só na tela.
-  const [reactivationConfig, sentTodayCount] = await Promise.all([
+  // messagesConfig: ver comentário grande em getReactivationCards acima —
+  // mesma fonte global (ReactivationMessagesConfig), buscada de novo aqui
+  // (não reaproveitável: esta função é chamada isolada, direto por um
+  // clique, nunca a partir de uma lista já carregada).
+  const [reactivationConfig, messagesConfig, sentTodayCount] = await Promise.all([
     prisma.reactivationConfig.findUnique({ where: { clinicId }, select: { dailyWhatsappLimit: true } }),
+    prisma.reactivationMessagesConfig.findUnique({ where: { id: "singleton" } }),
     countTodaysWhatsappSends(clinicId, now),
   ]);
   const dailyLimit = reactivationConfig?.dailyWhatsappLimit ?? DEFAULT_DAILY_WHATSAPP_LIMIT;
@@ -860,8 +870,7 @@ export async function sendReactivationWhatsAppMessage(
     return { ok: false, reason: "disconnected", clinicId };
   }
 
-  const config = slot.appointment.clinic.reactivationConfig;
-  const messages = [config?.message1, config?.message2, config?.message3, config?.message4, config?.message5];
+  const messages = [messagesConfig?.message1, messagesConfig?.message2, messagesConfig?.message3, messagesConfig?.message4, messagesConfig?.message5];
   const rawTemplate = resolveReactivationMessageText(slot.slot, messages, DEFAULT_REACTIVATION_MESSAGES);
 
   // {{primeiro_nome}}/{{data_horario}} (mesmo mecanismo de getReactivationCards,
