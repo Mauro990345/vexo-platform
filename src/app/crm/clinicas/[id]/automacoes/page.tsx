@@ -281,18 +281,19 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
                 {/* Card "Quente" (ver ReactivationRail.tsx/hot-lead-cards.ts)
                     — lead com conversa que nunca agendou, com sinal de
                     interesse nas mensagens dele. Cadência fixa de 3 passos
-                    (2/4/30 dias desde a última mensagem do lead) — só o
-                    limite diário fica aqui (a detecção por palavra-chave
-                    não é configurável, mora em hot-lead-detection.ts).
-                    AJUSTE (mesmo pedido acima): as 9 mensagens (3 por
-                    passo) saíram daqui — agora globais, em Follow-up →
-                    "Cards do Painel". */}
+                    (2/4/15 dias desde a última mensagem do lead — item 3,
+                    rodada mais recente, era 2/4/30) — só o limite diário
+                    fica aqui (a detecção por palavra-chave não é
+                    configurável, mora em hot-lead-detection.ts). AJUSTE
+                    (mesmo pedido acima): as 9 mensagens (3 por passo)
+                    saíram daqui — agora globais, em Follow-up → "Cards do
+                    Painel". */}
                 <div className="mt-5">
                   <h2 className="text-xs font-semibold">Quente</h2>
                   <p className="mt-1 text-caption text-vexo-muted">
                     Lead que nunca agendou, que perguntou sobre horário, preço ou endereço —
                     aparece no Painel com um botão de Instagram (copiar e abrir a conversa) em 3
-                    tentativas (2, 4 e 30 dias desde a última mensagem dele, uma sequência só por
+                    tentativas (2, 4 e 15 dias desde a última mensagem dele, uma sequência só por
                     lead). Limite diário de envios por clínica, pra evitar excesso de contato pela
                     mesma conta. Os textos das mensagens são globais, em Follow-up → "Cards do
                     Painel".

@@ -222,9 +222,10 @@ export async function updateNoShowFirstStepDelay(formData: FormData) {
   revalidatePath("/crm", "layout");
 }
 
-// Textos dos dois passos do card "Faltou" (D3/D10, ver NoShowCardSettings/
-// no-show-cards.ts) + "Não agendou" (D30/D60, ver never-scheduled-cards.ts)
-// + Reativação (5 textos em rodízio, reactivation.ts) + Quente (9
+// Textos dos passos do card "Faltou" (D3/D10/D30, ver NoShowCardSettings/
+// no-show-cards.ts) + "Não agendou" (D10/D30/D60, ver
+// never-scheduled-cards.ts) + Reativação (5 textos em rodízio,
+// reactivation.ts) + Quente (9
 // textos, 3 por passo, hot-lead-cards.ts) — AGORA TODOS GLOBAIS (pedido
 // explícito, "unificar os textos dos cards do Painel numa única tela
 // GLOBAL"); Reativação/Quente eram por clínica antes disso (ver
@@ -247,6 +248,13 @@ export async function updatePanelCardSettings(formData: FormData) {
   const day10Content = field("day10Content");
   const day30Content = field("day30Content");
   const day60Content = field("day60Content");
+  // Nomes de campo prefixados (ver comentário em FollowUpView.tsx) — sem
+  // isso colidiriam com day30Content/day10Content do outro card no MESMO
+  // <form>. noShowDay30Content = 3º passo do Faltou (item 1, rodada
+  // atual); neverScheduledDay10Content = novo 3º passo do Não agendou
+  // (item 2, rodada atual).
+  const noShowDay30Content = field("noShowDay30Content");
+  const neverScheduledDay10Content = field("neverScheduledDay10Content");
 
   const message1 = field("message1");
   const message2 = field("message2");
@@ -269,13 +277,13 @@ export async function updatePanelCardSettings(formData: FormData) {
   await prisma.$transaction([
     prisma.noShowCardSettings.upsert({
       where: { id: "singleton" },
-      create: { id: "singleton", day3Content, day10Content },
-      update: { day3Content, day10Content },
+      create: { id: "singleton", day3Content, day10Content, day30Content: noShowDay30Content },
+      update: { day3Content, day10Content, day30Content: noShowDay30Content },
     }),
     prisma.neverScheduledCardSettings.upsert({
       where: { id: "singleton" },
-      create: { id: "singleton", day30Content, day60Content },
-      update: { day30Content, day60Content },
+      create: { id: "singleton", day30Content, day60Content, day10Content: neverScheduledDay10Content },
+      update: { day30Content, day60Content, day10Content: neverScheduledDay10Content },
     }),
     prisma.reactivationMessagesConfig.upsert({
       where: { id: "singleton" },

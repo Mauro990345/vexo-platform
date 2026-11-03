@@ -572,6 +572,15 @@ model Conversation {
   // (possivelmente trocado de novo depois) de LLM_PROVIDER.
   lastSilenceCheckModel String?
 
+  // Âncora congelada do card "Não agendou" (item 4 do pedido) — setada
+  // uma única vez, na primeira vez que a conversa entra na janela do
+  // primeiro passo (D10), e nunca mais atualizada depois disso. Antes
+  // desse momento, a elegibilidade ainda usa lastMessageAt ao vivo (ver
+  // getNeverScheduledCards, never-scheduled-cards.ts) — sem isso, uma
+  // resposta do lead sem agendar reiniciava a contagem dos prazos D10/
+  // D30/D60 a cada mensagem nova, mesmo com o card já tendo aparecido.
+  neverScheduledAnchorAt DateTime?
+
   messages     Message[]
   appointments Appointment[]
   followUps    FollowUpLog[]
@@ -1050,6 +1059,9 @@ model NoShowCardSettings {
 
   day3Content  String? @db.Text
   day10Content String? @db.Text
+  // 3º passo (D30), item 1 do pedido — só Instagram, manual (ver
+  // no-show-cards.ts, canal forçado pro step 3 independente de telefone).
+  day30Content String? @db.Text
 
   updatedAt DateTime @updatedAt
 }
@@ -1089,6 +1101,10 @@ model NeverScheduledCardSettings {
 
   day30Content String? @db.Text
   day60Content String? @db.Text
+  // Novo 3º passo (D10), item 2 do pedido — persistido como step=3 em
+  // NeverScheduledCardSlot (D30/D60 continuam step=1/2, sem renumerar
+  // dados já gravados; ver never-scheduled-cards.ts).
+  day10Content String? @db.Text
 
   updatedAt DateTime @updatedAt
 }
@@ -1149,7 +1165,7 @@ model HotLeadConfig {
   step2Message2 String? @db.Text
   step2Message3 String? @db.Text
 
-  // Passo 3 · 30 dias — última tentativa (depois dele a sequência encerra,
+  // Passo 3 · 15 dias — última tentativa (depois dele a sequência encerra,
   // ver evaluateHotLeadEligibility).
   step3Message1 String? @db.Text
   step3Message2 String? @db.Text
