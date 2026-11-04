@@ -14,61 +14,100 @@ import { detectHotLeadSignal } from "@/lib/hot-lead-detection";
 // nenhum status, pro lead inteiro — mesmo critério "nunca agendou" já
 // usado pelo Quente, ver hot-lead-cards.ts) e sem nenhuma atividade na
 // conversa (mensagem de QUALQUER lado — Conversation.lastMessageAt, não
-// só lastLeadMessageAt) há 10 dias (D10, item 2 desta rodada), 30 dias
-// (D30) ou 60 dias (D60). Mesmo estilo do card "Faltou" (pedido
+// só lastLeadMessageAt) há 2 (D2), 4 (D4), 10 (D10), 30 (D30) ou 60 dias
+// (D60) — D2/D4 são da rodada atual. Mesmo estilo do card "Faltou" (pedido
 // explícito): mesma função de janela (computeReactivationWindow — 5 dias
 // ÚTEIS a partir do dia seguinte ao marco, ver reactivation.ts), mesmo
 // formato de passos fixos com slot lazy (só cria linha no banco no
 // primeiro clique, ver toggleNeverScheduledCardSent abaixo — igual a
 // toggleNoShowCardSent), mesmo texto de settings GLOBAL (singleton, vazio
-// usa o padrão).
+// usa o padrão). Todos os 5 passos são só Instagram manual (copiar+abrir)
+// — nunca WhatsApp, pedido explícito desta rodada (quem não agendou não
+// tem telefone cadastrado): este card nunca teve canal WhatsApp, nada
+// mudou aqui.
 //
-// O D10 novo entra como step=3 (NÃO renumera D30/D60, que continuam
-// step=1/2 — evita invalidar NeverScheduledCardSlot já gravados, cujo
-// `step` significaria outra coisa se renumerado). A posição de EXIBIÇÃO
-// ("mensagem X de Y") é cronológica (D10=1, D30=2, D60=3), independente do
+// D10 (rodada anterior) entrou como step=3; D2/D4 (rodada atual) entram
+// como step=4/5 — NUNCA renumera D30/D60/D10 já existentes, cujo `step`
+// significaria outra coisa se renumerado (NeverScheduledCardSlot já
+// gravado ficaria com o dia errado). A posição de EXIBIÇÃO ("mensagem X
+// de Y") é cronológica (D2=1, D4=2, D10=3, D30=4, D60=5), independente do
 // número de `step` gravado — ver stepDisplayPosition abaixo.
 //
 // Exclusões (pedido explícito: "já tenham qualquer agendamento" e
-// "marcados como perdidos" — item 2 pede explicitamente "mantenha as
-// exclusões atuais"):
+// "marcados como perdidos" — item 2 da rodada anterior pedia
+// explicitamente "mantenha as exclusões atuais", mantidas aqui):
 // - QUALQUER Appointment do lead, de qualquer status (mesmo cancelado) —
 //   `lead.appointments: { none: {} } }`, idêntico ao "nunca agendou" do
-//   Quente.
+//   Quente. Também cobre o item 3 desta rodada quanto aos LEMBRETES
+//   AUTOMÁTICOS de véspera (ReminderConfig/ReminderLog, por agendamento) —
+//   são mutuamente exclusivos com este card por definição: lembrete só
+//   existe pra quem TEM agendamento, "Não agendou" só pra quem NÃO tem
+//   nenhum. Nenhuma sobreposição possível, não precisou de ajuste.
 // - Conversation.status === "LOST" ("marcados como perdidos" — é
 //   exatamente o que esse status significa no schema, "não retomou após
 //   follow-up").
 //
-// Exclusão ADICIONAL (critério meu, não pedido explicitamente — reportado
-// no resumo da implementação): lead com sinal de interesse detectado em
+// Exclusão ADICIONAL #1 (critério meu, rodada anterior — reportado no
+// resumo da implementação): lead com sinal de interesse detectado em
 // QUALQUER mensagem dele (detectHotLeadSignal, hot-lead-detection.ts —
 // mesma detecção por palavra-chave do card "Quente") fica de fora daqui.
-// Motivo: as janelas de D30/D60 deste card colidem em cheio com o 3º passo
-// do Quente (15 dias desde a última mensagem do lead, +3 dias de janela —
-// ver HOT_LEAD_STEP_DAYS, hot-lead-cards.ts) — sem esta exclusão, o MESMO
+// Motivo: as janelas deste card colidiam com o 3º passo do Quente (15
+// dias desde a última mensagem do lead, +3 dias de janela — ver
+// HOT_LEAD_STEP_DAYS, hot-lead-cards.ts) — sem esta exclusão, o MESMO
 // lead apareceria duas vezes na faixa, em "Quente" e em "Não agendou", ao
-// mesmo tempo, pro mesmo intervalo de dias. "Não agendou" é pensado pro
-// lead que nunca deu nenhum sinal (silêncio puro); quem já perguntou
-// preço/endereço/horário continua coberto só pelo Quente.
+// mesmo tempo. "Não agendou" é pro lead que nunca deu nenhum sinal
+// (silêncio puro); quem já perguntou preço/endereço/horário continua
+// coberto só pelo Quente. ESTA MESMA exclusão também cobre D2/D4 (rodada
+// atual) quanto ao Quente — ver verificação do item 3 abaixo: como o
+// Quente exige um sinal de interesse pra sequer abrir uma sequência
+// (chooseHotLeadStep, hot-lead-cards.ts) e esta exclusão já tira do "Não
+// agendou" TODO lead com qualquer sinal, independente do dia, os dois
+// cards continuam mutuamente exclusivos por conversa — D2/D4 não mudam
+// essa conclusão, nenhum ajuste extra foi necessário na cadência do
+// Quente (que fica intocada, como pedido).
 //
-// Elegibilidade/âncora (item 4, rodada atual — AJUSTE): o card só pode
-// sumir quando o lead agendar (sai do filtro `lead.appointments: none`)
-// ou for marcado como perdido (status LOST) — uma resposta sem agendar
-// NÃO deve sumir o card nem reiniciar os prazos D10/D30/D60. Como
+// Exclusão ADICIONAL #2 (item 3 desta rodada — sobreposição encontrada
+// com a sequência automática "Parou de responder"/SILENCE,
+// follow-up.ts): D2/D4 caem bem na janela em que essa sequência
+// automática (gatilho em ~24h de silêncio por padrão, configurável em
+// FollowUpSettings.silenceHours) pode estar NO MEIO de disparar suas
+// próprias mensagens — sem tratar isso, a secretária veria o card manual
+// "Não agendou" pedindo pra ela mandar mensagem no MESMO momento em que a
+// IA já está mandando uma pela sequência automática, duplicando o
+// contato. Resolvido excluindo daqui qualquer conversa com um
+// FollowUpLog{trigger:"SILENCE", respondedAt:null} que AINDA TENHA passo
+// pendente (lastStepIndex+1 < nº de FollowUpStep configurados pra
+// SILENCE) — ver hasPendingSilenceSteps/getNeverScheduledCards abaixo.
+// Assim que a sequência automática esgota os passos configurados (ou se
+// nunca chegou a disparar), a conversa volta a ficar elegível normalmente
+// — sem mexer em FollowUpLog.respondedAt nem em nenhuma regra da própria
+// sequência SILENCE, só lendo o estado dela. D10/D30/D60 raramente
+// coincidem com isso na prática (a sequência SILENCE já teria esgotado os
+// passos muito antes), mas a mesma exclusão vale pros 5 passos por
+// uniformidade — mais simples que tratar cada um diferente.
+//
+// Elegibilidade/âncora (ajuste de rodada anterior, mantido): o card só
+// pode sumir quando o lead agendar (sai do filtro `lead.appointments:
+// none`) ou for marcado como perdido (status LOST) — uma resposta sem
+// agendar NÃO deve sumir o card nem reiniciar os prazos. Como
 // Conversation.lastMessageAt é atualizado em TODA mensagem nova (de
 // qualquer lado), usá-lo direto faria exatamente isso: reiniciar a
 // contagem a cada resposta. Resolvido com uma ÂNCORA CONGELADA
 // (Conversation.neverScheduledAnchorAt, schema.prisma): antes da conversa
-// entrar na primeira janela (D10), a âncora acompanha lastMessageAt ao
-// vivo (nada persistido ainda — a conversa pode estar só indo e voltando
-// normalmente, sem nenhum card mostrado); no momento em que ela entra na
-// janela do D10 por primeira vez, a âncora é congelada NESSE valor pra
-// sempre (ver getNeverScheduledCards abaixo) — uma resposta do lead
-// depois disso, sem agendar, não volta a mexer no prazo.
+// entrar na primeira janela (agora D2, antes era D10), a âncora acompanha
+// lastMessageAt ao vivo (nada persistido ainda — a conversa pode estar só
+// indo e voltando normalmente, sem nenhum card mostrado, OU com a
+// sequência SILENCE ainda ativa, ver exclusão #2 acima); no momento em
+// que ela entra na janela do passo mais precoce por primeira vez, a
+// âncora é congelada NESSE valor pra sempre (ver getNeverScheduledCards
+// abaixo) — uma resposta do lead depois disso, sem agendar, não volta a
+// mexer no prazo.
 export const NEVER_SCHEDULED_CARD_STEPS = [
   { step: 1, offsetDays: 30 },
   { step: 2, offsetDays: 60 },
   { step: 3, offsetDays: 10 },
+  { step: 4, offsetDays: 2 },
+  { step: 5, offsetDays: 4 },
 ] as const;
 
 const EARLIEST_STEP_OFFSET_DAYS = Math.min(...NEVER_SCHEDULED_CARD_STEPS.map((s) => s.offsetDays));
@@ -85,12 +124,19 @@ export function stepDisplayPosition(step: number): number {
 
 // DEFAULT_NEVER_SCHEDULED_CARD_MESSAGES é indexado por STEP (índice
 // step-1), não por posição de exibição — [0]=step1 (D30), [1]=step2
-// (D60), [2]=step3 (D10, novo).
-export const DEFAULT_NEVER_SCHEDULED_CARD_MESSAGES: readonly [string, string, string] = [
+// (D60), [2]=step3 (D10), [3]=step4 (D2, novo), [4]=step5 (D4, novo).
+// D2/D4: texto padrão curto e neutro (pedido explícito, "até eu
+// preencher"), mesmo padrão dos outros — editável em Follow-up → "Cards
+// do Painel".
+export const DEFAULT_NEVER_SCHEDULED_CARD_MESSAGES: readonly [string, string, string, string, string] = [
   "Oi, {{primeiro_nome}}. Passando por aqui rapidinho para te desejar uma excelente semana.",
   "Oi, {{primeiro_nome}}. Passando para desejar uma ótima semana. Quando fizer sentido, estamos por aqui.",
   "Oi, {{primeiro_nome}}. Passando por aqui para saber se ficou alguma dúvida sobre a avaliação. Estou à disposição.",
+  "Oi, {{primeiro_nome}}. Passando para saber se posso ajudar com alguma coisa.",
+  "Oi, {{primeiro_nome}}. Ainda por aqui, caso queira saber mais alguma coisa.",
 ];
+
+export type NeverScheduledExistingStep = { step: number; sentAt: Date | null };
 
 export type NeverScheduledCandidate = {
   conversationId: string;
@@ -98,34 +144,88 @@ export type NeverScheduledCandidate = {
   // Âncora congelada (ou lastMessageAt ao vivo, antes da primeira
   // janela) — ver comentário grande no topo do arquivo.
   anchorAt: Date;
+  // Passos já com slot gravado (NeverScheduledCardSlot) pra esta conversa
+  // — usado por chooseNeverScheduledStep (abaixo) pra escolher qual passo
+  // mostrar quando mais de uma janela está aberta ao mesmo tempo.
+  existingSteps: NeverScheduledExistingStep[];
 };
 
-export type NeverScheduledCardCandidate = NeverScheduledCandidate & { step: number; window: ReactivationWindow };
+export type NeverScheduledCardCandidate = Omit<NeverScheduledCandidate, "existingSteps"> & { step: number; window: ReactivationWindow };
 
-// Pura — mesma forma de buildNoShowCardCandidates (no-show-cards.ts), só
-// que ancorada em anchorAt (congelado — ver comentário grande no topo do
-// arquivo) em vez de noShowTriggeredAt, com offsets 10/30/60 em vez de
-// 3/10/30.
+const STEPS_BY_OFFSET_ASC = [...NEVER_SCHEDULED_CARD_STEPS].sort((a, b) => a.offsetDays - b.offsetDays);
+
+// Escolhe QUAL passo mostrar agora pra uma conversa, igual em espírito a
+// chooseHotLeadStep (hot-lead-cards.ts) — necessário porque D2 e D4
+// (rodada atual) ficam só 2 dias um do outro: a janela de 5 dias ÚTEIS de
+// cada um (computeReactivationWindow) é mais larga que essa distância, e
+// as duas SE SOBREPÕEM por alguns dias (ex.: D2 abre dia 2 e só fecha
+// dia~8; D4 abre dia 4, já dentro da janela do D2) — sem escolher, as
+// duas apareceriam como cards SEPARADOS pro mesmo lead ao mesmo tempo
+// (duplicado dentro do próprio "Não agendou", achado ao implementar este
+// ajuste). D10/D30/D60 nunca se sobrepõem entre si (dezenas de dias de
+// distância, bem mais que a janela de ~1 semana) — pra eles, esta função
+// sempre devolve exatamente o que o código antigo já devolvia, sem mudar
+// nada do comportamento existente.
+//
+// Prioridade: (1) o passo cronologicamente mais precoce com janela aberta
+// e AINDA NÃO marcado enviado; (2) se nenhum pendente estiver aberto, o
+// passo mais precoce com janela aberta JÁ marcado enviado — mantém o
+// "✓ enviado" visível até a janela dele fechar, igual ao comportamento de
+// sempre (sortReactivationCardsForDisplay, reactivation.ts, continua
+// cuidando de ordenar enviado-no-fim na lista final).
+export function chooseNeverScheduledStep(
+  anchorAt: Date,
+  existingSteps: NeverScheduledExistingStep[],
+  now: Date
+): { step: number; window: ReactivationWindow } | null {
+  const sentSteps = new Set(existingSteps.filter((s) => s.sentAt).map((s) => s.step));
+
+  for (const { step, offsetDays } of STEPS_BY_OFFSET_ASC) {
+    if (sentSteps.has(step)) continue;
+    const window = computeReactivationWindow(anchorAt, offsetDays);
+    if (isWithinReactivationWindow(window, now)) return { step, window };
+  }
+  for (const { step, offsetDays } of STEPS_BY_OFFSET_ASC) {
+    if (!sentSteps.has(step)) continue;
+    const window = computeReactivationWindow(anchorAt, offsetDays);
+    if (isWithinReactivationWindow(window, now)) return { step, window };
+  }
+  return null;
+}
+
+// Pura — aplica chooseNeverScheduledStep a cada candidato já pré-filtrado
+// (ver getNeverScheduledCards) e ordena pela janela. No máximo UM
+// resultado por conversationId agora (ver comentário grande acima).
 export function buildNeverScheduledCardCandidates(candidates: NeverScheduledCandidate[], now: Date): NeverScheduledCardCandidate[] {
   const result: NeverScheduledCardCandidate[] = [];
   for (const c of candidates) {
-    for (const { step, offsetDays } of NEVER_SCHEDULED_CARD_STEPS) {
-      const window = computeReactivationWindow(c.anchorAt, offsetDays);
-      if (isWithinReactivationWindow(window, now)) {
-        result.push({ ...c, step, window });
-      }
-    }
+    const choice = chooseNeverScheduledStep(c.anchorAt, c.existingSteps, now);
+    if (!choice) continue;
+    result.push({ conversationId: c.conversationId, leadId: c.leadId, anchorAt: c.anchorAt, step: choice.step, window: choice.window });
   }
-  return result.sort(
-    (a, b) => a.window.start.getTime() - b.window.start.getTime() || a.conversationId.localeCompare(b.conversationId) || a.step - b.step
-  );
+  return result.sort((a, b) => a.window.start.getTime() - b.window.start.getTime() || a.conversationId.localeCompare(b.conversationId));
 }
 
 export function resolveNeverScheduledCardMessageTemplate(
   step: number,
-  settings: { day30Content?: string | null; day60Content?: string | null; day10Content?: string | null }
+  settings: {
+    day30Content?: string | null;
+    day60Content?: string | null;
+    day10Content?: string | null;
+    day2Content?: string | null;
+    day4Content?: string | null;
+  }
 ): string {
-  const custom = step === 1 ? settings.day30Content : step === 2 ? settings.day60Content : settings.day10Content;
+  const custom =
+    step === 1
+      ? settings.day30Content
+      : step === 2
+        ? settings.day60Content
+        : step === 3
+          ? settings.day10Content
+          : step === 4
+            ? settings.day2Content
+            : settings.day4Content;
   if (custom && custom.trim()) return custom.trim();
   return DEFAULT_NEVER_SCHEDULED_CARD_MESSAGES[step - 1]!;
 }
@@ -156,27 +256,46 @@ export type NeverScheduledCard = {
   sentAt: Date | null;
 };
 
+// Exclusão ADICIONAL #2 (item 3, rodada atual) — ver comentário grande no
+// topo do arquivo. `totalSilenceSteps` é o nº de FollowUpStep configurados
+// pra SILENCE (global, /crm/follow-up); `openSilenceLogs` traz o
+// lastStepIndex de qualquer FollowUpLog{trigger:"SILENCE",
+// respondedAt:null} desta conversa (no máximo um, ver comentário em
+// processSilentConversations/follow-up.ts — a sequência SILENCE roda uma
+// única vez por conversa). Pura — fácil de testar sem mock de Prisma.
+export function hasPendingSilenceSteps(openSilenceLogs: { lastStepIndex: number | null }[], totalSilenceSteps: number): boolean {
+  return openSilenceLogs.some((log) => (log.lastStepIndex ?? -1) + 1 < totalSilenceSteps);
+}
+
 export async function getNeverScheduledCards(clinicId: string, now: Date = new Date()): Promise<NeverScheduledCard[]> {
-  const conversations = await prisma.conversation.findMany({
-    where: {
-      clinicId,
-      status: { not: "LOST" },
-      lastMessageAt: { not: null },
-      lead: { appointments: { none: {} } },
-    },
-    select: {
-      id: true,
-      leadId: true,
-      lastMessageAt: true,
-      neverScheduledAnchorAt: true,
-      messages: { where: { direction: "INBOUND" }, select: { content: true } },
-      neverScheduledCardSlots: { select: { step: true, sentAt: true } },
-    },
-  });
+  const [conversations, totalSilenceSteps] = await Promise.all([
+    prisma.conversation.findMany({
+      where: {
+        clinicId,
+        status: { not: "LOST" },
+        lastMessageAt: { not: null },
+        lead: { appointments: { none: {} } },
+      },
+      select: {
+        id: true,
+        leadId: true,
+        lastMessageAt: true,
+        neverScheduledAnchorAt: true,
+        messages: { where: { direction: "INBOUND" }, select: { content: true } },
+        neverScheduledCardSlots: { select: { step: true, sentAt: true } },
+        followUps: { where: { trigger: "SILENCE", respondedAt: null }, select: { lastStepIndex: true } },
+      },
+    }),
+    prisma.followUpStep.count({ where: { trigger: "SILENCE" } }),
+  ]);
 
   // Sinal de interesse (ver comentário grande no topo do arquivo) — essas
-  // conversas ficam só com o Quente, nunca duplicadas aqui.
-  const eligible = conversations.filter((c) => !detectHotLeadSignal(c.messages.map((m) => m.content)));
+  // conversas ficam só com o Quente, nunca duplicadas aqui. Sequência
+  // SILENCE ainda com passo pendente — evita duplicar com a mensagem
+  // automática que está por vir (exclusão #2, mesmo comentário).
+  const eligible = conversations.filter(
+    (c) => !detectHotLeadSignal(c.messages.map((m) => m.content)) && !hasPendingSilenceSteps(c.followUps, totalSilenceSteps)
+  );
 
   // Âncora congelada (item 4) — ver comentário grande no topo do arquivo.
   // Antes da primeira janela (D10), acompanha lastMessageAt ao vivo (nada
@@ -184,14 +303,16 @@ export async function getNeverScheduledCards(clinicId: string, now: Date = new D
   // congelada pra sempre em Conversation.neverScheduledAnchorAt.
   const toFreeze: { conversationId: string; anchorAt: Date }[] = [];
   const candidates: NeverScheduledCandidate[] = eligible.map((c) => {
-    if (c.neverScheduledAnchorAt) return { conversationId: c.id, leadId: c.leadId, anchorAt: c.neverScheduledAnchorAt };
+    if (c.neverScheduledAnchorAt) {
+      return { conversationId: c.id, leadId: c.leadId, anchorAt: c.neverScheduledAnchorAt, existingSteps: c.neverScheduledCardSlots };
+    }
 
     const liveAnchor = c.lastMessageAt!;
     const earliestWindow = computeReactivationWindow(liveAnchor, EARLIEST_STEP_OFFSET_DAYS);
     if (now.getTime() >= earliestWindow.start.getTime()) {
       toFreeze.push({ conversationId: c.id, anchorAt: liveAnchor });
     }
-    return { conversationId: c.id, leadId: c.leadId, anchorAt: liveAnchor };
+    return { conversationId: c.id, leadId: c.leadId, anchorAt: liveAnchor, existingSteps: c.neverScheduledCardSlots };
   });
 
   if (toFreeze.length > 0) {
