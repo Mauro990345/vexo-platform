@@ -223,7 +223,7 @@ export async function updateNoShowFirstStepDelay(formData: FormData) {
 }
 
 // Textos dos passos do card "Faltou" (D3/D10/D30, ver NoShowCardSettings/
-// no-show-cards.ts) + "Não agendou" (D10/D30/D60, ver
+// no-show-cards.ts) + "Não agendou" (D2/D4/D10/D30/D60, ver
 // never-scheduled-cards.ts) + Reativação (5 textos em rodízio,
 // reactivation.ts) + Quente (9
 // textos, 3 por passo, hot-lead-cards.ts) — AGORA TODOS GLOBAIS (pedido
@@ -255,6 +255,10 @@ export async function updatePanelCardSettings(formData: FormData) {
   // (item 2, rodada atual).
   const noShowDay30Content = field("noShowDay30Content");
   const neverScheduledDay10Content = field("neverScheduledDay10Content");
+  // D2/D4 do Não agendou (rodada atual) — nomes de campo sem colisão (o
+  // grupo "Faltou" não tem day2Content/day4Content).
+  const neverScheduledDay2Content = field("day2Content");
+  const neverScheduledDay4Content = field("day4Content");
 
   const message1 = field("message1");
   const message2 = field("message2");
@@ -282,8 +286,21 @@ export async function updatePanelCardSettings(formData: FormData) {
     }),
     prisma.neverScheduledCardSettings.upsert({
       where: { id: "singleton" },
-      create: { id: "singleton", day30Content, day60Content, day10Content: neverScheduledDay10Content },
-      update: { day30Content, day60Content, day10Content: neverScheduledDay10Content },
+      create: {
+        id: "singleton",
+        day30Content,
+        day60Content,
+        day10Content: neverScheduledDay10Content,
+        day2Content: neverScheduledDay2Content,
+        day4Content: neverScheduledDay4Content,
+      },
+      update: {
+        day30Content,
+        day60Content,
+        day10Content: neverScheduledDay10Content,
+        day2Content: neverScheduledDay2Content,
+        day4Content: neverScheduledDay4Content,
+      },
     }),
     prisma.reactivationMessagesConfig.upsert({
       where: { id: "singleton" },

@@ -480,17 +480,38 @@ export async function FollowUpView() {
                     <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5">
                       <div className="flex min-w-0 items-center gap-2.5">
                         <span className="shrink-0 text-card text-vexo-muted">Não agendou</span>
-                        <span className="truncate text-xs">{preview(neverScheduledCardSettings?.day30Content ?? "(texto padrão)")}</span>
+                        <span className="truncate text-xs">{preview(neverScheduledCardSettings?.day2Content ?? "(texto padrão)")}</span>
                       </div>
                       <span className="shrink-0 text-card text-vexo-muted transition group-open:rotate-180">▾</span>
                     </summary>
                     <div className="space-y-2.5 border-t border-vexo-border px-3 pb-3 pt-2.5">
-                      {/* Item 2 (rodada atual) — novo 3º passo (D10), antes
-                          do D30/D60 já existentes (ordem cronológica na
-                          tela; internamente é step=3, ver
-                          never-scheduled-cards.ts). */}
-                      {/* Mesmo motivo do comentário acima — "day10Content"
-                          colidiria com o campo do grupo "Faltou". */}
+                      {/* D2/D4 (rodada atual), antes dos D10/D30/D60 já
+                          existentes (ordem cronológica na tela;
+                          internamente são step=4/5, ver
+                          never-scheduled-cards.ts) — sem colisão de nome
+                          de campo com o grupo "Faltou" (que não tem
+                          day2Content/day4Content). */}
+                      <TemplateMessageField
+                        name="day2Content"
+                        label="2º dia (D2)"
+                        required={false}
+                        rows={2}
+                        variables={[{ token: "{{primeiro_nome}}", label: "+ Nome do lead" }]}
+                        defaultValue={neverScheduledCardSettings?.day2Content ?? ""}
+                        placeholder="Vazio usa o texto padrão."
+                      />
+                      <TemplateMessageField
+                        name="day4Content"
+                        label="4º dia (D4)"
+                        required={false}
+                        rows={2}
+                        variables={[{ token: "{{primeiro_nome}}", label: "+ Nome do lead" }]}
+                        defaultValue={neverScheduledCardSettings?.day4Content ?? ""}
+                        placeholder="Vazio usa o texto padrão."
+                      />
+                      {/* D10 (rodada anterior), internamente step=3 —
+                          "neverScheduledDay10Content" pra não colidir com
+                          "day10Content" do grupo "Faltou" (mesmo <form>). */}
                       <TemplateMessageField
                         name="neverScheduledDay10Content"
                         label="10º dia (D10)"
