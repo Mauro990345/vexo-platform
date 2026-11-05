@@ -13,6 +13,7 @@ import {
   updateNoShowFirstStepDelay,
   updatePanelCardSettings,
 } from "./actions";
+import { noShowGroupHelp, neverScheduledGroupHelp, hotLeadGroupHelp, REACTIVATION_GROUP_HELP } from "@/lib/panel-card-group-help";
 
 function preview(text: string, max = 70): string {
   const oneLine = text.replace(/\s+/g, " ").trim();
@@ -421,12 +422,21 @@ export async function FollowUpView() {
                     mesmo texto/rodízio pra todas as clínicas agora. */}
                 <form action={updatePanelCardSettings} className="mt-3 space-y-2">
                   <details name="panel-card-groups" className="group rounded-xl border border-vexo-border bg-vexo-surface">
-                    <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5">
-                      <div className="flex min-w-0 items-center gap-2.5">
-                        <span className="shrink-0 text-card text-vexo-muted">Faltou</span>
-                        <span className="truncate text-xs">{preview(noShowCardSettings?.day3Content ?? "(texto padrão)")}</span>
+                    {/* Texto de apoio sempre visível (pedido explícito —
+                        "logo abaixo do título... também com o grupo
+                        fechado") tem que ficar DENTRO de <summary>: é a
+                        única parte de um <details> que nunca colapsa.
+                        Dias vêm de NO_SHOW_CARD_STEPS (panel-card-group-help.ts),
+                        acompanham a constante sozinhos se a cadência mudar. */}
+                    <summary className="flex cursor-pointer list-none flex-col gap-1 px-3 py-2.5">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex min-w-0 items-center gap-2.5">
+                          <span className="shrink-0 text-card text-vexo-muted">Faltou</span>
+                          <span className="truncate text-xs">{preview(noShowCardSettings?.day3Content ?? "(texto padrão)")}</span>
+                        </div>
+                        <span className="shrink-0 text-card text-vexo-muted transition group-open:rotate-180">▾</span>
                       </div>
-                      <span className="shrink-0 text-card text-vexo-muted transition group-open:rotate-180">▾</span>
+                      <p className="text-card text-vexo-muted">{noShowGroupHelp()}</p>
                     </summary>
                     <div className="space-y-2.5 border-t border-vexo-border px-3 pb-3 pt-2.5">
                       <TemplateMessageField
@@ -453,9 +463,11 @@ export async function FollowUpView() {
                         defaultValue={noShowCardSettings?.day10Content ?? ""}
                         placeholder="Vazio usa o texto padrão."
                       />
-                      {/* Item 1 (rodada atual) — 3º passo do Faltou, só
-                          Instagram, manual, independente de o lead ter
-                          telefone (ver no-show-cards.ts). */}
+                      {/* 3º passo do Faltou (D30) — mesmo canal dos
+                          outros dois (WhatsApp se o lead tiver telefone,
+                          Instagram como fallback — ver no-show-cards.ts).
+                          Chegou a ser forçado só-Instagram numa rodada
+                          anterior; revertido a pedido explícito. */}
                       {/* Nome do campo prefixado ("noShowDay30Content",
                           não "day30Content") pra não colidir com o campo
                           de mesmo nome "day30Content" do grupo "Não
@@ -463,7 +475,7 @@ export async function FollowUpView() {
                           (pedido explícito, "um único botão"). */}
                       <TemplateMessageField
                         name="noShowDay30Content"
-                        label="30º dia (D30) · só Instagram"
+                        label="30º dia (D30)"
                         required={false}
                         rows={2}
                         variables={[
@@ -477,12 +489,15 @@ export async function FollowUpView() {
                   </details>
 
                   <details name="panel-card-groups" className="group rounded-xl border border-vexo-border bg-vexo-surface">
-                    <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5">
-                      <div className="flex min-w-0 items-center gap-2.5">
-                        <span className="shrink-0 text-card text-vexo-muted">Não agendou</span>
-                        <span className="truncate text-xs">{preview(neverScheduledCardSettings?.day2Content ?? "(texto padrão)")}</span>
+                    <summary className="flex cursor-pointer list-none flex-col gap-1 px-3 py-2.5">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex min-w-0 items-center gap-2.5">
+                          <span className="shrink-0 text-card text-vexo-muted">Não agendou</span>
+                          <span className="truncate text-xs">{preview(neverScheduledCardSettings?.day2Content ?? "(texto padrão)")}</span>
+                        </div>
+                        <span className="shrink-0 text-card text-vexo-muted transition group-open:rotate-180">▾</span>
                       </div>
-                      <span className="shrink-0 text-card text-vexo-muted transition group-open:rotate-180">▾</span>
+                      <p className="text-card text-vexo-muted">{neverScheduledGroupHelp()}</p>
                     </summary>
                     <div className="space-y-2.5 border-t border-vexo-border px-3 pb-3 pt-2.5">
                       {/* D2/D4 (rodada atual), antes dos D10/D30/D60 já
@@ -543,12 +558,20 @@ export async function FollowUpView() {
                   </details>
 
                   <details name="panel-card-groups" className="group rounded-xl border border-vexo-border bg-vexo-surface">
-                    <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5">
-                      <div className="flex min-w-0 items-center gap-2.5">
-                        <span className="shrink-0 text-card text-vexo-muted">Reativação</span>
-                        <span className="truncate text-xs">{reactivationFilledCount} de 5 preenchidas</span>
+                    {/* Texto de apoio estático, sem dias (pedido
+                        explícito desta rodada: "não colocar nenhuma
+                        informação sobre a janela de ±3 dias da
+                        Reativação" — o prazo é por agendamento, não um
+                        dia fixo). */}
+                    <summary className="flex cursor-pointer list-none flex-col gap-1 px-3 py-2.5">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex min-w-0 items-center gap-2.5">
+                          <span className="shrink-0 text-card text-vexo-muted">Reativação</span>
+                          <span className="truncate text-xs">{reactivationFilledCount} de 5 preenchidas</span>
+                        </div>
+                        <span className="shrink-0 text-card text-vexo-muted transition group-open:rotate-180">▾</span>
                       </div>
-                      <span className="shrink-0 text-card text-vexo-muted transition group-open:rotate-180">▾</span>
+                      <p className="text-card text-vexo-muted">{REACTIVATION_GROUP_HELP}</p>
                     </summary>
                     <div className="space-y-2.5 border-t border-vexo-border px-3 pb-3 pt-2.5">
                       {/* Item 6 (rodada atual) — Reativação não tem dia
@@ -577,12 +600,15 @@ export async function FollowUpView() {
                   </details>
 
                   <details name="panel-card-groups" className="group rounded-xl border border-vexo-border bg-vexo-surface">
-                    <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5">
-                      <div className="flex min-w-0 items-center gap-2.5">
-                        <span className="shrink-0 text-card text-vexo-muted">Quente</span>
-                        <span className="truncate text-xs">{hotLeadFilledCount} de 9 preenchidas</span>
+                    <summary className="flex cursor-pointer list-none flex-col gap-1 px-3 py-2.5">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex min-w-0 items-center gap-2.5">
+                          <span className="shrink-0 text-card text-vexo-muted">Quente</span>
+                          <span className="truncate text-xs">{hotLeadFilledCount} de 9 preenchidas</span>
+                        </div>
+                        <span className="shrink-0 text-card text-vexo-muted transition group-open:rotate-180">▾</span>
                       </div>
-                      <span className="shrink-0 text-card text-vexo-muted transition group-open:rotate-180">▾</span>
+                      <p className="text-card text-vexo-muted">{hotLeadGroupHelp()}</p>
                     </summary>
                     <div className="space-y-3 border-t border-vexo-border px-3 pb-3 pt-2.5">
                       {[1, 2, 3].map((step) => (

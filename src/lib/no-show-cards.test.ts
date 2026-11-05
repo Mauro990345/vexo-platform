@@ -220,7 +220,12 @@ describe("getNoShowCards", () => {
     expect(cards).toEqual([]);
   });
 
-  it("passo 3 (D30): canal sempre INSTAGRAM, mesmo com telefone cadastrado (item 1)", async () => {
+  // Item 2 (rodada atual) — D30 passa a usar o MESMO critério de canal
+  // dos outros dois passos (WhatsApp se o lead tiver telefone, Instagram
+  // como fallback). Tinha sido forçado só-Instagram numa rodada anterior
+  // (pedido explícito daquela vez, sem motivo técnico); revertido agora
+  // (pedido explícito desta rodada).
+  it("passo 3 (D30): canal WhatsApp quando o lead tem telefone, igual aos passos 1 e 2", async () => {
     const triggeredAt = new Date("2026-01-05T12:00:00.000Z");
     const now = computeReactivationWindow(triggeredAt, 30).start;
     appointmentFindManyMock.mockResolvedValue([apptRow({ conversation: { status: "IN_CONVERSATION", followUps: [{ triggeredAt }] } })]);
@@ -228,6 +233,19 @@ describe("getNoShowCards", () => {
     const cards = await getNoShowCards("clinic-1", now);
     expect(cards).toHaveLength(1);
     expect(cards[0]!.step).toBe(3);
+    expect(cards[0]!.channel).toBe("WHATSAPP");
+    expect(cards[0]!.whatsappLink).not.toBeNull();
+  });
+
+  it("passo 3 (D30): canal Instagram quando o lead NÃO tem telefone (mesmo fallback dos outros passos)", async () => {
+    const triggeredAt = new Date("2026-01-05T12:00:00.000Z");
+    const now = computeReactivationWindow(triggeredAt, 30).start;
+    appointmentFindManyMock.mockResolvedValue([apptRow({ conversation: { status: "IN_CONVERSATION", followUps: [{ triggeredAt }] } })]);
+    leadFindManyMock.mockResolvedValue([
+      { id: "lead-1", name: "Beatriz", igUsername: "bea.ig", igScopedId: null, nameLookupAttempted: true, profilePictureUrl: null, phone: null },
+    ]);
+
+    const cards = await getNoShowCards("clinic-1", now);
     expect(cards[0]!.channel).toBe("INSTAGRAM");
     expect(cards[0]!.whatsappLink).toBeNull();
   });

@@ -236,9 +236,13 @@ export async function getNoShowCards(clinicId: string, now: Date = new Date()): 
     const phone = lead?.phone ?? null;
     const igUsername = lead?.igUsername ?? null;
     // Item 2 (rodada anterior): sem telefone, o card usa o botão do
-    // Instagram. Item 1 (rodada atual): o passo 3 (D30) é SEMPRE
-    // Instagram, manual — independente de o lead ter telefone ou não.
-    const channel: "WHATSAPP" | "INSTAGRAM" = c.step === 3 ? "INSTAGRAM" : phone ? "WHATSAPP" : "INSTAGRAM";
+    // Instagram — vale igual pros 3 passos (D3/D10/D30). O passo 3 (D30)
+    // já chegou a ser forçado só-Instagram numa rodada anterior (pedido
+    // explícito daquela vez); revertido nesta rodada (pedido explícito,
+    // item 2) — quem faltou chegou a agendar, então tem telefone
+    // cadastrado como qualquer outro passo do Faltou. Sem motivo técnico
+    // envolvido: era só uma decisão de produto da rodada anterior.
+    const channel: "WHATSAPP" | "INSTAGRAM" = phone ? "WHATSAPP" : "INSTAGRAM";
 
     return {
       appointmentId: c.appointmentId,
