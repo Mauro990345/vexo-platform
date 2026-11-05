@@ -17,29 +17,60 @@ import { sendWhatsappMessage, validateBrazilianPhone, formatDateTimeLabel } from
 import { ensureLeadFirstNameFromInstagram } from "@/lib/instagram";
 import { renderMessageTemplate, normalizeFirstNameForTemplate } from "@/lib/message-template";
 
-// Card "Faltou" — item 2 do pedido (rodada anterior) + item 1 (rodada
-// atual, D30). Para um lead que agendou e foi marcado "Não compareceu"
+// Card "Faltou". Para um lead que agendou e foi marcado "Não compareceu"
 // (ver setAppointmentAttendance, appointments.ts) sem ter remarcado desde
-// então, aparece um card no D3, outro no D10 e outro no D30 após a falta.
+// então, aparece um card no D3, outro no D7 e outro no D15 após a falta.
 //
-// Elegibilidade (item 4, rodada atual — AJUSTE): o card só pode sumir
-// quando o lead AGENDAR/REMARCAR ou for marcado como perdido — uma
+// Cadência (rodada atual — AJUSTE, substitui qualquer instrução anterior
+// sobre o canal do 3º passo): era D3/D10/D30, agora D3/D7/D15 — pedido
+// explícito pra resgatar o lead antes de esfriar e reduzir o uso de
+// WhatsApp. Os PASSOS JÁ EXISTENTES foram reaproveitados (nenhuma
+// migration, nenhum dado apagado): o `step` gravado em NoShowCardSlot e
+// os nomes das colunas de texto em NoShowCardSettings (day10Content,
+// day30Content) continuam os MESMOS de antes — só o `offsetDays` de cada
+// step mudou (ver NO_SHOW_CARD_STEPS abaixo). O passo 2 (coluna
+// day10Content, textos/histórico de envio já gravados) passa a valer pro
+// D7; o passo 3 (coluna day30Content) passa a valer pro D15 — os nomes
+// das colunas ficam "desalinhados" do dia de verdade de propósito, pra
+// não precisar de nenhuma migration (rótulo exibido na tela vem só de
+// NO_SHOW_CARD_STEPS, nunca do nome da coluna).
+//
+// Canal — pedido explícito desta rodada, substituindo a decisão da
+// rodada anterior (PR #170): D3 e D7 (passos 1 e 2) continuam WhatsApp
+// direto (com fallback Instagram sem telefone, como sempre); D15 (passo
+// 3) volta a ser SEMPRE Instagram, manual — sem botão de envio por
+// WhatsApp, independente de o lead ter telefone (ver getNoShowCards e a
+// trava em sendNoShowCardWhatsAppMessage abaixo).
+//
+// Sobreposição de janelas (verificação pedida) — D3 e D7 ficam só 4 dias
+// um do outro, menor que a janela de 5 dias úteis de cada um
+// (computeReactivationWindow): as duas janelas SE SOBREPÕEM por alguns
+// dias (confirmado numericamente, não só por inspeção). D7 e D15 (8 dias
+// de distância) não se sobrepõem na prática. Resolvido com a MESMA
+// solução já usada no "Não agendou" pro mesmo problema (D2/D4, ver
+// chooseNeverScheduledStep em never-scheduled-cards.ts): nunca mostra
+// dois passos ao mesmo tempo pro mesmo agendamento — sempre o mais cedo
+// ainda pendente; se já enviado, mantém visível com check até a janela
+// dele fechar (ver chooseNoShowStep abaixo).
+//
+// Elegibilidade (ajuste de rodada anterior, mantido): o card só pode
+// sumir quando o lead AGENDAR/REMARCAR ou for marcado como perdido — uma
 // resposta dele sem agendar não some o card nem reinicia os prazos.
 // ANTES disso era "log NO_SHOW ainda aberto" (FollowUpLog.respondedAt ===
 // null), que fechava na primeira resposta de QUALQUER teor — pedido
-// explícito desta rodada pra separar "respondeu" de "agendou/remarcou"
-// aqui, SEM alterar a sequência automática (que continua usando
-// respondedAt normalmente, ver cancelPendingFollowUp/follow-up.ts; item 5
-// do pedido — verificação apenas, não é pra mudar essa parte). Elegível
-// agora: o agendamento ainda está NO_SHOW *e* continua sendo o mais
-// recente do lead (nenhum Appointment mais novo, de nenhum status —
-// mesmo critério de "mais recente por lead" já usado por
-// selectReactivationCandidates, reactivation.ts) *e* a conversa não está
-// LOST. A âncora de dias continua FollowUpLog.triggeredAt (nunca
-// reescrito por nenhum código — ver comentário grande em triggerFollowUp,
-// follow-up.ts), o mais recente da conversa com trigger NO_SHOW — só um
-// agendamento NO_SHOW pode ser "o mais recente do lead" por vez, então
-// nunca há ambiguidade sobre qual log corresponde à falta atual.
+// explícito de uma rodada anterior pra separar "respondeu" de
+// "agendou/remarcou" aqui, SEM alterar a sequência automática (que
+// continua usando respondedAt normalmente, ver
+// cancelPendingFollowUp/follow-up.ts). Elegível agora: o agendamento
+// ainda está NO_SHOW *e* continua sendo o mais recente do lead (nenhum
+// Appointment mais novo, de nenhum status — mesmo critério de "mais
+// recente por lead" já usado por selectReactivationCandidates,
+// reactivation.ts) *e* a conversa não está LOST. A âncora de dias
+// continua FollowUpLog.triggeredAt (nunca reescrito por nenhum código —
+// ver comentário grande em triggerFollowUp, follow-up.ts), o mais
+// recente da conversa com trigger NO_SHOW — só um agendamento NO_SHOW
+// pode ser "o mais recente do lead" por vez, então nunca há ambiguidade
+// sobre qual log corresponde à falta atual.
 //
 // Ancorado em FollowUpLog.triggeredAt (o momento do CLIQUE em "Não
 // compareceu", não o horário agendado da consulta — mesmo motivo de
@@ -50,19 +81,30 @@ import { renderMessageTemplate, normalizeFirstNameForTemplate } from "@/lib/mess
 
 export const NO_SHOW_CARD_STEPS = [
   { step: 1, offsetDays: 3 },
-  { step: 2, offsetDays: 10 },
-  { step: 3, offsetDays: 30 },
+  { step: 2, offsetDays: 7 },
+  { step: 3, offsetDays: 15 },
 ] as const;
+
+// "3º dia (D3)" — rótulo do campo de texto na aba "Cards do Painel"
+// (FollowUpView.tsx), sempre a partir de NO_SHOW_CARD_STEPS (pedido
+// explícito) — nunca um número escrito à mão, pra acompanhar sozinho se
+// a cadência mudar de novo.
+export function noShowStepLabel(step: number): string {
+  const offsetDays = NO_SHOW_CARD_STEPS.find((s) => s.step === step)?.offsetDays ?? step;
+  return `${offsetDays}º dia (D${offsetDays})`;
+}
 
 export const DEFAULT_NO_SHOW_CARD_MESSAGES: readonly [string, string, string] = [
   "Oi, {{primeiro_nome}}! Notamos que você não pôde vir na sua avaliação {{data_horario}}. Quer remarcar? Estamos à disposição.",
   "Oi! Ainda dá tempo de remarcar sua avaliação — é só nos avisar o melhor dia pra você.",
-  // D30 (item 1, rodada atual) — sem variável de nome da Dra. disponível
-  // (ver KNOWN_VARIABLE_NAMES, message-template.ts: só primeiro_nome/
-  // data_horario existem) — pedido explícito: escrever sem o nome quando
-  // não houver a variável ("a nossa agenda").
+  // D15 (passo 3) — sem variável de nome da Dra. disponível (ver
+  // KNOWN_VARIABLE_NAMES, message-template.ts: só primeiro_nome/
+  // data_horario existem) — escreve sem o nome quando não houver a
+  // variável ("a nossa agenda").
   "Oi, {{primeiro_nome}}. Passando para avisar que a nossa agenda segue com horários abertos. Quando fizer sentido, é só me chamar por aqui.",
 ];
+
+export type NoShowExistingStep = { step: number; sentAt: Date | null };
 
 export type NoShowCandidate = {
   appointmentId: string;
@@ -70,26 +112,71 @@ export type NoShowCandidate = {
   conversationId: string;
   scheduledAt: Date;
   noShowTriggeredAt: Date;
+  // Passos já com slot gravado (NoShowCardSlot) pra este agendamento —
+  // usado por chooseNoShowStep (abaixo) pra escolher qual passo mostrar
+  // quando mais de uma janela está aberta ao mesmo tempo (D3/D7).
+  existingSteps: NoShowExistingStep[];
 };
 
-export type NoShowCardCandidate = NoShowCandidate & { step: number; window: ReactivationWindow };
+export type NoShowCardCandidate = Omit<NoShowCandidate, "existingSteps"> & { step: number; window: ReactivationWindow };
 
-// Pura — mesma forma de buildReactivationCardCandidates (reactivation.ts),
-// só que cada candidato já tem os dois passos fixos (D3/D10) em vez de uma
-// lista configurável de períodos.
+const NO_SHOW_STEPS_BY_OFFSET_ASC = [...NO_SHOW_CARD_STEPS].sort((a, b) => a.offsetDays - b.offsetDays);
+
+// Escolhe QUAL passo mostrar agora pra um agendamento — mesmo espírito de
+// chooseNeverScheduledStep (never-scheduled-cards.ts), necessário porque
+// D3 e D7 ficam só 4 dias um do outro: a janela de 5 dias úteis de cada
+// um (computeReactivationWindow) é mais larga que essa distância, e as
+// duas SE SOBREPÕEM por alguns dias — sem escolher, as duas apareceriam
+// como cards SEPARADOS pro mesmo agendamento ao mesmo tempo (verificação
+// pedida ao trocar a cadência pra D3/D7/D15). D7 e D15 não se sobrepõem
+// na prática (8 dias de distância, mais que a janela de ~1 semana) — pra
+// eles, esta função sempre devolve exatamente o que o código antigo já
+// devolvia, sem mudar nada do comportamento existente.
+//
+// Prioridade: (1) o passo cronologicamente mais precoce com janela
+// aberta e AINDA NÃO marcado enviado; (2) se nenhum pendente estiver
+// aberto, o passo mais precoce com janela aberta JÁ marcado enviado —
+// mantém o "✓ enviado" visível até a janela dele fechar, igual ao
+// comportamento de sempre.
+export function chooseNoShowStep(
+  noShowTriggeredAt: Date,
+  existingSteps: NoShowExistingStep[],
+  now: Date
+): { step: number; window: ReactivationWindow } | null {
+  const sentSteps = new Set(existingSteps.filter((s) => s.sentAt).map((s) => s.step));
+
+  for (const { step, offsetDays } of NO_SHOW_STEPS_BY_OFFSET_ASC) {
+    if (sentSteps.has(step)) continue;
+    const window = computeReactivationWindow(noShowTriggeredAt, offsetDays);
+    if (isWithinReactivationWindow(window, now)) return { step, window };
+  }
+  for (const { step, offsetDays } of NO_SHOW_STEPS_BY_OFFSET_ASC) {
+    if (!sentSteps.has(step)) continue;
+    const window = computeReactivationWindow(noShowTriggeredAt, offsetDays);
+    if (isWithinReactivationWindow(window, now)) return { step, window };
+  }
+  return null;
+}
+
+// Pura — aplica chooseNoShowStep a cada candidato já pré-filtrado (ver
+// getNoShowCards). No máximo UM resultado por appointmentId agora (ver
+// comentário grande acima).
 export function buildNoShowCardCandidates(candidates: NoShowCandidate[], now: Date): NoShowCardCandidate[] {
   const result: NoShowCardCandidate[] = [];
   for (const c of candidates) {
-    for (const { step, offsetDays } of NO_SHOW_CARD_STEPS) {
-      const window = computeReactivationWindow(c.noShowTriggeredAt, offsetDays);
-      if (isWithinReactivationWindow(window, now)) {
-        result.push({ ...c, step, window });
-      }
-    }
+    const choice = chooseNoShowStep(c.noShowTriggeredAt, c.existingSteps, now);
+    if (!choice) continue;
+    result.push({
+      appointmentId: c.appointmentId,
+      leadId: c.leadId,
+      conversationId: c.conversationId,
+      scheduledAt: c.scheduledAt,
+      noShowTriggeredAt: c.noShowTriggeredAt,
+      step: choice.step,
+      window: choice.window,
+    });
   }
-  return result.sort(
-    (a, b) => a.window.start.getTime() - b.window.start.getTime() || a.appointmentId.localeCompare(b.appointmentId) || a.step - b.step
-  );
+  return result.sort((a, b) => a.window.start.getTime() - b.window.start.getTime() || a.appointmentId.localeCompare(b.appointmentId));
 }
 
 export function resolveNoShowCardMessageTemplate(
@@ -153,6 +240,7 @@ export async function getNoShowCards(clinicId: string, now: Date = new Date()): 
       conversationId: true,
       scheduledAt: true,
       status: true,
+      noShowCardSlots: { select: { step: true, sentAt: true } },
       conversation: {
         select: {
           status: true,
@@ -190,26 +278,28 @@ export async function getNoShowCards(clinicId: string, now: Date = new Date()): 
       conversationId: appt.conversationId!,
       scheduledAt: appt.scheduledAt,
       noShowTriggeredAt: log.triggeredAt,
+      existingSteps: appt.noShowCardSlots,
     });
   }
 
   const cardCandidates = buildNoShowCardCandidates(candidates, now);
   if (cardCandidates.length === 0) return [];
 
-  const [settings, leads, instagramAccount, existingSlotRows, reactivationConfig, sentTodayCount] = await Promise.all([
+  const [settings, leads, instagramAccount, reactivationConfig, sentTodayCount] = await Promise.all([
     prisma.noShowCardSettings.findUnique({ where: { id: "singleton" } }),
     prisma.lead.findMany({
       where: { id: { in: cardCandidates.map((c) => c.leadId) } },
       select: { id: true, name: true, igUsername: true, igScopedId: true, nameLookupAttempted: true, profilePictureUrl: true, phone: true },
     }),
     prisma.instagramAccount.findUnique({ where: { clinicId }, select: { accessTokenEnc: true } }),
-    prisma.noShowCardSlot.findMany({ where: { appointmentId: { in: cardCandidates.map((c) => c.appointmentId) } } }),
     prisma.reactivationConfig.findUnique({ where: { clinicId }, select: { dailyWhatsappLimit: true } }),
     countTodaysWhatsappSends(clinicId, now),
   ]);
   const leadById = new Map(leads.map((l) => [l.id, l]));
   const whatsappDailyLimitReached = isDailyWhatsappLimitReached(sentTodayCount, reactivationConfig?.dailyWhatsappLimit ?? DEFAULT_DAILY_WHATSAPP_LIMIT);
-  const sentAtByKey = new Map(existingSlotRows.map((s) => [`${s.appointmentId}:${s.step}`, s.sentAt]));
+  // sentAtByKey vem direto dos slots já buscados junto do agendamento
+  // (noShowCardSlots, acima) — sem precisar de uma segunda consulta.
+  const sentAtByKey = new Map(candidates.flatMap((c) => c.existingSteps.map((s) => [`${c.appointmentId}:${s.step}`, s.sentAt] as const)));
 
   // Nome ao vivo (Instagram) — uma vez por lead distinto, igual
   // getReactivationCards (reactivation.ts).
@@ -235,14 +325,11 @@ export async function getNoShowCards(clinicId: string, now: Date = new Date()): 
 
     const phone = lead?.phone ?? null;
     const igUsername = lead?.igUsername ?? null;
-    // Item 2 (rodada anterior): sem telefone, o card usa o botão do
-    // Instagram — vale igual pros 3 passos (D3/D10/D30). O passo 3 (D30)
-    // já chegou a ser forçado só-Instagram numa rodada anterior (pedido
-    // explícito daquela vez); revertido nesta rodada (pedido explícito,
-    // item 2) — quem faltou chegou a agendar, então tem telefone
-    // cadastrado como qualquer outro passo do Faltou. Sem motivo técnico
-    // envolvido: era só uma decisão de produto da rodada anterior.
-    const channel: "WHATSAPP" | "INSTAGRAM" = phone ? "WHATSAPP" : "INSTAGRAM";
+    // D3/D7 (passos 1 e 2): sem telefone, o card usa o botão do
+    // Instagram (fallback de sempre). D15 (passo 3): SEMPRE Instagram,
+    // manual — pedido explícito desta rodada, substitui a decisão da
+    // rodada anterior (PR #170) de deixar o passo 3 igual aos outros.
+    const channel: "WHATSAPP" | "INSTAGRAM" = c.step === 3 ? "INSTAGRAM" : phone ? "WHATSAPP" : "INSTAGRAM";
 
     return {
       appointmentId: c.appointmentId,
@@ -321,6 +408,11 @@ export async function sendNoShowCardWhatsAppMessage(
   if (!appointment) return { ok: false, reason: "not_found" };
 
   const clinicId = appointment.clinicId;
+
+  // Passo 3 (D15) nunca manda por WhatsApp (pedido explícito desta
+  // rodada) — a UI não oferece esse botão pro passo 3, mas a defesa em
+  // profundidade vale aqui também, caso a função seja chamada direto.
+  if (step === 3) return { ok: false, reason: "no_longer_eligible", clinicId };
 
   // Defesa em profundidade — reconfere aqui o que getNoShowCards já exige
   // pra sequer mostrar o card (item 4: ainda NO_SHOW, conversa não

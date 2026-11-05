@@ -14,6 +14,7 @@ import {
   updatePanelCardSettings,
 } from "./actions";
 import { noShowGroupHelp, neverScheduledGroupHelp, hotLeadGroupHelp, REACTIVATION_GROUP_HELP } from "@/lib/panel-card-group-help";
+import { noShowStepLabel } from "@/lib/no-show-cards";
 
 function preview(text: string, max = 70): string {
   const oneLine = text.replace(/\s+/g, " ").trim();
@@ -441,7 +442,7 @@ export async function FollowUpView() {
                     <div className="space-y-2.5 border-t border-vexo-border px-3 pb-3 pt-2.5">
                       <TemplateMessageField
                         name="day3Content"
-                        label="3º dia (D3)"
+                        label={noShowStepLabel(1)}
                         required={false}
                         rows={2}
                         variables={[
@@ -451,9 +452,15 @@ export async function FollowUpView() {
                         defaultValue={noShowCardSettings?.day3Content ?? ""}
                         placeholder="Vazio usa o texto padrão."
                       />
+                      {/* Campo gravado como "day10Content" no banco
+                          (nome da coluna NÃO muda — sem migration), mas
+                          hoje representa o passo 2 = D7 (era D10; ver
+                          comentário grande no topo de no-show-cards.ts).
+                          O rótulo vem de noShowStepLabel, sempre a
+                          partir de NO_SHOW_CARD_STEPS. */}
                       <TemplateMessageField
                         name="day10Content"
-                        label="10º dia (D10)"
+                        label={noShowStepLabel(2)}
                         required={false}
                         rows={2}
                         variables={[
@@ -463,19 +470,21 @@ export async function FollowUpView() {
                         defaultValue={noShowCardSettings?.day10Content ?? ""}
                         placeholder="Vazio usa o texto padrão."
                       />
-                      {/* 3º passo do Faltou (D30) — mesmo canal dos
-                          outros dois (WhatsApp se o lead tiver telefone,
-                          Instagram como fallback — ver no-show-cards.ts).
-                          Chegou a ser forçado só-Instagram numa rodada
-                          anterior; revertido a pedido explícito. */}
-                      {/* Nome do campo prefixado ("noShowDay30Content",
-                          não "day30Content") pra não colidir com o campo
-                          de mesmo nome "day30Content" do grupo "Não
+                      {/* 3º passo do Faltou (gravado como
+                          "noShowDay30Content"/"day30Content" no banco —
+                          nome NÃO muda, sem migration — hoje representa
+                          D15, era D30). SEMPRE Instagram, manual, sem
+                          botão de WhatsApp (pedido explícito desta
+                          rodada, substitui a decisão da rodada anterior
+                          — ver canal em no-show-cards.ts). Nome do campo
+                          prefixado ("noShowDay30Content", não
+                          "day30Content") pra não colidir com o campo de
+                          mesmo nome "day30Content" do grupo "Não
                           agendou" abaixo — os dois ficam no MESMO <form>
                           (pedido explícito, "um único botão"). */}
                       <TemplateMessageField
                         name="noShowDay30Content"
-                        label="30º dia (D30)"
+                        label={`${noShowStepLabel(3)} · só Instagram`}
                         required={false}
                         rows={2}
                         variables={[
