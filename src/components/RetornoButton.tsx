@@ -18,16 +18,27 @@ export type RetornoAction = (appointmentId: string, selection: RetornoSelection)
 // o pai do clique (mesmo padrão "burro" de sempre nesse arquivo).
 //
 // AJUSTE (pedido explícito — removida a opção "Sem retorno"; prazos numa
-// ÚNICA linha horizontal, sem quebrar, SÓ CELULAR): antes, mesmo depois
-// do painel passar a ocupar a largura do card inteiro, 320px ainda
-// quebrava pra 2 linhas (min-w-[28px] × 9 + gaps não cabia) — aceitável
-// quando havia um "Sem retorno" de reforço embaixo, mas o pedido agora é
-// nunca quebrar. Sem a largura mínima por botão (que era o que forçava a
-// quebra) e com gap/padding menores, flex-1 sozinho divide o espaço
-// disponível igualmente entre os 9 — cabem sempre numa linha, em
-// qualquer largura suportada (320px+, medido ao vivo). `sm:` continua
-// exatamente como sempre foi (grade 3×3, intocada — "em ≥640px nada
-// muda").
+// ÚNICA linha horizontal, sem quebrar): antes, mesmo depois do painel
+// passar a ocupar a largura do card inteiro, 320px ainda quebrava pra 2
+// linhas (min-w-[28px] × 9 + gaps não cabia) — aceitável quando havia um
+// "Sem retorno" de reforço embaixo, mas o pedido agora é nunca quebrar.
+// Sem a largura mínima por botão (que era o que forçava a quebra) e com
+// gap/padding menores, flex-1 sozinho divide o espaço disponível
+// igualmente entre os 9 — cabem sempre numa linha, em qualquer largura
+// suportada (320px+, medido ao vivo).
+//
+// AJUSTE (rodada seguinte, pedido explícito — "em computador, o menu
+// aparece em grade/quadrado; deve ficar na mesma linha horizontal que já
+// existe no celular"): o `sm:grid sm:grid-cols-3` que existia aqui
+// (grade 3×3 só em ≥640px) foi removido — agora o MESMO mecanismo de
+// linha única (flex-1 dividindo o espaço) vale pras duas telas, só o
+// padding/gap/altura ficam um pouco mais soltos em `sm:` (mouse, não
+// toque — sem precisar do piso de 34px de touch target). Fonte fixa em
+// 12px nas duas telas (não usa MOBILE_APPOINTMENT_SECONDARY_TEXT, que
+// cairia pra text-caption/10px em sm: — pedido explícito desta rodada:
+// "aumentar a fonte no computador, 1 a 2px" partindo dos 10px de antes).
+// RetornoButton.tsx (painel) alarga sm:w-[200px] pra caber os 9 numa
+// linha legível — ver comentário lá.
 export function ReturnPeriodOptions({
   availablePeriods,
   localDays,
@@ -39,7 +50,7 @@ export function ReturnPeriodOptions({
 }) {
   if (availablePeriods.length === 0) return null;
   return (
-    <div className="flex gap-[1px] sm:grid sm:grid-cols-3 sm:gap-1.5">
+    <div className="flex gap-[1px] sm:gap-1">
       {availablePeriods.map((days) => (
         <button
           key={days}
@@ -49,8 +60,8 @@ export function ReturnPeriodOptions({
           // garante o valor exato independente do texto ("30d" vs
           // "270d"). flex-1, sem min-w/max-w (ver comentário acima): os 9
           // dividem a largura disponível em partes iguais, sempre numa
-          // linha só.
-          className={`flex h-[34px] min-w-0 flex-1 items-center justify-center rounded-md border px-[2px] sm:h-auto sm:flex-none sm:px-1.5 sm:py-1 ${MOBILE_APPOINTMENT_SECONDARY_TEXT} font-medium transition ${
+          // linha só, nas duas telas.
+          className={`flex h-[34px] min-w-0 flex-1 items-center justify-center rounded-md border px-[2px] sm:px-1 text-[12px] font-medium transition ${
             localDays === days
               ? "border-vexo-accent bg-vexo-accent/15 text-vexo-accent"
               : "border-vexo-border text-vexo-muted hover:border-vexo-accent/50"
@@ -200,17 +211,20 @@ export function RetornoButton({
               compacto ancorado no card (pedido explícito: "painel escuro
               compacto"). */}
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          {/* Painel do seletor — AJUSTE (2026-10-29, 4ª rodada, pedido
-              explícito): SÓ CELULAR ocupa a largura do CARD (não mais um
-              w-[220px] fixo ancorado no botão), com margem pequena de
-              8px nas laterais (left-[8px] right-[8px], relativo ao card
-              — ver `sm:relative` acima) — é essa largura maior que dá
-              espaço pros 9 prazos caberem numa linha só na maioria das
-              telas (ver ReturnPeriodOptions). Em >=640px reverte pro
-              popover de sempre: ancorado no botão, right-0, w-[200px]
-              fixo, inalterado. */}
-          <div className="absolute left-[8px] top-full z-50 mt-[6px] w-[calc(100%-16px)] rounded-xl border border-vexo-border bg-vexo-surface2 p-[8px] shadow-card sm:left-auto sm:right-0 sm:w-[200px] sm:p-2.5">
-            <p className={`mb-[6px] ${MOBILE_APPOINTMENT_SECONDARY_TEXT} font-medium text-vexo-muted sm:mb-2`}>Prazo de retorno</p>
+          {/* Painel do seletor — SÓ CELULAR ocupa a largura do CARD (não
+              mais um w-[220px] fixo ancorado no botão), com margem
+              pequena de 8px nas laterais (left-[8px] right-[8px],
+              relativo ao card — ver `sm:relative` acima) — é essa
+              largura maior que dá espaço pros 9 prazos caberem numa
+              linha só na maioria das telas (ver ReturnPeriodOptions).
+              Em >=640px fica ancorado no botão, right-0, mas AJUSTE
+              (pedido explícito, rodada seguinte): sm:w-[200px] virou
+              sm:w-[348px] — os 9 prazos passaram de grade 3×3 pra linha
+              única também em desktop (ver ReturnPeriodOptions), e 200px
+              não cabia os 9 numa linha com fonte legível; 348px cabe
+              com folga sem virar um menu grande (medido ao vivo). */}
+          <div className="absolute left-[8px] top-full z-50 mt-[6px] w-[calc(100%-16px)] rounded-xl border border-vexo-border bg-vexo-surface2 p-[8px] shadow-card sm:left-auto sm:right-0 sm:w-[348px] sm:p-2.5">
+            <p className="mb-[6px] text-[12px] font-medium text-vexo-muted sm:mb-2">Prazo de retorno</p>
             <ReturnPeriodOptions availablePeriods={availablePeriods} localDays={localDays} onPick={handlePick} />
           </div>
         </>

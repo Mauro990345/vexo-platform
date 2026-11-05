@@ -50,7 +50,8 @@ function buildPopoverHtml(cardWidthPx: number, compiledCss: string): string {
 </head>
 <body>
   <div style="width:${cardWidthPx}px" class="relative flex w-full items-center rounded-lg border border-vexo-border bg-vexo-surface p-[8px]">
-    <div class="absolute left-[8px] top-full z-50 mt-[6px] w-[calc(100%-16px)] rounded-xl border border-vexo-border bg-vexo-surface2 p-[8px] shadow-card sm:left-auto sm:right-0 sm:w-[200px] sm:p-2.5" data-testid="popover-panel">
+    <div class="absolute left-[8px] top-full z-50 mt-[6px] w-[calc(100%-16px)] rounded-xl border border-vexo-border bg-vexo-surface2 p-[8px] shadow-card sm:left-auto sm:right-0 sm:w-[348px] sm:p-2.5" data-testid="popover-panel">
+      <p class="mb-[6px] text-[12px] font-medium text-vexo-muted sm:mb-2" data-testid="period-label">Prazo de retorno</p>
       ${optionsMarkup}
     </div>
   </div>
@@ -105,6 +106,8 @@ describe("ReturnPeriodOptions — layout real (320/375/430px)", () => {
       const box = await buttons.nth(i).boundingBox();
       if (box) boxes.push(box);
     }
+    const periodFontSize = await buttons.first().evaluate((el) => getComputedStyle(el).fontSize);
+    const labelFontSize = await page.locator('[data-testid="period-label"]').evaluate((el) => getComputedStyle(el).fontSize);
     await page.close();
 
     // Todos os botões são de prazo agora (RETURN_PERIOD_OPTIONS — removida
@@ -113,7 +116,7 @@ describe("ReturnPeriodOptions — layout real (320/375/430px)", () => {
     const rowYs = [...new Set(periodBoxes.map((b) => Math.round(b.y)))].sort((a, b) => a - b);
     const rows = rowYs.map((y) => periodBoxes.filter((b) => Math.round(b.y) === y));
 
-    return { cardWidth, panelWidth: panelBox.width, periodBoxes, rows };
+    return { cardWidth, panelWidth: panelBox.width, periodBoxes, rows, periodFontSize, labelFontSize };
   }
 
   it("375px: menu ocupa a largura do card (não presa ao botão gatilho, ~220px)", async () => {
@@ -154,5 +157,125 @@ describe("ReturnPeriodOptions — layout real (320/375/430px)", () => {
         expect(box.width).toBeLessThanOrEqual(90);
       }
     }
+  });
+
+  // Pedido explícito (rodada do ajuste de computador): "no celular nada
+  // muda" — confirma que a fonte dos prazos/rótulo em <640px continua
+  // 12px (mesmo valor de sempre, via MOBILE_APPOINTMENT_SECONDARY_TEXT
+  // antes desta rodada), não o valor novo do computador.
+  it("320/375/430px: fonte dos prazos e do rótulo continua 12px (inalterada)", async () => {
+    for (const w of [320, 375, 430]) {
+      const { periodFontSize, labelFontSize } = await measure(w);
+      expect(periodFontSize).toBe("12px");
+      expect(labelFontSize).toBe("12px");
+    }
+  });
+});
+
+// Ajuste (pedido explícito, rodada seguinte): "no computador, os prazos
+// aparecem em grade/quadrado — devem ficar na mesma linha horizontal que
+// já existe no celular". Mesma metodologia da suíte acima (browser real,
+// CSS compilado de verdade) — só muda a largura do viewport (1024/1440,
+// computador) e o painel passa a usar sm:w-[348px] (era sm:w-[200px],
+// não cabia os 9 numa linha com fonte legível — ver comentário em
+// RetornoButton.tsx).
+describe("ReturnPeriodOptions — layout real DESKTOP (1024/1440px)", () => {
+  let compiledCss: string;
+  let browser: Browser;
+  let tmpDir: string;
+
+  beforeAll(async () => {
+    tmpDir = mkdtempSync(path.join(tmpdir(), "vexo-layout-test-desktop-"));
+    const outCssPath = path.join(tmpDir, "compiled.css");
+    execFileSync(
+      "npx",
+      ["tailwindcss", "-i", "./src/app/globals.css", "-o", outCssPath, "--minify"],
+      { cwd: PROJECT_ROOT, stdio: "pipe" }
+    );
+    compiledCss = require("node:fs").readFileSync(outCssPath, "utf8");
+
+    browser = await chromium.launch({
+      executablePath: process.env.PLAYWRIGHT_CHROMIUM_PATH || "/opt/pw-browsers/chromium",
+    });
+  }, 60_000);
+
+  afterAll(async () => {
+    await browser?.close();
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  async function measureDesktop(viewportWidth: number) {
+    // Card com uma largura típica de grid de desktop (o painel do popover
+    // usa sm:w-[348px] FIXO, independente da largura do card — não
+    // precisa acompanhar o viewport como no celular).
+    const cardWidth = 360;
+    const html = buildPopoverHtml(cardWidth, compiledCss);
+
+    const page = await browser.newPage({ viewport: { width: viewportWidth, height: 900 } });
+    await page.setContent(html);
+
+    const panel = page.locator('[data-testid="popover-panel"]');
+    const panelBox = await panel.boundingBox();
+    if (!panelBox) throw new Error("popover panel not found in DOM");
+
+    const buttons = panel.locator("button");
+    const count = await buttons.count();
+    const boxes = [];
+    for (let i = 0; i < count; i++) {
+      const box = await buttons.nth(i).boundingBox();
+      if (box) boxes.push(box);
+    }
+    const periodFontSize = await buttons.first().evaluate((el) => getComputedStyle(el).fontSize);
+    const labelFontSize = await page.locator('[data-testid="period-label"]').evaluate((el) => getComputedStyle(el).fontSize);
+    await page.close();
+
+    const periodBoxes = boxes.slice(0, RETURN_PERIOD_OPTIONS.length);
+    const rowYs = [...new Set(periodBoxes.map((b) => Math.round(b.y)))].sort((a, b) => a - b);
+    const rows = rowYs.map((y) => periodBoxes.filter((b) => Math.round(b.y) === y));
+
+    return { panelWidth: panelBox.width, periodBoxes, rows, periodFontSize, labelFontSize };
+  }
+
+  it("1024px: os 9 prazos ficam numa linha só (não em grade/3 colunas)", async () => {
+    const { rows } = await measureDesktop(1024);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toHaveLength(RETURN_PERIOD_OPTIONS.length);
+  });
+
+  it("1440px: os 9 prazos ficam numa linha só", async () => {
+    const { rows } = await measureDesktop(1440);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toHaveLength(RETURN_PERIOD_OPTIONS.length);
+  });
+
+  it("1024/1440px: a fonte dos prazos e do rótulo aumentou (12px — era 10px/text-caption na grade antiga)", async () => {
+    for (const w of [1024, 1440]) {
+      const { periodFontSize, labelFontSize } = await measureDesktop(w);
+      expect(periodFontSize).toBe("12px");
+      expect(labelFontSize).toBe("12px");
+    }
+  });
+
+  it("1024/1440px: cada prazo fica legível (largura confortável, nem espremido nem esticado) e o menu continua compacto", async () => {
+    for (const w of [1024, 1440]) {
+      const { panelWidth, periodBoxes } = await measureDesktop(w);
+      // Compacto: o painel não vira um menu enorme (pedido explícito
+      // "sem deixar o menu grande ou espaçado").
+      expect(panelWidth).toBeLessThanOrEqual(400);
+      for (const box of periodBoxes) {
+        // Legível: largura mínima confortável pro texto "270d" em 12px
+        // (nem espremido)...
+        expect(box.width).toBeGreaterThanOrEqual(28);
+        // ...nem esticado além do razoável pra um botão retangular compacto.
+        expect(box.width).toBeLessThanOrEqual(60);
+      }
+    }
+  });
+
+  it("1024px e 1440px: o menu renderiza IDÊNTICO (painel fixo, não acompanha o viewport)", async () => {
+    const a = await measureDesktop(1024);
+    const b = await measureDesktop(1440);
+    expect(a.panelWidth).toBe(b.panelWidth);
+    expect(a.periodBoxes.map((p) => p.width)).toEqual(b.periodBoxes.map((p) => p.width));
   });
 });
