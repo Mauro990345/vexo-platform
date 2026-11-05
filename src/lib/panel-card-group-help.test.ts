@@ -15,13 +15,18 @@ function expectedDayList(days: readonly number[]): string {
 }
 
 describe("noShowGroupHelp (Faltou)", () => {
-  it("texto exato pedido, com os dias vindos de NO_SHOW_CARD_STEPS", () => {
+  it("texto exato pedido, com os dias (e o 'D15: Instagram') vindos de NO_SHOW_CARD_STEPS", () => {
     const days = NO_SHOW_CARD_STEPS.map((s) => s.offsetDays);
-    expect(noShowGroupHelp()).toBe(`Leads que faltaram à consulta. Resgate para remarcar nos dias ${expectedDayList(days)}. Canal: WhatsApp.`);
+    const instagramOnlyDay = NO_SHOW_CARD_STEPS.find((s) => s.step === 3)!.offsetDays;
+    expect(noShowGroupHelp()).toBe(
+      `Leads que faltaram à consulta. Resgate para remarcar nos dias ${expectedDayList(days)}. Canal: WhatsApp (D${instagramOnlyDay}: Instagram).`
+    );
   });
 
-  it("texto atual bate com os dias 3, 10 e 30 (estado de hoje de NO_SHOW_CARD_STEPS)", () => {
-    expect(noShowGroupHelp()).toBe("Leads que faltaram à consulta. Resgate para remarcar nos dias 3, 10 e 30. Canal: WhatsApp.");
+  it("texto atual bate com os dias 3, 7 e 15, canal WhatsApp com D15 ressalvado como Instagram (estado de hoje de NO_SHOW_CARD_STEPS)", () => {
+    expect(noShowGroupHelp()).toBe(
+      "Leads que faltaram à consulta. Resgate para remarcar nos dias 3, 7 e 15. Canal: WhatsApp (D15: Instagram)."
+    );
   });
 });
 

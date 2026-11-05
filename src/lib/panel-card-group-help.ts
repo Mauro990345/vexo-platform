@@ -22,9 +22,13 @@ function formatDayList(days: readonly number[]): string {
   return `${days.slice(0, -1).join(", ")} e ${days[days.length - 1]}`;
 }
 
+// Passo 3 é o único só-Instagram (ver canal em no-show-cards.ts); o "D15"
+// no texto também vem da constante (offsetDays do step 3), não escrito à
+// mão — se esse passo mudar de dia de novo, o texto acompanha sozinho.
 export function noShowGroupHelp(): string {
   const days = NO_SHOW_CARD_STEPS.map((s) => s.offsetDays).sort((a, b) => a - b);
-  return `Leads que faltaram à consulta. Resgate para remarcar nos dias ${formatDayList(days)}. Canal: WhatsApp.`;
+  const instagramOnlyDay = NO_SHOW_CARD_STEPS.find((s) => s.step === 3)?.offsetDays;
+  return `Leads que faltaram à consulta. Resgate para remarcar nos dias ${formatDayList(days)}. Canal: WhatsApp (D${instagramOnlyDay}: Instagram).`;
 }
 
 export function neverScheduledGroupHelp(): string {
