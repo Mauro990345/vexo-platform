@@ -81,124 +81,125 @@ body {
 }
 
 /* ---------------------------------------------------------------------------
- * Prévia isolada de paleta nova — pedido explícito: "testar numa página só
- * pra avaliar na prática" (sidebar + Pipeline, /crm/clinicas/[id]), SEM
- * tocar nas variáveis --vexo-* padrão (que continuam exatamente como
- * estão, valendo pra todo o resto do app) e sem mudar nenhum componente
- * (AppShell.tsx, clinic-nav.tsx, Pipeline page.tsx) — só CSS.
+ * Prévia isolada de paleta nova (2ª rodada, corrigida) — pedido explícito:
+ * "testar numa página só pra avaliar na prática" (SÓ Automações desta vez,
+ * /crm/clinicas/[id]/automacoes — a 1ª rodada tinha testado isso errado na
+ * Pipeline), SEM tocar nas variáveis --vexo-* padrão (valem pra todo o
+ * resto do app) e sem mudar nenhum componente COMPARTILHADO (AppShell.tsx,
+ * Tabs.tsx, TemplateMessageField.tsx, ReactivationConfigForms.tsx) — só
+ * src/app/crm/clinicas/[id]/automacoes/page.tsx (próprio da página, não
+ * compartilhado com mais nada) ganhou algumas classes novas.
  *
- * Mecanismo: a classe .vx-preview abaixo é aplicada SÓ quando a rota atual
- * é exatamente /crm/clinicas/[id] (Pipeline, sem sub-rota), num wrapper
- * ENVOLVENDO o <AppShell> inteiro — ver ClinicPalettePreview.tsx, usado em
+ * Mecanismo idêntico ao da 1ª rodada, só que escopado na rota certa desta
+ * vez: a classe .vxa-preview é aplicada SÓ quando o pathname é EXATAMENTE
+ * /crm/clinicas/[id]/automacoes, num wrapper envolvendo o <AppShell>
+ * INTEIRO — ver AutomacoesPalettePreview.tsx, usado em
  * src/app/crm/clinicas/[id]/layout.tsx. Como o wrapper engloba sidebar E
- * conteúdo da página, os dois herdam a paleta nova juntos; qualquer outra
- * rota (Automações, Follow-up...) usa o MESMO AppShell mas SEM o wrapper,
- * então continua 100% no visual azul padrão.
- *
- * Dentro de .vx-preview, os tokens globais (--vexo-bg, --vexo-accent...)
- * são REDECLARADOS com os valores da paleta nova — os componentes que já
- * leem esses tokens via classe Tailwind (bg-vexo-surface, text-vexo-fg,
- * bg-vexo-accent...) passam a herdar os valores novos automaticamente,
- * sem precisar trocar nenhuma className. É por isso que nenhum componente
- * precisou ser editado.
+ * conteúdo, os dois herdam a paleta nova juntos SÓ nesta página; Pipeline,
+ * Painel, Follow-up, Agenda e o resto continuam exatamente como sempre
+ * foram (Pipeline inclusive — revertida nesta mesma rodada pro visual de
+ * antes da 1ª tentativa, ver histórico do git).
  *
  * REVISÃO (decisão pendente do usuário):
  * - Aprovado: trocar os valores PADRÃO de --vexo-* (bloco :root acima) e
- *   de THEME_DEFAULTS (src/lib/theme.ts) pelos valores --vxp-* abaixo, e
- *   apagar este bloco + ClinicPalettePreview.tsx (o wrapper) + a troca no
- *   layout.tsx — a paleta nova vira a única, em todo o app.
- * - Reprovado: apagar este bloco, ClinicPalettePreview.tsx e a referência
- *   a ele em clinicas/[id]/layout.tsx — zero rastro em qualquer tela.
+ *   de THEME_DEFAULTS (src/lib/theme.ts) pelos valores --vxa-* abaixo, e
+ *   apagar este bloco + AutomacoesPalettePreview.tsx + as classes extras
+ *   em automacoes/page.tsx (ou deixá-las, já que virariam redundantes mas
+ *   inofensivas) + a troca no layout.tsx.
+ * - Reprovado: apagar este bloco, AutomacoesPalettePreview.tsx, a
+ *   referência a ele em clinicas/[id]/layout.tsx, e desfazer as classes
+ *   extras em automacoes/page.tsx (bg-vexo-surface2 no lugar de
+ *   bg-vexo-surface, border-l-2 border-l-vexo-accent, uppercase nos
+ *   títulos de seção, accent-vexo-accent nas checkboxes) — zero rastro em
+ *   qualquer outra tela.
  * ------------------------------------------------------------------------- */
-.vx-preview {
-  /* Base neutra (cinza-grafite, R=G=B — sem matiz azul-marinho), 3 níveis:
-     fundo da página mais escuro, sidebar/colunas um nível acima, cards
-     dentro delas outro nível acima — mesma hierarquia de 3 camadas que o
-     VEXO já usa, só que com uma progressão neutra em vez de azulada. */
-  --vxp-bg: 18 18 18; /* #121212 */
-  --vxp-surface: 28 28 28; /* #1c1c1c — sidebar + cards principais */
-  --vxp-surface2: 38 38 38; /* #262626 — blocos aninhados */
-  --vxp-border: 51 51 51; /* #333333 — borda fina padrão */
-  --vxp-border-strong: 69 69 69; /* #454545 */
-  --vxp-muted: 154 154 154; /* #9a9a9a — texto secundário, ~6.7:1 sobre o fundo */
-  --vxp-fg: 237 237 237; /* #ededed — branco levemente acinzentado, ~16:1 sobre o fundo */
+.vxa-preview {
+  /* Base — amostrada da referência do Figma (pedido explícito, valores
+     exatos). Fundo da página E da sidebar ficam quase idênticos de
+     propósito ("sem cor de fundo diferente" — só a borda de 1px separa os
+     dois); os blocos/cards ficam um nível acima (mais claro); os
+     mini-cards internos (inputs, etc.) ficam MAIS ESCUROS que o bloco ao
+     redor, como se estivessem encaixados/recessos nele. */
+  --vxa-bg: 23 24 34; /* #171822 — fundo da página E dos "mini-cards" internos (inputs) */
+  --vxa-sidebar: 22 25 32; /* #161920 — quase idêntico ao fundo, por pedido explícito */
+  --vxa-card: 32 35 44; /* #20232c — blocos/cards, um nível mais claro */
+  --vxa-border: 48 51 59; /* ~branco a 7% de opacidade sobre #20232c, pré-calculado (pedido: "1px branco com 6 a 8%") */
+  --vxa-border-strong: 59 61 69; /* ~branco a 12%, pro mesmo uso raro que --vexo-border-strong já tinha */
+  --vxa-muted: 139 144 154; /* #8b909a — texto secundário, pedido explícito */
+  --vxa-fg: 201 204 209; /* #c9ccd1 — título em branco levemente acinzentado, pedido explícito */
 
-  /* Azul fosco (slate/petróleo) — mais frio e acinzentado que o azul vivo
-     padrão, mas com corpo (não pastel/aguado): ~30% de saturação, valor
-     médio, não um cinza quase puro. Contraste verificado: ~3.4:1 como
-     elemento de UI sobre --vxp-bg (mín. 3:1), ~5.4:1 com texto branco em
-     cima (--vxp-accent-fg) — confortável nos dois usos. */
-  --vxp-accent: 78 109 136; /* #4e6d88 */
-  --vxp-accent-fg: 255 255 255;
+  /* Azul fosco — frio, acinzentado, com corpo (não pastel). Ponto de
+     partida exato do pedido (#5b86b0); contraste conferido: ~4.1:1 como
+     elemento de UI sobre o fundo do bloco, ~3.8:1 com texto branco em
+     cima (confortável pra rótulo curto em negrito, como os da sidebar). */
+  --vxa-accent: 91 134 176; /* #5b86b0 */
+  --vxa-accent-fg: 255 255 255;
 
-  /* Fundo "sutil" do item ativo da sidebar — pedido explícito: nada de
-     bloco azul forte, só um tom escuro com leve matiz do acento (~18% de
-     --vxp-accent sobre --vxp-surface), perceptível mas discreto. Troca o
-     que --vexo-petrol hoje provê (fundo do item ativo/hover, mais o fundo
-     dos cards de lead sem tom próprio nas colunas "Precisa de humano" e
-     "Perdido" do Pipeline, que seguem este mesmo token por padrão — ver
-     page-style-overrides.ts). */
-  --vxp-nav-active-bg: 37 43 47; /* #252b2f */
+  /* Fundo do item ativo da sidebar — pedido explícito "~14% de opacidade"
+     do azul fosco; pré-calculado (mistura de --vxa-accent a 14% sobre
+     --vxa-sidebar) pra funcionar com a classe bg-vexo-petrol já existente
+     em AppShell.tsx, sem precisar de um modificador de opacidade nela. */
+  --vxa-nav-active-bg: 32 40 52; /* #202834 */
 
-  /* Cores de apoio — REAPROVEITADAS de onde já existem no produto, não
-     inventadas (pedido explícito). Documentadas aqui como parte do
-     conjunto, mas só aplicadas onde já apareciam (ver comentários de cada
-     uma) — nada novo foi pintado com elas nesta rodada. */
-  --vxp-brown: 224 180 92; /* #e0b45c — mesmo dourado da borda de "Ideia central" no Bônus Full Face */
-  --vxp-brown-soft: 43 35 18; /* #2b2312 — mesmo fundo marrom-escuro de "Ideia central" */
-  --vxp-purple: 76 49 114; /* #4c3172 — mesmo roxo da pílula da coluna "Em conversa" do Pipeline */
-  --vxp-purple-soft: 44 34 58; /* #2c223a — mesmo fundo da coluna "Em conversa" */
-  --vxp-green: 43 100 76; /* #2b644c — mesmo verde da pílula da coluna "Agendado" do Pipeline */
-  --vxp-green-soft: 28 49 40; /* #1c3128 — mesmo fundo da coluna "Agendado" */
-  --vxp-red: 248 113 113; /* #f87171 — igual a --vexo-error hoje; incluído só por completude do conjunto, sem mudar nada (erro/alerta já era esta cor) */
+  /* Segundo destaque (dourado fosco) e cores de significado — REAPROVEITADAS
+     de onde já existem no VEXO (pedido explícito, "sem inventar tons
+     novos"). Documentadas aqui como parte do conjunto; não forçadas em
+     nenhum elemento novo de Automações nesta rodada por falta de um alvo
+     concreto que não exigisse inventar estrutura nova ou mexer em
+     componente compartilhado — ver resumo final da tarefa. */
+  --vxa-brown: 190 142 75; /* #be8e4b — dourado fosco pedido explícito (texto/ícone) */
+  --vxa-brown-soft: 43 35 18; /* #2b2312 — mesmo fundo marrom-escuro de "Ideia central" no Bônus */
+  --vxa-purple: 76 49 114; /* #4c3172 — mesmo roxo da coluna "Em conversa" do Pipeline, só pra esse estado */
+  --vxa-green: 43 100 76; /* #2b644c — mesmo verde da coluna "Agendado" do Pipeline, só pra ok/conectado/ligado */
+  --vxa-red: 248 113 113; /* #f87171 — igual a --vexo-error hoje, só erro/alerta */
 
-  /* Redeclara os tokens globais que os componentes já consomem — ver
-     comentário no topo deste bloco. Pipeline (colunas "Novo contato",
-     "Em conversa", "Agendado", "Follow-up") e os status semânticos
-     (--vexo-success/--vexo-warning/--vexo-error) ficam de fora de
-     propósito: já usam as cores de apoio corretas (roxo/verde/dourado) e
-     o pedido foi mantê-las como estão, "só para esse estado". */
-  --vexo-bg: var(--vxp-bg);
-  --vexo-surface: var(--vxp-surface);
-  --vexo-surface2: var(--vxp-surface2);
-  --vexo-border: var(--vxp-border);
-  --vexo-border-strong: var(--vxp-border-strong);
-  --vexo-muted: var(--vxp-muted);
-  --vexo-fg: var(--vxp-fg);
-  --vexo-accent: var(--vxp-accent);
-  --vexo-accent-fg: var(--vxp-accent-fg);
-  --vexo-petrol: var(--vxp-nav-active-bg);
+  /* Redeclara os tokens globais que os componentes já consomem — nenhum
+     precisou ser editado além de automacoes/page.tsx (próprio da página,
+     ver comentário no topo). */
+  --vexo-bg: var(--vxa-bg);
+  --vexo-surface: var(--vxa-sidebar);
+  --vexo-surface2: var(--vxa-card);
+  --vexo-border: var(--vxa-border);
+  --vexo-border-strong: var(--vxa-border-strong);
+  --vexo-muted: var(--vxa-muted);
+  --vexo-fg: var(--vxa-fg);
+  --vexo-accent: var(--vxa-accent);
+  --vexo-accent-fg: var(--vxa-accent-fg);
+  --vexo-petrol: var(--vxa-nav-active-bg);
 }
 
-/* Item ativo da sidebar: ícone (herda a cor do link via currentColor, sem
-   classe própria) fica com o acento; o RÓTULO fica branco, não azul —
-   pedido explícito ("branco no item ativo com fundo sutil, sem bloco azul
-   forte"). Feito via seletor, não editando AppShell.tsx: a combinação
-   ".bg-vexo-petrol.text-vexo-accent" (sem :hover) só existe no item
-   REALMENTE ativo (ver NavLink em AppShell.tsx) — o hover do item inativo
-   usa classes "hover:*" diferentes, não bate aqui. Se o className de
-   NavLink mudar algum dia, este seletor para de bater (silenciosamente
-   volta ao rótulo colorido) — ver teste AppShell.palette-preview.test.ts,
-   que trava essa suposição. */
-.vx-preview a.bg-vexo-petrol.text-vexo-accent span.truncate {
-  color: rgb(var(--vxp-fg));
+/* Item ativo da sidebar: ícone (herda a cor via currentColor) fica com o
+   acento; o RÓTULO fica branco, não azul; mais um indicador vertical fino
+   de 2px na lateral (pedido explícito) — via box-shadow inset, que NÃO
+   ocupa espaço de layout (ao contrário de um border de verdade, que
+   reduziria a largura útil e já causou uma regressão de altura numa
+   rodada anterior — ver ClinicPalettePreview antigo no histórico). Feito
+   via seletor, não editando AppShell.tsx: ".bg-vexo-petrol.text-vexo-accent"
+   (sem :hover) só existe no item REALMENTE ativo (ver NavLink em
+   AppShell.tsx) — o hover do item inativo usa classes "hover:*"
+   diferentes, não bate aqui. Se o className de NavLink mudar algum dia,
+   este seletor para de bater (silenciosamente volta ao visual padrão) —
+   ver teste AutomacoesPalettePreview.layout.test.ts, que trava essa
+   suposição. */
+.vxa-preview a.bg-vexo-petrol.text-vexo-accent {
+  box-shadow: inset 2px 0 0 0 rgb(var(--vxa-accent));
+}
+.vxa-preview a.bg-vexo-petrol.text-vexo-accent span.truncate {
+  color: rgb(var(--vxa-fg));
 }
 
 /* Tipografia do item do menu mais discreta — peso regular (era 500) e um
-   pouco menor (era 13px/text-sidebar-item) — pedido explícito ("peso
-   regular, tamanho um pouco menor"). Mesmo raciocínio de seletor acima:
-   ".text-sidebar-item.font-medium" juntas só aparecem no link do item de
-   menu (ver AppShell.tsx). */
-.vx-preview .text-sidebar-item.font-medium {
+   pouco menor (era 13px/text-sidebar-item), pedido explícito. Mesmo
+   raciocínio de seletor acima. */
+.vxa-preview .text-sidebar-item.font-medium {
   font-weight: 400;
   font-size: 12px;
 }
 
-/* Ícones de linha fina — pedido explícito ("ícones de linha fina"). Afeta
-   só os SVGs da sidebar (único lugar com ícone dentro do escopo: a
-   própria página Pipeline não usa nenhum). stroke-width via CSS vence o
-   atributo stroke-width="2" que o lucide-react aplica inline no SVG
-   (atributo de apresentação sempre perde pra regra de folha de estilo). */
-.vx-preview svg {
-  stroke-width: 1.75px;
+/* Ícones de linha fina (pedido explícito: "stroke ~1.5"). stroke-width via
+   CSS vence o atributo stroke-width="2" que o lucide-react aplica inline
+   no SVG (atributo de apresentação sempre perde pra regra de folha de
+   estilo). */
+.vxa-preview svg {
+  stroke-width: 1.5px;
 }

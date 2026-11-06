@@ -6,7 +6,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { AppShell } from "@/components/AppShell";
 import { buildClinicNavGroups } from "@/components/clinic-nav";
-import { ClinicPalettePreview } from "@/components/ClinicPalettePreview";
+import { AutomacoesPalettePreview } from "@/components/AutomacoesPalettePreview";
 
 // Sidebar de UMA clínica específica — troca completamente em relação ao
 // CRM global (ver crm/(global)/layout.tsx): Pipeline, Follow-up, WhatsApp,
@@ -29,7 +29,7 @@ export default async function ClinicLayout({
   if (!clinic) notFound();
 
   return (
-    <ClinicPalettePreview clinicId={clinic.id}>
+    <AutomacoesPalettePreview clinicId={clinic.id}>
       <AppShell
         userLabel={`${session?.user.name} · ${session?.user.role === "INTERNAL_ADMIN" ? "Admin" : "Equipe"}`}
         navGroups={buildClinicNavGroups(clinic.id)}
@@ -45,6 +45,6 @@ export default async function ClinicLayout({
       >
         {children}
       </AppShell>
-    </ClinicPalettePreview>
+    </AutomacoesPalettePreview>
   );
 }
