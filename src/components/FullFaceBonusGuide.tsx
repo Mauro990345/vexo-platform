@@ -409,7 +409,12 @@ function BlockCard({ block, s }: { block: ScriptBlock; s: Sizes }) {
       {block.media?.kind === "video" && (
         <video controls preload="metadata" src={block.media.url} className="mb-3 w-full rounded-lg" />
       )}
-      {block.media?.kind === "audio" && <audio controls preload="metadata" src={block.media.url} className="mb-3 w-full" />}
+      {/* Player nativo no topo do bloco, acima do texto (abaixo do título,
+          quando o bloco tem um). preload="none": nada é baixado até dar play.
+          Mais alto no celular (toque), compacto no PC. */}
+      {block.media?.kind === "audio" && (
+        <audio controls preload="none" src={block.media.url} className="mb-3 block h-11 w-full sm:h-9" />
+      )}
       <div className="space-y-2.5">
         {block.items.map((item, i) =>
           item.type === "subtitle" ? (

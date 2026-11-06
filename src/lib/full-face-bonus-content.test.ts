@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import fs from "fs";
+import path from "path";
 import {
   BONUS_STEPS,
   BONUS_SCREENS,
@@ -7,6 +9,9 @@ import {
   BONUS_OVERVIEW,
   adjacentBonusScreen,
   canViewFullFaceBonus,
+  bonusAudio,
+  BONUS_AUDIO_DIR,
+  BONUS_AUDIO_FILE_PATTERN,
 } from "./full-face-bonus-content";
 
 describe("Bônus Full Face — conteúdo", () => {
@@ -19,7 +24,6 @@ describe("Bônus Full Face — conteúdo", () => {
       expect(s.actions.length).toBeGreaterThan(0);
       for (const b of s.blocks) {
         expect(b.items.length).toBeGreaterThan(0);
-        expect(b.media).toBeUndefined();
       }
     }
   });
@@ -56,5 +60,33 @@ describe("Bônus Full Face — conteúdo", () => {
     expect(canViewFullFaceBonus({ internal: false, enabled: false })).toBe(false);
     expect(canViewFullFaceBonus({ internal: false, enabled: true })).toBe(true);
     expect(canViewFullFaceBonus({ internal: true, enabled: false })).toBe(true);
+  });
+});
+
+describe("Bônus Full Face — áudios", () => {
+  it("bonusAudio monta o caminho público", () => {
+    expect(bonusAudio("passo-1.mp3")).toEqual({ kind: "audio", url: "/audio/bonus/passo-1.mp3" });
+  });
+
+  it("convenção de nomes: passo-N.mp3 e passo-4a/4b.mp3", () => {
+    for (const ok of ["passo-1.mp3", "passo-7.mp3", "passo-4a.mp3", "passo-4b.mp3"]) {
+      expect(BONUS_AUDIO_FILE_PATTERN.test(ok)).toBe(true);
+    }
+    for (const bad of ["passo-8.mp3", "passo-1.wav", "passo-4c.mp3", "Passo-1.mp3"]) {
+      expect(BONUS_AUDIO_FILE_PATTERN.test(bad)).toBe(false);
+    }
+  });
+
+  it("todo bloco com áudio aponta para um MP3 que existe em public/audio/bonus", () => {
+    for (const step of BONUS_STEPS) {
+      for (const block of step.blocks) {
+        if (block.media?.kind !== "audio") continue;
+        const url = block.media.url;
+        expect(url.startsWith(`${BONUS_AUDIO_DIR}/`)).toBe(true);
+        const file = url.slice(BONUS_AUDIO_DIR.length + 1);
+        expect(BONUS_AUDIO_FILE_PATTERN.test(file), `${block.id}: ${file}`).toBe(true);
+        expect(fs.existsSync(path.join(process.cwd(), "public", url)), `${block.id}: falta public${url}`).toBe(true);
+      }
+    }
   });
 });

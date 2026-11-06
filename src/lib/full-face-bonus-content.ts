@@ -11,6 +11,20 @@ export type ScriptBlockItem = { type: "p"; text: string } | { type: "subtitle"; 
 
 export type ScriptBlockMedia = { kind: "video" | "audio"; url: string };
 
+// Áudios do guia: arquivos MP3 (mono, 96 kbps) em public/audio/bonus/,
+// servidos em /audio/bonus/<arquivo>. Convenção de nomes: passo-N.mp3 (um
+// bloco) e, no Passo 4 (dois blocos), passo-4a.mp3 e passo-4b.mp3. Para
+// acrescentar um áudio: coloque o arquivo na pasta e preencha o bloco com
+// `media: bonusAudio("passo-N.mp3")`. Bloco sem `media` não mostra nada.
+// O teste full-face-bonus-content.test.ts falha se um bloco apontar para
+// um arquivo que não existe na pasta ou fora da convenção.
+export const BONUS_AUDIO_DIR = "/audio/bonus";
+export const BONUS_AUDIO_FILE_PATTERN = /^passo-[1-7][ab]?\.mp3$/;
+
+export function bonusAudio(file: string): ScriptBlockMedia {
+  return { kind: "audio", url: `${BONUS_AUDIO_DIR}/${file}` };
+}
+
 export type ScriptBlock = {
   id: string;
   title?: string;
@@ -68,6 +82,7 @@ export const BONUS_STEPS: BonusStep[] = [
     blocks: [
       {
         id: "p1-b1",
+        media: bonusAudio("passo-1.mp3"),
         items: parseBlock(`
 Olá, tudo bem? Neste primeiro passo eu quero mudar a forma como você pensa naquilo que vende.
 
