@@ -1,4 +1,4 @@
-import { Columns3, Repeat, Link2, Activity, Bot, Zap, LayoutDashboard, ClipboardList } from "lucide-react";
+import { Columns3, Repeat, Gift, Link2, Activity, Bot, Zap, LayoutDashboard, ClipboardList } from "lucide-react";
 import type { NavGroup } from "@/components/AppShell";
 
 // Grupos de navegação de UMA clínica específica — usados tanto pelo layout
@@ -64,6 +64,10 @@ export function buildClinicNavGroups(clinicId: string): NavGroup[] {
         { href: `${base}/agente-ia`, label: "Agente de IA", icon: <Bot className="h-3.5 w-3.5 shrink-0" strokeWidth={2} /> },
         { href: `${base}/automacoes`, label: "Automações", icon: <Zap className="h-3.5 w-3.5 shrink-0" strokeWidth={2} /> },
         { href: `${base}/follow-up`, label: "Follow-up", icon: <Repeat className="h-3.5 w-3.5 shrink-0" strokeWidth={2} /> },
+        // Guia "Bônus Full Face" (ver /crm/clinicas/[id]/bonus) — sempre
+        // visível pro admin, independente do interruptor da conta (que só
+        // controla a aba no Painel da CLIENTE).
+        { href: `${base}/bonus`, label: "Bônus", icon: <Gift className="h-3.5 w-3.5 shrink-0" strokeWidth={2} /> },
       ],
     },
     {

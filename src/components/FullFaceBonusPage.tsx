@@ -18,8 +18,7 @@ export function FullFaceBonusPage({
       <div className="mx-auto max-w-6xl">
         <FullFaceBonusGuide
           storageKey={`vexo:bonus-full-face:v1:${clinicId}`}
-          panelHref={panelHref}
-          bonusHref={bonusHref}
+          tabs={{ panelHref, bonusHref }}
         />
       </div>
     </div>
