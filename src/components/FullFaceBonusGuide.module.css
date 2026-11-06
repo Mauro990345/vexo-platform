@@ -2,15 +2,18 @@
  * pedida à regra de "compacto" do VEXO: página de leitura/gravação de aula,
  * com o respiro do protótipo aprovado). Nada aqui vaza pro resto do app.
  *
- * Tokens: pedido explícito — trocar as cores próprias da aba pelas
- * variáveis globais do VEXO (--vexo-*, ver src/app/globals.css), em vez
- * de ter uma paleta decorativa isolada, pra aba não parecer uma ilha de
- * outra cor dentro da casca do app, e pra outras telas poderem reaproveitar
- * o mesmo estilo. Não precisa mais de uma variante clara/escura própria
- * aqui (ver .scope abaixo): os --vexo-* já são os únicos valores usados em
- * produção (VEXO é sempre escuro — classe .dark fixa no <html>, ver
- * src/app/layout.tsx) e, se um dia ganharem tema claro ou cor por clínica
- * (Configurações), o guia acompanha automaticamente.
+ * Tokens: superfícies/texto/borda neutros usam as variáveis globais do
+ * VEXO (--vexo-*, ver src/app/globals.css), pra aba não parecer uma ilha
+ * de outra cor dentro da casca do app. Não precisa de uma variante clara/
+ * escura própria aqui (ver .scope abaixo): os --vexo-* já são os únicos
+ * valores usados em produção (VEXO é sempre escuro — classe .dark fixa no
+ * <html>, ver src/app/layout.tsx) e, se um dia ganharem tema claro ou cor
+ * por clínica (Configurações), o guia acompanha automaticamente.
+ *
+ * Acento: verde PRÓPRIO do Bônus (--bonus-green, uma variável só — ver
+ * .scope), não o azul global (--vexo-accent) — pedido explícito pra ter
+ * só dois destaques na tela (dourado da "Ideia central" e esse verde) e
+ * deixar o azul reservado pro cabeçalho/elementos fora do Bônus.
  *
  * "Celular" = guia com até 860px de largura (container query no .root, não
  * media query da janela) — assim o guia dentro do AppShell do admin (com a
@@ -21,23 +24,41 @@
   /* .root (fundo --bg) é o "card" que fica sobre a página (sempre
      --vexo-bg atrás, ver FullFaceBonusPage.tsx e AppShell.tsx) — por isso
      mapeia pra --vexo-surface, um nível acima; os blocos aninhados
-     (.card, .phrase, .stepRow, .howCard, .msgCard, .apply...) mapeiam pro
-     nível seguinte, --vexo-surface2 — mesma hierarquia de 3 níveis que o
-     resto do VEXO já usa. */
+     neutros (.phrase, .stepRow, .howCard, .msgCard, .apply, .player...)
+     mapeiam pro nível seguinte, --vexo-surface2 — mesma hierarquia de 3
+     níveis que o resto do VEXO já usa. --card fica neutro de propósito:
+     só o bloco grande de conteúdo (.card, ver abaixo) ganha o verde. */
   --bg: rgb(var(--vexo-surface));
   --card: rgb(var(--vexo-surface2));
   --text: rgb(var(--vexo-fg));
   --muted: rgb(var(--vexo-muted));
   --line: rgb(var(--vexo-border));
-  /* Acento único: o azul do VEXO (pedido explícito — "o número do passo
-     selecionado, a linha fina do bloco 'Frase para usar' e os rótulos de
-     destaque passam a usar esse azul"). Era um teal/verde próprio da aba.
-     --vexo-petrol não é usado aqui: o pedido permitia, no máximo, um
-     detalhe secundário — não havia necessidade de um segundo acento além
-     do azul principal. */
-  --green: rgb(var(--vexo-accent));
-  --green-soft: rgb(var(--vexo-accent) / 0.14);
-  --on-green: rgb(var(--vexo-accent-fg));
+  /* Acento único do Bônus: verde (pedido explícito — "regra de cores no
+     Bônus: só duas de destaque, dourado (Ideia central) e verde (todo o
+     resto)"; o azul do VEXO (--vexo-accent) fica reservado pro cabeçalho/
+     elementos globais FORA do conteúdo do Bônus, ex. a aba ativa em
+     ClientPanelTabs). UMA variável só (--bonus-green, pedido explícito:
+     "deixe o verde em uma única variável fácil de ajustar") — todo o
+     resto deste bloco (acento sólido pros círculos/botões, fundo e borda
+     do bloco grande de conteúdo) é DERIVADO dela por opacidade, então
+     ajustar só essa variável retoca a tela inteira de forma consistente.
+     Mesmo tom de --vexo-success (RGB 52 211 153) — família de verde que
+     já existe no VEXO — mas como variável PRÓPRIA do Bônus, não o token
+     semântico global de "sucesso" (badges em outras telas). */
+  --bonus-green: 52 211 153;
+  --green: rgb(var(--bonus-green));
+  --green-soft: rgb(var(--bonus-green) / 0.14);
+  /* Texto escuro sobre um fill sólido de --green (círculo do passo ativo,
+     botão primário, "Copiado ✓") — mesmo valor de alto contraste usado
+     antes da troca pro azul (~8.8:1), mantido ao voltar pro verde. */
+  --on-green: #08201d;
+  /* Fundo "bem escuro e discreto" e borda "fina verde suave" do bloco
+     grande de conteúdo (ver .card abaixo) — washes de baixíssima opacidade
+     da MESMA --bonus-green sobre o fundo escuro da página, não uma cor
+     sólida: por isso ficam discretos mesmo a --bonus-green sendo um verde
+     vivo (precisa ser vivo pra continuar legível nos usos sólidos acima). */
+  --bonus-green-wash: rgb(var(--bonus-green) / 0.1);
+  --bonus-green-border: rgb(var(--bonus-green) / 0.32);
   /* Bloco "Ideia central" mantido como está (pedido explícito — o âmbar é
      um destaque semântico, não ligado à cor de marca): valores fixos,
      iguais aos que já estavam em produção (tema escuro, único usado). */
@@ -408,12 +429,11 @@
      "Ideia central" (borda de acento só na lateral), já que o
      preenchimento deixou de ser cheio. */
   border-radius: 0 14px 14px 0;
-  /* Era var(--phrase-bg) (tom escuro próprio, ainda um preenchimento
-     cheio em tom esverdeado) — pedido explícito: fundo neutro, igual aos
-     outros cards, com só uma linha fina de teal na lateral (o único
-     acento de teal deste bloco). */
+  /* Fundo neutro, igual aos outros cards — só o bloco grande de conteúdo
+     (.card) leva o fundo verde. A borda usa o mesmo wash suave de
+     --bonus-green do bloco grande (era var(--green) sólido/azul antes). */
   background: var(--card);
-  border-left: 2px solid var(--green);
+  border-left: 2px solid var(--bonus-green-border);
   color: var(--text);
 }
 .phraseLabel {
@@ -447,9 +467,14 @@
 .card {
   margin: 0 0 18px;
   padding: 20px 22px 6px;
-  border: 1px solid var(--line);
+  /* Pedido explícito: o "bloco grande" (player de áudio + texto do passo)
+     é o ÚNICO lugar da página com fundo verde — bem escuro e discreto,
+     com borda fina verde suave (washes de --bonus-green, ver .scope
+     acima). Todo o resto do guia (fundo da página, os outros cards)
+     continua neutro — não é mais var(--card)/var(--line) aqui. */
+  border: 1px solid var(--bonus-green-border);
   border-radius: 16px;
-  background: var(--card);
+  background: var(--bonus-green-wash);
 }
 .blockTitle {
   margin: 0 0 12px;
