@@ -11,6 +11,7 @@ import { ChannelStatusPill } from "@/components/ChannelStatusPill";
 import { normalizeBrazilianWhatsappNumber } from "@/lib/whatsapp";
 import { leadDisplayParts } from "@/lib/lead-display";
 import { LeadAvatar } from "@/components/LeadAvatar";
+import { ClientPanelTabs } from "@/components/ClientPanelTabs";
 import { InstagramGlyphIcon, WhatsAppGlyphIcon } from "@/components/BrandIcons";
 import { NeedsHumanBanner, type NeedsHumanLead } from "@/components/NeedsHumanBanner";
 import { ReactivationRail } from "@/components/ReactivationRail";
@@ -103,6 +104,7 @@ export async function ClientPanelView({
   hotLeadCardSentAction,
   standalone = true,
   headerAction,
+  bonusHref,
 }: {
   clinicId: string;
   week?: string;
@@ -128,6 +130,11 @@ export async function ClientPanelView({
   hotLeadCardSentAction?: (conversationId: string, step: number) => Promise<ToggleHotLeadCardSentResult>;
   standalone?: boolean;
   headerAction?: React.ReactNode;
+  // Rota do guia "Bônus Full Face" neste contexto (/dashboard/bonus ou
+  // /crm/painel-cliente/[id]/bonus). As abas "Painel / Bônus Full Face"
+  // só aparecem com o interruptor da conta ligado
+  // (Clinic.fullFaceBonusEnabled); desligado, nada aparece.
+  bonusHref?: string;
 }) {
   const now = new Date();
   const todayStart = startOfDay(now);
@@ -144,6 +151,7 @@ export async function ClientPanelView({
         instagramAccount: { select: { id: true } },
         googleCalendarAccount: { select: { id: true } },
         reactivationConfig: { select: { availablePeriods: true } },
+        fullFaceBonusEnabled: true,
       },
     }),
     // Cada período já sai emparelhado com suas próprias métricas (em vez de
@@ -222,6 +230,9 @@ export async function ClientPanelView({
   return (
     <div className={standalone ? "min-h-screen bg-vexo-bg px-4 pt-4 pb-6 sm:px-8 sm:pt-6 sm:pb-8" : undefined}>
       <div className={standalone ? "mx-auto max-w-6xl" : undefined}>
+        {bonusHref && clinic.fullFaceBonusEnabled && (
+          <ClientPanelTabs active="painel" panelHref={base} bonusHref={bonusHref} />
+        )}
         <div className="mb-8 flex items-start justify-between gap-3">
           <div>
             {/* SÓ CELULAR (pedido explícito, 2026-10-29, 2ª rodada):

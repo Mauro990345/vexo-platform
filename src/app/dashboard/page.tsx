@@ -22,5 +22,5 @@ export default async function ClientDashboardPage({
   const session = await requireClientSession();
   const clinicId = session.user.clinicId as string;
 
-  return <ClientPanelView clinicId={clinicId} week={searchParams.week} base="/dashboard" />;
+  return <ClientPanelView clinicId={clinicId} week={searchParams.week} base="/dashboard" bonusHref="/dashboard/bonus" />;
 }

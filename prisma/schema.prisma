@@ -52,6 +52,13 @@ model Clinic {
   notifyWhatsappEnabled    Boolean @default(false)
   remindersWhatsappEnabled Boolean @default(false)
 
+  // "Bônus Full Face" (guia de vendas em 7 passos, /dashboard/bonus) —
+  // liberado pelo admin conta por conta, em Automações > Configuração.
+  // Desligado = a aba some do Painel do cliente e a rota redireciona pra
+  // /dashboard. Nada do guia é salvo no banco (checkboxes ficam só no
+  // localStorage do navegador), então desligar não apaga nada.
+  fullFaceBonusEnabled Boolean @default(false)
+
   // Instância própria na Evolution API — cada clínica tem seu próprio
   // WhatsApp, pareado via QR code (ver src/lib/whatsapp-connection.ts).
   // Default (na criação) é o slug da clínica; pode ser renomeado antes do

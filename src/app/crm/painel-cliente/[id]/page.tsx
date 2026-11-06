@@ -49,6 +49,7 @@ export default async function ClientPanelPreviewPage({
       noShowCardSentAction={toggleNoShowCardSentAction}
       noShowCardSendWhatsappAction={sendNoShowCardWhatsAppMessageAction}
       hotLeadCardSentAction={toggleHotLeadCardSentAction}
+      bonusHref={`/crm/painel-cliente/${clinic.id}/bonus`}
     />
   );
 }

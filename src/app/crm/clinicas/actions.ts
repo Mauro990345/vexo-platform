@@ -192,6 +192,9 @@ export async function updateClinicSettings(clinicId: string, formData: FormData)
   // nenhum valor antigo ainda salvo no banco (as colunas continuam
   // existindo, só pararam de ser usadas em qualquer lugar do código).
   const active = formData.get("active") === "on";
+  // Interruptor "Bônus Full Face" (ver Clinic.fullFaceBonusEnabled) — mesmo
+  // form/botão, checkbox ao lado de "Clínica ativa".
+  const fullFaceBonusEnabled = formData.get("fullFaceBonusEnabled") === "on";
 
   // firstReminderHours/secondReminderHours/firstMessageTemplate/
   // secondMessageTemplate NÃO são lidos aqui de propósito — ficam no
@@ -208,11 +211,14 @@ export async function updateClinicSettings(clinicId: string, formData: FormData)
       address,
       clientWhatsappNumber,
       active,
+      fullFaceBonusEnabled,
     },
   });
 
   revalidatePath(`/crm/clinicas/${clinicId}/automacoes`);
   revalidatePath(`/crm/clinicas/${clinicId}`);
+  revalidatePath("/dashboard", "layout");
+  revalidatePath(`/crm/painel-cliente/${clinicId}`, "layout");
 }
 
 // Formulário PRÓPRIO (botão "Salvar lembretes", separado de "Salvar
