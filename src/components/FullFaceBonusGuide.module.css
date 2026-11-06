@@ -21,6 +21,13 @@
   --gold: #b7791f;
   --gold-soft: #fbf1dc;
   --on-green: #ffffff;
+  /* Fundo do bloco "Frase para usar" (.phrase) — pedido explícito: tom
+     mais escuro e discreto que o antigo preenchimento cheio em --green.
+     Não reaproveita --green/--on-green direto (usados em vários outros
+     lugares — stepNum, sideItemActive, pillActive, eyebrow etc. — que não
+     foram pedidos pra mudar). */
+  --phrase-bg: #16302c;
+  --phrase-text: #d9ece7;
   --title: var(--bonus-font-title), system-ui, -apple-system, sans-serif;
   --sans: var(--bonus-font-body), system-ui, -apple-system, sans-serif;
 }
@@ -36,6 +43,8 @@
   --gold: #e0b45c;
   --gold-soft: #2b2312;
   --on-green: #08201d;
+  --phrase-bg: #1a2d2a;
+  --phrase-text: #cfe3df;
 }
 
 /* ---------- Botão "Modo call" (fica na linha das abas / do cabeçalho) ---------- */
@@ -252,7 +261,12 @@
   margin: 0 0 8px;
   font-family: var(--title);
   font-weight: 700;
-  font-size: clamp(24px, 3.6vw, 32px);
+  /* Era clamp(24px, 3.6vw, 32px) — ~32px em qualquer tela de computador
+     (pedido explícito: reduzir o peso visual, ~24px). O clamp já tinha
+     24px como PISO (o valor que o "celular" sempre batia, por causa do
+     vw estreito), então fixar 24px aqui não muda nada no celular — só
+     reduz o computador, que era quem ficava no teto de 32px. */
+  font-size: 24px;
   line-height: 1.15;
   letter-spacing: -0.01em;
   text-wrap: balance;
@@ -356,8 +370,10 @@
 /* Passo */
 .idea {
   margin: 0 0 22px;
-  padding: 12px 16px;
-  border-left: 4px solid var(--gold);
+  /* Era 12px 16px — pedido explícito: menos espaço interno. */
+  padding: 9px 13px;
+  /* Era 4px — pedido explícito: borda lateral mais fina (~2px). */
+  border-left: 2px solid var(--gold);
   border-radius: 0 12px 12px 0;
   background: var(--gold-soft);
 }
@@ -371,6 +387,7 @@
 }
 .ideaText {
   margin: 0;
+  /* Já estava em ~16px (pedido pedia "cerca de 16px") — mantido. */
   font-size: 16px;
   font-weight: 500;
   line-height: 1.5;
@@ -380,10 +397,16 @@
 }
 .phrase {
   margin: 0 0 18px;
-  padding: 14px 18px;
+  /* Era 14px 18px — pedido explícito: menos espaço interno. */
+  padding: 10px 14px;
   border-radius: 14px;
-  background: var(--green);
-  color: var(--on-green);
+  /* Era var(--green)/var(--on-green) — um verde saturado cheio (o
+     elemento mais "pesado" da tela, pedido explícito). --phrase-bg/
+     --phrase-text (definidos em .scope, claro e escuro) são um tom bem
+     mais escuro e discreto — mesma família de cor, sem o preenchimento
+     vibrante. */
+  background: var(--phrase-bg);
+  color: var(--phrase-text);
 }
 .phraseLabel {
   margin: 0;
@@ -397,8 +420,9 @@
   margin: 4px 0 0;
   font-family: var(--title);
   font-weight: 500;
-  font-size: 18px;
-  line-height: 1.35;
+  /* Era 18px — pedido explícito: texto um pouco menor. */
+  font-size: 16px;
+  line-height: 1.4;
 }
 .call .phraseText {
   font-size: 23px;
@@ -427,8 +451,20 @@
 .audio {
   display: block;
   width: 100%;
+  /* Pedido explícito: compacto, largura máxima ~420px (cabe sozinho sem
+     rolagem horizontal em qualquer largura, computador ou celular — o
+     width:100% acima encolhe pra caber num container mais estreito que
+     420px). */
+  max-width: 420px;
   height: 36px;
   margin: 0 0 16px;
+  /* Pedido explícito: "estilo escuro e discreto" — color-scheme: dark
+     pede ao navegador o skin ESCURO nativo do <audio controls>
+     (suportado pelo menos em Chromium/Firefox; mantém play/pause, barra
+     de progresso, tempo e volume nativos, nenhum player customizado).
+     Escopado só a este elemento — não afeta nenhum outro controle do
+     guia (ex.: os checkboxes do checklist). */
+  color-scheme: dark;
 }
 .p {
   max-width: 62ch;
@@ -666,9 +702,8 @@
   .checklistSub {
     font-size: max(16px, var(--body));
   }
-  .audio {
-    height: 44px;
-  }
+  /* Antes 44px (maior que o computador) — pedido explícito: ~36px nas
+     duas telas, compacto, sem herdar o piso de toque maior daqui. */
 }
 
 @media (max-width: 640px) {

@@ -52,6 +52,19 @@ import {
 // já compareceu ou já foi cancelado não tem o que alternar aqui.
 const ACTIONABLE_STATUSES = ["SCHEDULED", "CONFIRMED", "NO_SHOW"];
 
+// Condição pra mostrar as abas "Painel / Bônus Full Face" — só a conta
+// (Clinic.fullFaceBonusEnabled). Pura e exportada de propósito (testável
+// sem precisar montar o componente inteiro nem mockar Prisma): bug
+// investigado nesta rodada ("aba Bônus aparece no celular mas não no
+// computador") confirmou que a causa NUNCA foi uma condição de largura de
+// tela aqui — era um proxy/CDN cacheando a resposta de /dashboard antes
+// do interruptor ser ligado (ver next.config.js, headers() cobrindo
+// /dashboard/* agora). Esta função prova que a lógica de exibição em si
+// é 100% independente de viewport.
+export function shouldShowClientBonusTab(bonusHref: string | undefined, fullFaceBonusEnabled: boolean): boolean {
+  return Boolean(bonusHref) && fullFaceBonusEnabled;
+}
+
 // Segunda como início da semana (getDay(): 0=dom..6=sáb).
 function startOfWeek(d: Date): Date {
   const diff = (d.getDay() + 6) % 7;
@@ -246,8 +259,8 @@ export async function ClientPanelView({
   return (
     <div className={standalone ? "min-h-screen bg-vexo-bg px-4 pt-4 pb-6 sm:px-8 sm:pt-6 sm:pb-8" : undefined}>
       <div className={standalone ? "mx-auto max-w-6xl" : undefined}>
-        {bonusHref && clinic.fullFaceBonusEnabled && (
-          <ClientPanelTabs active="painel" panelHref={base} bonusHref={bonusHref} />
+        {shouldShowClientBonusTab(bonusHref, clinic.fullFaceBonusEnabled) && (
+          <ClientPanelTabs active="painel" panelHref={base} bonusHref={bonusHref!} />
         )}
         <div className="mb-8 flex items-start justify-between gap-3">
           <div>
