@@ -36,15 +36,16 @@ const nextConfig = {
   // (commit mais recente já confirmadamente ativo) explicam um bug de
   // fundo/etiqueta desencontrados reproduzido de novo em produção.
   //
-  // /dashboard/* adicionado numa rodada seguinte (pedido explícito, bug
-  // "aba Bônus aparece no celular mas não no computador"): mesma causa
-  // raiz, só que faltava cobrir /dashboard/* — a aba "Bônus Full Face"
-  // (Painel do cliente, ClientPanelView.tsx) só depende de
-  // Clinic.fullFaceBonusEnabled, sem NENHUMA condição de largura de tela
-  // envolvida; o que diferenciava celular de computador era qual dos dois
-  // tinha uma resposta de /dashboard em cache de ANTES do interruptor ser
-  // ligado — sem este header, o proxy podia continuar servindo essa
-  // versão antiga pra um dos dois só porque bateu nele primeiro.
+  // /dashboard/* adicionado numa rodada seguinte, como hipótese pro bug
+  // "aba Bônus aparece no celular mas não no computador" — mantido aqui
+  // como reforço defensivo legítimo (mesma lógica do /crm/* acima), mas
+  // NÃO era a causa desse bug específico: investigação seguinte (com
+  // reprodução real, não suposição) achou que uma das três rotas que
+  // montam o Painel (/crm/clinicas/[id]/painel/page.tsx) simplesmente
+  // nunca passava a prop `bonusHref` pro ClientPanelView — então a aba
+  // nunca aparecia ALI, em nenhuma largura/dispositivo. Ver
+  // src/app/client-panel-bonus-routes.test.ts pela causa real e o teste
+  // que a prova.
   async headers() {
     return [
       {

@@ -21,13 +21,6 @@
   --gold: #b7791f;
   --gold-soft: #fbf1dc;
   --on-green: #ffffff;
-  /* Fundo do bloco "Frase para usar" (.phrase) — pedido explícito: tom
-     mais escuro e discreto que o antigo preenchimento cheio em --green.
-     Não reaproveita --green/--on-green direto (usados em vários outros
-     lugares — stepNum, sideItemActive, pillActive, eyebrow etc. — que não
-     foram pedidos pra mudar). */
-  --phrase-bg: #16302c;
-  --phrase-text: #d9ece7;
   --title: var(--bonus-font-title), system-ui, -apple-system, sans-serif;
   --sans: var(--bonus-font-body), system-ui, -apple-system, sans-serif;
 }
@@ -43,8 +36,6 @@
   --gold: #e0b45c;
   --gold-soft: #2b2312;
   --on-green: #08201d;
-  --phrase-bg: #1a2d2a;
-  --phrase-text: #cfe3df;
 }
 
 /* ---------- Botão "Modo call" (fica na linha das abas / do cabeçalho) ---------- */
@@ -142,8 +133,11 @@
 }
 .sideItemActive,
 .sideItemActive:hover {
-  background: var(--green-soft);
-  box-shadow: inset 3px 0 0 var(--green);
+  /* Era var(--green-soft) + box-shadow inset teal — pedido explícito:
+     sem contorno teal no passo selecionado, só um fundo levemente mais
+     claro (neutro, igual aos cards) — o teal fica só no número (.circle
+     abaixo). */
+  background: var(--card);
 }
 .circle {
   display: flex;
@@ -246,7 +240,9 @@
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--green);
+  /* Era var(--green) — pedido explícito: menos teal na tela, este rótulo
+     ("PASSO 1 DE 7") passa a cinza-azulado discreto. */
+  color: var(--muted);
 }
 .h1 {
   margin: 0 0 10px;
@@ -399,14 +395,17 @@
   margin: 0 0 18px;
   /* Era 14px 18px — pedido explícito: menos espaço interno. */
   padding: 10px 14px;
-  border-radius: 14px;
-  /* Era var(--green)/var(--on-green) — um verde saturado cheio (o
-     elemento mais "pesado" da tela, pedido explícito). --phrase-bg/
-     --phrase-text (definidos em .scope, claro e escuro) são um tom bem
-     mais escuro e discreto — mesma família de cor, sem o preenchimento
-     vibrante. */
-  background: var(--phrase-bg);
-  color: var(--phrase-text);
+  /* Era 14px (todos os cantos) — agora segue o mesmo desenho do bloco
+     "Ideia central" (borda de acento só na lateral), já que o
+     preenchimento deixou de ser cheio. */
+  border-radius: 0 14px 14px 0;
+  /* Era var(--phrase-bg) (tom escuro próprio, ainda um preenchimento
+     cheio em tom esverdeado) — pedido explícito: fundo neutro, igual aos
+     outros cards, com só uma linha fina de teal na lateral (o único
+     acento de teal deste bloco). */
+  background: var(--card);
+  border-left: 2px solid var(--green);
+  color: var(--text);
 }
 .phraseLabel {
   margin: 0;
@@ -414,7 +413,9 @@
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  opacity: 0.8;
+  /* Era herdado de --phrase-text (teal) — pedido explícito: rótulo
+     pequeno em cinza-azulado discreto, não teal. */
+  color: var(--muted);
 }
 .phraseText {
   margin: 4px 0 0;
@@ -448,23 +449,86 @@
   font-size: 18px;
   line-height: 1.3;
 }
-.audio {
-  display: block;
+/* Player de áudio compacto, estilo próprio (play/pause, progresso, tempo
+   e volume) — ver BonusAudioPlayer.tsx. Substitui o <audio controls>
+   nativo porque o nativo não dá pra deixar no tamanho pedido (~320x32px)
+   de forma confiável entre navegadores, nem dá pra mudar o comportamento
+   do volume no celular (nativamente um toque no ícone muta, sem barra
+   pra reajustar — bug relatado). Vale igual pra computador e celular. */
+.player {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   width: 100%;
-  /* Pedido explícito: compacto, largura máxima ~420px (cabe sozinho sem
-     rolagem horizontal em qualquer largura, computador ou celular — o
-     width:100% acima encolhe pra caber num container mais estreito que
-     420px). */
-  max-width: 420px;
-  height: 36px;
+  max-width: 320px;
+  height: 32px;
+  padding: 0 10px;
   margin: 0 0 16px;
-  /* Pedido explícito: "estilo escuro e discreto" — color-scheme: dark
-     pede ao navegador o skin ESCURO nativo do <audio controls>
-     (suportado pelo menos em Chromium/Firefox; mantém play/pause, barra
-     de progresso, tempo e volume nativos, nenhum player customizado).
-     Escopado só a este elemento — não afeta nenhum outro controle do
-     guia (ex.: os checkboxes do checklist). */
-  color-scheme: dark;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--card);
+}
+.playerBtn {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.playerBtn:hover {
+  color: var(--green);
+}
+.playerProgress {
+  flex: 1;
+  min-width: 0;
+  height: 3px;
+  margin: 0;
+  accent-color: var(--green);
+  cursor: pointer;
+}
+.playerTime {
+  flex-shrink: 0;
+  /* Exceção deliberada à regra "nenhum texto abaixo de 16px no celular"
+     (ver topo do arquivo e o @container mais abaixo): o player precisa
+     caber em ~320x32px nas duas telas (pedido explícito, item mais
+     recente), o que não sobra espaço pra um "0:12 / 1:03" em 16px junto
+     dos botões — só este rótulo de tempo fica pequeno. */
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.volumeWrap {
+  position: relative;
+  display: flex;
+  flex-shrink: 0;
+}
+.volumePopover {
+  position: absolute;
+  right: -6px;
+  bottom: calc(100% + 8px);
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--card);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+}
+.volumeRange {
+  width: 90px;
+  height: 3px;
+  margin: 0;
+  accent-color: var(--green);
+  cursor: pointer;
 }
 .p {
   max-width: 62ch;
@@ -702,8 +766,6 @@
   .checklistSub {
     font-size: max(16px, var(--body));
   }
-  /* Antes 44px (maior que o computador) — pedido explícito: ~36px nas
-     duas telas, compacto, sem herdar o piso de toque maior daqui. */
 }
 
 @media (max-width: 640px) {
