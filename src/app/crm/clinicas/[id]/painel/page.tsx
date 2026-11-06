@@ -53,6 +53,10 @@ export default async function ClinicPainelPage({
       clinicId={params.id}
       week={searchParams.week}
       base={`/crm/clinicas/${params.id}/painel`}
+      // Faltava — sem isso shouldShowClientBonusTab nunca via um bonusHref
+      // aqui e a aba "Bônus Full Face" nunca aparecia nesta rota, em
+      // nenhuma largura de tela (bug era de código, não de cache/viewport).
+      bonusHref={`/crm/clinicas/${params.id}/bonus`}
       noShowAction={setAppointmentAttendanceAction}
       returnPeriodAction={setAppointmentReturnPeriodAction}
       reactivationSentAction={toggleReactivationCardSentAction}

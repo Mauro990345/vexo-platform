@@ -16,6 +16,7 @@ import {
   type ScriptBlock,
 } from "@/lib/full-face-bonus-content";
 import { bonusBodyFont, bonusTitleFont } from "@/lib/bonus-fonts";
+import { BonusAudioPlayer } from "./BonusAudioPlayer";
 import styles from "./FullFaceBonusGuide.module.css";
 
 // Guia "Bônus Full Face" — uma tela por vez (Visão geral, Passos 1–7,
@@ -354,19 +355,6 @@ function CheckRow({ checked, onChange, children }: { checked: boolean; onChange:
   );
 }
 
-// Volume inicial de 20% em todo player de áudio do guia (inclusive os dos
-// próximos passos). A pessoa continua ajustando pelo controle do player.
-// No iPhone/iPad (Safari) o volume de <audio> é só leitura por código — lá
-// fica no volume do aparelho, e isso não é contornado de propósito.
-function setInitialVolume(el: HTMLAudioElement | null) {
-  if (!el) return;
-  try {
-    el.volume = 0.2;
-  } catch {
-    // ignora navegadores que não permitem
-  }
-}
-
 function BlockCard({ block }: { block: ScriptBlock }) {
   return (
     <section className={styles.card}>
@@ -374,11 +362,10 @@ function BlockCard({ block }: { block: ScriptBlock }) {
       {block.media?.kind === "video" && (
         <video controls preload="metadata" src={block.media.url} className="mb-4 w-full rounded-lg" />
       )}
-      {/* Player nativo no topo do bloco, acima do texto (abaixo do título,
-          quando o bloco tem um). preload="none": nada é baixado até dar play. */}
-      {block.media?.kind === "audio" && (
-        <audio ref={setInitialVolume} controls preload="none" src={block.media.url} className={styles.audio} />
-      )}
+      {/* Player compacto próprio no topo do bloco, acima do texto (abaixo
+          do título, quando o bloco tem um) — ver BonusAudioPlayer.tsx.
+          preload="none": nada é baixado até dar play. */}
+      {block.media?.kind === "audio" && <BonusAudioPlayer src={block.media.url} />}
       {block.items.map((item, i) =>
         item.type === "subtitle" ? (
           <h3 key={i} className={styles.sub}>
