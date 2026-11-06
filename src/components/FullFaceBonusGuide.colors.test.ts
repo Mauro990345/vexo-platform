@@ -1,13 +1,16 @@
 // Teste de cor do guia "Bônus Full Face" — pedido explícito (rodada mais
-// recente): trocar a paleta própria da aba pelos tokens globais do VEXO
-// (--vexo-*, ver src/app/globals.css), com um único acento (o azul do
-// VEXO) no lugar do teal/verde que a aba usava antes, e o bloco "Ideia
-// central" mantido com o âmbar fixo (destaque semântico, fora da troca).
+// recente): o verde volta, mas só no "bloco grande" (player de áudio +
+// texto do passo, ver .card/BlockCard em FullFaceBonusGuide.tsx) — fundo
+// da página continua neutro (--vexo-surface, padrão VEXO). Acento único
+// do conteúdo do Bônus é esse mesmo verde (--bonus-green, UMA variável só
+// — ver .scope no CSS), não mais o azul (--vexo-accent) da rodada
+// anterior: círculo do passo ativo e a borda da "Frase para usar" usam
+// esse verde; "Ideia central" continua intocado (âmbar fixo).
 //
-// A prova mais forte de que a aba REALMENTE usa os tokens globais (e não
-// só reproduziu os mesmos valores por coincidência) é trocar o valor de
-// --vexo-accent/--vexo-surface no :root e confirmar que a cor renderizada
-// do guia muda junto — é isso que os testes "segue a troca de..." fazem.
+// A prova mais forte de que os elementos REALMENTE usam a variável (e não
+// só reproduziram os mesmos valores por coincidência) é trocar
+// --bonus-green no :root e confirmar que a cor renderizada muda junto —
+// é isso que o teste "prova de vínculo real" faz.
 //
 // Por que um browser real (Playwright) em vez de ler o CSS como texto:
 // :global(...) (postcss-modules) não é CSS padrão — um browser real,
@@ -37,42 +40,85 @@ const DEFAULT_VEXO_ROOT = `
   --vexo-petrol-border: 30 68 89;
 `;
 
-const VEXO_SURFACE = "rgb(20, 26, 36)";
-const VEXO_SURFACE2 = "rgb(27, 34, 46)";
+const VEXO_SURFACE = "rgb(20, 26, 36)"; // fundo da página (.root) — sem verde
+const VEXO_SURFACE2 = "rgb(27, 34, 46)"; // blocos neutros (ex: .phrase)
 const VEXO_MUTED = "rgb(139, 150, 168)";
-const VEXO_ACCENT = "rgb(59, 130, 246)"; // azul
-const OLD_TEAL = "rgb(94, 194, 181)"; // acento antigo da aba (não deve mais aparecer)
+const VEXO_ACCENT = "rgb(59, 130, 246)"; // azul — reservado fora do Bônus
 
 const markup = `
 <div class="scope">
-  <div class="side">
-    <button class="sideItem sideItemActive" id="activeItem">
-      <span class="circle">2</span>
-      <span class="sideTitle">Passo 2</span>
-    </button>
-  </div>
-  <div>
-    <p class="eyebrow" id="eyebrow">Passo 2 de 7</p>
-    <div class="idea" id="idea">
-      <p class="ideaLabel" id="ideaLabel">Ideia central</p>
+  <div class="root" id="root">
+    <div class="side">
+      <button class="sideItem sideItemActive" id="activeItem">
+        <span class="circle">2</span>
+        <span class="sideTitle">Passo 2</span>
+      </button>
     </div>
-    <div class="phrase" id="phrase">
-      <p class="phraseLabel" id="phraseLabel">Frase para usar</p>
-      <p class="phraseText" id="phraseText">texto da frase</p>
+    <div>
+      <p class="eyebrow" id="eyebrow">Passo 2 de 7</p>
+      <div class="idea" id="idea">
+        <p class="ideaLabel" id="ideaLabel">Ideia central</p>
+      </div>
+      <div class="phrase" id="phrase">
+        <p class="phraseLabel" id="phraseLabel">Frase para usar</p>
+        <p class="phraseText" id="phraseText">texto da frase</p>
+      </div>
+      <section class="card" id="card">
+        <h2 class="blockTitle">Título do bloco</h2>
+        <p class="p">Texto do passo dentro do bloco grande.</p>
+      </section>
     </div>
   </div>
 </div>`;
 
-async function renderWithRoot(browser: Browser, compiledCss: string, rootVars: string) {
+async function renderWithRoot(browser: Browser, compiledCss: string, rootVars: string, overrideAfter = "") {
   const page = await browser.newPage();
   await page.setContent(
-    `<!DOCTYPE html><html class="dark"><head><meta charset="utf-8"><style>:root{${rootVars}}</style><style>${compiledCss}</style></head><body>${markup}</body></html>`
+    `<!DOCTYPE html><html class="dark"><head><meta charset="utf-8"><style>:root{${rootVars}}</style><style>${compiledCss}</style><style>${overrideAfter}</style></head><body>${markup}</body></html>`
   );
   await page.waitForTimeout(100);
   return page;
 }
 
-describe("FullFaceBonusGuide — paleta mapeada pros tokens globais do VEXO", () => {
+// Relative luminance / contraste WCAG — pra provar numericamente "o texto
+// deve manter contraste de leitura confortável" (pedido explícito) em vez
+// de confiar só em inspeção visual.
+function relativeLuminance(rgb: string): number {
+  const [r, g, b] = rgb
+    .match(/\d+/g)!
+    .slice(0, 3)
+    .map((n) => Number(n) / 255);
+  const lin = (c: number) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
+  return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+}
+
+function contrastRatio(a: string, b: string): number {
+  const la = relativeLuminance(a);
+  const lb = relativeLuminance(b);
+  const [lighter, darker] = la > lb ? [la, lb] : [lb, la];
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+// getComputedStyle() devolve o valor CRU da cor (ex: "rgba(52, 211, 153,
+// 0.1)" pro wash do bloco grande) — NUNCA o composto visual contra o que
+// está atrás. Pra medir "quão escuro/discreto" o wash realmente aparece
+// na tela (e o contraste real do texto sobre ele), é preciso compor a
+// cor com alpha manualmente sobre o fundo que fica atrás (.root/--bg).
+function parseRgba(c: string): [number, number, number, number] {
+  const nums = c.match(/[\d.]+/g)!.map(Number);
+  return [nums[0] ?? 0, nums[1] ?? 0, nums[2] ?? 0, nums[3] ?? 1];
+}
+
+function compositeOverBg(fgRgba: string, bgRgb: string): string {
+  const [fr, fgG, fb, fa] = parseRgba(fgRgba);
+  const [br, bgG, bb] = parseRgba(bgRgb);
+  const r = fr * fa + br * (1 - fa);
+  const g = fgG * fa + bgG * (1 - fa);
+  const b = fb * fa + bb * (1 - fa);
+  return `rgb(${r}, ${g}, ${b})`;
+}
+
+describe("FullFaceBonusGuide — verde só no bloco grande, acento único (--bonus-green)", () => {
   let browser: Browser;
   let compiledCss: string;
 
@@ -86,67 +132,117 @@ describe("FullFaceBonusGuide — paleta mapeada pros tokens globais do VEXO", ()
     await browser?.close();
   });
 
-  async function colorOf(page: Awaited<ReturnType<typeof renderWithRoot>>, selector: string, prop: string) {
+  async function styleOf(page: Awaited<ReturnType<typeof renderWithRoot>>, selector: string, prop: string) {
     return page.$eval(selector, (el, p) => getComputedStyle(el)[p as keyof CSSStyleDeclaration] as string, prop);
   }
 
-  it("com os tokens PADRÃO do VEXO: superfícies em --vexo-surface/--vexo-surface2 (não mais a paleta própria antiga)", async () => {
+  it("fundo da página (.root) continua neutro, --vexo-surface — sem verde", async () => {
     const page = await renderWithRoot(browser, compiledCss, DEFAULT_VEXO_ROOT);
-    expect(await colorOf(page, "#activeItem", "backgroundColor")).toBe(VEXO_SURFACE2);
-    expect(await colorOf(page, "#phrase", "backgroundColor")).toBe(VEXO_SURFACE2);
+    expect(await styleOf(page, "#root", "backgroundColor")).toBe(VEXO_SURFACE);
     await page.close();
   });
 
-  it("com os tokens PADRÃO do VEXO: acento único é o azul (--vexo-accent) — nada mais usa o teal antigo", async () => {
+  it("bloco grande (.card — player + texto do passo): fundo e borda são um wash de verde, não a superfície neutra", async () => {
     const page = await renderWithRoot(browser, compiledCss, DEFAULT_VEXO_ROOT);
-    const circleBg = await colorOf(page, "#activeItem .circle", "backgroundColor");
-    const phraseBorder = await colorOf(page, "#phrase", "borderLeftColor");
-    expect(circleBg).toBe(VEXO_ACCENT);
-    expect(phraseBorder).toBe(VEXO_ACCENT);
-    expect(circleBg).not.toBe(OLD_TEAL);
-    expect(phraseBorder).not.toBe(OLD_TEAL);
+    const bg = await styleOf(page, "#card", "backgroundColor");
+    const borderColor = await styleOf(page, "#card", "borderTopColor");
+    expect(bg).not.toBe(VEXO_SURFACE2);
+    expect(bg).not.toBe("rgba(0, 0, 0, 0)");
+    expect(borderColor).toMatch(/^rgba?\(/);
+    await page.close();
+  });
+
+  it("bloco grande: o wash de fundo é BEM ESCURO e discreto (luminância baixa, perto do fundo da página — já composto com o alpha)", async () => {
+    const page = await renderWithRoot(browser, compiledCss, DEFAULT_VEXO_ROOT);
+    const cardBg = await styleOf(page, "#card", "backgroundColor");
+    const pageBg = await styleOf(page, "#root", "backgroundColor");
+    const composite = compositeOverBg(cardBg, pageBg);
+    const cardLum = relativeLuminance(composite);
+    const pageLum = relativeLuminance(pageBg);
+    // "Discreto": a luminância do bloco (já composta com o que fica atrás)
+    // fica bem próxima da página — não um verde vivo/saturado tomando a
+    // tela, mas perceptível o bastante pra se notar (diferença pequena
+    // porém não nula).
+    const diff = Math.abs(cardLum - pageLum);
+    expect(diff).toBeGreaterThan(0);
+    expect(diff).toBeLessThan(0.05);
+    await page.close();
+  });
+
+  it("'Frase para usar': borda verde suave (não mais azul), fundo continua neutro (não é o mesmo wash do bloco grande)", async () => {
+    const page = await renderWithRoot(browser, compiledCss, DEFAULT_VEXO_ROOT);
+    const bg = await styleOf(page, "#phrase", "backgroundColor");
+    const borderLeftColor = await styleOf(page, "#phrase", "borderLeftColor");
+    expect(bg).toBe(VEXO_SURFACE2);
+    expect(borderLeftColor).not.toBe(VEXO_ACCENT);
+    await page.close();
+  });
+
+  it("círculo do passo ativo: verde do Bônus (não mais azul)", async () => {
+    const page = await renderWithRoot(browser, compiledCss, DEFAULT_VEXO_ROOT);
+    const circleBg = await styleOf(page, "#activeItem .circle", "backgroundColor");
+    expect(circleBg).toBe("rgb(52, 211, 153)");
+    expect(circleBg).not.toBe(VEXO_ACCENT);
     await page.close();
   });
 
   it("passo selecionado no menu: sem contorno (box-shadow none) — só o número carrega o acento", async () => {
     const page = await renderWithRoot(browser, compiledCss, DEFAULT_VEXO_ROOT);
-    expect(await colorOf(page, "#activeItem", "boxShadow")).toBe("none");
+    expect(await styleOf(page, "#activeItem", "boxShadow")).toBe("none");
     await page.close();
   });
 
   it("'PASSO 2 DE 7' e 'FRASE PARA USAR': cinza-azulado discreto (--vexo-muted), não o acento", async () => {
     const page = await renderWithRoot(browser, compiledCss, DEFAULT_VEXO_ROOT);
-    expect(await colorOf(page, "#eyebrow", "color")).toBe(VEXO_MUTED);
-    expect(await colorOf(page, "#phraseLabel", "color")).toBe(VEXO_MUTED);
+    expect(await styleOf(page, "#eyebrow", "color")).toBe(VEXO_MUTED);
+    expect(await styleOf(page, "#phraseLabel", "color")).toBe(VEXO_MUTED);
     await page.close();
   });
 
-  it("bloco 'Ideia central' mantido fora da troca: não usa o azul nem os tokens de superfície globais", async () => {
+  it("bloco 'Ideia central' mantido fora da troca: nem verde nem tokens de superfície globais", async () => {
     const page = await renderWithRoot(browser, compiledCss, DEFAULT_VEXO_ROOT);
-    const ideaBg = await colorOf(page, "#idea", "backgroundColor");
-    const ideaLabelColor = await colorOf(page, "#ideaLabel", "color");
+    const ideaBg = await styleOf(page, "#idea", "backgroundColor");
+    const ideaLabelColor = await styleOf(page, "#ideaLabel", "color");
     expect(ideaBg).not.toBe(VEXO_SURFACE2);
-    expect(ideaBg).not.toBe(VEXO_ACCENT);
-    expect(ideaLabelColor).not.toBe(VEXO_ACCENT);
+    expect(ideaBg).not.toBe("rgb(52, 211, 153)");
+    expect(ideaLabelColor).not.toBe("rgb(52, 211, 153)");
     expect(ideaLabelColor).not.toBe(VEXO_MUTED);
     await page.close();
   });
 
-  it("prova de vínculo real: trocando --vexo-accent no :root, a cor do guia muda junto (não é um valor fixo duplicado)", async () => {
-    const customRoot = DEFAULT_VEXO_ROOT.replace("--vexo-accent: 59 130 246;", "--vexo-accent: 220 38 38;"); // vermelho de teste
-    const page = await renderWithRoot(browser, compiledCss, customRoot);
-    const circleBg = await colorOf(page, "#activeItem .circle", "backgroundColor");
-    expect(circleBg).toBe("rgb(220, 38, 38)");
-    expect(circleBg).not.toBe(VEXO_ACCENT);
+  it("texto sobre o fill sólido de verde (--on-green, círculo ativo) mantém contraste confortável (>= 4.5:1)", async () => {
+    const page = await renderWithRoot(browser, compiledCss, DEFAULT_VEXO_ROOT);
+    const circleBg = await styleOf(page, "#activeItem .circle", "backgroundColor");
+    const circleText = await styleOf(page, "#activeItem .circle", "color");
+    expect(contrastRatio(circleBg, circleText)).toBeGreaterThanOrEqual(4.5);
     await page.close();
   });
 
-  it("prova de vínculo real: trocando --vexo-surface2 no :root, o fundo dos blocos aninhados muda junto", async () => {
-    const customRoot = DEFAULT_VEXO_ROOT.replace("--vexo-surface2: 27 34 46;", "--vexo-surface2: 10 50 10;"); // verde de teste
+  it("texto do bloco grande sobre o wash verde mantém contraste confortável (>= 4.5:1, já composto com o alpha)", async () => {
+    const page = await renderWithRoot(browser, compiledCss, DEFAULT_VEXO_ROOT);
+    const cardBg = await styleOf(page, "#card", "backgroundColor");
+    const pageBg = await styleOf(page, "#root", "backgroundColor");
+    const titleColor = await styleOf(page, "#card .blockTitle", "color");
+    const composite = compositeOverBg(cardBg, pageBg);
+    expect(contrastRatio(composite, titleColor)).toBeGreaterThanOrEqual(4.5);
+    await page.close();
+  });
+
+  it("prova de vínculo real: trocando --bonus-green no :root, o acento (círculo) e o wash do bloco grande mudam junto", async () => {
+    const page = await renderWithRoot(browser, compiledCss, DEFAULT_VEXO_ROOT, ".scope { --bonus-green: 220 38 38; }"); // vermelho de teste
+    const circleBg = await styleOf(page, "#activeItem .circle", "backgroundColor");
+    const cardBorder = await styleOf(page, "#card", "borderTopColor");
+    expect(circleBg).toBe("rgb(220, 38, 38)");
+    expect(circleBg).not.toBe("rgb(52, 211, 153)");
+    expect(cardBorder).toBe("rgba(220, 38, 38, 0.32)");
+    await page.close();
+  });
+
+  it("trocando --vexo-accent (azul global) no :root, NADA no conteúdo do Bônus muda — acento é só o verde próprio", async () => {
+    const customRoot = DEFAULT_VEXO_ROOT.replace("--vexo-accent: 59 130 246;", "--vexo-accent: 220 38 38;");
     const page = await renderWithRoot(browser, compiledCss, customRoot);
-    const phraseBg = await colorOf(page, "#phrase", "backgroundColor");
-    expect(phraseBg).toBe("rgb(10, 50, 10)");
-    expect(phraseBg).not.toBe(VEXO_SURFACE2);
+    const circleBg = await styleOf(page, "#activeItem .circle", "backgroundColor");
+    expect(circleBg).toBe("rgb(52, 211, 153)");
     await page.close();
   });
 });
