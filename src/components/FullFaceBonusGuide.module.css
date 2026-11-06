@@ -2,8 +2,15 @@
  * pedida à regra de "compacto" do VEXO: página de leitura/gravação de aula,
  * com o respiro do protótipo aprovado). Nada aqui vaza pro resto do app.
  *
- * Tokens: claro por padrão; escuro quando o VEXO está no tema escuro
- * (classe .dark no <html>, ver src/app/layout.tsx).
+ * Tokens: pedido explícito — trocar as cores próprias da aba pelas
+ * variáveis globais do VEXO (--vexo-*, ver src/app/globals.css), em vez
+ * de ter uma paleta decorativa isolada, pra aba não parecer uma ilha de
+ * outra cor dentro da casca do app, e pra outras telas poderem reaproveitar
+ * o mesmo estilo. Não precisa mais de uma variante clara/escura própria
+ * aqui (ver .scope abaixo): os --vexo-* já são os únicos valores usados em
+ * produção (VEXO é sempre escuro — classe .dark fixa no <html>, ver
+ * src/app/layout.tsx) e, se um dia ganharem tema claro ou cor por clínica
+ * (Configurações), o guia acompanha automaticamente.
  *
  * "Celular" = guia com até 860px de largura (container query no .root, não
  * media query da janela) — assim o guia dentro do AppShell do admin (com a
@@ -11,31 +18,33 @@
  * quando aperta. Nesse modo nenhum texto fica abaixo de 16px. */
 
 .scope {
-  --bg: #f4f7f6;
-  --card: #ffffff;
-  --text: #14211f;
-  --muted: #5a6b68;
-  --line: #d9e2e0;
-  --green: #0f5c55;
-  --green-soft: #e1f0ee;
-  --gold: #b7791f;
-  --gold-soft: #fbf1dc;
-  --on-green: #ffffff;
-  --title: var(--bonus-font-title), system-ui, -apple-system, sans-serif;
-  --sans: var(--bonus-font-body), system-ui, -apple-system, sans-serif;
-}
-
-:global(.dark) .scope {
-  --bg: #0e1716;
-  --card: #162321;
-  --text: #e6efed;
-  --muted: #94a8a4;
-  --line: #2a3b38;
-  --green: #5ec2b5;
-  --green-soft: #17302d;
+  /* .root (fundo --bg) é o "card" que fica sobre a página (sempre
+     --vexo-bg atrás, ver FullFaceBonusPage.tsx e AppShell.tsx) — por isso
+     mapeia pra --vexo-surface, um nível acima; os blocos aninhados
+     (.card, .phrase, .stepRow, .howCard, .msgCard, .apply...) mapeiam pro
+     nível seguinte, --vexo-surface2 — mesma hierarquia de 3 níveis que o
+     resto do VEXO já usa. */
+  --bg: rgb(var(--vexo-surface));
+  --card: rgb(var(--vexo-surface2));
+  --text: rgb(var(--vexo-fg));
+  --muted: rgb(var(--vexo-muted));
+  --line: rgb(var(--vexo-border));
+  /* Acento único: o azul do VEXO (pedido explícito — "o número do passo
+     selecionado, a linha fina do bloco 'Frase para usar' e os rótulos de
+     destaque passam a usar esse azul"). Era um teal/verde próprio da aba.
+     --vexo-petrol não é usado aqui: o pedido permitia, no máximo, um
+     detalhe secundário — não havia necessidade de um segundo acento além
+     do azul principal. */
+  --green: rgb(var(--vexo-accent));
+  --green-soft: rgb(var(--vexo-accent) / 0.14);
+  --on-green: rgb(var(--vexo-accent-fg));
+  /* Bloco "Ideia central" mantido como está (pedido explícito — o âmbar é
+     um destaque semântico, não ligado à cor de marca): valores fixos,
+     iguais aos que já estavam em produção (tema escuro, único usado). */
   --gold: #e0b45c;
   --gold-soft: #2b2312;
-  --on-green: #08201d;
+  --title: var(--bonus-font-title), system-ui, -apple-system, sans-serif;
+  --sans: var(--bonus-font-body), system-ui, -apple-system, sans-serif;
 }
 
 /* ---------- Botão "Modo call" (fica na linha das abas / do cabeçalho) ---------- */
