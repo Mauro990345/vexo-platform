@@ -354,14 +354,14 @@ function CheckRow({ checked, onChange, children }: { checked: boolean; onChange:
   );
 }
 
-// Volume inicial de 35% em todo player de áudio do guia (inclusive os dos
+// Volume inicial de 20% em todo player de áudio do guia (inclusive os dos
 // próximos passos). A pessoa continua ajustando pelo controle do player.
 // No iPhone/iPad (Safari) o volume de <audio> é só leitura por código — lá
 // fica no volume do aparelho, e isso não é contornado de propósito.
 function setInitialVolume(el: HTMLAudioElement | null) {
   if (!el) return;
   try {
-    el.volume = 0.35;
+    el.volume = 0.2;
   } catch {
     // ignora navegadores que não permitem
   }
