@@ -9,6 +9,7 @@ import {
   toggleNoShowCardSentAction,
   sendNoShowCardWhatsAppMessageAction,
   toggleHotLeadCardSentAction,
+  toggleNeverScheduledCardSentAction,
 } from "@/app/crm/clinicas/actions";
 
 export const dynamic = "force-dynamic";
@@ -59,6 +60,7 @@ export default async function ClinicPainelPage({
       noShowCardSentAction={toggleNoShowCardSentAction}
       noShowCardSendWhatsappAction={sendNoShowCardWhatsAppMessageAction}
       hotLeadCardSentAction={toggleHotLeadCardSentAction}
+      neverScheduledCardSentAction={toggleNeverScheduledCardSentAction}
       standalone={false}
       headerAction={<ClientAccessModal clinicId={params.id} initialLink={initialLink} />}
     />

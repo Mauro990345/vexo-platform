@@ -24,8 +24,9 @@ import { detectHotLeadSignal, leadAskedToStop, type HotLeadSignalCategory } from
 //
 // Reescrita completa (pedido explícito) — antes havia um único card por
 // conversa, numa janela de 3-21 dias de silêncio recalculada do zero a
-// cada consulta; agora são até 3 passos (2/4/30 dias), cada um visível 3
-// dias, com uma ÂNCORA FIXA por conversa (ver HotLeadCardSlot.
+// cada consulta; agora são até 3 passos (2/4/15 dias — item 3, rodada
+// mais recente, era 2/4/30), cada um visível 3 dias, com uma ÂNCORA FIXA
+// por conversa (ver HotLeadCardSlot.
 // sequenceAnchorAt, schema.prisma) — sem isso, cada nova mensagem do lead
 // reiniciaria os prazos em vez de cancelar a sequência (pedido explícito:
 // "a sequência NÃO reinicia").
@@ -43,7 +44,12 @@ import { detectHotLeadSignal, leadAskedToStop, type HotLeadSignalCategory } from
 //   (não só na hora de abrir a sequência) — a única das três travas que
 //   precisa ser reavaliada mesmo depois da sequência já ter começado.
 
-export const HOT_LEAD_STEP_DAYS = [2, 4, 30] as const;
+// Item 3 (pedido explícito, rodada atual): 3º passo mudou de 30 pra 15
+// dias — cadência puramente em código (sem nenhum dado por clínica ou
+// copiado pelo snapshot de criação de clínica; ver resumo da
+// implementação), então a mudança vale igual pra todas as clínicas sem
+// nenhuma migration/dado a preservar.
+export const HOT_LEAD_STEP_DAYS = [2, 4, 15] as const;
 export const HOT_LEAD_STEP_COUNT = HOT_LEAD_STEP_DAYS.length;
 export const HOT_LEAD_WINDOW_AFTER_DAYS = 3;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -61,7 +67,7 @@ export const DEFAULT_HOT_LEAD_STEP_MESSAGES: readonly [readonly string[], readon
     "Oi! Vi sua mensagem por aqui — fico à disposição se ainda quiser saber mais.",
     "Oi! Passando de novo pra saber se ainda posso ajudar com o que você perguntou.",
   ],
-  // Passo 3 · 30 dias — última tentativa.
+  // Passo 3 · 15 dias — última tentativa.
   [
     "Oi! Faz um tempo que a gente não se fala — ainda posso te ajudar com o que você perguntou?",
     "Oi! Ficamos à disposição se ainda fizer sentido pra você — é só responder por aqui.",
@@ -250,8 +256,14 @@ export async function getHotLeadCards(clinicId: string, now: Date = new Date()):
   const cardCandidates = buildHotLeadCardCandidates(inputs, now);
   if (cardCandidates.length === 0) return [];
 
-  const [config, leads, instagramAccount, sentTodayCount] = await Promise.all([
+  // AJUSTE (pedido explícito — "unificar os textos... numa única tela
+  // GLOBAL"): os 9 textos vêm de HotLeadMessagesConfig (singleton,
+  // GLOBAL, editado em Follow-up → "Cards do Painel"), não mais de
+  // HotLeadConfig (que continua só com dailyLimit/contadores de rotação,
+  // POR CLÍNICA, intocados).
+  const [config, messagesConfig, leads, instagramAccount, sentTodayCount] = await Promise.all([
     prisma.hotLeadConfig.findUnique({ where: { clinicId } }),
+    prisma.hotLeadMessagesConfig.findUnique({ where: { id: "singleton" } }),
     prisma.lead.findMany({
       where: { id: { in: cardCandidates.map((c) => c.leadId) } },
       select: { id: true, name: true, igUsername: true, igScopedId: true, nameLookupAttempted: true, profilePictureUrl: true },
@@ -278,7 +290,7 @@ export async function getHotLeadCards(clinicId: string, now: Date = new Date()):
       continue;
     }
     const stepIdx = c.step - 1;
-    const availableSlots = resolveAvailableReactivationSlots(stepMessagesFromConfig(config, c.step));
+    const availableSlots = resolveAvailableReactivationSlots(stepMessagesFromConfig(messagesConfig, c.step));
     const assigned = assignNextReactivationSlot(availableSlots, counters[stepIdx]!);
     counters[stepIdx] = assigned.nextSequenceCounter;
     slotByCandidate.set(key, assigned.slot);
@@ -329,7 +341,7 @@ export async function getHotLeadCards(clinicId: string, now: Date = new Date()):
   return cardCandidates.map((c) => {
     const lead = leadById.get(c.leadId);
     const slot = slotByCandidate.get(`${c.conversationId}:${c.step}`)!;
-    const messages = stepMessagesFromConfig(config, c.step);
+    const messages = stepMessagesFromConfig(messagesConfig, c.step);
     const defaults = DEFAULT_HOT_LEAD_STEP_MESSAGES[c.step - 1]!;
     const rawTemplate = resolveReactivationMessageText(slot, messages, defaults);
     const message = renderMessageTemplate(rawTemplate, {
@@ -349,7 +361,7 @@ export async function getHotLeadCards(clinicId: string, now: Date = new Date()):
       igUsername,
       profilePictureUrl: lead?.profilePictureUrl ?? null,
       message,
-      instagramDmLink: resolveInstagramDmLink(igUsername),
+      instagramDmLink: resolveInstagramDmLink(igUsername, message),
       instagramProfileLink: igUsername ? buildInstagramProfileLink(igUsername) : null,
       reason: buildHotLeadCardReason(c.category, c.anchorAt, now, c.step),
       sentAt: existingStep?.sentAt ?? null,

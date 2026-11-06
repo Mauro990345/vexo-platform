@@ -38,14 +38,19 @@ async function copyToClipboard(text: string): Promise<boolean> {
 }
 
 // Botão "Instagram" da faixa de Reativação (ver ReactivationRail.tsx) — um
-// clique só faz DUAS coisas: copia a mensagem sugerida pra área de
-// transferência (pra secretária colar no Direct — a Meta não expõe nenhum
-// parâmetro de texto pro ig.me, diferente do wa.me) e abre a conversa no
-// Instagram (ig.me/m/<@>) numa aba nova. O envio nunca é automático — só
-// copia e abre, quem cola e aperta "Enviar" lá dentro é sempre a
-// secretária, igual ao botão de WhatsApp (que também só abre o wa.me já
-// preenchido). Sem @ do lead, dmLink vem null (ver resolveInstagramDmLink,
-// reactivation.ts) e o botão fica desativado.
+// clique faz DUAS coisas: copia a mensagem sugerida pra área de
+// transferência E abre a conversa no Instagram (ig.me/m/<@>) numa aba
+// nova. `dmLink` já chega pronto de resolveInstagramDmLink/buildInstagramDmLink
+// (reactivation.ts) com ?text=<mensagem> tentando pré-preencher o campo —
+// parâmetro NÃO documentado pela Meta (ao contrário do wa.me), então
+// algumas versões do app/webview podem ignorá-lo (ou a URL ter ficado
+// grande demais e vir sem o parâmetro, ver INSTAGRAM_DM_LINK_MAX_LENGTH) —
+// por isso a cópia pra área de transferência acontece SEMPRE, no mesmo
+// clique, nunca só a abertura do link: se o campo não vier preenchido, a
+// secretária só cola. O envio nunca é automático — quem aperta "Enviar"
+// lá dentro é sempre a secretária, igual ao botão de WhatsApp (que também
+// só abre o wa.me já preenchido). Sem @ do lead, dmLink vem null (ver
+// resolveInstagramDmLink, reactivation.ts) e o botão fica desativado.
 //
 // Dois avisos do mesmo clique, de propósito: o toast flutuante (mensagem
 // completa, "Mensagem copiada"/"Não foi possível copiar") E o próprio

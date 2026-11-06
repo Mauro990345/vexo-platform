@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import type { FollowUpStep, FollowUpTrigger } from "@prisma/client";
-import { Clock, CalendarX } from "lucide-react";
+import { Clock, CalendarX, LayoutPanelTop } from "lucide-react";
 import { Tabs } from "@/components/Tabs";
 import { TemplateMessageField } from "@/components/TemplateMessageField";
 import { AttachmentField } from "@/components/AttachmentField";
@@ -11,8 +11,10 @@ import {
   moveFollowUpStep,
   updateFollowUpSettings,
   updateNoShowFirstStepDelay,
-  updateNoShowCardSettings,
+  updatePanelCardSettings,
 } from "./actions";
+import { noShowGroupHelp, neverScheduledGroupHelp, hotLeadGroupHelp, REACTIVATION_GROUP_HELP } from "@/lib/panel-card-group-help";
+import { noShowStepLabel } from "@/lib/no-show-cards";
 
 function preview(text: string, max = 70): string {
   const oneLine = text.replace(/\s+/g, " ").trim();
@@ -23,10 +25,16 @@ function StepList({
   steps,
   trigger,
   firstStepLabel,
+  allowAddStep = true,
 }: {
   steps: FollowUpStep[];
   trigger: FollowUpTrigger;
   firstStepLabel: string;
+  // Item 7 (rodada atual) — "Não compareceu" perde o bloco "Adicionar
+  // passo" por completo (fica só com os 2 passos já existentes, editáveis
+  // normalmente); "Parou de responder" continua podendo adicionar passos,
+  // sem nenhuma mudança.
+  allowAddStep?: boolean;
 }) {
   return (
     <div className="space-y-3">
@@ -172,55 +180,57 @@ function StepList({
         ))}
       </div>
 
-      <form action={addFollowUpStep.bind(null, trigger)} className="space-y-2.5 rounded-xl border border-dashed border-vexo-border p-3.5">
-        <h3 className="text-xs font-medium text-vexo-muted">Adicionar passo {steps.length + 1}</h3>
+      {allowAddStep && (
+        <form action={addFollowUpStep.bind(null, trigger)} className="space-y-2.5 rounded-xl border border-dashed border-vexo-border p-3.5">
+          <h3 className="text-xs font-medium text-vexo-muted">Adicionar passo {steps.length + 1}</h3>
 
-        <div>
-          <label className="mb-1 block text-xs text-vexo-muted">
-            {steps.length === 0 ? firstStepLabel : "Enviado quantas horas após o passo anterior"}
-          </label>
-          <input
-            name="offsetHours"
-            type="number"
-            min={trigger === "NO_SHOW" && steps.length === 0 ? 1 : 0}
-            required
-            defaultValue={trigger === "NO_SHOW" && steps.length === 0 ? 1 : 0}
-            className="w-24 rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5 text-xs outline-none focus:border-vexo-accent"
-          />
-        </div>
-
-        <TemplateMessageField placeholder="Ex: Oi! Ainda tem interesse em agendar sua avaliação?" />
-
-        {trigger === "NO_SHOW" && (
           <div>
-            <label className="mb-1 block text-xs text-vexo-muted">Canal</label>
-            <select
-              name="channel"
-              defaultValue="INSTAGRAM"
-              className="w-full rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5 text-xs outline-none focus:border-vexo-accent"
-            >
-              <option value="INSTAGRAM">Instagram (Direct)</option>
-              <option value="WHATSAPP">WhatsApp — reengajamento extra, só se o lead tiver telefone</option>
-            </select>
-            <p className="mt-1 text-card text-vexo-muted">
-              WhatsApp é complementar às mensagens do Instagram (não substitui), sem anexo e sem a
-              janela de 24h — o anexo abaixo é ignorado se escolher esse canal.
-            </p>
+            <label className="mb-1 block text-xs text-vexo-muted">
+              {steps.length === 0 ? firstStepLabel : "Enviado quantas horas após o passo anterior"}
+            </label>
+            <input
+              name="offsetHours"
+              type="number"
+              min={trigger === "NO_SHOW" && steps.length === 0 ? 1 : 0}
+              required
+              defaultValue={trigger === "NO_SHOW" && steps.length === 0 ? 1 : 0}
+              className="w-24 rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5 text-xs outline-none focus:border-vexo-accent"
+            />
           </div>
-        )}
 
-        <div>
-          <label className="mb-1 block text-xs text-vexo-muted">Anexo (opcional — imagem ou vídeo)</label>
-          <AttachmentField key={steps.length} helpText="JPG, PNG, WEBP, GIF, MP4, MOV ou WEBM — até 25MB." />
-        </div>
+          <TemplateMessageField placeholder="Ex: Oi! Ainda tem interesse em agendar sua avaliação?" />
 
-        <button
-          type="submit"
-          className="rounded-lg bg-vexo-accent px-2.5 py-1.5 text-xs font-medium text-vexo-accentFg hover:opacity-90"
-        >
-          Adicionar passo
-        </button>
-      </form>
+          {trigger === "NO_SHOW" && (
+            <div>
+              <label className="mb-1 block text-xs text-vexo-muted">Canal</label>
+              <select
+                name="channel"
+                defaultValue="INSTAGRAM"
+                className="w-full rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5 text-xs outline-none focus:border-vexo-accent"
+              >
+                <option value="INSTAGRAM">Instagram (Direct)</option>
+                <option value="WHATSAPP">WhatsApp — reengajamento extra, só se o lead tiver telefone</option>
+              </select>
+              <p className="mt-1 text-card text-vexo-muted">
+                WhatsApp é complementar às mensagens do Instagram (não substitui), sem anexo e sem a
+                janela de 24h — o anexo abaixo é ignorado se escolher esse canal.
+              </p>
+            </div>
+          )}
+
+          <div>
+            <label className="mb-1 block text-xs text-vexo-muted">Anexo (opcional — imagem ou vídeo)</label>
+            <AttachmentField key={steps.length} helpText="JPG, PNG, WEBP, GIF, MP4, MOV ou WEBM — até 25MB." />
+          </div>
+
+          <button
+            type="submit"
+            className="rounded-lg bg-vexo-accent px-2.5 py-1.5 text-xs font-medium text-vexo-accentFg hover:opacity-90"
+          >
+            Adicionar passo
+          </button>
+        </form>
+      )}
     </div>
   );
 }
@@ -231,21 +241,47 @@ function StepList({
 // (FollowUpStep/FollowUpSettings não têm clinicId, é compartilhada por
 // todas as clínicas) — só muda a sidebar em volta, não o conteúdo.
 export async function FollowUpView() {
-  const [silenceSteps, noShowSteps, settings, noShowCardSettings] = await Promise.all([
-    prisma.followUpStep.findMany({ where: { trigger: "SILENCE" }, orderBy: { order: "asc" } }),
-    prisma.followUpStep.findMany({ where: { trigger: "NO_SHOW" }, orderBy: { order: "asc" } }),
-    prisma.followUpSettings.findUnique({ where: { id: "singleton" } }),
-    prisma.noShowCardSettings.findUnique({ where: { id: "singleton" } }),
-  ]);
+  const [silenceSteps, noShowSteps, settings, noShowCardSettings, neverScheduledCardSettings, reactivationMessagesConfig, hotLeadMessagesConfig] =
+    await Promise.all([
+      prisma.followUpStep.findMany({ where: { trigger: "SILENCE" }, orderBy: { order: "asc" } }),
+      prisma.followUpStep.findMany({ where: { trigger: "NO_SHOW" }, orderBy: { order: "asc" } }),
+      prisma.followUpSettings.findUnique({ where: { id: "singleton" } }),
+      prisma.noShowCardSettings.findUnique({ where: { id: "singleton" } }),
+      prisma.neverScheduledCardSettings.findUnique({ where: { id: "singleton" } }),
+      // Reativação/Quente (pedido explícito — "unificar os textos... numa
+      // única tela GLOBAL"): antes eram configurados por clínica em
+      // Automações, agora globais aqui, mesmo singleton das duas linhas
+      // acima.
+      prisma.reactivationMessagesConfig.findUnique({ where: { id: "singleton" } }),
+      prisma.hotLeadMessagesConfig.findUnique({ where: { id: "singleton" } }),
+    ]);
   const silenceHours = settings?.silenceHours ?? 24;
+
+  const reactivationMessages = [
+    reactivationMessagesConfig?.message1,
+    reactivationMessagesConfig?.message2,
+    reactivationMessagesConfig?.message3,
+    reactivationMessagesConfig?.message4,
+    reactivationMessagesConfig?.message5,
+  ];
+  const reactivationFilledCount = reactivationMessages.filter((m) => m?.trim()).length;
+
+  const hotLeadStepMessages = [
+    [hotLeadMessagesConfig?.step1Message1, hotLeadMessagesConfig?.step1Message2, hotLeadMessagesConfig?.step1Message3],
+    [hotLeadMessagesConfig?.step2Message1, hotLeadMessagesConfig?.step2Message2, hotLeadMessagesConfig?.step2Message3],
+    [hotLeadMessagesConfig?.step3Message1, hotLeadMessagesConfig?.step3Message2, hotLeadMessagesConfig?.step3Message3],
+  ];
+  const hotLeadFilledCount = hotLeadStepMessages.flat().filter((m) => m?.trim()).length;
+  const HOT_LEAD_STEP_LABELS = ["Passo 1 · 2 dias", "Passo 2 · 4 dias", "Passo 3 · 15 dias"];
 
   return (
     <div className="max-w-lg space-y-8">
       <div>
         <h1 className="text-base font-semibold tracking-tight">Follow-up</h1>
         <p className="mt-1 text-xs text-vexo-muted">
-          Duas sequências independentes, cada uma com seus próprios passos. Vale pra todas as
-          clínicas. Clique num passo pra editar.
+          Duas sequências automáticas independentes, cada uma com seus próprios passos, e os
+          textos dos cards manuais do Painel. Vale pra todas as clínicas. Clique num passo pra
+          editar.
         </p>
       </div>
 
@@ -351,59 +387,266 @@ export async function FollowUpView() {
                     steps={noShowSteps}
                     trigger="NO_SHOW"
                     firstStepLabel="Enviado quantas horas após marcar como não compareceu"
+                    allowAddStep={false}
                   />
                 </div>
+              </section>
+            ),
+          },
+          {
+            id: "panel-cards",
+            label: "Cards do Painel",
+            icon: <LayoutPanelTop className="h-3.5 w-3.5 shrink-0" strokeWidth={2} />,
+            content: (
+              <section>
+                <p className="text-xs text-vexo-muted">
+                  Cards manuais do Painel (copiar + abrir o Instagram, ou WhatsApp direto no
+                  "Faltou") — sem envio automático. Vale pra todas as clínicas.
+                </p>
 
-                {/* Card "Faltou" (ver ReactivationRail.tsx/no-show-cards.ts)
-                    — DIFERENTE da sequência automática acima: aparece como
-                    CARD no Painel (WhatsApp direto, ou Instagram sem
-                    telefone), não como mensagem automática. D3/D10 fixos
-                    (não configuráveis, só o texto de cada um) — pedido
-                    explícito. Vazio usa o texto padrão. */}
-                <div className="mt-5">
-                  <h2 className="text-xs font-semibold">Card "Faltou" no Painel</h2>
-                  <p className="mt-1 text-caption text-vexo-muted">
-                    Aparece no Painel pros leads que faltaram e não responderam nem remarcaram — um
-                    card no 3º dia e outro no 10º dia após a falta, em paralelo à sequência
-                    automática acima.
-                  </p>
+                {/* 4 grupos recolhíveis (pedido explícito) — details com o
+                    mesmo `name` (só um aberto por vez, mesmo padrão de
+                    StepList acima/ReactivationConfigForms.tsx), mas UM SÓ
+                    <form> por fora envolvendo os 4, com UM botão "Salvar
+                    textos" no final (pedido explícito: "um único botão") —
+                    diferente do accordion de Automações (cada bloco tinha
+                    seu próprio form/botão), aqui a submissão é uma coisa
+                    só. updatePanelCardSettings (actions.ts) grava as
+                    QUATRO tabelas de configuração numa transação.
 
-                  <form
-                    action={updateNoShowCardSettings}
-                    className="mt-2 space-y-2.5 rounded-xl border border-vexo-border bg-vexo-surface p-3.5"
+                    Faltou/Não agendou: ver comentário de antes desta
+                    rodada (D3/D10/D30/D60 fixos, não configuráveis, só o
+                    texto). Reativação (5 textos em rodízio) e Quente (9
+                    textos, 3 por passo) ERAM por clínica em Automações —
+                    pedido explícito desta rodada: "unificar os textos...
+                    numa única tela GLOBAL" — saíram de lá, entraram aqui,
+                    mesmo texto/rodízio pra todas as clínicas agora. */}
+                <form action={updatePanelCardSettings} className="mt-3 space-y-2">
+                  <details name="panel-card-groups" className="group rounded-xl border border-vexo-border bg-vexo-surface">
+                    {/* Texto de apoio sempre visível (pedido explícito —
+                        "logo abaixo do título... também com o grupo
+                        fechado") tem que ficar DENTRO de <summary>: é a
+                        única parte de um <details> que nunca colapsa.
+                        Dias vêm de NO_SHOW_CARD_STEPS (panel-card-group-help.ts),
+                        acompanham a constante sozinhos se a cadência mudar. */}
+                    <summary className="flex cursor-pointer list-none flex-col gap-1 px-3 py-2.5">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex min-w-0 items-center gap-2.5">
+                          <span className="shrink-0 text-card text-vexo-muted">Faltou</span>
+                          <span className="truncate text-xs">{preview(noShowCardSettings?.day3Content ?? "(texto padrão)")}</span>
+                        </div>
+                        <span className="shrink-0 text-card text-vexo-muted transition group-open:rotate-180">▾</span>
+                      </div>
+                      <p className="text-card text-vexo-muted">{noShowGroupHelp()}</p>
+                    </summary>
+                    <div className="space-y-2.5 border-t border-vexo-border px-3 pb-3 pt-2.5">
+                      <TemplateMessageField
+                        name="day3Content"
+                        label={noShowStepLabel(1)}
+                        required={false}
+                        rows={2}
+                        variables={[
+                          { token: "{{primeiro_nome}}", label: "+ Nome do lead" },
+                          { token: "{{data_horario}}", label: "+ Data e horário perdidos" },
+                        ]}
+                        defaultValue={noShowCardSettings?.day3Content ?? ""}
+                        placeholder="Vazio usa o texto padrão."
+                      />
+                      {/* Campo gravado como "day10Content" no banco
+                          (nome da coluna NÃO muda — sem migration), mas
+                          hoje representa o passo 2 = D7 (era D10; ver
+                          comentário grande no topo de no-show-cards.ts).
+                          O rótulo vem de noShowStepLabel, sempre a
+                          partir de NO_SHOW_CARD_STEPS. */}
+                      <TemplateMessageField
+                        name="day10Content"
+                        label={noShowStepLabel(2)}
+                        required={false}
+                        rows={2}
+                        variables={[
+                          { token: "{{primeiro_nome}}", label: "+ Nome do lead" },
+                          { token: "{{data_horario}}", label: "+ Data e horário perdidos" },
+                        ]}
+                        defaultValue={noShowCardSettings?.day10Content ?? ""}
+                        placeholder="Vazio usa o texto padrão."
+                      />
+                      {/* 3º passo do Faltou (gravado como
+                          "noShowDay30Content"/"day30Content" no banco —
+                          nome NÃO muda, sem migration — hoje representa
+                          D15, era D30). SEMPRE Instagram, manual, sem
+                          botão de WhatsApp (pedido explícito desta
+                          rodada, substitui a decisão da rodada anterior
+                          — ver canal em no-show-cards.ts). Nome do campo
+                          prefixado ("noShowDay30Content", não
+                          "day30Content") pra não colidir com o campo de
+                          mesmo nome "day30Content" do grupo "Não
+                          agendou" abaixo — os dois ficam no MESMO <form>
+                          (pedido explícito, "um único botão"). */}
+                      <TemplateMessageField
+                        name="noShowDay30Content"
+                        label={`${noShowStepLabel(3)} · só Instagram`}
+                        required={false}
+                        rows={2}
+                        variables={[
+                          { token: "{{primeiro_nome}}", label: "+ Nome do lead" },
+                          { token: "{{data_horario}}", label: "+ Data e horário perdidos" },
+                        ]}
+                        defaultValue={noShowCardSettings?.day30Content ?? ""}
+                        placeholder="Vazio usa o texto padrão."
+                      />
+                    </div>
+                  </details>
+
+                  <details name="panel-card-groups" className="group rounded-xl border border-vexo-border bg-vexo-surface">
+                    <summary className="flex cursor-pointer list-none flex-col gap-1 px-3 py-2.5">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex min-w-0 items-center gap-2.5">
+                          <span className="shrink-0 text-card text-vexo-muted">Não agendou</span>
+                          <span className="truncate text-xs">{preview(neverScheduledCardSettings?.day2Content ?? "(texto padrão)")}</span>
+                        </div>
+                        <span className="shrink-0 text-card text-vexo-muted transition group-open:rotate-180">▾</span>
+                      </div>
+                      <p className="text-card text-vexo-muted">{neverScheduledGroupHelp()}</p>
+                    </summary>
+                    <div className="space-y-2.5 border-t border-vexo-border px-3 pb-3 pt-2.5">
+                      {/* D2/D4 (rodada atual), antes dos D10/D30/D60 já
+                          existentes (ordem cronológica na tela;
+                          internamente são step=4/5, ver
+                          never-scheduled-cards.ts) — sem colisão de nome
+                          de campo com o grupo "Faltou" (que não tem
+                          day2Content/day4Content). */}
+                      <TemplateMessageField
+                        name="day2Content"
+                        label="2º dia (D2)"
+                        required={false}
+                        rows={2}
+                        variables={[{ token: "{{primeiro_nome}}", label: "+ Nome do lead" }]}
+                        defaultValue={neverScheduledCardSettings?.day2Content ?? ""}
+                        placeholder="Vazio usa o texto padrão."
+                      />
+                      <TemplateMessageField
+                        name="day4Content"
+                        label="4º dia (D4)"
+                        required={false}
+                        rows={2}
+                        variables={[{ token: "{{primeiro_nome}}", label: "+ Nome do lead" }]}
+                        defaultValue={neverScheduledCardSettings?.day4Content ?? ""}
+                        placeholder="Vazio usa o texto padrão."
+                      />
+                      {/* D10 (rodada anterior), internamente step=3 —
+                          "neverScheduledDay10Content" pra não colidir com
+                          "day10Content" do grupo "Faltou" (mesmo <form>). */}
+                      <TemplateMessageField
+                        name="neverScheduledDay10Content"
+                        label="10º dia (D10)"
+                        required={false}
+                        rows={2}
+                        variables={[{ token: "{{primeiro_nome}}", label: "+ Nome do lead" }]}
+                        defaultValue={neverScheduledCardSettings?.day10Content ?? ""}
+                        placeholder="Vazio usa o texto padrão."
+                      />
+                      <TemplateMessageField
+                        name="day30Content"
+                        label="30º dia (D30)"
+                        required={false}
+                        rows={2}
+                        variables={[{ token: "{{primeiro_nome}}", label: "+ Nome do lead" }]}
+                        defaultValue={neverScheduledCardSettings?.day30Content ?? ""}
+                        placeholder="Vazio usa o texto padrão."
+                      />
+                      <TemplateMessageField
+                        name="day60Content"
+                        label="60º dia (D60)"
+                        required={false}
+                        rows={2}
+                        variables={[{ token: "{{primeiro_nome}}", label: "+ Nome do lead" }]}
+                        defaultValue={neverScheduledCardSettings?.day60Content ?? ""}
+                        placeholder="Vazio usa o texto padrão."
+                      />
+                    </div>
+                  </details>
+
+                  <details name="panel-card-groups" className="group rounded-xl border border-vexo-border bg-vexo-surface">
+                    {/* Texto de apoio estático, sem dias (pedido
+                        explícito desta rodada: "não colocar nenhuma
+                        informação sobre a janela de ±3 dias da
+                        Reativação" — o prazo é por agendamento, não um
+                        dia fixo). */}
+                    <summary className="flex cursor-pointer list-none flex-col gap-1 px-3 py-2.5">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex min-w-0 items-center gap-2.5">
+                          <span className="shrink-0 text-card text-vexo-muted">Reativação</span>
+                          <span className="truncate text-xs">{reactivationFilledCount} de 5 preenchidas</span>
+                        </div>
+                        <span className="shrink-0 text-card text-vexo-muted transition group-open:rotate-180">▾</span>
+                      </div>
+                      <p className="text-card text-vexo-muted">{REACTIVATION_GROUP_HELP}</p>
+                    </summary>
+                    <div className="space-y-2.5 border-t border-vexo-border px-3 pb-3 pt-2.5">
+                      {/* Item 6 (rodada atual) — Reativação não tem dia
+                          fixo por texto (a secretária escolhe o prazo por
+                          agendamento, ver ReturnPeriodChipsForm em
+                          automacoes/page.tsx), então não mostra "Dº dia"
+                          como Faltou/Não agendou acima — só esta linha
+                          curta explicando o rodízio. */}
+                      <p className="text-card text-vexo-muted">
+                        Sem dia fixo — o prazo é escolhido pela secretária por agendamento, e os 5
+                        textos abaixo giram em rodízio entre os leads.
+                      </p>
+                      {[1, 2, 3, 4, 5].map((n) => (
+                        <TemplateMessageField
+                          key={n}
+                          name={`message${n}`}
+                          label={`Mensagem ${n}`}
+                          required={false}
+                          rows={2}
+                          variables={[{ token: "{{primeiro_nome}}", label: "+ Nome do lead" }]}
+                          defaultValue={reactivationMessages[n - 1] ?? ""}
+                          placeholder="Vazio usa um texto padrão de acompanhamento, sem citar serviço/procedimento."
+                        />
+                      ))}
+                    </div>
+                  </details>
+
+                  <details name="panel-card-groups" className="group rounded-xl border border-vexo-border bg-vexo-surface">
+                    <summary className="flex cursor-pointer list-none flex-col gap-1 px-3 py-2.5">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex min-w-0 items-center gap-2.5">
+                          <span className="shrink-0 text-card text-vexo-muted">Quente</span>
+                          <span className="truncate text-xs">{hotLeadFilledCount} de 9 preenchidas</span>
+                        </div>
+                        <span className="shrink-0 text-card text-vexo-muted transition group-open:rotate-180">▾</span>
+                      </div>
+                      <p className="text-card text-vexo-muted">{hotLeadGroupHelp()}</p>
+                    </summary>
+                    <div className="space-y-3 border-t border-vexo-border px-3 pb-3 pt-2.5">
+                      {[1, 2, 3].map((step) => (
+                        <div key={step} className={step > 1 ? "space-y-2 border-t border-vexo-border pt-2.5" : "space-y-2"}>
+                          <p className="text-xs font-medium text-vexo-fg">{HOT_LEAD_STEP_LABELS[step - 1]}</p>
+                          {[1, 2, 3].map((n) => (
+                            <TemplateMessageField
+                              key={n}
+                              name={`step${step}Message${n}`}
+                              label={`Mensagem ${n}`}
+                              required={false}
+                              rows={2}
+                              variables={[{ token: "{{primeiro_nome}}", label: "+ Nome do lead" }]}
+                              defaultValue={hotLeadStepMessages[step - 1]?.[n - 1] ?? ""}
+                              placeholder="Vazio usa um texto padrão de acompanhamento."
+                            />
+                          ))}
+                        </div>
+                      ))}
+                    </div>
+                  </details>
+
+                  <button
+                    type="submit"
+                    className="rounded-lg border border-vexo-accent px-2.5 py-1.5 text-xs font-medium text-vexo-accent hover:bg-vexo-accent/10"
                   >
-                    <TemplateMessageField
-                      name="day3Content"
-                      label="Card do 3º dia (D3)"
-                      required={false}
-                      rows={2}
-                      variables={[
-                        { token: "{{primeiro_nome}}", label: "+ Nome do lead" },
-                        { token: "{{data_horario}}", label: "+ Data e horário perdidos" },
-                      ]}
-                      defaultValue={noShowCardSettings?.day3Content ?? ""}
-                      placeholder="Vazio usa o texto padrão."
-                    />
-                    <TemplateMessageField
-                      name="day10Content"
-                      label="Card do 10º dia (D10)"
-                      required={false}
-                      rows={2}
-                      variables={[
-                        { token: "{{primeiro_nome}}", label: "+ Nome do lead" },
-                        { token: "{{data_horario}}", label: "+ Data e horário perdidos" },
-                      ]}
-                      defaultValue={noShowCardSettings?.day10Content ?? ""}
-                      placeholder="Vazio usa o texto padrão."
-                    />
-                    <button
-                      type="submit"
-                      className="rounded-lg border border-vexo-accent px-2.5 py-1.5 text-xs font-medium text-vexo-accent hover:bg-vexo-accent/10"
-                    >
-                      Salvar textos
-                    </button>
-                  </form>
-                </div>
+                    Salvar textos
+                  </button>
+                </form>
               </section>
             ),
           },

@@ -222,21 +222,97 @@ export async function updateNoShowFirstStepDelay(formData: FormData) {
   revalidatePath("/crm", "layout");
 }
 
-// Textos dos dois passos do card "Faltou" (D3/D10, ver NoShowCardSettings/
-// no-show-cards.ts) — GLOBAL, mesmo motivo de FollowUpStep/FollowUpSettings
-// (a sequência de não-comparecimento também é global). Vazio = usa o
-// texto padrão (DEFAULT_NO_SHOW_CARD_MESSAGES).
-export async function updateNoShowCardSettings(formData: FormData) {
+// Textos dos passos do card "Faltou" (D3/D10/D30, ver NoShowCardSettings/
+// no-show-cards.ts) + "Não agendou" (D2/D4/D10/D30/D60, ver
+// never-scheduled-cards.ts) + Reativação (5 textos em rodízio,
+// reactivation.ts) + Quente (9
+// textos, 3 por passo, hot-lead-cards.ts) — AGORA TODOS GLOBAIS (pedido
+// explícito, "unificar os textos dos cards do Painel numa única tela
+// GLOBAL"); Reativação/Quente eram por clínica antes disso (ver
+// ReactivationConfig.message1-5/HotLeadConfig.stepXMessageY,
+// schema.prisma — colunas e dados antigos mantidos intactos, só pararam
+// de ser lidos). Vazio = usa o texto padrão de cada um. Aba "Cards do
+// Painel" (FollowUpView.tsx) pedido explícito: 4 grupos recolhíveis, UM
+// botão "Salvar textos" pros 4 juntos — por isso uma action só, gravando
+// as QUATRO tabelas de configuração numa transação (cada uma continua
+// separada — cards com regra de elegibilidade bem diferente — só a TELA
+// os agrupa).
+export async function updatePanelCardSettings(formData: FormData) {
   await requireInternalSession();
 
-  const day3Content = String(formData.get("day3Content") ?? "").trim() || null;
-  const day10Content = String(formData.get("day10Content") ?? "").trim() || null;
+  function field(name: string): string | null {
+    return String(formData.get(name) ?? "").trim() || null;
+  }
 
-  await prisma.noShowCardSettings.upsert({
-    where: { id: "singleton" },
-    create: { id: "singleton", day3Content, day10Content },
-    update: { day3Content, day10Content },
-  });
+  const day3Content = field("day3Content");
+  const day10Content = field("day10Content");
+  const day30Content = field("day30Content");
+  const day60Content = field("day60Content");
+  // Nomes de campo prefixados (ver comentário em FollowUpView.tsx) — sem
+  // isso colidiriam com day30Content/day10Content do outro card no MESMO
+  // <form>. noShowDay30Content = 3º passo do Faltou (item 1, rodada
+  // atual); neverScheduledDay10Content = novo 3º passo do Não agendou
+  // (item 2, rodada atual).
+  const noShowDay30Content = field("noShowDay30Content");
+  const neverScheduledDay10Content = field("neverScheduledDay10Content");
+  // D2/D4 do Não agendou (rodada atual) — nomes de campo sem colisão (o
+  // grupo "Faltou" não tem day2Content/day4Content).
+  const neverScheduledDay2Content = field("day2Content");
+  const neverScheduledDay4Content = field("day4Content");
+
+  const message1 = field("message1");
+  const message2 = field("message2");
+  const message3 = field("message3");
+  const message4 = field("message4");
+  const message5 = field("message5");
+
+  const hotLeadFields = {
+    step1Message1: field("step1Message1"),
+    step1Message2: field("step1Message2"),
+    step1Message3: field("step1Message3"),
+    step2Message1: field("step2Message1"),
+    step2Message2: field("step2Message2"),
+    step2Message3: field("step2Message3"),
+    step3Message1: field("step3Message1"),
+    step3Message2: field("step3Message2"),
+    step3Message3: field("step3Message3"),
+  };
+
+  await prisma.$transaction([
+    prisma.noShowCardSettings.upsert({
+      where: { id: "singleton" },
+      create: { id: "singleton", day3Content, day10Content, day30Content: noShowDay30Content },
+      update: { day3Content, day10Content, day30Content: noShowDay30Content },
+    }),
+    prisma.neverScheduledCardSettings.upsert({
+      where: { id: "singleton" },
+      create: {
+        id: "singleton",
+        day30Content,
+        day60Content,
+        day10Content: neverScheduledDay10Content,
+        day2Content: neverScheduledDay2Content,
+        day4Content: neverScheduledDay4Content,
+      },
+      update: {
+        day30Content,
+        day60Content,
+        day10Content: neverScheduledDay10Content,
+        day2Content: neverScheduledDay2Content,
+        day4Content: neverScheduledDay4Content,
+      },
+    }),
+    prisma.reactivationMessagesConfig.upsert({
+      where: { id: "singleton" },
+      create: { id: "singleton", message1, message2, message3, message4, message5 },
+      update: { message1, message2, message3, message4, message5 },
+    }),
+    prisma.hotLeadMessagesConfig.upsert({
+      where: { id: "singleton" },
+      create: { id: "singleton", ...hotLeadFields },
+      update: hotLeadFields,
+    }),
+  ]);
 
   revalidatePath("/crm", "layout");
 }

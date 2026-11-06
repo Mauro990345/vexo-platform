@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { TemplateMessageField } from "@/components/TemplateMessageField";
 import { RETURN_PERIOD_OPTIONS } from "@/lib/reactivation";
 
 const SAVED_LABEL_DURATION_MS = 2000;
@@ -103,163 +102,37 @@ export function DailyWhatsappLimitForm({ action, dailyLimit }: { action: (formDa
   );
 }
 
-// Bloco de até 5 mensagens da Reativação — <details> recolhido mostra o
-// resumo, clique abre pra editar, "Salvar" fecha de volta pro resumo
-// (pedido explícito). Conjunto ÚNICO agora (usado tanto no envio de
-// WhatsApp quanto no fallback de Instagram, pedido explícito — antes havia
-// dois conjuntos separados, um por canal). <details> controlado (open/
-// onToggle) só pra poder fechar programaticamente depois do save — clicar
-// no <summary> continua abrindo/fechando normalmente, onToggle só
-// sincroniza o estado React de volta com o que o navegador já fez.
-export function ReactivationMessageBlockForm({
-  action,
-  summary,
-  defaultValues,
-}: {
-  action: (formData: FormData) => Promise<void>;
-  summary: string;
-  defaultValues: (string | null | undefined)[];
-}) {
-  const [open, setOpen] = useState(false);
-  const [isPending, startTransition] = useTransition();
-  const [saved, setSaved] = useState(false);
-
-  // Mostra "Salvo ✓" por 2s ANTES de recolher — se fechasse na hora, o
-  // aviso nunca apareceria (o botão fica dentro do <details>, some junto).
-  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const formData = new FormData(e.currentTarget);
-    startTransition(async () => {
-      await action(formData);
-      setSaved(true);
-      window.setTimeout(() => {
-        setSaved(false);
-        setOpen(false);
-      }, SAVED_LABEL_DURATION_MS);
-    });
-  }
+// "Limite de envios por dia" do card "Quente" (ver hot-lead-cards.ts) —
+// mesmo padrão exato de DailyWhatsappLimitForm acima, só campo/label
+// diferentes. AJUSTE (pedido explícito, "unificar os textos... numa
+// única tela GLOBAL"): as 9 mensagens (3 por passo, e as 5 da
+// Reativação, antigo ReactivationMessageBlockForm/HotLeadConfigForm,
+// removidos aqui) saíram desta tela — agora globais, editadas em
+// Follow-up → "Cards do Painel" (ver updatePanelCardSettings,
+// src/app/crm/(global)/follow-up/actions.ts). Esta função ficou só com o
+// que continua POR CLÍNICA.
+export function HotLeadDailyLimitForm({ action, dailyLimit }: { action: (formData: FormData) => Promise<void>; dailyLimit: number }) {
+  const { isPending, saved, handleSubmit } = useSavableForm(action);
 
   return (
-    <details
-      open={open}
-      onToggle={(e) => setOpen(e.currentTarget.open)}
-      className="group rounded-lg border border-vexo-border bg-vexo-surface2"
-    >
-      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2">
-        <div className="flex min-w-0 items-center gap-2.5">
-          <span className="shrink-0 text-card text-vexo-muted">Mensagens</span>
-          <span className="truncate text-xs">{summary}</span>
-        </div>
-        <span className="shrink-0 text-card text-vexo-muted transition group-open:rotate-180">▾</span>
-      </summary>
-      <form onSubmit={handleSubmit} className="space-y-2 border-t border-vexo-border px-3 pb-3 pt-2.5">
-        {[1, 2, 3, 4, 5].map((n) => (
-          <TemplateMessageField
-            key={n}
-            name={`message${n}`}
-            label={`Mensagem ${n}`}
-            required={false}
-            rows={2}
-            variables={[{ token: "{{primeiro_nome}}", label: "+ Nome do lead" }]}
-            defaultValue={defaultValues[n - 1] ?? ""}
-            placeholder="Vazio usa um texto padrão de acompanhamento, sem citar serviço/procedimento."
-          />
-        ))}
-        <button type="submit" disabled={isPending} className={SAVE_BUTTON_CLASS}>
-          {saved ? "Salvo ✓" : "Salvar"}
-        </button>
-      </form>
-    </details>
-  );
-}
-
-const HOT_LEAD_STEP_LABELS: readonly string[] = ["Passo 1 · 2 dias", "Passo 2 · 4 dias", "Passo 3 · 30 dias"];
-
-// Config do card "Quente" (ver hot-lead-cards.ts) — limite diário + até 3
-// variações de texto POR PASSO (3 passos fixos, pedido explícito) — um só
-// form/botão "Salvar" pra tudo junto (dailyLimit + os 3 grupos), mesmo
-// mecanismo de texto de sempre (reaproveita TemplateMessageField, mesmo
-// componente usado pela Reativação acima).
-export function HotLeadConfigForm({
-  action,
-  summary,
-  dailyLimit,
-  stepDefaultValues,
-}: {
-  action: (formData: FormData) => Promise<void>;
-  summary: string;
-  dailyLimit: number;
-  // Uma entrada por passo (3), cada uma com até 3 valores.
-  stepDefaultValues: (string | null | undefined)[][];
-}) {
-  const [open, setOpen] = useState(false);
-  const [isPending, startTransition] = useTransition();
-  const [saved, setSaved] = useState(false);
-
-  // Mesmo padrão de ReactivationMessageBlockForm acima: mostra "Salvo ✓"
-  // por 2s ANTES de recolher.
-  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const formData = new FormData(e.currentTarget);
-    startTransition(async () => {
-      await action(formData);
-      setSaved(true);
-      window.setTimeout(() => {
-        setSaved(false);
-        setOpen(false);
-      }, SAVED_LABEL_DURATION_MS);
-    });
-  }
-
-  return (
-    <details
-      open={open}
-      onToggle={(e) => setOpen(e.currentTarget.open)}
-      className="group rounded-lg border border-vexo-border bg-vexo-surface2"
-    >
-      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2">
-        <div className="flex min-w-0 items-center gap-2.5">
-          <span className="shrink-0 text-card text-vexo-muted">Mensagens Quente</span>
-          <span className="truncate text-xs">{summary}</span>
-        </div>
-        <span className="shrink-0 text-card text-vexo-muted transition group-open:rotate-180">▾</span>
-      </summary>
-      <form onSubmit={handleSubmit} className="space-y-3 border-t border-vexo-border px-3 pb-3 pt-2.5">
-        <div>
-          <label className="mb-1 block text-xs text-vexo-muted" htmlFor="dailyLimit">
-            Limite de envios por dia
-          </label>
-          <input
-            id="dailyLimit"
-            name="dailyLimit"
-            type="number"
-            min={1}
-            required
-            defaultValue={dailyLimit}
-            className="w-20 rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5 text-xs outline-none focus:border-vexo-accent"
-          />
-        </div>
-        {[1, 2, 3].map((step) => (
-          <div key={step} className="space-y-2 border-t border-vexo-border pt-2.5">
-            <p className="text-xs font-medium text-vexo-fg">{HOT_LEAD_STEP_LABELS[step - 1]}</p>
-            {[1, 2, 3].map((n) => (
-              <TemplateMessageField
-                key={n}
-                name={`step${step}Message${n}`}
-                label={`Mensagem ${n}`}
-                required={false}
-                rows={2}
-                variables={[{ token: "{{primeiro_nome}}", label: "+ Nome do lead" }]}
-                defaultValue={stepDefaultValues[step - 1]?.[n - 1] ?? ""}
-                placeholder="Vazio usa um texto padrão de acompanhamento."
-              />
-            ))}
-          </div>
-        ))}
-        <button type="submit" disabled={isPending} className={SAVE_BUTTON_CLASS}>
-          {saved ? "Salvo ✓" : "Salvar"}
-        </button>
-      </form>
-    </details>
+    <form onSubmit={handleSubmit} className="flex flex-wrap items-end gap-2">
+      <div>
+        <label className="mb-1 block text-xs text-vexo-muted" htmlFor="dailyLimit">
+          Limite de envios por dia
+        </label>
+        <input
+          id="dailyLimit"
+          name="dailyLimit"
+          type="number"
+          min={1}
+          required
+          defaultValue={dailyLimit}
+          className="w-20 rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5 text-xs outline-none focus:border-vexo-accent"
+        />
+      </div>
+      <button type="submit" disabled={isPending} className={SAVE_BUTTON_CLASS}>
+        {saved ? "Salvo ✓" : "Salvar"}
+      </button>
+    </form>
   );
 }

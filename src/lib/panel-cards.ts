@@ -2,19 +2,22 @@ import type { ReactivationCard } from "@/lib/reactivation";
 import type { NoShowCard } from "@/lib/no-show-cards";
 import type { HotLeadCard } from "@/lib/hot-lead-cards";
 import { hotLeadCategoryLabel } from "@/lib/hot-lead-cards";
+import type { NeverScheduledCard } from "@/lib/never-scheduled-cards";
 
-// Une os três tipos de card da faixa de Reativação do Painel num único
+// Une os QUATRO tipos de card da faixa de Reativação do Painel num único
 // formato pra exibição (ver PanelCardBadge.tsx/ReactivationRail.tsx) — a
 // geração de cada tipo continua em módulos SEPARADOS (reactivation.ts,
-// no-show-cards.ts, hot-lead-cards.ts), cada um com sua própria regra de
-// elegibilidade/janela/trava; este arquivo só junta o resultado já pronto
-// de cada um, sem nenhuma lógica de elegibilidade própria.
-export type PanelCardKind = "HOT_LEAD" | "NO_SHOW" | "REACTIVATION";
+// no-show-cards.ts, hot-lead-cards.ts, never-scheduled-cards.ts), cada um
+// com sua própria regra de elegibilidade/janela/trava; este arquivo só
+// junta o resultado já pronto de cada um, sem nenhuma lógica de
+// elegibilidade própria.
+export type PanelCardKind = "HOT_LEAD" | "NO_SHOW" | "REACTIVATION" | "NEVER_SCHEDULED";
 
 export type PanelCardActionKey =
   | { kind: "REACTIVATION"; appointmentId: string; thresholdDays: number }
   | { kind: "NO_SHOW"; appointmentId: string; step: number }
-  | { kind: "HOT_LEAD"; conversationId: string; step: number };
+  | { kind: "HOT_LEAD"; conversationId: string; step: number }
+  | { kind: "NEVER_SCHEDULED"; conversationId: string; step: number };
 
 export type PanelCard = {
   kind: PanelCardKind;
@@ -77,19 +80,24 @@ export function truncateNameToTwoWords(name: string): string {
   return `${words.slice(0, 2).join(" ")}…`;
 }
 
-// Pura — recebe os três resultados JÁ PRONTOS (cada um vindo da sua
+// Pura — recebe os quatro resultados JÁ PRONTOS (cada um vindo da sua
 // própria consulta/regra) e devolve a lista única, na ordem final de
-// exibição: Quente, Faltou, Reativação (pedido explícito) — simples
-// concatenação nessa ordem, porque cada lista de origem já chega ordenada
-// por urgência internamente (ver buildHotLeadCardCandidates/
-// buildNoShowCardCandidates/buildReactivationCardCandidates). A separação
-// pendente-primeiro/enviado-no-fim continua sendo
+// exibição: Quente, Faltou, Reativação, Não agendou — simples
+// concatenação nessa ordem (os 3 primeiros já eram assim, pedido
+// explícito de antes; "Não agendou" entra por ÚLTIMO, por ser o lead
+// menos qualificado dos quatro — nunca mostrou sinal de interesse nem
+// chegou a agendar, ao contrário dos outros três), porque cada lista de
+// origem já chega ordenada por urgência internamente (ver
+// buildHotLeadCardCandidates/buildNoShowCardCandidates/
+// buildReactivationCardCandidates/buildNeverScheduledCardCandidates). A
+// separação pendente-primeiro/enviado-no-fim continua sendo
 // sortReactivationCardsForDisplay (reactivation.ts) — já genérica sobre
 // `{ sentAt }`, reaproveitada tal como está, sem duplicar.
 export function mergePanelCards(input: {
   hotLeadCards: HotLeadCard[];
   noShowCards: NoShowCard[];
   reactivationCards: ReactivationCard[];
+  neverScheduledCards: NeverScheduledCard[];
 }): PanelCard[] {
   const hotLead: PanelCard[] = input.hotLeadCards.map((c) => ({
     kind: "HOT_LEAD",
@@ -151,5 +159,24 @@ export function mergePanelCards(input: {
     disabledReason: !c.sentAt && c.dailyLimitReached ? "Limite diário atingido" : undefined,
   }));
 
-  return [...hotLead, ...noShow, ...reactivation];
+  const neverScheduled: PanelCard[] = input.neverScheduledCards.map((c) => ({
+    kind: "NEVER_SCHEDULED",
+    cardKey: `never-scheduled:${c.conversationId}:${c.step}`,
+    leadId: c.leadId,
+    name: c.name,
+    igUsername: c.igUsername,
+    profilePictureUrl: c.profilePictureUrl,
+    message: c.message,
+    channel: "INSTAGRAM",
+    whatsappLink: null,
+    instagramDmLink: c.instagramDmLink,
+    instagramProfileLink: c.instagramProfileLink,
+    reason: c.reason,
+    reasonShort: c.reason,
+    sentAt: c.sentAt,
+    actionKey: { kind: "NEVER_SCHEDULED", conversationId: c.conversationId, step: c.step },
+    disabledReason: undefined,
+  }));
+
+  return [...hotLead, ...noShow, ...reactivation, ...neverScheduled];
 }

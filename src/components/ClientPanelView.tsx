@@ -16,9 +16,10 @@ import { InstagramGlyphIcon, WhatsAppGlyphIcon } from "@/components/BrandIcons";
 import { NeedsHumanBanner, type NeedsHumanLead } from "@/components/NeedsHumanBanner";
 import { ReactivationRail } from "@/components/ReactivationRail";
 import { getReactivationCards, RETURN_PERIOD_OPTIONS, type SendReactivationWhatsAppResult } from "@/lib/reactivation";
-import type { SetAppointmentReturnPeriodResult } from "@/lib/appointments";
+import { isAppointmentVisibleInList, type SetAppointmentReturnPeriodResult } from "@/lib/appointments";
 import { getNoShowCards } from "@/lib/no-show-cards";
 import { getHotLeadCards } from "@/lib/hot-lead-cards";
+import { getNeverScheduledCards } from "@/lib/never-scheduled-cards";
 import { mergePanelCards } from "@/lib/panel-cards";
 import type { ToggleHotLeadCardSentResult } from "@/lib/hot-lead-cards";
 import {
@@ -102,6 +103,7 @@ export async function ClientPanelView({
   noShowCardSentAction,
   noShowCardSendWhatsappAction,
   hotLeadCardSentAction,
+  neverScheduledCardSentAction,
   standalone = true,
   headerAction,
   bonusHref,
@@ -111,7 +113,7 @@ export async function ClientPanelView({
   base: string;
   noShowAction?: (appointmentId: string, status: "COMPLETED" | "NO_SHOW") => Promise<unknown>;
   // Mesmo motivo de noShowAction — botão "Retorno" (ver RetornoButton.tsx).
-  returnPeriodAction?: (appointmentId: string, selection: number | "none" | "unset") => Promise<SetAppointmentReturnPeriodResult>;
+  returnPeriodAction?: (appointmentId: string, selection: number | "unset") => Promise<SetAppointmentReturnPeriodResult>;
   // Mesmo motivo de noShowAction acima (comentário grande logo abaixo) —
   // marcar/desmarcar um card da Reativação como enviado (ver
   // ReactivationRail) também precisa rodar sob uma sessão diferente em
@@ -128,6 +130,10 @@ export async function ClientPanelView({
   noShowCardSentAction?: (appointmentId: string, step: number) => Promise<unknown>;
   noShowCardSendWhatsappAction?: (appointmentId: string, step: number) => Promise<SendReactivationWhatsAppResult>;
   hotLeadCardSentAction?: (conversationId: string, step: number) => Promise<ToggleHotLeadCardSentResult>;
+  // Card "Não agendou" (ver ReactivationRail/PanelCardBadge/
+  // never-scheduled-cards.ts) — mesmo motivo de injeção por contexto dos
+  // demais acima.
+  neverScheduledCardSentAction?: (conversationId: string, step: number) => Promise<unknown>;
   standalone?: boolean;
   headerAction?: React.ReactNode;
   // Rota do guia "Bônus Full Face" neste contexto (/dashboard/bonus ou
@@ -142,7 +148,7 @@ export async function ClientPanelView({
   const parsedRef = week ? new Date(week) : now;
   const weekStart = startOfWeek(Number.isNaN(parsedRef.getTime()) ? now : parsedRef);
 
-  const [clinic, periods, appointments, dailyApproached, needsHumanConversations, reactivationCards, noShowCards, hotLeadCards, sentReactivationSlots] = await Promise.all([
+  const [clinic, periods, appointments, dailyApproached, needsHumanConversations, reactivationCards, noShowCards, hotLeadCards, neverScheduledCards, sentReactivationSlots] = await Promise.all([
     prisma.clinic.findUniqueOrThrow({
       where: { id: clinicId },
       select: {
@@ -204,6 +210,7 @@ export async function ClientPanelView({
     getReactivationCards(clinicId, now),
     getNoShowCards(clinicId, now),
     getHotLeadCards(clinicId, now),
+    getNeverScheduledCards(clinicId, now),
     // Agendamentos com o prazo de retorno TRAVADO (ver RetornoButton.tsx/
     // setAppointmentReturnPeriod, appointments.ts) — qualquer card de
     // Reativação já enviado pra aquele agendamento, em qualquer prazo.
@@ -213,9 +220,18 @@ export async function ClientPanelView({
     }),
   ]);
 
-  const panelCards = mergePanelCards({ hotLeadCards, noShowCards, reactivationCards });
+  const panelCards = mergePanelCards({ hotLeadCards, noShowCards, reactivationCards, neverScheduledCards });
   const availableReturnPeriods = clinic.reactivationConfig?.availablePeriods ?? [...RETURN_PERIOD_OPTIONS];
   const lockedReturnPeriodAppointmentIds = new Set(sentReactivationSlots.map((s) => s.appointmentId));
+  // Pedido explícito: "Compareceu" só fica visível aqui por
+  // ATTENDED_VISIBLE_DAYS dias (ver isAppointmentVisibleInList,
+  // appointments.ts) — só filtro de EXIBIÇÃO, nada é apagado (mesmo
+  // princípio do filtro de CANCELLED já aplicado na query acima); os
+  // demais status não têm prazo, continuam sempre. clinicId passado pra
+  // isAppointmentVisibleInList isentar a Clínica Demo (DEMO_CLINIC_ID) da
+  // regra — lá, todos os agendamentos continuam aparecendo, pra
+  // testes/vídeos; nas demais clínicas, nada muda.
+  const visibleAppointments = appointments.filter((a) => isAppointmentVisibleInList(a, now, clinicId));
 
   const needsHumanLeads: NeedsHumanLead[] = needsHumanConversations.map((conv) => {
     const { primary } = leadDisplayParts(conv.lead, null);
@@ -343,6 +359,7 @@ export async function ClientPanelView({
               noShowToggleAction={noShowCardSentAction}
               noShowSendWhatsappAction={noShowCardSendWhatsappAction}
               hotLeadToggleAction={hotLeadCardSentAction}
+              neverScheduledToggleAction={neverScheduledCardSentAction}
             />
           </div>
 
@@ -354,7 +371,7 @@ export async function ClientPanelView({
             </div>
             <NeedsHumanBanner leads={needsHumanLeads} />
             <div className={MOBILE_LIST_GAP}>
-              {appointments.map((a) => {
+              {visibleAppointments.map((a) => {
                 const { primary, handle } = leadDisplayParts(a.lead, a.manualTitle);
                 return (
                 <div
@@ -491,7 +508,6 @@ export async function ClientPanelView({
                         appointmentId={a.id}
                         availablePeriods={availableReturnPeriods}
                         returnPeriodDays={a.returnPeriodDays}
-                        returnPeriodNone={a.returnPeriodNone}
                         locked={lockedReturnPeriodAppointmentIds.has(a.id)}
                         action={returnPeriodAction}
                       />
@@ -504,7 +520,7 @@ export async function ClientPanelView({
                 );
               })}
 
-              {appointments.length === 0 && (
+              {visibleAppointments.length === 0 && (
                 <p className="rounded-lg border border-vexo-border bg-vexo-surface p-4 text-center text-sm text-vexo-muted">
                   Nenhum agendamento ainda.
                 </p>

@@ -5,16 +5,12 @@
 
 // Clínica ÚNICA em que este script pode operar — recusa qualquer outro id,
 // na hora, antes de ler ou apagar qualquer linha (pedido explícito: restrito
-// à Clínica Demo VEXO).
-export const DEMO_CLINIC_ID = "cmthv55880000qrhxwstrvglp";
-
-export function assertDemoClinic(clinicId: string): void {
-  if (clinicId !== DEMO_CLINIC_ID) {
-    throw new Error(
-      `Este script só opera na Clínica Demo VEXO (id "${DEMO_CLINIC_ID}") — recebido "${clinicId}". Abortado por segurança, nada foi lido nem apagado.`
-    );
-  }
-}
+// à Clínica Demo VEXO). Movido pra src/lib/demo-clinic.ts (pedido explícito,
+// cards "fixos" da Reativação — src/lib/reactivation.ts, código de RUNTIME,
+// passou a precisar do mesmo id; prisma/ não pode ser importado de lá) —
+// reexportado aqui pra nenhum script existente (clean-no-photo-demo-data.ts,
+// seed-reactivation-showcase.ts, diagnose-*.ts) precisar mudar o import.
+export { DEMO_CLINIC_ID, assertDemoClinic } from "../src/lib/demo-clinic";
 
 export type LeadPhotoRow = { profilePictureUrl: string | null };
 

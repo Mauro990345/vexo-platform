@@ -3,6 +3,7 @@ import { startOfDay, addDays } from "@/lib/metrics";
 import { normalizeBrazilianWhatsappNumber, validateBrazilianPhone, sendWhatsappMessage, formatDateTimeLabel } from "@/lib/whatsapp";
 import { ensureLeadFirstNameFromInstagram } from "@/lib/instagram";
 import { renderMessageTemplate, normalizeFirstNameForTemplate } from "@/lib/message-template";
+import { DEMO_CLINIC_ID } from "@/lib/demo-clinic";
 
 // Faixa "Reativação" do Painel do cliente (ver ClientPanelView.tsx /
 // ReactivationRail.tsx) — pacientes cujo agendamento da IA completou o
@@ -179,20 +180,33 @@ export function selectReactivationCandidates(appointments: ReactivationSourceApp
   return candidates;
 }
 
-// Quais prazos (dias) geram card pra ESTE agendamento — "Sem retorno"
-// marcado = nenhum; um prazo marcado = só esse (substitui os padrão,
-// pedido explícito: marcar um prazo cancela os cards padrão pendentes —
-// como eles nunca chegam a ser gerados de novo depois que o prazo manual
-// está marcado, "cancelar" aqui é simplesmente NUNCA MAIS incluir os
-// períodos padrão na lista de candidatos; um slot padrão já criado antes
-// da marcação, mas ainda não enviado, simplesmente para de aparecer —
-// nenhuma linha precisa ser apagada); nada marcado = os padrão da clínica
-// (pode ser mais de um, um card por padrão).
+// Quais prazos (dias) geram card pra ESTE agendamento — um prazo marcado =
+// só esse (substitui os padrão, pedido explícito: marcar um prazo cancela
+// os cards padrão pendentes — como eles nunca chegam a ser gerados de
+// novo depois que o prazo manual está marcado, "cancelar" aqui é
+// simplesmente NUNCA MAIS incluir os períodos padrão na lista de
+// candidatos; um slot padrão já criado antes da marcação, mas ainda não
+// enviado, simplesmente para de aparecer — nenhuma linha precisa ser
+// apagada); nada marcado = os padrão da clínica (pode ser mais de um, um
+// card por padrão).
+//
+// AJUSTE (pedido explícito — removida a opção "Sem retorno" do botão
+// Retorno, ver RetornoButton.tsx): `returnPeriodNone` deixou de ter
+// qualquer efeito aqui — "nada marcado" SEMPRE usa os padrão da clínica
+// agora, nunca mais "nenhum card" (era esse o papel de returnPeriodNone,
+// true). O campo continua existindo no banco (sem migration) por causa de
+// linhas antigas que já tinham sido marcadas "Sem retorno" antes desta
+// mudança — essas linhas passam a se comportar como "nada marcado" (usam
+// os padrão da clínica), em vez de continuar sem gerar card nenhum: é
+// exatamente o novo comportamento pedido ("se todos os prazos forem
+// desmarcados... vale o prazo padrão da clínica"), aplicado por igual a
+// elas. `appt.returnPeriodNone` continua no tipo só pra não exigir
+// mudança nos vários call-sites que já montam esse objeto com os dois
+// campos.
 export function resolveAppointmentReturnPeriods(
   appt: { returnPeriodDays: number | null; returnPeriodNone: boolean },
   clinicDefaultPeriods: readonly number[]
 ): number[] {
-  if (appt.returnPeriodNone) return [];
   if (appt.returnPeriodDays != null) return [appt.returnPeriodDays];
   return [...clinicDefaultPeriods];
 }
@@ -289,13 +303,30 @@ export function buildReactivationWhatsAppLink(phone: string, message: string): s
   return `https://wa.me/${normalized}?text=${encodeURIComponent(message)}`;
 }
 
+// Teto de segurança pro tamanho da URL com ?text= (pedido explícito: "se a
+// mensagem codificada deixar o link muito longo, usar só a cópia e abrir
+// ig.me sem o parâmetro"). O ?text= do ig.me/m/<usuário> NÃO é documentado
+// pela Meta (ao contrário do wa.me, que documenta e aceita texto de
+// qualquer tamanho) — pode não ser aceito por toda versão do app/webview
+// que abre o link. 2000 caracteres pra URL inteira é um teto conservador,
+// bem abaixo do que navegadores modernos toleram (tipicamente >8000), com
+// folga pro caso de o app do Instagram ser mais restritivo.
+export const INSTAGRAM_DM_LINK_MAX_LENGTH = 2000;
+
 // ig.me abre a conversa no Instagram direto (sem precisar já ter o
-// contato salvo, diferente do wa.me que precisa de telefone) — a mensagem
-// NUNCA vai colada na URL (a Meta não expõe esse parâmetro pro Direct):
-// o texto é copiado pra área de transferência separadamente (ver
-// InstagramDmButton.tsx), a secretária cola e envia manualmente.
-export function buildInstagramDmLink(igUsername: string): string {
-  return `https://ig.me/m/${igUsername}`;
+// contato salvo, diferente do wa.me que precisa de telefone). `message`
+// tenta pré-preencher o campo via ?text= — parâmetro NÃO documentado pela
+// Meta, então NUNCA é a única forma: a mensagem também é sempre copiada
+// pra área de transferência à parte (ver InstagramDmButton.tsx) no mesmo
+// toque, e se o texto não aparecer preenchido a secretária só cola. Sem
+// `message` (ou URL resultante grande demais, ver INSTAGRAM_DM_LINK_MAX_LENGTH
+// acima), devolve o link simples, sem o parâmetro — só a cópia resolve
+// esse caso.
+export function buildInstagramDmLink(igUsername: string, message?: string): string {
+  const base = `https://ig.me/m/${igUsername}`;
+  if (!message) return base;
+  const withText = `${base}?text=${encodeURIComponent(message)}`;
+  return withText.length <= INSTAGRAM_DM_LINK_MAX_LENGTH ? withText : base;
 }
 
 // Perfil público — mesmo formato já usado em NeedsHumanBanner.tsx, só pro
@@ -308,9 +339,10 @@ export function buildInstagramProfileLink(igUsername: string): string {
 // Decide se o botão "Instagram" do card tem o que fazer — null sem @
 // (pedido explícito: "se o lead não tiver @ do Instagram, o botão fica
 // desativado"), é exatamente o que InstagramDmButton.tsx usa como
-// `disabled={!dmLink}`.
-export function resolveInstagramDmLink(igUsername: string | null): string | null {
-  return igUsername ? buildInstagramDmLink(igUsername) : null;
+// `disabled={!dmLink}`. `message` é repassado pra buildInstagramDmLink
+// pré-preencher o campo via ?text= (ver lá).
+export function resolveInstagramDmLink(igUsername: string | null, message?: string): string | null {
+  return igUsername ? buildInstagramDmLink(igUsername, message) : null;
 }
 
 export type ReactivationCard = {
@@ -409,13 +441,94 @@ export function isDailyWhatsappLimitReached(sentTodayCount: number, dailyLimit: 
   return sentTodayCount >= dailyLimit;
 }
 
+// Cards "fixos" da Clínica Demo VEXO (pedido explícito — usados em vídeos
+// e treinamentos, precisam ficar sempre visíveis e sempre funcionando,
+// sem depender de scheduledAt/janela de ±3 dias nem de ninguém rodar o
+// script de novo). Marca reaproveitada de uma estrutura JÁ EXISTENTE —
+// nenhuma migration nova: a mera EXISTÊNCIA de uma linha em
+// ReactivationShowcaseBackup (appointmentId) já identifica "este é um dos
+// cards fixos do showcase", porque só prisma/seed-reactivation-showcase.ts
+// escreve nessa tabela, e só pra esta clínica (assertDemoClinic). Mesmo
+// assim, a checagem de clinicId abaixo é EXPLÍCITA (não confia só em "a
+// tabela está vazia pras outras clínicas") — defesa em profundidade,
+// pedido explícito item 3 ("adicione teste que comprove isso").
+//
+// Um card fixo entra na lista final IGNORANDO por completo: a janela de
+// ±3 dias (computeReturnContactWindow é calculada só pra exibir a data,
+// nunca checada com isWithinReactivationWindow), qual foi o agendamento
+// MAIS RECENTE do lead (selectReactivationCandidates nunca roda pra estes
+// ids — ver exclusão em getReactivationCards, abaixo) e o status do
+// agendamento (CANCELLED/NO_SHOW não importam aqui). Por isso continua
+// aparecendo mesmo se esse agendamento for marcado "Retornou", cancelado,
+// ou o lead ganhar um agendamento mais novo depois (pedido explícito,
+// item 1).
+//
+// A partir daqui, o card percorre o MESMO caminho de sempre
+// (assignReactivationCardSlots reusa o ReactivationCardSlot já existente
+// pelo appointmentId+thresholdDays — criado pelo próprio script — então
+// nunca consome um slot novo da sequência; toggle/envio de WhatsApp
+// continuam sendo toggleReactivationCardSent/sendReactivationWhatsAppMessage,
+// inalterados, SEM NENHUMA validação de janela) — é isso que garante
+// "funcionando de verdade", pedido explícito item 2.
+async function getPinnedReactivationCandidates(
+  clinicId: string,
+  defaultPeriods: readonly number[]
+): Promise<{ candidates: ReactivationCardCandidate[]; pinnedAppointmentIds: Set<string> }> {
+  if (clinicId !== DEMO_CLINIC_ID) return { candidates: [], pinnedAppointmentIds: new Set() };
+
+  const backups = await prisma.reactivationShowcaseBackup.findMany({
+    where: { clinicId },
+    select: { appointmentId: true },
+  });
+  const pinnedAppointmentIds = new Set(backups.map((b) => b.appointmentId));
+  if (pinnedAppointmentIds.size === 0) return { candidates: [], pinnedAppointmentIds };
+
+  // Releitura DIRETA por id — de propósito sem os filtros normais
+  // (conversationId/status/"mais recente por lead"): um card fixo precisa
+  // continuar aparecendo mesmo que o agendamento tenha sido cancelado ou
+  // deixado de ser o mais recente do lead.
+  const appointments = await prisma.appointment.findMany({
+    where: { id: { in: [...pinnedAppointmentIds] } },
+    select: { id: true, leadId: true, scheduledAt: true, returnPeriodDays: true, returnPeriodNone: true },
+  });
+
+  const candidates: ReactivationCardCandidate[] = [];
+  for (const appt of appointments) {
+    if (!appt.leadId) continue;
+    for (const thresholdDays of resolveAppointmentReturnPeriods(appt, defaultPeriods)) {
+      candidates.push({
+        appointmentId: appt.id,
+        leadId: appt.leadId,
+        scheduledAt: appt.scheduledAt,
+        returnPeriodDays: appt.returnPeriodDays,
+        returnPeriodNone: appt.returnPeriodNone,
+        thresholdDays,
+        // Só informativo (completionDate exibido no card) — NUNCA checado
+        // com isWithinReactivationWindow pra estes candidatos.
+        window: computeReturnContactWindow(appt.scheduledAt, thresholdDays),
+      });
+    }
+  }
+  return { candidates, pinnedAppointmentIds };
+}
+
 export async function getReactivationCards(clinicId: string, now: Date = new Date()): Promise<ReactivationCard[]> {
-  const config = await prisma.reactivationConfig.findUnique({ where: { clinicId } });
+  // AJUSTE (pedido explícito — "unificar os textos... numa única tela
+  // GLOBAL"): os 5 textos vêm de ReactivationMessagesConfig (singleton,
+  // GLOBAL, editado em Follow-up → "Cards do Painel"), não mais de
+  // ReactivationConfig (que continua só com prazos/limite/rotação, POR
+  // CLÍNICA, intocados).
+  const [config, messagesConfig] = await Promise.all([
+    prisma.reactivationConfig.findUnique({ where: { clinicId } }),
+    prisma.reactivationMessagesConfig.findUnique({ where: { id: "singleton" } }),
+  ]);
   const defaultPeriods = config?.defaultPeriods?.length ? config.defaultPeriods : DEFAULT_RETURN_PERIODS;
   const dailyLimit = config?.dailyWhatsappLimit ?? DEFAULT_DAILY_WHATSAPP_LIMIT;
 
-  const messages = [config?.message1, config?.message2, config?.message3, config?.message4, config?.message5];
+  const messages = [messagesConfig?.message1, messagesConfig?.message2, messagesConfig?.message3, messagesConfig?.message4, messagesConfig?.message5];
   const availableSlots = resolveAvailableReactivationSlots(messages);
+
+  const { candidates: pinnedCardCandidates, pinnedAppointmentIds } = await getPinnedReactivationCandidates(clinicId, defaultPeriods);
 
   const appointments = await prisma.appointment.findMany({
     where: { clinicId, conversationId: { not: null } },
@@ -430,8 +543,15 @@ export async function getReactivationCards(clinicId: string, now: Date = new Dat
     },
   });
 
-  const baseCandidates = selectReactivationCandidates(appointments);
-  const cardCandidates = buildReactivationCardCandidates(baseCandidates, defaultPeriods, now);
+  // Ids fixos NUNCA passam pelo caminho normal (seleção por lead
+  // mais-recente + janela de ±3 dias, abaixo) — já entraram incondicionalmente
+  // via pinnedCardCandidates, acima. Excluir aqui evita duplicar o mesmo
+  // card e garante que status/"outro agendamento mais novo" nunca tirem um
+  // card fixo da lista (pedido explícito, item 1).
+  const baseCandidates = selectReactivationCandidates(
+    pinnedAppointmentIds.size === 0 ? appointments : appointments.filter((a) => !pinnedAppointmentIds.has(a.id))
+  );
+  const cardCandidates = [...buildReactivationCardCandidates(baseCandidates, defaultPeriods, now), ...pinnedCardCandidates];
   if (cardCandidates.length === 0) return [];
 
   const existingSlotRows = await prisma.reactivationCardSlot.findMany({
@@ -515,7 +635,7 @@ export async function getReactivationCards(clinicId: string, now: Date = new Dat
       message,
       channel,
       whatsappLink: channel === "WHATSAPP" && phone ? buildReactivationWhatsAppLink(phone, message) : null,
-      instagramDmLink: channel === "INSTAGRAM" ? resolveInstagramDmLink(igUsername) : null,
+      instagramDmLink: channel === "INSTAGRAM" ? resolveInstagramDmLink(igUsername, message) : null,
       // @ só vira link de perfil nas linhas de Instagram (pedido
       // explícito) — nas de WhatsApp continua texto puro.
       instagramProfileLink: channel === "INSTAGRAM" && igUsername ? buildInstagramProfileLink(igUsername) : null,
@@ -665,9 +785,6 @@ export async function sendReactivationWhatsAppMessage(
             select: {
               whatsappInstanceName: true,
               instagramAccount: { select: { accessTokenEnc: true } },
-              reactivationConfig: {
-                select: { message1: true, message2: true, message3: true, message4: true, message5: true },
-              },
             },
           },
         },
@@ -687,8 +804,13 @@ export async function sendReactivationWhatsAppMessage(
   // corrida "limite batido entre o card aparecer na tela e o clique"; a UI
   // já esconde o botão nesse caso (ver ReactivationCard.dailyLimitReached/
   // ReactivationRail.tsx), mas o servidor nunca confia só na tela.
-  const [reactivationConfig, sentTodayCount] = await Promise.all([
+  // messagesConfig: ver comentário grande em getReactivationCards acima —
+  // mesma fonte global (ReactivationMessagesConfig), buscada de novo aqui
+  // (não reaproveitável: esta função é chamada isolada, direto por um
+  // clique, nunca a partir de uma lista já carregada).
+  const [reactivationConfig, messagesConfig, sentTodayCount] = await Promise.all([
     prisma.reactivationConfig.findUnique({ where: { clinicId }, select: { dailyWhatsappLimit: true } }),
+    prisma.reactivationMessagesConfig.findUnique({ where: { id: "singleton" } }),
     countTodaysWhatsappSends(clinicId, now),
   ]);
   const dailyLimit = reactivationConfig?.dailyWhatsappLimit ?? DEFAULT_DAILY_WHATSAPP_LIMIT;
@@ -748,8 +870,7 @@ export async function sendReactivationWhatsAppMessage(
     return { ok: false, reason: "disconnected", clinicId };
   }
 
-  const config = slot.appointment.clinic.reactivationConfig;
-  const messages = [config?.message1, config?.message2, config?.message3, config?.message4, config?.message5];
+  const messages = [messagesConfig?.message1, messagesConfig?.message2, messagesConfig?.message3, messagesConfig?.message4, messagesConfig?.message5];
   const rawTemplate = resolveReactivationMessageText(slot.slot, messages, DEFAULT_REACTIVATION_MESSAGES);
 
   // {{primeiro_nome}}/{{data_horario}} (mesmo mecanismo de getReactivationCards,

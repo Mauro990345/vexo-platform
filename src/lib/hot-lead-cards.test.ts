@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 const conversationFindManyMock = vi.fn();
 const hotLeadConfigFindUniqueMock = vi.fn();
 const hotLeadConfigUpsertMock = vi.fn();
+const hotLeadMessagesConfigFindUniqueMock = vi.fn();
 const leadFindManyMock = vi.fn();
 const instagramAccountFindUniqueMock = vi.fn();
 const hotLeadCardSlotCountMock = vi.fn();
@@ -16,6 +17,12 @@ vi.mock("@/lib/prisma", () => ({
     hotLeadConfig: {
       findUnique: (...args: unknown[]) => hotLeadConfigFindUniqueMock(...args),
       upsert: (...args: unknown[]) => hotLeadConfigUpsertMock(...args),
+    },
+    // GLOBAL agora (pedido explícito, "unificar os textos... numa única
+    // tela GLOBAL") — hotLeadConfig acima ficou só com dailyLimit/
+    // contadores de rotação, POR CLÍNICA; os 9 textos vêm daqui.
+    hotLeadMessagesConfig: {
+      findUnique: (...args: unknown[]) => hotLeadMessagesConfigFindUniqueMock(...args),
     },
     lead: { findMany: (...args: unknown[]) => leadFindManyMock(...args) },
     instagramAccount: { findUnique: (...args: unknown[]) => instagramAccountFindUniqueMock(...args) },
@@ -64,9 +71,9 @@ function input(overrides: Partial<HotLeadConversationInput> = {}): HotLeadConver
   };
 }
 
-describe("HOT_LEAD_STEP_DAYS — cadência fixa 2/4/30", () => {
+describe("HOT_LEAD_STEP_DAYS — cadência fixa 2/4/15 (item 3, rodada atual — era 2/4/30)", () => {
   it("3 passos, nessa ordem", () => {
-    expect(HOT_LEAD_STEP_DAYS).toEqual([2, 4, 30]);
+    expect(HOT_LEAD_STEP_DAYS).toEqual([2, 4, 15]);
     expect(HOT_LEAD_STEP_COUNT).toBe(3);
     expect(HOT_LEAD_WINDOW_AFTER_DAYS).toBe(3);
   });
@@ -118,13 +125,13 @@ describe("chooseHotLeadStep — qual passo mostrar agora (sequência nova)", () 
     expect(choice).toBeNull();
   });
 
-  it("30 dias (passo 3 no dia exato): elegível no passo 3", () => {
-    const choice = chooseHotLeadStep(input({ lastLeadMessageAt: new Date(NOW.getTime() - 30 * DAY_MS) }), NOW);
+  it("15 dias (passo 3 no dia exato): elegível no passo 3 (item 3 — era 30 dias)", () => {
+    const choice = chooseHotLeadStep(input({ lastLeadMessageAt: new Date(NOW.getTime() - 15 * DAY_MS) }), NOW);
     expect(choice?.step).toBe(3);
   });
 
-  it("34 dias (depois da janela do passo 3): nada — sequência encerrada, nenhuma nova tentativa", () => {
-    const choice = chooseHotLeadStep(input({ lastLeadMessageAt: new Date(NOW.getTime() - 34 * DAY_MS) }), NOW);
+  it("19 dias (depois da janela do passo 3): nada — sequência encerrada, nenhuma nova tentativa", () => {
+    const choice = chooseHotLeadStep(input({ lastLeadMessageAt: new Date(NOW.getTime() - 19 * DAY_MS) }), NOW);
     expect(choice).toBeNull();
   });
 
@@ -289,6 +296,7 @@ describe("getHotLeadCards — wrapper Prisma", () => {
     conversationFindManyMock.mockReset();
     hotLeadConfigFindUniqueMock.mockReset();
     hotLeadConfigUpsertMock.mockReset();
+    hotLeadMessagesConfigFindUniqueMock.mockReset();
     leadFindManyMock.mockReset();
     instagramAccountFindUniqueMock.mockReset();
     hotLeadCardSlotCountMock.mockReset();
@@ -299,6 +307,7 @@ describe("getHotLeadCards — wrapper Prisma", () => {
     instagramAccountFindUniqueMock.mockResolvedValue(null);
     hotLeadCardSlotCountMock.mockResolvedValue(0);
     hotLeadConfigFindUniqueMock.mockResolvedValue({ dailyLimit: 5 });
+    hotLeadMessagesConfigFindUniqueMock.mockResolvedValue(null);
     transactionMock.mockResolvedValue([]);
   });
 

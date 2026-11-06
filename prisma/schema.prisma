@@ -579,6 +579,15 @@ model Conversation {
   // (possivelmente trocado de novo depois) de LLM_PROVIDER.
   lastSilenceCheckModel String?
 
+  // Âncora congelada do card "Não agendou" (item 4 do pedido) — setada
+  // uma única vez, na primeira vez que a conversa entra na janela do
+  // primeiro passo (D10), e nunca mais atualizada depois disso. Antes
+  // desse momento, a elegibilidade ainda usa lastMessageAt ao vivo (ver
+  // getNeverScheduledCards, never-scheduled-cards.ts) — sem isso, uma
+  // resposta do lead sem agendar reiniciava a contagem dos prazos D10/
+  // D30/D60 a cada mensagem nova, mesmo com o card já tendo aparecido.
+  neverScheduledAnchorAt DateTime?
+
   messages     Message[]
   appointments Appointment[]
   followUps    FollowUpLog[]
@@ -586,6 +595,10 @@ model Conversation {
   // Cards "Quente" (ver HotLeadCardSlot acima e hot-lead-cards.ts) — até
   // 3 por conversa, um por passo da cadência.
   hotLeadCardSlots HotLeadCardSlot[]
+
+  // Cards "Não agendou" (ver NeverScheduledCardSlot acima e
+  // never-scheduled-cards.ts) — até 2 por conversa (D30/D60).
+  neverScheduledCardSlots NeverScheduledCardSlot[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -933,6 +946,13 @@ model ReactivationConfig {
 
   dailyWhatsappLimit Int @default(15)
 
+  // AJUSTE (pedido explícito — "unificar os textos... numa única tela
+  // GLOBAL"): message1-5 PARARAM DE SER LIDOS pelo app (ver
+  // ReactivationMessagesConfig abaixo, que substituiu isto como fonte dos
+  // textos) — colunas e dados mantidos de propósito, sem migration de
+  // remoção ("não apague as colunas ou dados por clínica"). Só ficam
+  // paradas aqui como histórico de quando a Reativação ainda era
+  // configurável por clínica.
   message1 String? @db.Text
   message2 String? @db.Text
   message3 String? @db.Text
@@ -943,8 +963,29 @@ model ReactivationConfig {
   // assignNextReactivationSlot, reactivation.ts) — nunca é lido de volta
   // pra decidir o texto de um card já existente (isso vem de
   // ReactivationCardSlot, abaixo, fixo por agendamento+período desde o
-  // momento em que aquele card entra na faixa).
+  // momento em que aquele card entra na faixa). Continua POR CLÍNICA
+  // mesmo depois dos textos virarem globais — é só a posição da rotação,
+  // não o conteúdo.
   sequenceCounter Int @default(0)
+
+  updatedAt DateTime @updatedAt
+}
+
+// Textos da Reativação GLOBAIS (pedido explícito — antes eram por
+// clínica, em ReactivationConfig.message1-5 acima) — singleton, mesmo
+// padrão de NoShowCardSettings/NeverScheduledCardSettings. Editado na aba
+// "Cards do Painel" (Follow-up), não mais em Automações. Migration de
+// criação já semeia esta linha com os textos que estavam salvos na
+// Clínica Demo VEXO (ver migration.sql) — as colunas antigas em
+// ReactivationConfig continuam intactas, só pararam de ser lidas.
+model ReactivationMessagesConfig {
+  id String @id @default("singleton")
+
+  message1 String? @db.Text
+  message2 String? @db.Text
+  message3 String? @db.Text
+  message4 String? @db.Text
+  message5 String? @db.Text
 
   updatedAt DateTime @updatedAt
 }
@@ -1025,6 +1066,9 @@ model NoShowCardSettings {
 
   day3Content  String? @db.Text
   day10Content String? @db.Text
+  // 3º passo (D30), item 1 do pedido — só Instagram, manual (ver
+  // no-show-cards.ts, canal forçado pro step 3 independente de telefone).
+  day30Content String? @db.Text
 
   updatedAt DateTime @updatedAt
 }
@@ -1050,6 +1094,55 @@ model NoShowCardSlot {
   @@unique([appointmentId, step])
 }
 
+// Textos do card "Não agendou" (ver never-scheduled-cards.ts) — mesmo
+// padrão de NoShowCardSettings acima (GLOBAL, singleton, vazio usa o
+// texto padrão), tabela PRÓPRIA em vez de reaproveitar
+// NoShowCardSettings pra não acoplar dois cards com regras de
+// elegibilidade bem diferentes (um é por agendamento faltado, o outro é
+// por conversa sem nenhum agendamento) só porque a tela os agrupa visualmente
+// (aba "Cards do Painel", FollowUpView.tsx) — a tela chama as duas
+// upserts na mesma submissão de formulário, sem precisar que sejam a
+// mesma tabela.
+model NeverScheduledCardSettings {
+  id String @id @default("singleton")
+
+  day30Content String? @db.Text
+  day60Content String? @db.Text
+  // Novo 3º passo (D10), item 2 do pedido (rodada anterior) — persistido
+  // como step=3 em NeverScheduledCardSlot (D30/D60 continuam step=1/2,
+  // sem renumerar dados já gravados; ver never-scheduled-cards.ts).
+  day10Content String? @db.Text
+  // D2/D4 (rodada atual) — step=4/5, mesmo motivo acima: sem renumerar
+  // nada já gravado.
+  day2Content String? @db.Text
+  day4Content String? @db.Text
+
+  updatedAt DateTime @updatedAt
+}
+
+// Estado (enviado/pendente) de cada um dos dois passos do card "Não
+// agendou" pra uma CONVERSA específica — mesmo papel de NoShowCardSlot
+// acima, só que chaveado por conversationId (não existe nenhum
+// Appointment pra este card: é exatamente a definição dele, "nunca
+// agendou" — ver getNeverScheduledCards, never-scheduled-cards.ts). step
+// 1 = D30, step 2 = D60.
+model NeverScheduledCardSlot {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  step Int
+
+  // Mesma semântica de NoShowCardSlot.sentAt — null = pendente; nunca
+  // afeta elegibilidade (a janela de 5 dias úteis, ancorada em
+  // Conversation.lastMessageAt + 30/60 dias, decide isso).
+  sentAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@unique([conversationId, step])
+}
+
 // Configuração do card "Quente" (lead que nunca agendou, parado, com sinal
 // de interesse — ver hot-lead-cards.ts) — POR CLÍNICA, mesmo padrão de
 // ReactivationConfig. Cadência FIXA de 3 passos (2/4/30 dias desde a
@@ -1069,7 +1162,11 @@ model HotLeadConfig {
   // excesso de contato automatizado pela mesma conta (pedido explícito).
   dailyLimit Int @default(5)
 
-  // Passo 1 · 2 dias desde a última mensagem do lead.
+  // AJUSTE (pedido explícito — "unificar os textos... numa única tela
+  // GLOBAL"): os 9 textos abaixo PARARAM DE SER LIDOS pelo app (ver
+  // HotLeadMessagesConfig abaixo) — colunas e dados mantidos de
+  // propósito, sem migration de remoção. Passo 1 · 2 dias desde a última
+  // mensagem do lead.
   step1Message1 String? @db.Text
   step1Message2 String? @db.Text
   step1Message3 String? @db.Text
@@ -1079,7 +1176,7 @@ model HotLeadConfig {
   step2Message2 String? @db.Text
   step2Message3 String? @db.Text
 
-  // Passo 3 · 30 dias — última tentativa (depois dele a sequência encerra,
+  // Passo 3 · 15 dias — última tentativa (depois dele a sequência encerra,
   // ver evaluateHotLeadEligibility).
   step3Message1 String? @db.Text
   step3Message2 String? @db.Text
@@ -1087,9 +1184,35 @@ model HotLeadConfig {
 
   // Mesmo papel de ReactivationConfig.sequenceCounter, um por passo — só
   // decide a PRÓXIMA posição na rotação em sequência daquele passo.
+  // Continua POR CLÍNICA mesmo depois dos textos virarem globais (mesmo
+  // motivo de ReactivationConfig.sequenceCounter acima).
   step1SequenceCounter Int @default(0)
   step2SequenceCounter Int @default(0)
   step3SequenceCounter Int @default(0)
+
+  updatedAt DateTime @updatedAt
+}
+
+// Textos do "Quente" GLOBAIS (pedido explícito — antes eram por clínica,
+// em HotLeadConfig.stepXMessageY acima) — singleton, mesmo padrão de
+// ReactivationMessagesConfig acima. Editado na aba "Cards do Painel"
+// (Follow-up). Migration de criação semeia esta linha com os textos da
+// Clínica Demo VEXO — as colunas antigas em HotLeadConfig continuam
+// intactas, só pararam de ser lidas.
+model HotLeadMessagesConfig {
+  id String @id @default("singleton")
+
+  step1Message1 String? @db.Text
+  step1Message2 String? @db.Text
+  step1Message3 String? @db.Text
+
+  step2Message1 String? @db.Text
+  step2Message2 String? @db.Text
+  step2Message3 String? @db.Text
+
+  step3Message1 String? @db.Text
+  step3Message2 String? @db.Text
+  step3Message3 String? @db.Text
 
   updatedAt DateTime @updatedAt
 }

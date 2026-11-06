@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const reactivationConfigFindUniqueMock = vi.fn();
+const reactivationMessagesConfigFindUniqueMock = vi.fn();
 const appointmentFindManyMock = vi.fn();
 const reactivationCardSlotFindManyMock = vi.fn();
 const reactivationCardSlotUpsertMock = vi.fn();
@@ -14,11 +15,18 @@ const noShowCardSlotFindFirstMock = vi.fn();
 const reactivationConfigUpsertMock = vi.fn();
 const leadFindManyMock = vi.fn();
 const instagramAccountFindUniqueMock = vi.fn();
+const reactivationShowcaseBackupFindManyMock = vi.fn();
 vi.mock("@/lib/prisma", () => ({
   prisma: {
     reactivationConfig: {
       findUnique: (...args: unknown[]) => reactivationConfigFindUniqueMock(...args),
       upsert: (...args: unknown[]) => reactivationConfigUpsertMock(...args),
+    },
+    // GLOBAL agora (pedido explícito, "unificar os textos... numa única
+    // tela GLOBAL") — reactivationConfig acima ficou só com prazos/
+    // limite/rotação, POR CLÍNICA; os 5 textos vêm daqui.
+    reactivationMessagesConfig: {
+      findUnique: (...args: unknown[]) => reactivationMessagesConfigFindUniqueMock(...args),
     },
     appointment: { findMany: (...args: unknown[]) => appointmentFindManyMock(...args) },
     reactivationCardSlot: {
@@ -36,6 +44,10 @@ vi.mock("@/lib/prisma", () => ({
     },
     lead: { findMany: (...args: unknown[]) => leadFindManyMock(...args) },
     instagramAccount: { findUnique: (...args: unknown[]) => instagramAccountFindUniqueMock(...args) },
+    // Cards "fixos" da Clínica Demo VEXO (getPinnedReactivationCandidates,
+    // reactivation.ts) — vazio por padrão em todo teste (beforeEach abaixo),
+    // só preenchido nos testes da própria describe("cards fixos...").
+    reactivationShowcaseBackup: { findMany: (...args: unknown[]) => reactivationShowcaseBackupFindManyMock(...args) },
   },
 }));
 
@@ -63,6 +75,7 @@ vi.mock("@/lib/whatsapp", async (importOriginal) => {
   return { ...actual, sendWhatsappMessage: (...args: unknown[]) => sendWhatsappMessageMock(...args) };
 });
 
+import { DEMO_CLINIC_ID } from "@/lib/demo-clinic";
 import {
   computeReactivationWindow,
   isWithinReactivationWindow,
@@ -80,6 +93,7 @@ import {
   buildInstagramDmLink,
   buildInstagramProfileLink,
   resolveInstagramDmLink,
+  INSTAGRAM_DM_LINK_MAX_LENGTH,
   reactivationChannelForLead,
   DEFAULT_REACTIVATION_MESSAGES,
   RETURN_PERIOD_OPTIONS,
@@ -261,8 +275,16 @@ describe("selectReactivationCandidates", () => {
 });
 
 describe("resolveAppointmentReturnPeriods — qual prazo (ou prazos) gera card pra um agendamento", () => {
-  it('"Sem retorno" marcado: nenhum prazo, mesmo com padrões da clínica configurados', () => {
-    expect(resolveAppointmentReturnPeriods({ returnPeriodDays: null, returnPeriodNone: true }, [30, 60])).toEqual([]);
+  // Pedido explícito (removida a opção "Sem retorno" do botão Retorno):
+  // returnPeriodNone deixou de ter qualquer efeito — mesmo true (linha
+  // antiga, marcada antes desta mudança), "nada marcado" sempre usa os
+  // padrões da clínica agora.
+  it('returnPeriodNone=true (linha antiga, de antes da remoção de "Sem retorno"): usa os padrões da clínica, igual a "nada marcado"', () => {
+    expect(resolveAppointmentReturnPeriods({ returnPeriodDays: null, returnPeriodNone: true }, [30, 60])).toEqual([30, 60]);
+  });
+
+  it("prazo manual marcado: só esse, ignora os padrões da clínica — mesmo com returnPeriodNone true numa linha antiga", () => {
+    expect(resolveAppointmentReturnPeriods({ returnPeriodDays: 120, returnPeriodNone: true }, [30, 60])).toEqual([120]);
   });
 
   it("prazo manual marcado: só esse, ignora os padrões da clínica", () => {
@@ -296,11 +318,12 @@ describe("buildReactivationCardCandidates — manual vs. padrão da clínica", (
     expect(cards).toEqual([]);
   });
 
-  it('"Sem retorno" marcado: nenhum card, mesmo dentro da janela que os padrões gerariam', () => {
+  it("returnPeriodNone=true (linha antiga): gera card pelos padrões da clínica, igual a nada marcado", () => {
     const scheduledAt = new Date("2026-01-01T12:00:00.000Z");
     const window30 = computeReturnContactWindow(scheduledAt, 30);
     const cards = buildReactivationCardCandidates([candidate({ scheduledAt, returnPeriodNone: true })], [30, 60], window30.start);
-    expect(cards).toEqual([]);
+    expect(cards).toHaveLength(1);
+    expect(cards[0]!.thresholdDays).toBe(30);
   });
 
   it("prazo manual marcado: só um card, no prazo marcado — ignora os padrões", () => {
@@ -477,7 +500,7 @@ describe("rotação em sequência das mensagens", () => {
 });
 
 describe("Instagram — links e botão desativado sem @", () => {
-  it("buildInstagramDmLink: gera o link ig.me/m/<@>", () => {
+  it("buildInstagramDmLink: sem mensagem, gera o link simples ig.me/m/<@>", () => {
     expect(buildInstagramDmLink("fulano.silva")).toBe("https://ig.me/m/fulano.silva");
   });
 
@@ -485,12 +508,101 @@ describe("Instagram — links e botão desativado sem @", () => {
     expect(buildInstagramProfileLink("fulano.silva")).toBe("https://www.instagram.com/fulano.silva/");
   });
 
-  it("resolveInstagramDmLink: devolve o link quando há @", () => {
+  it("resolveInstagramDmLink: devolve o link simples quando há @, sem mensagem", () => {
     expect(resolveInstagramDmLink("fulano.silva")).toBe("https://ig.me/m/fulano.silva");
   });
 
   it("resolveInstagramDmLink: null sem @ — é o que deixa o botão Instagram desativado", () => {
     expect(resolveInstagramDmLink(null)).toBeNull();
+  });
+
+  // Pedido explícito (item 1): pré-preencher o campo da conversa via
+  // ?text= (parâmetro NÃO documentado pela Meta — por isso a cópia pra
+  // área de transferência, ver InstagramDmButton.tsx, continua sempre
+  // acontecendo também, nunca só o link).
+  describe("buildInstagramDmLink com mensagem — ?text= codificado", () => {
+    it("mensagem simples: ?text=<mensagem codificada com encodeURIComponent>", () => {
+      const link = buildInstagramDmLink("fulano.silva", "Oi! Tudo bem?");
+      expect(link).toBe(`https://ig.me/m/fulano.silva?text=${encodeURIComponent("Oi! Tudo bem?")}`);
+    });
+
+    it("acentos: codificados corretamente, decodificam de volta pro texto original", () => {
+      const message = "Oi! Como você está desde o atendimento na clínica?";
+      const link = buildInstagramDmLink("fulano.silva", message);
+      const textParam = new URL(link).searchParams.get("text");
+      expect(textParam).toBe(message);
+    });
+
+    it("quebras de linha: preservadas (decodifica de volta igual)", () => {
+      const message = "Oi!\nTudo bem?\n\nPassando só pra saber como você está.";
+      const link = buildInstagramDmLink("fulano.silva", message);
+      const textParam = new URL(link).searchParams.get("text");
+      expect(textParam).toBe(message);
+    });
+
+    it("emoji: preservado (decodifica de volta igual, inclusive par substituto UTF-16)", () => {
+      const message = "Oi! 💙 Como você está?";
+      const link = buildInstagramDmLink("fulano.silva", message);
+      const textParam = new URL(link).searchParams.get("text");
+      expect(textParam).toBe(message);
+    });
+
+    it('aspas (simples e duplas): preservadas, nunca quebram a URL', () => {
+      const message = `Oi! A "promoção" de hoje é essa: não deixe pra amanhã.`;
+      const link = buildInstagramDmLink("fulano.silva", message);
+      expect(() => new URL(link)).not.toThrow();
+      const textParam = new URL(link).searchParams.get("text");
+      expect(textParam).toBe(message);
+    });
+
+    it("mensagem vazia: tratada como ausente, link simples sem ?text=", () => {
+      expect(buildInstagramDmLink("fulano.silva", "")).toBe("https://ig.me/m/fulano.silva");
+    });
+
+    it("resolveInstagramDmLink repassa a mensagem pra buildInstagramDmLink", () => {
+      const link = resolveInstagramDmLink("fulano.silva", "Oi!");
+      expect(link).toBe(`https://ig.me/m/fulano.silva?text=${encodeURIComponent("Oi!")}`);
+    });
+  });
+
+  // Pedido explícito (item 3): link muito longo cai pro fallback sem
+  // ?text= — só a cópia pra área de transferência resolve esse caso.
+  describe("buildInstagramDmLink — fallback quando a URL fica longa demais", () => {
+    it("mensagem curta: fica dentro do limite, mantém ?text=", () => {
+      const link = buildInstagramDmLink("fulano.silva", "Oi! Tudo bem?");
+      expect(link).toContain("?text=");
+      expect(link.length).toBeLessThanOrEqual(INSTAGRAM_DM_LINK_MAX_LENGTH);
+    });
+
+    it("mensagem longa o bastante pra ultrapassar o teto: cai pro link SEM ?text=", () => {
+      // Repetição simples, bem acima do teto mesmo depois de codificada.
+      const longMessage = "Oi! Como você está desde o seu atendimento? ".repeat(80);
+      const withoutText = buildInstagramDmLink("fulano.silva", longMessage);
+      expect(withoutText).toBe("https://ig.me/m/fulano.silva");
+      expect(withoutText).not.toContain("?text=");
+      // Confirma que a mensagem realmente excederia o teto se tivesse ido
+      // pro link — não é só "qualquer mensagem longa cai no fallback".
+      const wouldBeLink = `https://ig.me/m/fulano.silva?text=${encodeURIComponent(longMessage)}`;
+      expect(wouldBeLink.length).toBeGreaterThan(INSTAGRAM_DM_LINK_MAX_LENGTH);
+    });
+
+    it("exatamente no limite: mantém ?text= (limite é inclusivo)", () => {
+      // Monta uma mensagem cujo link com ?text= fica EXATAMENTE no teto.
+      const base = "https://ig.me/m/fulano.silva?text=";
+      const budget = INSTAGRAM_DM_LINK_MAX_LENGTH - base.length;
+      const message = "a".repeat(budget); // 'a' não precisa de encoding, 1 char = 1 char codificado
+      const link = buildInstagramDmLink("fulano.silva", message);
+      expect(link.length).toBe(INSTAGRAM_DM_LINK_MAX_LENGTH);
+      expect(link).toContain("?text=");
+    });
+
+    it("1 caractere acima do limite: cai pro fallback", () => {
+      const base = "https://ig.me/m/fulano.silva?text=";
+      const budget = INSTAGRAM_DM_LINK_MAX_LENGTH - base.length + 1;
+      const message = "a".repeat(budget);
+      const link = buildInstagramDmLink("fulano.silva", message);
+      expect(link).toBe("https://ig.me/m/fulano.silva");
+    });
   });
 });
 
@@ -546,6 +658,7 @@ describe("isDailyWhatsappLimitReached", () => {
 describe("getReactivationCards — sentAt, janela e limite diário", () => {
   beforeEach(() => {
     reactivationConfigFindUniqueMock.mockReset();
+    reactivationMessagesConfigFindUniqueMock.mockReset();
     appointmentFindManyMock.mockReset();
     reactivationCardSlotFindManyMock.mockReset();
     reactivationCardSlotUpsertMock.mockReset();
@@ -564,6 +677,10 @@ describe("getReactivationCards — sentAt, janela e limite diário", () => {
     instagramAccountFindUniqueMock.mockResolvedValue(null);
     reactivationCardSlotCountMock.mockResolvedValue(0);
     noShowCardSlotCountMock.mockResolvedValue(0);
+    // Sem textos globais customizados, por padrão — cai pros defaults
+    // (DEFAULT_REACTIVATION_MESSAGES). Testes de mensagem customizada
+    // configuram isto explicitamente.
+    reactivationMessagesConfigFindUniqueMock.mockResolvedValue(null);
   });
 
   it('um card já marcado "enviado" continua desaparecendo sozinho quando a janela vence — sentAt nunca estende nem protege a elegibilidade', async () => {
@@ -631,7 +748,11 @@ describe("getReactivationCards — sentAt, janela e limite diário", () => {
     expect(cards[0]!.thresholdDays).toBe(120);
   });
 
-  it('"Sem retorno" marcado: nenhum card, mesmo dentro da janela que os padrões gerariam', async () => {
+  // Pedido explícito (removida a opção "Sem retorno" do botão Retorno):
+  // returnPeriodNone=true numa linha antiga (de antes desta mudança) passa
+  // a se comportar como "nada marcado" — gera card pelos padrões da
+  // clínica, nunca mais zero cards.
+  it("returnPeriodNone=true (linha antiga): gera card pelos padrões da clínica, igual a nada marcado", async () => {
     const scheduledAt = new Date("2026-01-01T12:00:00.000Z");
     const window30 = computeReturnContactWindow(scheduledAt, 30);
     const now = window30.start;
@@ -641,10 +762,62 @@ describe("getReactivationCards — sentAt, janela e limite diário", () => {
       { id: "appt-1", leadId: "lead-1", conversationId: "conv-1", scheduledAt, status: "SCHEDULED", returnPeriodDays: null, returnPeriodNone: true },
     ]);
     reactivationCardSlotFindManyMock.mockResolvedValue([]);
+    reactivationCardSlotUpsertMock.mockResolvedValue({});
+
+    const cards = await getReactivationCards("clinic-1", now);
+
+    expect(cards).toHaveLength(1);
+    expect(cards[0]!.thresholdDays).toBe(30);
+  });
+
+  // Pedido explícito, "toggle do Retorno": desmarcar um prazo cancela o
+  // card daquele prazo se ainda não foi enviado — sem precisar apagar a
+  // linha antiga de ReactivationCardSlot (ver comentário grande em
+  // resolveAppointmentReturnPeriods/appointments.ts): ela simplesmente
+  // para de ser candidata na próxima montagem da lista.
+  it("desmarcar o prazo (returnPeriodDays volta a null): o card PENDENTE daquele prazo some, mesmo com a linha antiga de slot ainda no banco", async () => {
+    const scheduledAt = new Date("2026-01-01T12:00:00.000Z");
+    const window90 = computeReturnContactWindow(scheduledAt, 90);
+    const now = window90.start;
+
+    // Clínica sem padrões — se o prazo 90 abandonado ainda gerasse card,
+    // apareceria aqui; sem padrão nenhum, só prova que realmente sumiu.
+    reactivationConfigFindUniqueMock.mockResolvedValue({ defaultPeriods: [], dailyWhatsappLimit: 15 });
+    appointmentFindManyMock.mockResolvedValue([
+      { id: "appt-1", leadId: "lead-1", conversationId: "conv-1", scheduledAt, status: "SCHEDULED", returnPeriodDays: null, returnPeriodNone: false },
+    ]);
+    // Linha órfã, do prazo de 90 dias abandonado — ainda no banco, nunca
+    // apagada (mesmo princípio de sempre: nunca apagar histórico).
+    reactivationCardSlotFindManyMock.mockResolvedValue([{ appointmentId: "appt-1", thresholdDays: 90, slot: 1, sentAt: null }]);
 
     const cards = await getReactivationCards("clinic-1", now);
 
     expect(cards).toEqual([]);
+  });
+
+  it("desmarcar o prazo DEPOIS de já enviado: o histórico do envio permanece (setAppointmentReturnPeriod nem chega a rodar — ver appointments.test.ts, 'já enviado: unset também trava')", async () => {
+    // Confirma, do lado de getReactivationCards, que um slot JÁ ENVIADO
+    // nunca é afetado por mudança de returnPeriodDays — o teste principal
+    // da trava em si (a mudança nem é aceita) fica em appointments.test.ts;
+    // aqui só garante que, se o prazo enviado ainda bater com o
+    // returnPeriodDays atual (único jeito dele chegar até aqui, já que a
+    // troca é bloqueada), o card aparece normalmente, esmaecido (sentAt
+    // preenchido), nunca removido.
+    const scheduledAt = new Date("2026-01-01T12:00:00.000Z");
+    const window90 = computeReturnContactWindow(scheduledAt, 90);
+    const now = window90.start;
+    const sentAt = new Date(now.getTime() - 1000);
+
+    reactivationConfigFindUniqueMock.mockResolvedValue({ defaultPeriods: [], dailyWhatsappLimit: 15 });
+    appointmentFindManyMock.mockResolvedValue([
+      { id: "appt-1", leadId: "lead-1", conversationId: "conv-1", scheduledAt, status: "SCHEDULED", returnPeriodDays: 90, returnPeriodNone: false },
+    ]);
+    reactivationCardSlotFindManyMock.mockResolvedValue([{ appointmentId: "appt-1", thresholdDays: 90, slot: 1, sentAt }]);
+
+    const cards = await getReactivationCards("clinic-1", now);
+
+    expect(cards).toHaveLength(1);
+    expect(cards[0]!.sentAt).toEqual(sentAt);
   });
 
   it("sem telefone cadastrado: canal INSTAGRAM, sem link de WhatsApp", async () => {
@@ -666,7 +839,12 @@ describe("getReactivationCards — sentAt, janela e limite diário", () => {
 
     expect(cards[0]!.channel).toBe("INSTAGRAM");
     expect(cards[0]!.whatsappLink).toBeNull();
-    expect(cards[0]!.instagramDmLink).toBe("https://ig.me/m/fulana.ig");
+    // Pedido explícito (item 1, rodada seguinte): instagramDmLink agora
+    // carrega ?text=<mensagem> pra pré-preencher o campo — ver
+    // describe("buildInstagramDmLink com mensagem...") pros testes
+    // focados nisso; aqui só confirma que getReactivationCards repassa a
+    // mensagem do card pra resolveInstagramDmLink.
+    expect(cards[0]!.instagramDmLink).toBe(`https://ig.me/m/fulana.ig?text=${encodeURIComponent(cards[0]!.message)}`);
   });
 
   it("limite diário de WhatsApp atingido: card de canal WHATSAPP ainda pendente sai com dailyLimitReached", async () => {
@@ -733,9 +911,8 @@ describe("getReactivationCards — sentAt, janela e limite diário", () => {
     const window90 = computeReturnContactWindow(scheduledAt, 90);
     const now = window90.start;
 
-    reactivationConfigFindUniqueMock.mockResolvedValue({
-      defaultPeriods: [90],
-      dailyWhatsappLimit: 15,
+    reactivationConfigFindUniqueMock.mockResolvedValue({ defaultPeriods: [90], dailyWhatsappLimit: 15 });
+    reactivationMessagesConfigFindUniqueMock.mockResolvedValue({
       message1: "Oi, {{primeiro_nome}}! Faz tempo desde {{data_horario}}.",
     });
     appointmentFindManyMock.mockResolvedValue([
@@ -760,7 +937,8 @@ describe("getReactivationCards — sentAt, janela e limite diário", () => {
     ]);
     instagramAccountFindUniqueMock.mockResolvedValue({ accessTokenEnc: "enc-token" });
     ensureLeadFirstNameFromInstagramMock.mockResolvedValue("João Pedro");
-    reactivationConfigFindUniqueMock.mockResolvedValue({ defaultPeriods: [90], dailyWhatsappLimit: 15, message1: "Oi, {{primeiro_nome}}!" });
+    reactivationConfigFindUniqueMock.mockResolvedValue({ defaultPeriods: [90], dailyWhatsappLimit: 15 });
+    reactivationMessagesConfigFindUniqueMock.mockResolvedValue({ message1: "Oi, {{primeiro_nome}}!" });
     appointmentFindManyMock.mockResolvedValue([
       { id: "appt-1", leadId: "lead-1", conversationId: "conv-1", scheduledAt, status: "SCHEDULED", returnPeriodDays: null, returnPeriodNone: false },
     ]);
@@ -771,6 +949,168 @@ describe("getReactivationCards — sentAt, janela e limite diário", () => {
 
     expect(ensureLeadFirstNameFromInstagramMock).toHaveBeenCalledWith(expect.objectContaining({ id: "lead-1" }), "enc-token");
     expect(cards[0]!.message).toBe("Oi, João!");
+  });
+});
+
+// Cards "fixos" da Clínica Demo VEXO (pedido explícito — usados em vídeos
+// e treinamentos, precisam ficar sempre visíveis e funcionando de
+// verdade). Marca reaproveitada de ReactivationShowcaseBackup (nenhuma
+// migration nova) — ver getPinnedReactivationCandidates, reactivation.ts.
+describe("getReactivationCards — cards fixos da Clínica Demo VEXO", () => {
+  beforeEach(() => {
+    reactivationConfigFindUniqueMock.mockReset();
+    reactivationMessagesConfigFindUniqueMock.mockReset();
+    appointmentFindManyMock.mockReset();
+    reactivationCardSlotFindManyMock.mockReset();
+    reactivationCardSlotUpsertMock.mockReset();
+    reactivationConfigUpsertMock.mockReset();
+    reactivationCardSlotCountMock.mockReset();
+    noShowCardSlotCountMock.mockReset();
+    leadFindManyMock.mockReset();
+    instagramAccountFindUniqueMock.mockReset();
+    ensureLeadFirstNameFromInstagramMock.mockReset();
+    reactivationShowcaseBackupFindManyMock.mockReset();
+    instagramAccountFindUniqueMock.mockResolvedValue(null);
+    reactivationCardSlotCountMock.mockResolvedValue(0);
+    noShowCardSlotCountMock.mockResolvedValue(0);
+    reactivationConfigFindUniqueMock.mockResolvedValue({ defaultPeriods: [30, 60], dailyWhatsappLimit: 15 });
+    reactivationMessagesConfigFindUniqueMock.mockResolvedValue(null);
+  });
+
+  // Item 3 (pedido explícito): "adicione teste que comprove" que a marca
+  // de fixo é ignorada em qualquer clínica que não a Demo — mesmo que,
+  // hipoteticamente, existisse uma linha em ReactivationShowcaseBackup
+  // pra ela (nunca deveria acontecer, mas o código não deve CONFIAR
+  // nisso — ver checagem explícita de clinicId em
+  // getPinnedReactivationCandidates).
+  it("clínica QUALQUER (não a Demo): ReactivationShowcaseBackup nem é consultada, mesmo que exista linha nela", async () => {
+    const scheduledAt = new Date("2020-01-01T12:00:00.000Z"); // MUITO fora de qualquer janela
+    const now = new Date("2026-06-01T12:00:00.000Z");
+
+    appointmentFindManyMock.mockResolvedValue([
+      { id: "appt-fora-da-janela", leadId: "lead-1", conversationId: "conv-1", scheduledAt, status: "CANCELLED", returnPeriodDays: 30, returnPeriodNone: false },
+    ]);
+    reactivationCardSlotFindManyMock.mockResolvedValue([]);
+    leadFindManyMock.mockResolvedValue([]);
+    // Mesmo que, por engano, houvesse uma linha pra "clinic-1" aqui, a
+    // função nem deveria chegar a chamar findMany — ver asserção abaixo.
+    reactivationShowcaseBackupFindManyMock.mockResolvedValue([{ appointmentId: "appt-fora-da-janela" }]);
+
+    const cards = await getReactivationCards("clinic-1", now);
+
+    expect(reactivationShowcaseBackupFindManyMock).not.toHaveBeenCalled();
+    // CANCELLED + fora da janela, sem a marca de fixo valendo pra esta
+    // clínica: nenhum card — comportamento normal, intocado.
+    expect(cards).toEqual([]);
+  });
+
+  it("Clínica Demo, sem nenhum backup (nenhum card marcado como fixo ainda): comportamento 100% normal", async () => {
+    reactivationShowcaseBackupFindManyMock.mockResolvedValue([]);
+    const scheduledAt = new Date("2026-01-01T12:00:00.000Z");
+    const window30 = computeReturnContactWindow(scheduledAt, 30);
+    const now = window30.start;
+
+    appointmentFindManyMock.mockResolvedValue([
+      { id: "appt-1", leadId: "lead-1", conversationId: "conv-1", scheduledAt, status: "SCHEDULED", returnPeriodDays: 30, returnPeriodNone: false },
+    ]);
+    reactivationCardSlotFindManyMock.mockResolvedValue([]);
+    reactivationCardSlotUpsertMock.mockResolvedValue({});
+    leadFindManyMock.mockResolvedValue([
+      { id: "lead-1", name: "Fulana", igUsername: "fulana.ig", igScopedId: "ig-1", nameLookupAttempted: true, profilePictureUrl: null, phone: "11987654321" },
+    ]);
+
+    const cards = await getReactivationCards(DEMO_CLINIC_ID, now);
+
+    expect(cards).toHaveLength(1);
+  });
+
+  it("card fixo FORA da janela de ±3 dias (scheduledAt bem antigo): aparece mesmo assim", async () => {
+    reactivationShowcaseBackupFindManyMock.mockResolvedValue([{ appointmentId: "appt-fixo" }]);
+    const now = new Date("2026-06-01T12:00:00.000Z");
+    const scheduledAtAntigo = new Date("2020-01-01T12:00:00.000Z"); // prazo de 30 dias venceu há anos
+
+    appointmentFindManyMock
+      // 1ª chamada: getPinnedReactivationCandidates (releitura direta por id)
+      .mockResolvedValueOnce([{ id: "appt-fixo", leadId: "lead-1", scheduledAt: scheduledAtAntigo, returnPeriodDays: 30, returnPeriodNone: false }])
+      // 2ª chamada: appointments normais da clínica (nenhum aqui — só o fixo existe)
+      .mockResolvedValueOnce([]);
+    reactivationCardSlotFindManyMock.mockResolvedValue([{ appointmentId: "appt-fixo", thresholdDays: 30, slot: 1, sentAt: null }]);
+    leadFindManyMock.mockResolvedValue([
+      { id: "lead-1", name: "Paciente Fixo", igUsername: "paciente.fixo", igScopedId: "ig-1", nameLookupAttempted: true, profilePictureUrl: null, phone: "11987654321" },
+    ]);
+
+    const cards = await getReactivationCards(DEMO_CLINIC_ID, now);
+
+    expect(cards).toHaveLength(1);
+    expect(cards[0]!.appointmentId).toBe("appt-fixo");
+    expect(cards[0]!.thresholdDays).toBe(30);
+  });
+
+  it('card fixo CANCELLED: aparece mesmo assim (status nunca é checado pro caminho fixo)', async () => {
+    reactivationShowcaseBackupFindManyMock.mockResolvedValue([{ appointmentId: "appt-fixo" }]);
+    const now = new Date("2026-06-01T12:00:00.000Z");
+
+    appointmentFindManyMock
+      .mockResolvedValueOnce([{ id: "appt-fixo", leadId: "lead-1", scheduledAt: now, returnPeriodDays: 30, returnPeriodNone: false }])
+      // normal query já filtra CANCELLED fora da seleção de qualquer forma,
+      // mas nem chega a importar: appt-fixo nunca passa por ali.
+      .mockResolvedValueOnce([{ id: "appt-fixo", leadId: "lead-1", conversationId: "conv-1", scheduledAt: now, status: "CANCELLED", returnPeriodDays: 30, returnPeriodNone: false }]);
+    reactivationCardSlotFindManyMock.mockResolvedValue([{ appointmentId: "appt-fixo", thresholdDays: 30, slot: 1, sentAt: null }]);
+    leadFindManyMock.mockResolvedValue([
+      { id: "lead-1", name: "Paciente Fixo", igUsername: "paciente.fixo", igScopedId: "ig-1", nameLookupAttempted: true, profilePictureUrl: null, phone: "11987654321" },
+    ]);
+
+    const cards = await getReactivationCards(DEMO_CLINIC_ID, now);
+
+    expect(cards).toHaveLength(1);
+    expect(cards[0]!.appointmentId).toBe("appt-fixo");
+  });
+
+  it("card fixo cujo lead ganhou um agendamento mais novo depois: o fixo continua aparecendo, sem duplicar", async () => {
+    reactivationShowcaseBackupFindManyMock.mockResolvedValue([{ appointmentId: "appt-fixo-antigo" }]);
+    const now = new Date("2026-06-01T12:00:00.000Z");
+    const scheduledAtAntigo = new Date("2025-01-01T12:00:00.000Z");
+    const scheduledAtNovo = new Date("2026-05-20T12:00:00.000Z"); // recente, ainda não completou prazo nenhum
+
+    appointmentFindManyMock
+      .mockResolvedValueOnce([{ id: "appt-fixo-antigo", leadId: "lead-1", scheduledAt: scheduledAtAntigo, returnPeriodDays: 30, returnPeriodNone: false }])
+      .mockResolvedValueOnce([
+        { id: "appt-fixo-antigo", leadId: "lead-1", conversationId: "conv-1", scheduledAt: scheduledAtAntigo, status: "SCHEDULED", returnPeriodDays: 30, returnPeriodNone: false },
+        { id: "appt-novo", leadId: "lead-1", conversationId: "conv-2", scheduledAt: scheduledAtNovo, status: "SCHEDULED", returnPeriodDays: 30, returnPeriodNone: false },
+      ]);
+    reactivationCardSlotFindManyMock.mockResolvedValue([{ appointmentId: "appt-fixo-antigo", thresholdDays: 30, slot: 1, sentAt: null }]);
+    leadFindManyMock.mockResolvedValue([
+      { id: "lead-1", name: "Paciente Fixo", igUsername: "paciente.fixo", igScopedId: "ig-1", nameLookupAttempted: true, profilePictureUrl: null, phone: "11987654321" },
+    ]);
+
+    const cards = await getReactivationCards(DEMO_CLINIC_ID, now);
+
+    // Só o card fixo aparece (appt-novo ainda não completou o prazo de 30
+    // dias até `now`, então nem entraria pela via normal de qualquer
+    // forma) — o importante aqui é que appt-fixo-antigo NÃO foi excluído
+    // por não ser mais "o agendamento mais recente do lead".
+    expect(cards).toHaveLength(1);
+    expect(cards[0]!.appointmentId).toBe("appt-fixo-antigo");
+  });
+
+  it("card fixo reflete sentAt do ReactivationCardSlot já existente — mesmo mecanismo de toggle dos cards reais", async () => {
+    reactivationShowcaseBackupFindManyMock.mockResolvedValue([{ appointmentId: "appt-fixo" }]);
+    const now = new Date("2026-06-01T12:00:00.000Z");
+    const sentAt = new Date("2026-05-01T12:00:00.000Z");
+
+    appointmentFindManyMock
+      .mockResolvedValueOnce([{ id: "appt-fixo", leadId: "lead-1", scheduledAt: now, returnPeriodDays: 30, returnPeriodNone: false }])
+      .mockResolvedValueOnce([]);
+    reactivationCardSlotFindManyMock.mockResolvedValue([{ appointmentId: "appt-fixo", thresholdDays: 30, slot: 1, sentAt }]);
+    leadFindManyMock.mockResolvedValue([
+      { id: "lead-1", name: "Paciente Fixo", igUsername: "paciente.fixo", igScopedId: "ig-1", nameLookupAttempted: true, profilePictureUrl: null, phone: "11987654321" },
+    ]);
+
+    const cards = await getReactivationCards(DEMO_CLINIC_ID, now);
+
+    expect(cards[0]!.sentAt).toEqual(sentAt);
+    // Reusa o slot já existente — nunca cria um novo via upsert.
+    expect(reactivationCardSlotUpsertMock).not.toHaveBeenCalled();
   });
 });
 
@@ -844,13 +1184,6 @@ describe("sendReactivationWhatsAppMessage — envio direto pelo VEXO", () => {
         lead: { id: "lead-1", name: "Fulana", igScopedId: "ig-1", nameLookupAttempted: true, phone: "11987654321" },
         clinic: {
           whatsappInstanceName: "clinic-1-instance",
-          reactivationConfig: {
-            message1: null,
-            message2: "Mensagem customizada da clínica",
-            message3: null,
-            message4: null,
-            message5: null,
-          },
         },
       },
       ...overrides,
@@ -866,6 +1199,7 @@ describe("sendReactivationWhatsAppMessage — envio direto pelo VEXO", () => {
     reactivationCardSlotCountMock.mockReset();
     noShowCardSlotCountMock.mockReset();
     reactivationConfigFindUniqueMock.mockReset();
+    reactivationMessagesConfigFindUniqueMock.mockReset();
     sendWhatsappMessageMock.mockReset();
     reactivationCardSlotFindFirstMock.mockResolvedValue(null); // sem envio anterior = sem rate limit, por padrão
     noShowCardSlotFindFirstMock.mockResolvedValue(null);
@@ -873,6 +1207,10 @@ describe("sendReactivationWhatsAppMessage — envio direto pelo VEXO", () => {
     reactivationCardSlotCountMock.mockResolvedValue(0); // abaixo do limite diário, por padrão
     noShowCardSlotCountMock.mockResolvedValue(0);
     reactivationConfigFindUniqueMock.mockResolvedValue({ dailyWhatsappLimit: 15 });
+    // slot=2 (ver fakeSlot acima) -> message2 — mesmo texto que estava
+    // embutido em fakeSlot antes desta rodada (GLOBAL agora, não mais
+    // lido de appointment.clinic.reactivationConfig).
+    reactivationMessagesConfigFindUniqueMock.mockResolvedValue({ message2: "Mensagem customizada da clínica" });
   });
 
   it("sucesso: reserva, manda o texto certo (da config+slot, nunca do cliente) e marca enviado", async () => {
@@ -988,17 +1326,8 @@ describe("sendReactivationWhatsAppMessage — envio direto pelo VEXO", () => {
   });
 
   it("mensagem customizada com {{primeiro_nome}}/{{data_horario}}: renderiza antes de mandar de verdade", async () => {
-    reactivationCardSlotFindUniqueMock.mockResolvedValue(
-      fakeSlot({
-        appointment: {
-          ...fakeSlot().appointment,
-          clinic: {
-            ...fakeSlot().appointment.clinic,
-            reactivationConfig: { message1: null, message2: "Oi, {{primeiro_nome}}! Em {{data_horario}}.", message3: null, message4: null, message5: null },
-          },
-        },
-      })
-    );
+    reactivationCardSlotFindUniqueMock.mockResolvedValue(fakeSlot());
+    reactivationMessagesConfigFindUniqueMock.mockResolvedValue({ message2: "Oi, {{primeiro_nome}}! Em {{data_horario}}." });
     sendWhatsappMessageMock.mockResolvedValue(undefined);
 
     await sendReactivationWhatsAppMessage("appt-1", 90, new Date("2026-04-01T12:00:00.000Z"));

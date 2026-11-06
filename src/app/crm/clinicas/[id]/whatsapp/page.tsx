@@ -1,7 +1,13 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireInternalSession } from "@/lib/session";
-import { ensureWhatsappQrForClinic, refreshWhatsappStatus, type WhatsappConnectionState } from "@/lib/whatsapp-connection";
+import {
+  ensureWhatsappQrForClinic,
+  refreshWhatsappStatus,
+  describeWhatsappConnectionError,
+  WHATSAPP_RECOVERED_MESSAGE,
+  type WhatsappConnectionState,
+} from "@/lib/whatsapp-connection";
 import { WhatsappConnectionPanel } from "@/components/WhatsappConnectionPanel";
 import {
   disconnectWhatsappAction,
@@ -24,21 +30,32 @@ export default async function ClinicWhatsappPage({ params }: { params: { id: str
   try {
     status = await refreshWhatsappStatus(clinic.id);
   } catch (err) {
-    statusError = err instanceof Error ? err.message : "Erro ao consultar status na Evolution API.";
+    console.error("[vexo] Falha ao consultar status do WhatsApp na Evolution API:", err);
+    statusError = describeWhatsappConnectionError(err);
   }
 
   let instanceName = clinic.whatsappInstanceName ?? clinic.slug;
   let qrBase64: string | null = null;
+  let recoveredMessage: string | null = null;
 
   // QR expira em segundos — só busca (e só falha visivelmente) quando ainda
-  // não está conectado; já conectado não precisa de QR nenhum.
+  // não está conectado; já conectado não precisa de QR nenhum. Item "d":
+  // nunca mostra o erro bruto (ver describeWhatsappConnectionError,
+  // whatsapp-connection.ts) — o erro real vai pro log do servidor, só o
+  // texto em português chega no card. `recovered: true` (a instância
+  // estava quebrada e ensureWhatsappQrForClinic já se recuperou sozinho,
+  // ver pedido explícito item "a") avisa a pessoa num texto informativo
+  // separado (recoveredMessage, estilo neutro) — não é um erro, não deve
+  // parecer um.
   if (status !== "open") {
     try {
       const qr = await ensureWhatsappQrForClinic(clinic.id);
       instanceName = qr.instanceName;
       qrBase64 = qr.qrBase64;
+      if (qr.recovered) recoveredMessage = WHATSAPP_RECOVERED_MESSAGE;
     } catch (err) {
-      statusError = statusError ?? (err instanceof Error ? err.message : "Erro ao gerar QR code.");
+      console.error("[vexo] Falha ao gerar QR code do WhatsApp na Evolution API:", err);
+      statusError = statusError ?? describeWhatsappConnectionError(err);
     }
   }
 
@@ -51,6 +68,7 @@ export default async function ClinicWhatsappPage({ params }: { params: { id: str
         status={status}
         qrBase64={qrBase64}
         statusError={statusError}
+        recoveredMessage={recoveredMessage}
         refreshHref={`/crm/clinicas/${clinic.id}/whatsapp`}
         description="Notifica a secretária quando um lead precisa de atendimento humano."
         disconnectAction={disconnectWhatsappAction.bind(null, clinic.id)}

@@ -34,6 +34,7 @@ import {
 } from "@/lib/reactivation";
 import { toggleNoShowCardSent, sendNoShowCardWhatsAppMessage } from "@/lib/no-show-cards";
 import { toggleHotLeadCardSent, type ToggleHotLeadCardSentResult } from "@/lib/hot-lead-cards";
+import { toggleNeverScheduledCardSent } from "@/lib/never-scheduled-cards";
 
 const CONNECTION_LINK_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 dias
 
@@ -46,27 +47,107 @@ function slugify(name: string): string {
     .replace(/(^-|-$)/g, "");
 }
 
+// Snapshot opcional (item 1 do pedido, "copiar configurações de outra
+// clínica pra acelerar o setup") — campo "Copiar configurações de:" na
+// tela Nova clínica (clinicas/nova/page.tsx), padrão "Nenhuma".
+//
+// O QUE É COPIADO (configurações EDITÁVEIS, nunca dado específico — pedido
+// explícito, itens 2/3):
+//   - aiSystemPrompt (Clinic): prompt da IA.
+//   - firstBandDelaySeconds (Clinic): delay "até 1h" do Agente de IA —
+//     também é "configuração do agente" (pedido explícito "e demais
+//     configurações do agente"), não dado específico.
+//   - ReminderConfig: hoursBefore (horários) + firstMessageTemplate/
+//     secondMessageTemplate (textos dos 2 lembretes).
+//   - ReactivationConfig: availablePeriods/defaultPeriods (prazos de
+//     retorno) + dailyWhatsappLimit (limite diário Reativação+Faltou).
+//     NUNCA message1-5 nem sequenceCounter — ver "o que NÃO é copiado"
+//     abaixo.
+//   - HotLeadConfig: dailyLimit (limite diário do Quente — "tentativas do
+//     card Quente" do pedido é a cadência fixa 2/4/15 dias, código, não
+//     dado por clínica; o que existe de configurável por clínica aqui é
+//     só o limite diário). NUNCA stepXMessageY nem stepXSequenceCounter.
+//
+// O QUE NÃO É COPIADO (pedido explícito, item 3, + achados meus — ver
+// resposta dada ao pedido original pra essa lista completa explicada):
+//   - Dado específico da clínica: name/slug, address, clientWhatsappNumber,
+//     active (sempre nasce true, o default do schema), confirmationVideoUrl/
+//     confirmationVideoCaption, attendanceTipMessage/attendanceFinalMessage
+//     (mesmo texto/sequência do vídeo de confirmação — mesma categoria,
+//     mesmo tratamento), Briefing/BriefingLink.
+//   - Conexões/credenciais: InstagramAccount, GoogleCalendarAccount,
+//     whatsappInstanceName (cada clínica recebe o PRÓPRIO, derivado do seu
+//     slug, nunca o da origem — instância da Evolution é por clínica, não
+//     reaproveitável), ConnectionLink/ConnectionBundle, ClientPanelLink,
+//     User (login do painel do cliente).
+//   - Dado específico/histórico: Lead, Conversation, Appointment, Message,
+//     FollowUpLog, ApproachLog, ResultPhoto (fotos reais de procedimentos
+//     da clínica de origem), WeeklySummary, ReactivationShowcaseBackup (só
+//     existe pra Clínica Demo).
+//   - Contadores de rotação (ReactivationConfig.sequenceCounter,
+//     HotLeadConfig.stepXSequenceCounter): estado de progresso de rodízio,
+//     não configuração — a clínica nova começa do zero.
+//   - message1-5/stepXMessageY (ReactivationConfig/HotLeadConfig): inertes
+//     desde que os textos de Reativação/Quente viraram GLOBAIS (ver
+//     ReactivationMessagesConfig/HotLeadMessagesConfig) — não haveria o
+//     que copiar aí mesmo.
+//   - Já são globais, não precisam de cópia nenhuma: os 4 textos dos cards
+//     do Painel (Faltou/Não agendou/Reativação/Quente) e as 2 sequências
+//     de Follow-up (Parou de responder/Não compareceu) — valem pra todas
+//     as clínicas, inclusive a nova, sem nenhuma ação aqui.
 export async function createClinic(formData: FormData) {
   await requireInternalSession();
 
   const name = String(formData.get("name") ?? "").trim();
   if (!name) throw new Error("Nome da clínica é obrigatório.");
   const address = String(formData.get("address") ?? "").trim() || null;
+  const copyFromClinicId = String(formData.get("copyFromClinicId") ?? "").trim() || null;
 
   const slug = slugify(name) + "-" + Math.random().toString(36).slice(2, 6);
+
+  // null quando "Nenhuma" (padrão) ou se o id escolhido não existir mais
+  // (corrida rara — a lista vem da mesma consulta que populou o <select>)
+  // — nesse caso cai de volta pro comportamento de sempre, sem erro.
+  const source = copyFromClinicId
+    ? await prisma.clinic.findUnique({
+        where: { id: copyFromClinicId },
+        select: {
+          aiSystemPrompt: true,
+          firstBandDelaySeconds: true,
+          reminderConfig: { select: { hoursBefore: true, firstMessageTemplate: true, secondMessageTemplate: true } },
+          reactivationConfig: { select: { availablePeriods: true, defaultPeriods: true, dailyWhatsappLimit: true } },
+          hotLeadConfig: { select: { dailyLimit: true } },
+        },
+      })
+    : null;
 
   const clinic = await prisma.clinic.create({
     data: {
       name,
       slug,
       address,
-      // Nome padrão da instância na Evolution API — pode ser trocado antes
-      // do primeiro pareamento em /crm/clinicas/[id]/whatsapp (ex. pra
-      // reaproveitar uma instância já validada).
+      // Nome padrão da instância na Evolution API — SEMPRE derivado do
+      // slug desta clínica nova, nunca copiado da origem (uma instância
+      // WhatsApp é por clínica, não reaproveitável — ver "conexões" acima).
+      // Pode ser trocado antes do primeiro pareamento em
+      // /crm/clinicas/[id]/whatsapp (ex. pra reaproveitar uma instância já
+      // validada).
       whatsappInstanceName: slug,
       pilotStartedAt: new Date(),
       pilotEndsAt: new Date(Date.now() + 21 * 24 * 60 * 60 * 1000),
-      reminderConfig: { create: { hoursBefore: [24, 3] } },
+      ...(source?.aiSystemPrompt != null ? { aiSystemPrompt: source.aiSystemPrompt } : {}),
+      ...(source ? { firstBandDelaySeconds: source.firstBandDelaySeconds } : {}),
+      // hoursBefore sempre criado (comportamento de sempre, com ou sem
+      // snapshot) — só os valores mudam quando há origem com reminderConfig
+      // próprio; sem origem (ou origem sem reminderConfig ainda salvo), cai
+      // no default de sempre [24, 3].
+      reminderConfig: {
+        create: source?.reminderConfig
+          ? { ...source.reminderConfig }
+          : { hoursBefore: [24, 3] },
+      },
+      ...(source?.reactivationConfig ? { reactivationConfig: { create: { ...source.reactivationConfig } } } : {}),
+      ...(source?.hotLeadConfig ? { hotLeadConfig: { create: { ...source.hotLeadConfig } } } : {}),
     },
   });
 
@@ -323,40 +404,19 @@ export async function updateClinicDailyWhatsappLimit(clinicId: string, formData:
   revalidatePath(`/crm/clinicas/${clinicId}/automacoes`);
 }
 
-// Conjunto ÚNICO de até 5 mensagens — usado tanto no envio de WhatsApp
-// quanto no fallback de Instagram (pedido explícito, ver reactivation.ts).
-export async function updateClinicReactivationMessages(clinicId: string, formData: FormData) {
-  await requireInternalSession();
-
-  const message1 = String(formData.get("message1") ?? "").trim() || null;
-  const message2 = String(formData.get("message2") ?? "").trim() || null;
-  const message3 = String(formData.get("message3") ?? "").trim() || null;
-  const message4 = String(formData.get("message4") ?? "").trim() || null;
-  const message5 = String(formData.get("message5") ?? "").trim() || null;
-
-  await prisma.reactivationConfig.upsert({
-    where: { clinicId },
-    create: { clinicId, message1, message2, message3, message4, message5 },
-    update: { message1, message2, message3, message4, message5 },
-  });
-
-  revalidatePath(`/crm/clinicas/${clinicId}/automacoes`);
-}
-
 // Botão "Retorno" do card de agendamento (ver RetornoButton.tsx) — grava
-// só o número de dias (ou "none" pra "Sem retorno") no próprio
-// Appointment, não em ReactivationConfig (é por AGENDAMENTO, não por
-// clínica). Validação do valor aqui (mesma lista fixa de
-// isValidReturnPeriodDays) — setAppointmentReturnPeriod (appointments.ts)
-// só decide SE a troca pode acontecer agora (trava: depois de enviado,
-// não muda mais).
+// só o número de dias no próprio Appointment, não em ReactivationConfig (é
+// por AGENDAMENTO, não por clínica). Validação do valor aqui (mesma lista
+// fixa de isValidReturnPeriodDays) — setAppointmentReturnPeriod
+// (appointments.ts) só decide SE a troca pode acontecer agora (trava:
+// depois de enviado, não muda mais).
 export async function setAppointmentReturnPeriodAction(
   appointmentId: string,
-  selection: number | "none" | "unset"
+  selection: number | "unset"
 ): Promise<SetAppointmentReturnPeriodResult> {
   await requireInternalSession();
 
-  if (selection !== "none" && selection !== "unset" && !isValidReturnPeriodDays(selection)) {
+  if (selection !== "unset" && !isValidReturnPeriodDays(selection)) {
     throw new Error("Prazo de retorno inválido.");
   }
 
@@ -368,12 +428,14 @@ export async function setAppointmentReturnPeriodAction(
   return result;
 }
 
-// Card "Quente" (ver hot-lead-cards.ts) — mesmo padrão das ações acima:
-// upsert PARCIAL, nunca toca nos contadores de rotação (um por passo,
-// preserva a posição da rotação de cada um). dailyLimit sempre válido
-// (mínimo 1) — zero desligaria o card silenciosamente sem nenhuma forma de
-// a clínica saber por que nenhum card aparece.
-export async function updateClinicHotLeadConfig(clinicId: string, formData: FormData) {
+// Card "Quente" (ver hot-lead-cards.ts) — AJUSTE (pedido explícito,
+// "unificar os textos... numa única tela GLOBAL"): os 9 textos saíram
+// daqui (agora em HotLeadMessagesConfig, editados em Follow-up → "Cards
+// do Painel" — ver updatePanelCardSettings, follow-up/actions.ts); esta
+// action ficou só com o que continua POR CLÍNICA. dailyLimit sempre
+// válido (mínimo 1) — zero desligaria o card silenciosamente sem nenhuma
+// forma de a clínica saber por que nenhum card aparece.
+export async function updateClinicHotLeadDailyLimit(clinicId: string, formData: FormData) {
   await requireInternalSession();
 
   const dailyLimit = parseInt(String(formData.get("dailyLimit") ?? ""), 10);
@@ -381,27 +443,10 @@ export async function updateClinicHotLeadConfig(clinicId: string, formData: Form
     throw new Error("Informe um limite diário válido (1 ou mais).");
   }
 
-  function field(name: string): string | null {
-    return String(formData.get(name) ?? "").trim() || null;
-  }
-
-  const data = {
-    dailyLimit,
-    step1Message1: field("step1Message1"),
-    step1Message2: field("step1Message2"),
-    step1Message3: field("step1Message3"),
-    step2Message1: field("step2Message1"),
-    step2Message2: field("step2Message2"),
-    step2Message3: field("step2Message3"),
-    step3Message1: field("step3Message1"),
-    step3Message2: field("step3Message2"),
-    step3Message3: field("step3Message3"),
-  };
-
   await prisma.hotLeadConfig.upsert({
     where: { clinicId },
-    create: { clinicId, ...data },
-    update: data,
+    create: { clinicId, dailyLimit },
+    update: { dailyLimit },
   });
 
   revalidatePath(`/crm/clinicas/${clinicId}/automacoes`);
@@ -747,6 +792,16 @@ export async function toggleHotLeadCardSentAction(conversationId: string, step: 
   await requireInternalSession();
   const result = await toggleHotLeadCardSent(conversationId, step);
   if (result.clinicId) revalidatePath(`/crm/clinicas/${result.clinicId}`);
+  return result;
+}
+
+// Card "Não agendou" (ver never-scheduled-cards.ts) — mesmo padrão exato
+// de toggleHotLeadCardSentAction acima, só uma action (toggle), nunca
+// envia de verdade pelo VEXO.
+export async function toggleNeverScheduledCardSentAction(conversationId: string, step: number) {
+  await requireInternalSession();
+  const result = await toggleNeverScheduledCardSent(conversationId, step);
+  if (result?.clinicId) revalidatePath(`/crm/clinicas/${result.clinicId}`);
   return result;
 }
 

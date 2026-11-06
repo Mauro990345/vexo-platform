@@ -3,6 +3,7 @@ import { mergePanelCards, reactivationCardReason, reactivationCardReasonShort, t
 import type { ReactivationCard } from "./reactivation";
 import type { NoShowCard } from "./no-show-cards";
 import type { HotLeadCard } from "./hot-lead-cards";
+import type { NeverScheduledCard } from "./never-scheduled-cards";
 
 function hotLeadCard(overrides: Partial<HotLeadCard> = {}): HotLeadCard {
   return {
@@ -65,6 +66,24 @@ function reactivationCard(overrides: Partial<ReactivationCard> = {}): Reactivati
   };
 }
 
+function neverScheduledCard(overrides: Partial<NeverScheduledCard> = {}): NeverScheduledCard {
+  return {
+    conversationId: "conv-3",
+    step: 1,
+    leadId: "lead-4",
+    name: "Daniela",
+    igUsername: "daniela.ig",
+    profilePictureUrl: null,
+    message: "Oi, Daniela!",
+    instagramDmLink: "https://ig.me/m/daniela.ig",
+    instagramProfileLink: "https://www.instagram.com/daniela.ig/",
+    reason: "Sem agendamento há 31 dias · mensagem 1 de 2",
+    anchorAt: new Date(),
+    sentAt: null,
+    ...overrides,
+  };
+}
+
 describe("reactivationCardReason", () => {
   it('"120 dias após o procedimento" (exemplo do pedido) — intocado, serve o desktop', () => {
     expect(reactivationCardReason(120)).toBe("120 dias após o procedimento");
@@ -104,21 +123,22 @@ describe("truncateNameToTwoWords", () => {
 });
 
 describe("mergePanelCards", () => {
-  it("ordena Quente, Faltou, Reativação, nessa ordem fixa", () => {
+  it("ordena Quente, Faltou, Reativação, Não agendou, nessa ordem fixa", () => {
     const merged = mergePanelCards({
       hotLeadCards: [hotLeadCard()],
       noShowCards: [noShowCard()],
       reactivationCards: [reactivationCard()],
+      neverScheduledCards: [neverScheduledCard()],
     });
 
-    expect(merged.map((c) => c.kind)).toEqual(["HOT_LEAD", "NO_SHOW", "REACTIVATION"]);
+    expect(merged.map((c) => c.kind)).toEqual(["HOT_LEAD", "NO_SHOW", "REACTIVATION", "NEVER_SCHEDULED"]);
   });
 
   it("preserva a ordem interna de cada lista de origem (já vem ordenada por urgência)", () => {
     const merged = mergePanelCards({
       hotLeadCards: [hotLeadCard({ conversationId: "conv-a" }), hotLeadCard({ conversationId: "conv-b" })],
       noShowCards: [],
-      reactivationCards: [],
+      reactivationCards: [], neverScheduledCards: [],
     });
     expect(merged.map((c) => c.cardKey)).toEqual(["hot:conv-a:1", "hot:conv-b:1"]);
   });
@@ -127,7 +147,7 @@ describe("mergePanelCards", () => {
     const merged = mergePanelCards({
       hotLeadCards: [hotLeadCard({ conversationId: "conv-a", step: 2 })],
       noShowCards: [],
-      reactivationCards: [],
+      reactivationCards: [], neverScheduledCards: [],
     });
     expect(merged[0]!.cardKey).toBe("hot:conv-a:2");
     expect((merged[0]!.actionKey as { kind: "HOT_LEAD"; conversationId: string; step: number }).step).toBe(2);
@@ -137,7 +157,7 @@ describe("mergePanelCards", () => {
     const merged = mergePanelCards({
       hotLeadCards: [hotLeadCard({ dailyLimitReached: true })],
       noShowCards: [],
-      reactivationCards: [],
+      reactivationCards: [], neverScheduledCards: [],
     });
     expect(merged[0]!.disabledReason).toBe("Limite diário atingido");
   });
@@ -146,18 +166,18 @@ describe("mergePanelCards", () => {
     const merged = mergePanelCards({
       hotLeadCards: [hotLeadCard({ dailyLimitReached: true, sentAt: new Date() })],
       noShowCards: [],
-      reactivationCards: [],
+      reactivationCards: [], neverScheduledCards: [],
     });
     expect(merged[0]!.disabledReason).toBeUndefined();
   });
 
   it("card de Faltou no limite diário de WhatsApp (sem ainda ter sido marcado) vem com disabledReason", () => {
-    const merged = mergePanelCards({ hotLeadCards: [], noShowCards: [noShowCard({ dailyLimitReached: true })], reactivationCards: [] });
+    const merged = mergePanelCards({ hotLeadCards: [], noShowCards: [noShowCard({ dailyLimitReached: true })], reactivationCards: [], neverScheduledCards: [] });
     expect(merged[0]!.disabledReason).toBe("Limite diário atingido");
   });
 
   it("card de Reativação no limite diário de WhatsApp (sem ainda ter sido marcado) vem com disabledReason", () => {
-    const merged = mergePanelCards({ hotLeadCards: [], noShowCards: [], reactivationCards: [reactivationCard({ dailyLimitReached: true })] });
+    const merged = mergePanelCards({ hotLeadCards: [], noShowCards: [], reactivationCards: [reactivationCard({ dailyLimitReached: true })], neverScheduledCards: [] });
     expect(merged[0]!.disabledReason).toBe("Limite diário atingido");
   });
 
@@ -165,25 +185,25 @@ describe("mergePanelCards", () => {
     const merged = mergePanelCards({
       hotLeadCards: [],
       noShowCards: [noShowCard({ dailyLimitReached: true, sentAt: new Date() })],
-      reactivationCards: [reactivationCard({ dailyLimitReached: true, sentAt: new Date() })],
+      reactivationCards: [reactivationCard({ dailyLimitReached: true, sentAt: new Date() })], neverScheduledCards: [],
     });
     expect(merged.every((c) => c.disabledReason === undefined)).toBe(true);
   });
 
   it("sem limite diário atingido: nenhum dos três tipos fica desabilitado", () => {
-    const merged = mergePanelCards({ hotLeadCards: [hotLeadCard()], noShowCards: [noShowCard()], reactivationCards: [reactivationCard()] });
+    const merged = mergePanelCards({ hotLeadCards: [hotLeadCard()], noShowCards: [noShowCard()], reactivationCards: [reactivationCard()], neverScheduledCards: [] });
     expect(merged.every((c) => c.disabledReason === undefined)).toBe(true);
   });
 
   it("listas vazias: lista vazia", () => {
-    expect(mergePanelCards({ hotLeadCards: [], noShowCards: [], reactivationCards: [] })).toEqual([]);
+    expect(mergePanelCards({ hotLeadCards: [], noShowCards: [], reactivationCards: [], neverScheduledCards: [] })).toEqual([]);
   });
 
   it('reasonShort do Quente: só a categoria, sem "· há N dias · passo X de Y" (pedido explícito, só celular)', () => {
     const merged = mergePanelCards({
       hotLeadCards: [hotLeadCard({ category: "horario", reason: "Perguntou sobre horário · há 6 dias · passo 1 de 3" })],
       noShowCards: [],
-      reactivationCards: [],
+      reactivationCards: [], neverScheduledCards: [],
     });
     expect(merged[0]!.reasonShort).toBe("Perguntou sobre horário");
     expect(merged[0]!.reason).toBe("Perguntou sobre horário · há 6 dias · passo 1 de 3"); // reason (desktop) intocado
@@ -193,7 +213,7 @@ describe("mergePanelCards", () => {
     const merged = mergePanelCards({
       hotLeadCards: [hotLeadCard({ category: "preco_endereco" })],
       noShowCards: [],
-      reactivationCards: [],
+      reactivationCards: [], neverScheduledCards: [],
     });
     expect(merged[0]!.reasonShort).toBe("Perguntou preço/endereço");
   });
@@ -202,7 +222,7 @@ describe("mergePanelCards", () => {
     const merged = mergePanelCards({
       hotLeadCards: [],
       noShowCards: [noShowCard({ reason: "Faltou há 3 dias · mensagem 1 de 2" })],
-      reactivationCards: [],
+      reactivationCards: [], neverScheduledCards: [],
     });
     expect(merged[0]!.reasonShort).toBe("Faltou há 3 dias · mensagem 1 de 2");
     expect(merged[0]!.reasonShort).toBe(merged[0]!.reason);
@@ -212,9 +232,52 @@ describe("mergePanelCards", () => {
     const merged = mergePanelCards({
       hotLeadCards: [],
       noShowCards: [],
-      reactivationCards: [reactivationCard({ thresholdDays: 90 })],
+      reactivationCards: [reactivationCard({ thresholdDays: 90 })], neverScheduledCards: [],
     });
     expect(merged[0]!.reasonShort).toBe("90 dias após");
     expect(merged[0]!.reason).toBe("90 dias após o procedimento"); // reason (desktop) intocado
+  });
+
+  it('"Não agendou": canal sempre INSTAGRAM, nunca WhatsApp (pedido explícito)', () => {
+    const merged = mergePanelCards({
+      hotLeadCards: [],
+      noShowCards: [],
+      reactivationCards: [],
+      neverScheduledCards: [neverScheduledCard()],
+    });
+    expect(merged[0]!.channel).toBe("INSTAGRAM");
+    expect(merged[0]!.whatsappLink).toBeNull();
+  });
+
+  it('cardKey do "Não agendou" inclui conversationId e o passo (D30/D60)', () => {
+    const merged = mergePanelCards({
+      hotLeadCards: [],
+      noShowCards: [],
+      reactivationCards: [],
+      neverScheduledCards: [neverScheduledCard({ conversationId: "conv-x", step: 2 })],
+    });
+    expect(merged[0]!.cardKey).toBe("never-scheduled:conv-x:2");
+    expect(merged[0]!.actionKey).toEqual({ kind: "NEVER_SCHEDULED", conversationId: "conv-x", step: 2 });
+  });
+
+  it('reasonShort do "Não agendou": igual ao reason completo (mesmo padrão do Faltou, nada a encurtar)', () => {
+    const merged = mergePanelCards({
+      hotLeadCards: [],
+      noShowCards: [],
+      reactivationCards: [],
+      neverScheduledCards: [neverScheduledCard({ reason: "Sem agendamento há 61 dias · mensagem 2 de 2" })],
+    });
+    expect(merged[0]!.reasonShort).toBe("Sem agendamento há 61 dias · mensagem 2 de 2");
+    expect(merged[0]!.reasonShort).toBe(merged[0]!.reason);
+  });
+
+  it('"Não agendou" nunca vem com disabledReason (sem limite diário, não pedido)', () => {
+    const merged = mergePanelCards({
+      hotLeadCards: [],
+      noShowCards: [],
+      reactivationCards: [],
+      neverScheduledCards: [neverScheduledCard()],
+    });
+    expect(merged[0]!.disabledReason).toBeUndefined();
   });
 });
