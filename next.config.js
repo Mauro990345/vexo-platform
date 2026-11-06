@@ -24,21 +24,37 @@ const nextConfig = {
       dynamic: 0,
     },
   },
-  // Cache-Control explícito pra todo /crm/* — reforço defensivo além do
-  // `export const dynamic = "force-dynamic"` de cada página (que já devia
-  // ser suficiente pro Next não deixar CACHEAR essas respostas) e do
-  // staleTimes acima (cache do CLIENTE). Isso aqui cobre uma 3ª camada
-  // possível: um proxy/CDN NA FRENTE do Next (ex: edge da Railway) que não
-  // respeite os headers de cache que o Next já manda por padrão pra rota
-  // dinâmica, e sirva uma resposta HTML antiga em cache pra requisição
-  // seguinte — cenário investigado depois de confirmar que nem o código
-  // (mesma fonte gerando fundo+etiqueta) nem o deploy (commit mais recente
-  // já confirmadamente ativo) explicam um bug de fundo/etiqueta
-  // desencontrados reproduzido de novo em produção.
+  // Cache-Control explícito pra todo /crm/* e /dashboard/* — reforço
+  // defensivo além do `export const dynamic = "force-dynamic"` de cada
+  // página (que já devia ser suficiente pro Next não deixar CACHEAR essas
+  // respostas) e do staleTimes acima (cache do CLIENTE). Isso aqui cobre
+  // uma 3ª camada possível: um proxy/CDN NA FRENTE do Next (ex: edge da
+  // Railway) que não respeite os headers de cache que o Next já manda por
+  // padrão pra rota dinâmica, e sirva uma resposta HTML antiga em cache
+  // pra requisição seguinte — cenário investigado depois de confirmar que
+  // nem o código (mesma fonte gerando fundo+etiqueta) nem o deploy
+  // (commit mais recente já confirmadamente ativo) explicam um bug de
+  // fundo/etiqueta desencontrados reproduzido de novo em produção.
+  //
+  // /dashboard/* adicionado numa rodada seguinte (pedido explícito, bug
+  // "aba Bônus aparece no celular mas não no computador"): mesma causa
+  // raiz, só que faltava cobrir /dashboard/* — a aba "Bônus Full Face"
+  // (Painel do cliente, ClientPanelView.tsx) só depende de
+  // Clinic.fullFaceBonusEnabled, sem NENHUMA condição de largura de tela
+  // envolvida; o que diferenciava celular de computador era qual dos dois
+  // tinha uma resposta de /dashboard em cache de ANTES do interruptor ser
+  // ligado — sem este header, o proxy podia continuar servindo essa
+  // versão antiga pra um dos dois só porque bateu nele primeiro.
   async headers() {
     return [
       {
         source: "/crm/:path*",
+        headers: [
+          { key: "Cache-Control", value: "no-store, must-revalidate" },
+        ],
+      },
+      {
+        source: "/dashboard/:path*",
         headers: [
           { key: "Cache-Control", value: "no-store, must-revalidate" },
         ],
