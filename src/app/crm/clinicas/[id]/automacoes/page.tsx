@@ -121,6 +121,22 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
                     </p>
                   </div>
 
+                  <div>
+                    <label className="flex items-center gap-2 text-xs">
+                      <input
+                        type="checkbox"
+                        name="fullFaceBonusEnabled"
+                        defaultChecked={clinic.fullFaceBonusEnabled}
+                        className="rounded border-vexo-border"
+                      />
+                      Bônus Full Face
+                    </label>
+                    <p className="mt-1 text-caption text-vexo-muted">
+                      Libera a aba "Bônus Full Face" (guia de vendas em 7 passos) no Painel desta
+                      clínica. Desligar só esconde a aba — nada é apagado.
+                    </p>
+                  </div>
+
                   <button
                     type="submit"
                     className="rounded-lg border border-vexo-accent px-2.5 py-1.5 text-xs font-medium text-vexo-accent hover:bg-vexo-accent/10"
