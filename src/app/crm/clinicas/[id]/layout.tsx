@@ -6,6 +6,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { AppShell } from "@/components/AppShell";
 import { buildClinicNavGroups } from "@/components/clinic-nav";
+import { ClinicPalettePreview } from "@/components/ClinicPalettePreview";
 
 // Sidebar de UMA clínica específica — troca completamente em relação ao
 // CRM global (ver crm/(global)/layout.tsx): Pipeline, Follow-up, WhatsApp,
@@ -28,20 +29,22 @@ export default async function ClinicLayout({
   if (!clinic) notFound();
 
   return (
-    <AppShell
-      userLabel={`${session?.user.name} · ${session?.user.role === "INTERNAL_ADMIN" ? "Admin" : "Equipe"}`}
-      navGroups={buildClinicNavGroups(clinic.id)}
-      contextHeader={
-        <div className="rounded-lg bg-vexo-surface2 px-2 py-1.5">
-          <Link href="/crm" className="flex items-center gap-1 text-card text-vexo-muted hover:text-vexo-fg">
-            <ChevronLeft className="h-3 w-3 shrink-0" strokeWidth={2} />
-            Contas
-          </Link>
-          <p className="mt-0.5 truncate text-xs font-medium">{clinic.name}</p>
-        </div>
-      }
-    >
-      {children}
-    </AppShell>
+    <ClinicPalettePreview clinicId={clinic.id}>
+      <AppShell
+        userLabel={`${session?.user.name} · ${session?.user.role === "INTERNAL_ADMIN" ? "Admin" : "Equipe"}`}
+        navGroups={buildClinicNavGroups(clinic.id)}
+        contextHeader={
+          <div className="rounded-lg bg-vexo-surface2 px-2 py-1.5">
+            <Link href="/crm" className="flex items-center gap-1 text-card text-vexo-muted hover:text-vexo-fg">
+              <ChevronLeft className="h-3 w-3 shrink-0" strokeWidth={2} />
+              Contas
+            </Link>
+            <p className="mt-0.5 truncate text-xs font-medium">{clinic.name}</p>
+          </div>
+        }
+      >
+        {children}
+      </AppShell>
+    </ClinicPalettePreview>
   );
 }
