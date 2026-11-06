@@ -71,10 +71,10 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
 
                 <form
                   action={updateClinicSettings.bind(null, clinic.id)}
-                  className="mt-5 space-y-3 rounded-xl border border-vexo-border bg-vexo-surface p-3.5"
+                  className="mt-5 space-y-3 rounded-xl bg-vexo-surface p-3.5"
                 >
                   <div>
-                    <label className="mb-1 block text-xs" htmlFor="address">
+                    <label className="mb-1 block text-xs text-vexo-muted" htmlFor="address">
                       Endereço da clínica
                     </label>
                     <input
@@ -91,7 +91,7 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
                   </div>
 
                   <div>
-                    <label className="mb-1 block text-xs" htmlFor="clientWhatsappNumber">
+                    <label className="mb-1 block text-xs text-vexo-muted" htmlFor="clientWhatsappNumber">
                       WhatsApp da clínica
                     </label>
                     <input
@@ -111,7 +111,7 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
                   </div>
 
                   <div>
-                    <label className="flex items-center gap-2 text-xs">
+                    <label className="flex items-center gap-2 text-xs text-vexo-muted">
                       <input type="checkbox" name="active" defaultChecked={clinic.active} className="rounded border-vexo-border" />
                       Clínica ativa
                     </label>
@@ -122,7 +122,7 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
                   </div>
 
                   <div>
-                    <label className="flex items-center gap-2 text-xs">
+                    <label className="flex items-center gap-2 text-xs text-vexo-muted">
                       <input
                         type="checkbox"
                         name="fullFaceBonusEnabled"
@@ -160,7 +160,7 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
                   </p>
 
                   <form action={updateClinicReminders.bind(null, clinic.id)} className="mt-2 space-y-2">
-                    <details name="automacoes-lembretes" className="group rounded-xl border border-vexo-border bg-vexo-surface">
+                    <details name="automacoes-lembretes" className="group rounded-xl bg-vexo-surface">
                       <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5">
                         <div className="flex min-w-0 items-center gap-2.5">
                           <span className="shrink-0 text-card text-vexo-muted">
@@ -172,7 +172,7 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
                         </div>
                         <span className="shrink-0 text-card text-vexo-muted transition group-open:rotate-180">▾</span>
                       </summary>
-                      <div className="space-y-2.5 border-t border-vexo-border px-3 pb-3 pt-2.5">
+                      <div className="space-y-2.5 px-3 pb-3 pt-2.5">
                         <div>
                           <label className="mb-1 block text-xs text-vexo-muted" htmlFor="firstReminderHours">
                             Horas antes
@@ -199,7 +199,7 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
                       </div>
                     </details>
 
-                    <details name="automacoes-lembretes" className="group rounded-xl border border-vexo-border bg-vexo-surface">
+                    <details name="automacoes-lembretes" className="group rounded-xl bg-vexo-surface">
                       <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5">
                         <div className="flex min-w-0 items-center gap-2.5">
                           <span className="shrink-0 text-card text-vexo-muted">
@@ -211,7 +211,7 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
                         </div>
                         <span className="shrink-0 text-card text-vexo-muted transition group-open:rotate-180">▾</span>
                       </summary>
-                      <div className="space-y-2.5 border-t border-vexo-border px-3 pb-3 pt-2.5">
+                      <div className="space-y-2.5 px-3 pb-3 pt-2.5">
                         <div>
                           <label className="mb-1 block text-xs text-vexo-muted" htmlFor="secondReminderHours">
                             Horas antes
@@ -275,7 +275,7 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
                     Os textos das mensagens são globais, em Follow-up → "Cards do Painel".
                   </p>
 
-                  <div className="mt-2 space-y-3 rounded-xl border border-vexo-border bg-vexo-surface p-3">
+                  <div className="mt-2 space-y-3 rounded-xl bg-vexo-surface p-3">
                     <ReturnPeriodChipsForm
                       action={updateClinicReturnPeriods.bind(null, clinic.id, "available")}
                       label="Prazos disponíveis para a secretária"
@@ -315,7 +315,7 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
                     Painel".
                   </p>
 
-                  <div className="mt-2 space-y-2 rounded-xl border border-vexo-border bg-vexo-surface p-3">
+                  <div className="mt-2 space-y-2 rounded-xl bg-vexo-surface p-3">
                     <HotLeadDailyLimitForm
                       action={updateClinicHotLeadDailyLimit.bind(null, clinic.id)}
                       dailyLimit={clinic.hotLeadConfig?.dailyLimit ?? 5}
@@ -338,7 +338,7 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
 
                 <form
                   action={logApproach.bind(null, clinic.id)}
-                  className="mt-5 flex flex-col gap-2 rounded-xl border border-vexo-border bg-vexo-surface p-3.5"
+                  className="mt-5 flex flex-col gap-2 rounded-xl bg-vexo-surface p-3.5"
                 >
                   <div>
                     <label className="mb-1 block text-xs text-vexo-muted" htmlFor="count">
