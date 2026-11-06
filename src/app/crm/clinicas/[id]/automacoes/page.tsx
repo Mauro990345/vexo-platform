@@ -71,7 +71,7 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
 
                 <form
                   action={updateClinicSettings.bind(null, clinic.id)}
-                  className="mt-5 space-y-3 rounded-xl bg-vexo-surface p-3.5"
+                  className="mt-5 space-y-3 rounded-xl border border-vexo-border border-l-2 border-l-vexo-accent bg-vexo-surface2 p-3.5"
                 >
                   <div>
                     <label className="mb-1 block text-xs text-vexo-muted" htmlFor="address">
@@ -112,7 +112,12 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
 
                   <div>
                     <label className="flex items-center gap-2 text-xs text-vexo-muted">
-                      <input type="checkbox" name="active" defaultChecked={clinic.active} className="rounded border-vexo-border" />
+                      <input
+                        type="checkbox"
+                        name="active"
+                        defaultChecked={clinic.active}
+                        className="rounded border-vexo-border accent-vexo-accent"
+                      />
                       Clínica ativa
                     </label>
                     <p className="mt-1 text-caption text-vexo-muted">
@@ -127,7 +132,7 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
                         type="checkbox"
                         name="fullFaceBonusEnabled"
                         defaultChecked={clinic.fullFaceBonusEnabled}
-                        className="rounded border-vexo-border"
+                        className="rounded border-vexo-border accent-vexo-accent"
                       />
                       Bônus Full Face
                     </label>
@@ -153,14 +158,17 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
                     endereço, WhatsApp e ativa/inativa só por mexer num
                     lembrete. */}
                 <div className="mt-5">
-                  <h2 className="text-xs font-semibold">Lembretes de agendamento</h2>
+                  <h2 className="text-xs font-semibold uppercase tracking-wide text-vexo-muted">Lembretes de agendamento</h2>
                   <p className="mt-1 text-caption text-vexo-muted">
                     Enviados automaticamente ao lead pelo Instagram (Direct), nas horas configuradas
                     antes do horário marcado — nunca por WhatsApp.
                   </p>
 
                   <form action={updateClinicReminders.bind(null, clinic.id)} className="mt-2 space-y-2">
-                    <details name="automacoes-lembretes" className="group rounded-xl bg-vexo-surface">
+                    <details
+                      name="automacoes-lembretes"
+                      className="group rounded-xl border border-vexo-border border-l-2 border-l-vexo-accent bg-vexo-surface2"
+                    >
                       <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5">
                         <div className="flex min-w-0 items-center gap-2.5">
                           <span className="shrink-0 text-card text-vexo-muted">
@@ -199,7 +207,10 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
                       </div>
                     </details>
 
-                    <details name="automacoes-lembretes" className="group rounded-xl bg-vexo-surface">
+                    <details
+                      name="automacoes-lembretes"
+                      className="group rounded-xl border border-vexo-border border-l-2 border-l-vexo-accent bg-vexo-surface2"
+                    >
                       <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5">
                         <div className="flex min-w-0 items-center gap-2.5">
                           <span className="shrink-0 text-card text-vexo-muted">
@@ -265,7 +276,7 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
                     daqui — agora globais, editadas em Follow-up → "Cards
                     do Painel" (ver updatePanelCardSettings, actions.ts). */}
                 <div className="mt-5">
-                  <h2 className="text-xs font-semibold">Prazos de retorno</h2>
+                  <h2 className="text-xs font-semibold uppercase tracking-wide text-vexo-muted">Prazos de retorno</h2>
                   <p className="mt-1 text-caption text-vexo-muted">
                     A secretária marca o prazo de retorno de cada paciente atendido no botão
                     "Retorno" do card de agendamento. Sem marcação, valem os prazos padrão
@@ -275,7 +286,7 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
                     Os textos das mensagens são globais, em Follow-up → "Cards do Painel".
                   </p>
 
-                  <div className="mt-2 space-y-3 rounded-xl bg-vexo-surface p-3">
+                  <div className="mt-2 space-y-3 rounded-xl border border-vexo-border border-l-2 border-l-vexo-accent bg-vexo-surface2 p-3">
                     <ReturnPeriodChipsForm
                       action={updateClinicReturnPeriods.bind(null, clinic.id, "available")}
                       label="Prazos disponíveis para a secretária"
@@ -305,7 +316,7 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
                     saíram daqui — agora globais, em Follow-up → "Cards do
                     Painel". */}
                 <div className="mt-5">
-                  <h2 className="text-xs font-semibold">Quente</h2>
+                  <h2 className="text-xs font-semibold uppercase tracking-wide text-vexo-muted">Quente</h2>
                   <p className="mt-1 text-caption text-vexo-muted">
                     Lead que nunca agendou, que perguntou sobre horário, preço ou endereço —
                     aparece no Painel com um botão de Instagram (copiar e abrir a conversa) em 3
@@ -315,7 +326,7 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
                     Painel".
                   </p>
 
-                  <div className="mt-2 space-y-2 rounded-xl bg-vexo-surface p-3">
+                  <div className="mt-2 space-y-2 rounded-xl border border-vexo-border border-l-2 border-l-vexo-accent bg-vexo-surface2 p-3">
                     <HotLeadDailyLimitForm
                       action={updateClinicHotLeadDailyLimit.bind(null, clinic.id)}
                       dailyLimit={clinic.hotLeadConfig?.dailyLimit ?? 5}
@@ -338,7 +349,7 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
 
                 <form
                   action={logApproach.bind(null, clinic.id)}
-                  className="mt-5 flex flex-col gap-2 rounded-xl bg-vexo-surface p-3.5"
+                  className="mt-5 flex flex-col gap-2 rounded-xl border border-vexo-border border-l-2 border-l-vexo-accent bg-vexo-surface2 p-3.5"
                 >
                   <div>
                     <label className="mb-1 block text-xs text-vexo-muted" htmlFor="count">
