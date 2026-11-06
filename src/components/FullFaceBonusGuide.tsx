@@ -89,15 +89,22 @@ async function copyText(text: string): Promise<boolean> {
 const actionKey = (step: number, i: number) => `${step}-${i}`;
 const checklistKey = (group: string, i: number) => `${group}-${i}`;
 
+// Duas formas de uso: `tabs` (Painel do cliente, /dashboard/bonus e "Ver
+// painel": abas "Painel / Bônus Full Face" no topo) ou `header` (item
+// "Bônus" do menu lateral da clínica no CRM, /crm/clinicas/[id]/bonus —
+// dentro do AppShell do admin, sem as abas da cliente). No modo admin o
+// menu interno do guia só vira lateral a partir de lg, porque a sidebar do
+// AppShell já ocupa espaço; o modo cliente continua igual (md).
 export function FullFaceBonusGuide({
   storageKey,
-  panelHref,
-  bonusHref,
+  tabs,
+  header,
 }: {
   storageKey: string;
-  panelHref: string;
-  bonusHref: string;
+  tabs?: { panelHref: string; bonusHref: string };
+  header?: React.ReactNode;
 }) {
+  const inAdmin = !tabs;
   const actionsKey = `${storageKey}:acoes`;
   const checklistStoreKey = `${storageKey}:checklist`;
 
@@ -198,34 +205,46 @@ export function FullFaceBonusGuide({
 
   const current = screen.startsWith("step-") ? BONUS_STEPS.find((st) => `step-${st.number}` === screen) : undefined;
 
+  const callButton = (
+    <button
+            type="button"
+            onClick={() => setCallMode((v) => !v)}
+            aria-pressed={callMode}
+            className={`inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 text-[16px] font-medium sm:text-xs ${
+              callMode
+                ? "border-vexo-accent bg-vexo-accent text-vexo-accentFg hover:opacity-90"
+                : "border-vexo-border text-vexo-fg hover:border-vexo-accent"
+            }`}
+          >
+            <Maximize2 className="h-3.5 w-3.5" strokeWidth={2} />
+            Modo call
+          </button>
+  );
+
   return (
     <div ref={topRef} className="scroll-mt-4">
-      <ClientPanelTabs
-        active="bonus"
-        panelHref={panelHref}
-        bonusHref={bonusHref}
-        trailing={
-<button
-          type="button"
-          onClick={() => setCallMode((v) => !v)}
-          aria-pressed={callMode}
-          className={`inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 text-[16px] font-medium sm:text-xs ${
-            callMode
-              ? "border-vexo-accent bg-vexo-accent text-vexo-accentFg hover:opacity-90"
-              : "border-vexo-border text-vexo-fg hover:border-vexo-accent"
-          }`}
-        >
-          <Maximize2 className="h-3.5 w-3.5" strokeWidth={2} />
-          Modo call
-        </button>
-        }
-      />
+      {tabs ? (
+        <ClientPanelTabs active="bonus" panelHref={tabs.panelHref} bonusHref={tabs.bonusHref} trailing={callButton} />
+      ) : (
+        <div className="mb-4 flex items-start justify-between gap-3">
+          <div className="min-w-0">{header}</div>
+          <div className="shrink-0">{callButton}</div>
+        </div>
+      )}
 
-      <div className={callMode ? "" : "md:grid md:grid-cols-[230px_minmax(0,1fr)] md:gap-6"}>
+      <div
+        className={
+          callMode
+            ? ""
+            : inAdmin
+              ? "lg:grid lg:grid-cols-[220px_minmax(0,1fr)] lg:gap-6"
+              : "md:grid md:grid-cols-[230px_minmax(0,1fr)] md:gap-6"
+        }
+      >
         {!callMode && (
           <>
             {/* Celular: faixa horizontal rolável só com os números */}
-            <nav className="-mx-4 mb-4 overflow-x-auto px-4 md:hidden" aria-label="Telas do guia">
+            <nav className={`-mx-4 mb-4 overflow-x-auto px-4 ${inAdmin ? "lg:hidden" : "md:hidden"}`} aria-label="Telas do guia">
               <div className="flex w-max gap-1.5">
                 {BONUS_SCREENS.map((id) => {
                   const active = id === screen;
@@ -255,7 +274,7 @@ export function FullFaceBonusGuide({
             </nav>
 
             {/* PC/tablet: menu lateral */}
-            <nav className="hidden md:block" aria-label="Telas do guia">
+            <nav className={inAdmin ? "hidden lg:block" : "hidden md:block"} aria-label="Telas do guia">
               <div className="sticky top-4 space-y-0.5 rounded-xl border border-vexo-border bg-vexo-surface p-1.5">
                 <SideItem active={screen === "overview"} onClick={() => go("overview")}>
                   <Home className="h-3.5 w-3.5 shrink-0" strokeWidth={2} />
