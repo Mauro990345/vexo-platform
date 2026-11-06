@@ -53,6 +53,16 @@
   --vexo-error: 248 113 113; /* #f87171 — erro/negativo (falha, faltou, precisa de humano) */
   --vexo-warning: 251 191 36; /* #fbbf24 — alerta/atenção (conectando, pendente) */
 
+  /* Verde do "Bônus Full Face" (guia em si + a prévia de estilo testada na
+     tela Automações) — token PRÓPRIO, fixo, que NÃO acompanha a cor de
+     marca personalizável por clínica (--vexo-accent, acima, pode ser
+     trocada em Configurações/ThemeSettings) nem o token semântico de
+     "sucesso" (--vexo-success, usado em badges). Pedido explícito: "uma
+     única variável fácil de ajustar" — mude só este valor pra retocar as
+     duas áreas juntas. Mesmo tom usado nas PRs #179/#180 (antes da troca
+     de paleta pra azul): mais claro/sutil que --vexo-success. */
+  --bonus-green: 94 194 181; /* #5ec2b5 */
+
   /* Botão WhatsApp da Reativação (ver ReactivationActionButtonStyle.ts) —
      valor FIXO, travado no verde que o badge "Compareceu" usava antes do
      ajuste de 2026-10 (ver painel.status.completed.background em

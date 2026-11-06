@@ -10,10 +10,12 @@
  * <html>, ver src/app/layout.tsx) e, se um dia ganharem tema claro ou cor
  * por clínica (Configurações), o guia acompanha automaticamente.
  *
- * Acento: verde PRÓPRIO do Bônus (--bonus-green, uma variável só — ver
- * .scope), não o azul global (--vexo-accent) — pedido explícito pra ter
- * só dois destaques na tela (dourado da "Ideia central" e esse verde) e
- * deixar o azul reservado pro cabeçalho/elementos fora do Bônus.
+ * Acento: verde PRÓPRIO do Bônus (--bonus-green, declarada em
+ * src/app/globals.css — uma variável só, reaproveitada também pela prévia
+ * de estilo da tela Automações), não o azul global (--vexo-accent) —
+ * pedido explícito pra ter só dois destaques na tela (dourado da "Ideia
+ * central" e esse verde) e deixar o azul reservado pro cabeçalho/
+ * elementos fora do Bônus.
  *
  * "Celular" = guia com até 860px de largura (container query no .root, não
  * media query da janela) — assim o guia dentro do AppShell do admin (com a
@@ -37,15 +39,13 @@
      Bônus: só duas de destaque, dourado (Ideia central) e verde (todo o
      resto)"; o azul do VEXO (--vexo-accent) fica reservado pro cabeçalho/
      elementos globais FORA do conteúdo do Bônus, ex. a aba ativa em
-     ClientPanelTabs). UMA variável só (--bonus-green, pedido explícito:
-     "deixe o verde em uma única variável fácil de ajustar") — todo o
-     resto deste bloco (acento sólido pros círculos/botões, fundo e borda
-     do bloco grande de conteúdo) é DERIVADO dela por opacidade, então
-     ajustar só essa variável retoca a tela inteira de forma consistente.
-     Mesmo tom de --vexo-success (RGB 52 211 153) — família de verde que
-     já existe no VEXO — mas como variável PRÓPRIA do Bônus, não o token
-     semântico global de "sucesso" (badges em outras telas). */
-  --bonus-green: 52 211 153;
+     ClientPanelTabs). UMA variável só, --bonus-green — pedido explícito:
+     "deixe o verde em uma única variável fácil de ajustar" — agora
+     declarada em src/app/globals.css (:root), não mais aqui: assim a
+     prévia de estilo na tela Automações usa exatamente o mesmo valor (só
+     um lugar pra ajustar as duas áreas juntas). Todo o resto deste bloco
+     (acento sólido pros círculos/botões, fundo e borda do bloco grande de
+     conteúdo) é DERIVADO dela por opacidade. */
   --green: rgb(var(--bonus-green));
   --green-soft: rgb(var(--bonus-green) / 0.14);
   /* Texto escuro sobre um fill sólido de --green (círculo do passo ativo,

@@ -1,11 +1,15 @@
-// Teste de cor do guia "Bônus Full Face" — pedido explícito (rodada mais
-// recente): o verde volta, mas só no "bloco grande" (player de áudio +
-// texto do passo, ver .card/BlockCard em FullFaceBonusGuide.tsx) — fundo
-// da página continua neutro (--vexo-surface, padrão VEXO). Acento único
-// do conteúdo do Bônus é esse mesmo verde (--bonus-green, UMA variável só
-// — ver .scope no CSS), não mais o azul (--vexo-accent) da rodada
-// anterior: círculo do passo ativo e a borda da "Frase para usar" usam
-// esse verde; "Ideia central" continua intocado (âmbar fixo).
+// Teste de cor do guia "Bônus Full Face" — pedido explícito: o verde
+// volta, mas só no "bloco grande" (player de áudio + texto do passo, ver
+// .card/BlockCard em FullFaceBonusGuide.tsx) — fundo da página continua
+// neutro (--vexo-surface, padrão VEXO). Acento único do conteúdo do Bônus
+// é esse mesmo verde (--bonus-green, UMA variável só, declarada em
+// src/app/globals.css :root — não mais local ao .scope, pra também poder
+// ser reaproveitada pela prévia de estilo da tela Automações), não mais o
+// azul (--vexo-accent): círculo do passo ativo e a borda da "Frase para
+// usar" usam esse verde; "Ideia central" continua intocado (âmbar fixo).
+// Tom mais claro/sutil (RGB 94 194 181, igual às PRs #179/#180, antes da
+// troca de paleta) — pedido explícito porque o tom anterior (RGB 52 211
+// 153) tinha ficado "forte demais".
 //
 // A prova mais forte de que os elementos REALMENTE usam a variável (e não
 // só reproduziram os mesmos valores por coincidência) é trocar
@@ -25,7 +29,8 @@ import { chromium, type Browser } from "playwright";
 const CSS_PATH = path.join(__dirname, "FullFaceBonusGuide.module.css");
 
 // Valores PADRÃO do VEXO (src/app/globals.css) — "R G B" sem vírgula,
-// igual ao formato real das variáveis.
+// igual ao formato real das variáveis. --bonus-green incluída aqui porque
+// agora mora em :root (globals.css), não mais dentro de .scope.
 const DEFAULT_VEXO_ROOT = `
   --vexo-bg: 11 15 23;
   --vexo-surface: 20 26 36;
@@ -38,7 +43,10 @@ const DEFAULT_VEXO_ROOT = `
   --vexo-accent-fg: 255 255 255;
   --vexo-petrol: 11 36 54;
   --vexo-petrol-border: 30 68 89;
+  --bonus-green: 94 194 181;
 `;
+
+const BONUS_GREEN = "rgb(94, 194, 181)";
 
 const VEXO_SURFACE = "rgb(20, 26, 36)"; // fundo da página (.root) — sem verde
 const VEXO_SURFACE2 = "rgb(27, 34, 46)"; // blocos neutros (ex: .phrase)
@@ -84,10 +92,10 @@ async function renderWithRoot(browser: Browser, compiledCss: string, rootVars: s
 // deve manter contraste de leitura confortável" (pedido explícito) em vez
 // de confiar só em inspeção visual.
 function relativeLuminance(rgb: string): number {
-  const [r, g, b] = rgb
-    .match(/\d+/g)!
-    .slice(0, 3)
-    .map((n) => Number(n) / 255);
+  const nums = rgb.match(/\d+/g)!;
+  const r = Number(nums[0] ?? 0) / 255;
+  const g = Number(nums[1] ?? 0) / 255;
+  const b = Number(nums[2] ?? 0) / 255;
   const lin = (c: number) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
   return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
 }
@@ -99,7 +107,7 @@ function contrastRatio(a: string, b: string): number {
   return (lighter + 0.05) / (darker + 0.05);
 }
 
-// getComputedStyle() devolve o valor CRU da cor (ex: "rgba(52, 211, 153,
+// getComputedStyle() devolve o valor CRU da cor (ex: "rgba(94, 194, 181,
 // 0.1)" pro wash do bloco grande) — NUNCA o composto visual contra o que
 // está atrás. Pra medir "quão escuro/discreto" o wash realmente aparece
 // na tela (e o contraste real do texto sobre ele), é preciso compor a
@@ -181,7 +189,7 @@ describe("FullFaceBonusGuide — verde só no bloco grande, acento único (--bon
   it("círculo do passo ativo: verde do Bônus (não mais azul)", async () => {
     const page = await renderWithRoot(browser, compiledCss, DEFAULT_VEXO_ROOT);
     const circleBg = await styleOf(page, "#activeItem .circle", "backgroundColor");
-    expect(circleBg).toBe("rgb(52, 211, 153)");
+    expect(circleBg).toBe(BONUS_GREEN);
     expect(circleBg).not.toBe(VEXO_ACCENT);
     await page.close();
   });
@@ -204,8 +212,8 @@ describe("FullFaceBonusGuide — verde só no bloco grande, acento único (--bon
     const ideaBg = await styleOf(page, "#idea", "backgroundColor");
     const ideaLabelColor = await styleOf(page, "#ideaLabel", "color");
     expect(ideaBg).not.toBe(VEXO_SURFACE2);
-    expect(ideaBg).not.toBe("rgb(52, 211, 153)");
-    expect(ideaLabelColor).not.toBe("rgb(52, 211, 153)");
+    expect(ideaBg).not.toBe(BONUS_GREEN);
+    expect(ideaLabelColor).not.toBe(BONUS_GREEN);
     expect(ideaLabelColor).not.toBe(VEXO_MUTED);
     await page.close();
   });
@@ -233,7 +241,7 @@ describe("FullFaceBonusGuide — verde só no bloco grande, acento único (--bon
     const circleBg = await styleOf(page, "#activeItem .circle", "backgroundColor");
     const cardBorder = await styleOf(page, "#card", "borderTopColor");
     expect(circleBg).toBe("rgb(220, 38, 38)");
-    expect(circleBg).not.toBe("rgb(52, 211, 153)");
+    expect(circleBg).not.toBe(BONUS_GREEN);
     expect(cardBorder).toBe("rgba(220, 38, 38, 0.32)");
     await page.close();
   });
@@ -242,7 +250,7 @@ describe("FullFaceBonusGuide — verde só no bloco grande, acento único (--bon
     const customRoot = DEFAULT_VEXO_ROOT.replace("--vexo-accent: 59 130 246;", "--vexo-accent: 220 38 38;");
     const page = await renderWithRoot(browser, compiledCss, customRoot);
     const circleBg = await styleOf(page, "#activeItem .circle", "backgroundColor");
-    expect(circleBg).toBe("rgb(52, 211, 153)");
+    expect(circleBg).toBe(BONUS_GREEN);
     await page.close();
   });
 });
