@@ -48,24 +48,7 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
   const dailyWhatsappLimit = clinic.reactivationConfig?.dailyWhatsappLimit ?? DEFAULT_DAILY_WHATSAPP_LIMIT;
 
   return (
-    // Prévia do estilo do Bônus Full Face nesta tela (pedido explícito,
-    // "pra vermos na prática") — escopada só aqui: sobrescreve as
-    // variáveis que os botões/abas/seleção já liam (--vexo-accent, azul,
-    // e --vexo-accent-fg, o texto EM CIMA de um fundo accent sólido —
-    // ex. o botão "Registrar") pela MESMA --bonus-green do guia (src/
-    // app/globals.css) e pelo mesmo texto escuro de alto contraste que o
-    // guia usa sobre o fill verde (--on-green, ~8.8:1 — branco em cima do
-    // verde mais claro do Bônus ficaria com contraste ruim, ~2:1), sem
-    // mudar os tokens globais (Painel/Follow-up/Agenda continuam azuis).
-    // Afeta de graça os componentes compartilhados usados aqui (Tabs,
-    // TemplateMessageField, ReactivationConfigForms) — nenhum deles
-    // precisou ser alterado, só leem as variáveis que já liam. Mesmo
-    // padrão de override pontual de custom properties via style inline
-    // usado em src/app/layout.tsx (tema por clínica).
-    <div
-      className="max-w-3xl space-y-4"
-      style={{ "--vexo-accent": "var(--bonus-green)", "--vexo-accent-fg": "8 32 29" } as React.CSSProperties}
-    >
+    <div className="max-w-3xl space-y-4">
       <h1 className="text-base font-semibold tracking-tight">Automações</h1>
 
       {/* Abas horizontais — mesmo padrão do topo do Follow-up (ver
@@ -88,7 +71,7 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
 
                 <form
                   action={updateClinicSettings.bind(null, clinic.id)}
-                  className="mt-5 space-y-3 rounded-xl ring-1 ring-inset ring-vexo-accent/30 bg-vexo-accent/10 p-3.5"
+                  className="mt-5 space-y-3 rounded-xl bg-vexo-surface p-3.5"
                 >
                   <div>
                     <label className="mb-1 block text-xs text-vexo-muted" htmlFor="address">
@@ -177,7 +160,7 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
                   </p>
 
                   <form action={updateClinicReminders.bind(null, clinic.id)} className="mt-2 space-y-2">
-                    <details name="automacoes-lembretes" className="group rounded-xl ring-1 ring-inset ring-vexo-accent/30 bg-vexo-accent/10">
+                    <details name="automacoes-lembretes" className="group rounded-xl bg-vexo-surface">
                       <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5">
                         <div className="flex min-w-0 items-center gap-2.5">
                           <span className="shrink-0 text-card text-vexo-muted">
@@ -216,7 +199,7 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
                       </div>
                     </details>
 
-                    <details name="automacoes-lembretes" className="group rounded-xl ring-1 ring-inset ring-vexo-accent/30 bg-vexo-accent/10">
+                    <details name="automacoes-lembretes" className="group rounded-xl bg-vexo-surface">
                       <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5">
                         <div className="flex min-w-0 items-center gap-2.5">
                           <span className="shrink-0 text-card text-vexo-muted">
@@ -292,7 +275,7 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
                     Os textos das mensagens são globais, em Follow-up → "Cards do Painel".
                   </p>
 
-                  <div className="mt-2 space-y-3 rounded-xl ring-1 ring-inset ring-vexo-accent/30 bg-vexo-accent/10 p-3">
+                  <div className="mt-2 space-y-3 rounded-xl bg-vexo-surface p-3">
                     <ReturnPeriodChipsForm
                       action={updateClinicReturnPeriods.bind(null, clinic.id, "available")}
                       label="Prazos disponíveis para a secretária"
@@ -332,7 +315,7 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
                     Painel".
                   </p>
 
-                  <div className="mt-2 space-y-2 rounded-xl ring-1 ring-inset ring-vexo-accent/30 bg-vexo-accent/10 p-3">
+                  <div className="mt-2 space-y-2 rounded-xl bg-vexo-surface p-3">
                     <HotLeadDailyLimitForm
                       action={updateClinicHotLeadDailyLimit.bind(null, clinic.id)}
                       dailyLimit={clinic.hotLeadConfig?.dailyLimit ?? 5}
@@ -355,7 +338,7 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
 
                 <form
                   action={logApproach.bind(null, clinic.id)}
-                  className="mt-5 flex flex-col gap-2 rounded-xl ring-1 ring-inset ring-vexo-accent/30 bg-vexo-accent/10 p-3.5"
+                  className="mt-5 flex flex-col gap-2 rounded-xl bg-vexo-surface p-3.5"
                 >
                   <div>
                     <label className="mb-1 block text-xs text-vexo-muted" htmlFor="count">
