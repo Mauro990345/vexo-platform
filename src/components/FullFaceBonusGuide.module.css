@@ -1,0 +1,689 @@
+/* Visual do guia "Bônus Full Face" — ESCOPADO a este contêiner (exceção
+ * pedida à regra de "compacto" do VEXO: página de leitura/gravação de aula,
+ * com o respiro do protótipo aprovado). Nada aqui vaza pro resto do app.
+ *
+ * Tokens: claro por padrão; escuro quando o VEXO está no tema escuro
+ * (classe .dark no <html>, ver src/app/layout.tsx).
+ *
+ * "Celular" = guia com até 860px de largura (container query no .root, não
+ * media query da janela) — assim o guia dentro do AppShell do admin (com a
+ * sidebar do CRM ocupando espaço) também cai no layout de coluna única
+ * quando aperta. Nesse modo nenhum texto fica abaixo de 16px. */
+
+.scope {
+  --bg: #f4f7f6;
+  --card: #ffffff;
+  --text: #14211f;
+  --muted: #5a6b68;
+  --line: #d9e2e0;
+  --green: #0f5c55;
+  --green-soft: #e1f0ee;
+  --gold: #b7791f;
+  --gold-soft: #fbf1dc;
+  --on-green: #ffffff;
+  --title: var(--bonus-font-title), system-ui, -apple-system, sans-serif;
+  --sans: var(--bonus-font-body), system-ui, -apple-system, sans-serif;
+}
+
+:global(.dark) .scope {
+  --bg: #0e1716;
+  --card: #162321;
+  --text: #e6efed;
+  --muted: #94a8a4;
+  --line: #2a3b38;
+  --green: #5ec2b5;
+  --green-soft: #17302d;
+  --gold: #e0b45c;
+  --gold-soft: #2b2312;
+  --on-green: #08201d;
+}
+
+/* ---------- Botão "Modo call" (fica na linha das abas / do cabeçalho) ---------- */
+.callBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+  cursor: pointer;
+}
+.callBtn:hover {
+  border-color: var(--green);
+}
+.callBtnActive {
+  background: var(--green);
+  border-color: var(--green);
+  color: var(--on-green);
+}
+.callBtn:focus-visible {
+  outline: 3px solid var(--green);
+  outline-offset: 2px;
+}
+
+/* ---------- Contêiner ---------- */
+.root {
+  --body: 15px;
+  container: bonus / inline-size;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: var(--body);
+  line-height: 1.65;
+  border-radius: 16px;
+  -webkit-font-smoothing: antialiased;
+}
+.root.call {
+  --body: 19px;
+}
+.root :focus-visible {
+  outline: 3px solid var(--green);
+  outline-offset: 2px;
+}
+.root button {
+  font-family: inherit;
+}
+
+.inner {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 32px 20px;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 720px);
+  gap: 40px;
+  align-items: start;
+}
+.call .layout {
+  grid-template-columns: minmax(0, 860px);
+  justify-content: center;
+}
+
+/* ---------- Menu lateral ---------- */
+.side {
+  position: sticky;
+  top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.sideItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+.sideItem:hover {
+  background: color-mix(in srgb, var(--green-soft) 55%, transparent);
+}
+.sideItemActive,
+.sideItemActive:hover {
+  background: var(--green-soft);
+  box-shadow: inset 3px 0 0 var(--green);
+}
+.circle {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 1.5px solid var(--line);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+}
+.sideItemActive .circle {
+  background: var(--green);
+  border-color: var(--green);
+  color: var(--on-green);
+}
+.sideTitle {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  line-height: 1.3;
+}
+.sideItemActive .sideTitle {
+  font-weight: 600;
+}
+.sideCount {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.sideCountDone {
+  color: var(--green);
+  font-weight: 600;
+}
+.sep {
+  height: 1px;
+  margin: 6px 6px;
+  background: var(--line);
+}
+
+/* Faixa de pílulas (só no "celular") */
+.strip {
+  display: none;
+}
+.pill {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  height: 44px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1.5px solid var(--line);
+  background: var(--card);
+  color: var(--text);
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.pillActive {
+  border-color: var(--green);
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+/* ---------- Conteúdo ---------- */
+.main {
+  min-width: 0;
+  animation: bonusFade 0.25s ease;
+}
+@keyframes bonusFade {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .main {
+    animation: none;
+  }
+  .stepRow,
+  .copyBtn {
+    transition: none;
+  }
+}
+
+.eyebrow {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--green);
+}
+.h1 {
+  margin: 0 0 10px;
+  font-family: var(--title);
+  font-weight: 700;
+  font-size: clamp(26px, 4vw, 36px);
+  line-height: 1.12;
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+}
+.stepTitle {
+  margin: 0 0 8px;
+  font-family: var(--title);
+  font-weight: 700;
+  font-size: clamp(24px, 3.6vw, 32px);
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+}
+.stepHeader {
+  margin-bottom: 14px;
+}
+.lead {
+  max-width: 56ch;
+  margin: 0 0 28px;
+  font-size: 17px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+.sectionLabel {
+  margin: 0 0 10px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* Visão geral */
+.howGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 28px;
+}
+.howCard {
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--card);
+}
+.howTitle {
+  margin: 0;
+  font-family: var(--title);
+  font-weight: 700;
+  font-size: 15px;
+  line-height: 1.3;
+}
+.howText {
+  margin: 4px 0 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.stepList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.stepRow {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--card);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+}
+.stepRow:hover {
+  border-color: var(--green);
+}
+.stepNum {
+  font-family: var(--title);
+  font-weight: 700;
+  font-size: 24px;
+  line-height: 1;
+  color: var(--green);
+}
+.stepRowTitle {
+  display: block;
+  font-family: var(--title);
+  font-weight: 700;
+  font-size: 17px;
+  line-height: 1.3;
+}
+.stepRowIdea {
+  display: block;
+  margin-top: 3px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+.chevron {
+  color: var(--muted);
+}
+
+/* Passo */
+.idea {
+  margin: 0 0 22px;
+  padding: 12px 16px;
+  border-left: 4px solid var(--gold);
+  border-radius: 0 12px 12px 0;
+  background: var(--gold-soft);
+}
+.ideaLabel {
+  margin: 0 0 4px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--gold);
+}
+.ideaText {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 1.5;
+}
+.call .ideaText {
+  font-size: 20px;
+}
+.phrase {
+  margin: 0 0 18px;
+  padding: 14px 18px;
+  border-radius: 14px;
+  background: var(--green);
+  color: var(--on-green);
+}
+.phraseLabel {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.8;
+}
+.phraseText {
+  margin: 4px 0 0;
+  font-family: var(--title);
+  font-weight: 500;
+  font-size: 18px;
+  line-height: 1.35;
+}
+.call .phraseText {
+  font-size: 23px;
+}
+.phraseNote {
+  margin: 8px 0 0;
+  font-size: 13px;
+  line-height: 1.5;
+  opacity: 0.9;
+}
+
+.card {
+  margin: 0 0 18px;
+  padding: 20px 22px 6px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--card);
+}
+.blockTitle {
+  margin: 0 0 12px;
+  font-family: var(--title);
+  font-weight: 700;
+  font-size: 18px;
+  line-height: 1.3;
+}
+.audio {
+  display: block;
+  width: 100%;
+  height: 36px;
+  margin: 0 0 16px;
+}
+.p {
+  max-width: 62ch;
+  margin: 0 0 14px;
+  font-size: var(--body);
+  line-height: 1.65;
+}
+.sub {
+  margin: 20px 0 8px;
+  font-family: var(--title);
+  font-weight: 700;
+  font-size: 15px;
+  line-height: 1.3;
+  color: var(--green);
+}
+.call .sub {
+  font-size: 19px;
+}
+
+.apply {
+  margin: 0 0 22px;
+  padding: 16px 22px 8px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--card);
+}
+.applyHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+.applyTitle {
+  margin: 0;
+  font-family: var(--title);
+  font-weight: 700;
+  font-size: 16px;
+  line-height: 1.3;
+}
+.meta {
+  font-size: 13px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.check {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 7px 0;
+  font-size: var(--body);
+  line-height: 1.5;
+  cursor: pointer;
+}
+.check input {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  margin: 0.15em 0 0;
+  accent-color: var(--green);
+  cursor: pointer;
+}
+.checkDone {
+  color: var(--muted);
+}
+
+/* Checklist e mensagens */
+.checklistHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.checklistSub {
+  max-width: 56ch;
+  margin: 0;
+  color: var(--muted);
+}
+.pillBtn {
+  padding: 8px 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--card);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.pillBtn:hover {
+  border-color: var(--green);
+}
+.messagesTitle {
+  margin: 30px 0 12px;
+  font-family: var(--title);
+  font-weight: 700;
+  font-size: 20px;
+  line-height: 1.25;
+}
+.msgGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 12px;
+}
+.msgCard {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--card);
+}
+.msgTitle {
+  margin: 0;
+  font-family: var(--title);
+  font-weight: 700;
+  font-size: 15px;
+  line-height: 1.3;
+}
+.msgText {
+  flex: 1;
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--bg);
+  font-size: 14px;
+  line-height: 1.55;
+  white-space: pre-line;
+}
+.copyBtn {
+  display: inline-flex;
+  align-self: flex-start;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border: 1.5px solid var(--green);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--green);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+.copyBtnDone {
+  background: var(--green);
+  color: var(--on-green);
+}
+
+/* Rodapé de navegação */
+.footer {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 28px;
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
+}
+.btn {
+  padding: 10px 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--card);
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.2;
+  cursor: pointer;
+}
+.btn:hover {
+  border-color: var(--green);
+}
+.btnPrimary {
+  margin-left: auto;
+  border-color: var(--green);
+  background: var(--green);
+  color: var(--on-green);
+}
+.btnPrimary:hover {
+  filter: brightness(1.06);
+}
+
+/* ---------- "Celular": guia com até 860px ---------- */
+@container bonus (max-width: 860px) {
+  .layout,
+  .call .layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+  .side {
+    display: none;
+  }
+  .strip {
+    display: flex;
+    gap: 8px;
+    margin: 0 -20px 22px;
+    padding: 0 20px 4px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .strip::-webkit-scrollbar {
+    display: none;
+  }
+  .howGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .msgGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  /* Nenhum texto abaixo de 16px */
+  .eyebrow,
+  .sectionLabel,
+  .ideaLabel,
+  .phraseLabel,
+  .phraseNote,
+  .howText,
+  .stepRowIdea,
+  .meta,
+  .msgText,
+  .copyBtn,
+  .pillBtn,
+  .btn,
+  .howTitle,
+  .sub,
+  .msgTitle,
+  .applyTitle {
+    font-size: 16px;
+  }
+  .main,
+  .p,
+  .check,
+  .checklistSub {
+    font-size: max(16px, var(--body));
+  }
+  .audio {
+    height: 44px;
+  }
+}
+
+@media (max-width: 640px) {
+  .root {
+    margin: 0 -16px;
+    border-radius: 0;
+  }
+  .inner {
+    padding: 24px 16px;
+  }
+  .callBtn {
+    font-size: 16px;
+  }
+  .strip {
+    margin: 0 -16px 22px;
+    padding: 0 16px 4px;
+  }
+}
