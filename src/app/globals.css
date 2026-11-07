@@ -81,172 +81,38 @@ body {
 }
 
 /* ---------------------------------------------------------------------------
- * Prévia isolada de paleta nova (4ª rodada, ajustes finos sobre a 3ª) —
- * pedido explícito: "testar numa página só pra avaliar na prática", SÓ
- * Automações (/crm/clinicas/[id]/automacoes), SEM tocar nas variáveis
- * --vexo-* padrão (valem pra todo o resto do app) e sem mudar nenhum
- * componente COMPARTILHADO (AppShell.tsx, Tabs.tsx, TemplateMessageField.tsx,
- * ReactivationConfigForms.tsx) — só automacoes/page.tsx (próprio da
- * página, não compartilhado com mais nada) tem classes extras.
+ * Prévia isolada de paleta nova (5ª rodada — simplificação) — pedido
+ * explícito: desfazer o teste de paleta, mantendo SÓ a mudança do tom do
+ * azul. Rodadas anteriores testaram fundo/cards/bordas mais escuros, duas
+ * camadas de texto (off-white/cinza), tipografia e ícones mais finos na
+ * sidebar, e cores de destaque por seção (dourado/verde/laranja/roxo) —
+ * tudo isso voltou ao visual de antes do teste (ver histórico do git,
+ * commit 155bb51, anterior à PR #185). Só o azul (--vexo-accent) continua
+ * valendo o tom novo testado, nos mesmos lugares em que o azul já era
+ * usado (item ativo da sidebar, logo do VEXO, botão "Salvar configuração",
+ * abas ativas, checkboxes/toggles — accent-vexo-accent — foco de campos e
+ * fundos de estado ativo em baixa opacidade, tipo bg-vexo-accent/15) —
+ * nenhum desses lugares precisou de classe nova, já usavam --vexo-accent.
  *
- * Mecanismo (sem mudança desde a 2ª rodada): a classe .vxa-preview é
- * aplicada SÓ quando o pathname é EXATAMENTE /crm/clinicas/[id]/
- * automacoes, num wrapper envolvendo o <AppShell> INTEIRO — ver
- * AutomacoesPalettePreview.tsx, usado em src/app/crm/clinicas/[id]/
- * layout.tsx. Pipeline, Painel, Follow-up, Agenda e o resto continuam
- * exatamente como sempre foram.
- *
- * Ajustes desta rodada (sobre a versão anterior): texto em duas camadas —
- * off-white pra títulos/rótulos/valores, cinza só pra ajuda/metadados;
- * sidebar com itens inativos um pouco mais claros e item ATIVO agora em
- * off-white (não mais azul — só o fundo sutil do item continua azulado);
- * cada seção da página ganha UMA cor (ícone + título + palavra-chave
- * pontual): Configuração/"Registrar abordagens" ficam no azul já usado em
- * botões/abas/foco (nenhuma classe nova, só removida a cor extra que os
- * ícones das abas tinham), Lembretes continua dourado, Prazos de retorno
- * passa a verde (mesmo tom do "ativa"/card "Agendado"), Quente ganha um
- * laranja terroso novo (--vxa-orange). Roxo SAI da página (pedido
- * explícito) — a seta dos lembretes volta a cinza neutro.
+ * Mecanismo (sem mudança): a classe .vxa-preview é aplicada SÓ quando o
+ * pathname é EXATAMENTE /crm/clinicas/[id]/automacoes, num wrapper
+ * envolvendo o <AppShell> INTEIRO — ver AutomacoesPalettePreview.tsx,
+ * usado em src/app/crm/clinicas/[id]/layout.tsx. Pipeline, Painel,
+ * Follow-up, Agenda e o resto continuam exatamente como sempre foram.
  *
  * REVISÃO (decisão pendente do usuário):
- * - Aprovado: trocar os valores PADRÃO de --vexo-* (bloco :root acima) e
- *   de THEME_DEFAULTS (src/lib/theme.ts) pelos valores --vxa-* abaixo, e
- *   apagar este bloco + AutomacoesPalettePreview.tsx + as classes extras
- *   em automacoes/page.tsx (ou deixá-las, já que virariam redundantes mas
- *   inofensivas) + a troca no layout.tsx.
- * - Reprovado: apagar este bloco, AutomacoesPalettePreview.tsx, a
- *   referência a ele em clinicas/[id]/layout.tsx, e desfazer as classes
- *   extras em automacoes/page.tsx — zero rastro em qualquer outra tela.
+ * - Aprovado: trocar o valor PADRÃO de --vexo-accent/--vexo-accent-fg
+ *   (bloco :root acima) e de THEME_DEFAULTS (src/lib/theme.ts) pelo valor
+ *   abaixo, e apagar este bloco + AutomacoesPalettePreview.tsx + a troca
+ *   no layout.tsx (automacoes/page.tsx não tem mais nenhuma classe extra
+ *   pra desfazer).
+ * - Reprovado: apagar este bloco, AutomacoesPalettePreview.tsx e a
+ *   referência a ele em clinicas/[id]/layout.tsx — zero rastro em
+ *   qualquer outra tela.
  * ------------------------------------------------------------------------- */
 .vxa-preview {
-  /* Base — amostrada da referência do Figma (pedido explícito, valores
-     exatos). Fundo da página E da sidebar ficam quase idênticos de
-     propósito ("sem cor de fundo diferente" — só a borda de 1px separa os
-     dois); os blocos/cards ficam um nível acima (mais claro); os
-     mini-cards internos (inputs, etc.) ficam MAIS ESCUROS que o bloco ao
-     redor, como se estivessem encaixados/recessos nele. */
-  --vxa-bg: 23 24 34; /* #171822 — fundo da página E dos "mini-cards" internos (inputs); pedido explícito desta rodada: manter como está */
-  --vxa-sidebar: 22 25 32; /* #161920 — quase idêntico ao fundo, por pedido explícito */
-  /* Era 32 35 44 (#20232c) — pedido explícito desta rodada: "cinza claro
-     demais", voltar a um tom escuro (referência: o tom que os blocos
-     tinham antes de qualquer teste de paleta, bg-vexo-surface padrão,
-     #141a24) — mas calibrado pra ainda dar um leve degrau acima do fundo
-     da página (que mudou desde então, de #0b0f17 pra #171822), senão o
-     bloco ficaria praticamente invisível contra o fundo novo. */
-  --vxa-card: 26 29 38; /* #1a1d26 */
-  --vxa-border: 42 45 53; /* ~branco a 7% de opacidade sobre #1a1d26, recalculado pro novo tom do card (pedido: "branco ~6-8%") */
-  --vxa-border-strong: 53 56 64; /* ~branco a 12%, mesmo recálculo */
-  /* Duas camadas de texto (pedido explícito desta rodada, "a página fica
-     sem vida com tudo cinza"): --vxa-muted SÓ pra ajuda/explicação e
-     metadados (horários, datas, contadores — ex: "1º lembrete · 12h
-     antes"); --vxa-fg (mais claro que antes, era 201 204 209/#c9ccd1) pra
-     título da página, títulos de seção, rótulos de campo, texto digitado,
-     nomes de item, números/valores e o texto das linhas de lembrete. Não
-     mudou o QUE usa --vexo-muted/--vexo-fg por padrão (body/h1 já usam
-     --vexo-fg; parágrafos de ajuda já usam --vexo-muted) — só os RÓTULOS
-     de campo em automacoes/page.tsx trocaram de classe (muted -> fg), ver
-     comentários lá. */
-  --vxa-muted: 139 144 154; /* #8b909a — inalterado */
-  --vxa-fg: 230 232 236; /* #e6e8ec — off-white, nunca branco puro (pedido explícito) */
-
-  /* Azul — era 91 134 176 (#5b86b0, "fosco" demais segundo o pedido desta
-     rodada: "um pouco mais vivo e mais escuro"). Ponto de partida exato
-     do novo pedido (#2b87bd); contraste conferido: ~4.3:1 como elemento
-     de UI sobre o fundo do bloco novo, ~4.0:1 com texto branco em cima —
-     levemente melhor que antes, apesar de "mais escuro", porque ficou
-     mais saturado (menos acinzentado). */
-  --vxa-accent: 43 135 189; /* #2b87bd */
-  --vxa-accent-fg: 255 255 255;
-
-  /* Fundo do item ativo da sidebar — "~12-14% de opacidade" do azul,
-     pré-calculado (mistura de --vxa-accent a 14% sobre --vxa-sidebar) pra
-     funcionar com a classe bg-vexo-petrol já existente em AppShell.tsx,
-     sem precisar de um modificador de opacidade nela. */
-  --vxa-nav-active-bg: 25 40 54; /* #192836 */
-
-  /* Sidebar — pedido explícito desta rodada: "itens inativos um pouco mais
-     claros que hoje (~#aab0ba)" — um terceiro tom de texto, só pros itens
-     do menu (desktop e a barra de abas do celular), mais claro que
-     --vxa-muted mas sem chegar no off-white de título. O item ATIVO passa
-     de azul (--vexo-accent, como em qualquer outro link ativo do app) pra
-     --vxa-fg (off-white) — pedido explícito "item ativo em branco/
-     off-white"; o fundo sutil azulado (--vxa-nav-active-bg acima) continua
-     igual, só o texto/ícone em cima dele que mudou de cor. Ver seletores
-     logo abaixo do bloco .vxa-preview. */
-  --vxa-sidebar-inactive: 170 176 186; /* #aab0ba */
-
-  /* Segundo destaque (dourado fosco) e cores de significado — REAPROVEITADAS
-     de onde já existem no VEXO (pedido explícito, "sem inventar tons
-     novos"), agora efetivamente aplicadas em alguns detalhes pontuais de
-     automacoes/page.tsx (títulos de seção, ícones das abas, palavras-chave
-     nos textos de apoio, a palavra "ativa", a seta dos lembretes) — ver
-     comentários lá. */
-  --vxa-brown: 190 142 75; /* #be8e4b — dourado fosco, usado só na seção "Lembretes de agendamento" (ícone do cabeçalho — não, o ícone da aba voltou a azul — título da seção e as 2 palavras-chave do texto de apoio) */
-  --vxa-brown-soft: 43 35 18; /* #2b2312 — mesmo fundo marrom-escuro de "Ideia central" no Bônus (documentado; não usado — nenhum bloco leva fundo colorido, pedido explícito) */
-  --vxa-purple: 76 49 114; /* #4c3172 — mesmo roxo da coluna "Em conversa" do Pipeline; NÃO USADO nesta rodada (pedido explícito: "roxo não é usado nesta página") — mantido só documentado, a seta dos lembretes que o usava voltou a --vxa-muted */
-  --vxa-green: 43 100 76; /* #2b644c — mesmo verde da coluna "Agendado" do Pipeline. Usado na palavra "ativa" (estado ativo/ok) E, nesta rodada, também como a cor da seção "Prazos de retorno" (título + a palavra "Retorno" no texto de apoio) */
-  --vxa-orange: 208 138 86; /* #d08a56 — laranja terroso/queimado novo (pedido explícito, ponto de partida exato), só pra seção "Quente": título + a palavra "Instagram" no texto de apoio. Contraste conferido sobre o fundo do bloco: ~6:1, no mesmo patamar do dourado */
-  --vxa-red: 248 113 113; /* #f87171 — igual a --vexo-error hoje, só erro/alerta (não usado — Automações não tem estado de erro, e esta rodada reforça explicitamente "não alterar nenhum estilo de erro/alerta já existente") */
-
-  /* Redeclara os tokens globais que os componentes já consomem — nenhum
-     precisou ser editado além de automacoes/page.tsx (próprio da página,
-     ver comentário no topo). */
-  --vexo-bg: var(--vxa-bg);
-  --vexo-surface: var(--vxa-sidebar);
-  --vexo-surface2: var(--vxa-card);
-  --vexo-border: var(--vxa-border);
-  --vexo-border-strong: var(--vxa-border-strong);
-  --vexo-muted: var(--vxa-muted);
-  --vexo-fg: var(--vxa-fg);
-  --vexo-accent: var(--vxa-accent);
-  --vexo-accent-fg: var(--vxa-accent-fg);
-  --vexo-petrol: var(--vxa-nav-active-bg);
-
-  /* Cor de texto PADRÃO do wrapper em si — sem isso, elementos sem classe
-     de cor própria (ex: o <h1>"Automações", o texto de preview de cada
-     lembrete) herdam o "color" computado do <body> (que fica FORA de
-     .vxa-preview na árvore e por isso nunca vê --vxa-fg redefinido aqui) —
-     herança de "color" copia o valor já resolvido do ancestral, não
-     reavalia a variável CSS. Declarar "color" aqui, dentro do próprio
-     wrapper, garante que --vxa-fg (de dentro) seja a base herdada por tudo
-     que não pedir uma cor própria — mesmo papel que "text-vexo-fg" no
-     body cumpre pro resto do app. */
-  color: rgb(var(--vxa-fg));
-}
-
-/* Sidebar — pedido explícito desta rodada ("itens inativos um pouco mais
-   claros... item ativo em branco/off-white"). Dois seletores, sem editar
-   AppShell.tsx (componente compartilhado):
-   1. Item INATIVO: a combinação "text-vexo-muted" dentro de um <nav> só
-      existe nos itens do menu em si (desktop E a barra de abas do
-      celular, que reusa o mesmo className) — o rótulo do GRUPO ("Operação")
-      é um <p>, não um <a>, então o seletor não o alcança por acidente.
-   2. Item ATIVO (só desktop, "aside" — a barra de abas do celular usa
-      bg-vexo-accent/text-vexo-accent sem bg-vexo-petrol, e continua azul,
-      como qualquer aba ativa do app): sobrescreve só a COR de
-      "bg-vexo-petrol text-vexo-accent" (texto E ícone, via currentColor)
-      pra off-white — o fundo sutil azulado (--vxa-nav-active-bg) continua
-      intacto, e segue sem contorno/indicador (nada adicionado aqui além
-      da cor do texto), exatamente como a rodada anterior deixou. */
-.vxa-preview nav a.text-vexo-muted {
-  color: rgb(var(--vxa-sidebar-inactive));
-}
-.vxa-preview aside a.bg-vexo-petrol.text-vexo-accent {
-  color: rgb(var(--vxa-fg));
-}
-
-/* Tipografia do item do menu mais discreta — peso regular (era 500) e um
-   pouco menor (era 13px/text-sidebar-item), pedido explícito. Mesmo
-   raciocínio de seletor acima. */
-.vxa-preview .text-sidebar-item.font-medium {
-  font-weight: 400;
-  font-size: 12px;
-}
-
-/* Ícones de linha fina (pedido explícito: "stroke ~1.5"). stroke-width via
-   CSS vence o atributo stroke-width="2" que o lucide-react aplica inline
-   no SVG (atributo de apresentação sempre perde pra regra de folha de
-   estilo). */
-.vxa-preview svg {
-  stroke-width: 1.5px;
+  /* Era 91 134 176 (#5b86b0, azul fosco original) -> 43 135 189 (#2b87bd,
+     um pouco mais vivo e escuro, pedido mantido de uma rodada anterior). */
+  --vexo-accent: 43 135 189; /* #2b87bd */
+  --vexo-accent-fg: 255 255 255;
 }
