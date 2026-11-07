@@ -13,6 +13,13 @@ export type TabItem = {
   content: React.ReactNode;
 };
 
+// Cor do ícone de cada aba — FIXA pela posição (1ª/2ª/3ª/4ª da esquerda
+// pra direita), não por estar selecionada ou não (pedido explícito:
+// substitui a regra anterior de "ícone azul na aba ativa"). Cicla de 4 em
+// 4 — nenhuma página hoje passa de 4 abas, mas isso nunca quebra se
+// alguma ganhar uma 5ª no futuro, só repete a cor da 1ª.
+const TAB_ICON_COLORS = ["text-vexo-tabIcon1", "text-vexo-tabIcon2", "text-vexo-tabIcon3", "text-vexo-tabIcon4"];
+
 // Abas horizontais reutilizáveis, com um traço abaixo da aba ativa que
 // desliza (anima left/width) até a aba clicada — mesmo padrão visual do
 // menu "Atendimento & Social / Anúncios & Métricas / Agendas / Telefonia"
@@ -33,7 +40,7 @@ export function Tabs({ tabs, defaultTabId }: { tabs: TabItem[]; defaultTabId?: s
   return (
     <div>
       <div className="relative flex gap-8 border-b border-vexo-border">
-        {tabs.map((tab) => (
+        {tabs.map((tab, index) => (
           <button
             key={tab.id}
             ref={(el) => {
@@ -43,14 +50,10 @@ export function Tabs({ tabs, defaultTabId }: { tabs: TabItem[]; defaultTabId?: s
             onClick={() => setActiveId(tab.id)}
             className="flex shrink-0 items-center gap-1.5 whitespace-nowrap px-0.5 pb-2.5 text-xs font-medium text-vexo-tabFg transition-colors"
           >
-            {/* Ícone num span próprio, de cor independente do texto acima
-                (pedido explícito: "o texto das abas fica off-white... o
-                ícone [continua] em azul" na aba ativa) — sem isso, o ícone
-                herdaria currentColor do <button> (agora sempre off-white) e
-                perderia a indicação de qual aba está selecionada. */}
-            {tab.icon && (
-              <span className={activeId === tab.id ? "text-vexo-accent" : "text-vexo-fg/60"}>{tab.icon}</span>
-            )}
+            {/* Ícone num span próprio, de cor independente do texto acima —
+                sem isso, herdaria currentColor do <button> (sempre
+                off-white) e perderia a cor fixa por posição. */}
+            {tab.icon && <span className={TAB_ICON_COLORS[index % TAB_ICON_COLORS.length]}>{tab.icon}</span>}
             {tab.label}
           </button>
         ))}
