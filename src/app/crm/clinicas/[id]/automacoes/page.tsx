@@ -3,6 +3,7 @@ import { Settings, ClipboardList } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { requireInternalSession } from "@/lib/session";
 import { Tabs } from "@/components/Tabs";
+import { Button } from "@/components/Button";
 import { TemplateMessageField } from "@/components/TemplateMessageField";
 import {
   updateClinicSettings,
@@ -71,7 +72,7 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
 
                 <form
                   action={updateClinicSettings.bind(null, clinic.id)}
-                  className="mt-5 space-y-3 rounded-xl bg-vexo-surface p-3.5"
+                  className="mt-5 space-y-3 rounded-block bg-vexo-surface p-block"
                 >
                   <div>
                     <label className="mb-1 block text-xs text-vexo-muted" htmlFor="address">
@@ -142,12 +143,9 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
                     </p>
                   </div>
 
-                  <button
-                    type="submit"
-                    className="rounded-lg border border-vexo-accent px-2.5 py-1.5 text-xs font-medium text-vexo-accent hover:bg-vexo-accent/10"
-                  >
+                  <Button type="submit" variant="outline">
                     Salvar configuração
-                  </button>
+                  </Button>
                 </form>
 
                 {/* Seção separada, com o próprio botão de salvar — igual ao
@@ -165,7 +163,7 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
                   </p>
 
                   <form action={updateClinicReminders.bind(null, clinic.id)} className="mt-2 space-y-2">
-                    <details name="automacoes-lembretes" className="group rounded-xl bg-vexo-surface">
+                    <details name="automacoes-lembretes" className="group rounded-block bg-vexo-surface">
                       <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5">
                         <div className="flex min-w-0 items-center gap-2.5">
                           <span className="shrink-0 text-card text-vexo-muted">
@@ -204,7 +202,7 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
                       </div>
                     </details>
 
-                    <details name="automacoes-lembretes" className="group rounded-xl bg-vexo-surface">
+                    <details name="automacoes-lembretes" className="group rounded-block bg-vexo-surface">
                       <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5">
                         <div className="flex min-w-0 items-center gap-2.5">
                           <span className="shrink-0 text-card text-vexo-muted">
@@ -243,12 +241,9 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
                       </div>
                     </details>
 
-                    <button
-                      type="submit"
-                      className="rounded-lg border border-vexo-accent px-2.5 py-1.5 text-xs font-medium text-vexo-accent hover:bg-vexo-accent/10"
-                    >
+                    <Button type="submit" variant="outline">
                       Salvar lembretes
-                    </button>
+                    </Button>
                   </form>
                 </div>
 
@@ -280,7 +275,7 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
                     Os textos das mensagens são globais, em Follow-up → "Cards do Painel".
                   </p>
 
-                  <div className="mt-2 space-y-3 rounded-xl bg-vexo-surface p-3">
+                  <div className="mt-2 space-y-3 rounded-block bg-vexo-surface p-3">
                     <ReturnPeriodChipsForm
                       action={updateClinicReturnPeriods.bind(null, clinic.id, "available")}
                       label="Prazos disponíveis para a secretária"
@@ -320,7 +315,7 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
                     Painel".
                   </p>
 
-                  <div className="mt-2 space-y-2 rounded-xl bg-vexo-surface p-3">
+                  <div className="mt-2 space-y-2 rounded-block bg-vexo-surface p-3">
                     <HotLeadDailyLimitForm
                       action={updateClinicHotLeadDailyLimit.bind(null, clinic.id)}
                       dailyLimit={clinic.hotLeadConfig?.dailyLimit ?? 5}
@@ -343,7 +338,7 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
 
                 <form
                   action={logApproach.bind(null, clinic.id)}
-                  className="mt-5 flex flex-col gap-2 rounded-xl bg-vexo-surface p-3.5"
+                  className="mt-5 flex flex-col gap-2 rounded-block bg-vexo-surface p-block"
                 >
                   <div>
                     <label className="mb-1 block text-xs text-vexo-muted" htmlFor="count">
@@ -359,9 +354,9 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
                       className="w-full rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5 text-xs outline-none focus:border-vexo-accent"
                     />
                   </div>
-                  <button className="self-start rounded-lg bg-vexo-accent px-2.5 py-1.5 text-xs font-medium text-vexo-accentFg hover:opacity-90">
+                  <Button type="submit" variant="primary" className="self-start">
                     Registrar
-                  </button>
+                  </Button>
                 </form>
               </section>
             ),
