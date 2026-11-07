@@ -1,4 +1,4 @@
-// Prévia isolada de paleta nova (2ª rodada, corrigida) — pedido explícito:
+// Prévia isolada de paleta nova (testa a 4ª rodada) — pedido explícito:
 // "testar numa página só" = SÓ Automações desta vez (/crm/clinicas/[id]/
 // automacoes), sidebar incluída enquanto nessa página; a Pipeline (alvo
 // errado da 1ª rodada) foi revertida e fica fora do escopo. O mecanismo
@@ -99,7 +99,24 @@ describe("AutomacoesPalettePreview — ativa .vxa-preview só na aba Automaçõe
       const el = spans.find((s) => s.textContent === "Automações");
       return el ? getComputedStyle(el).color : null;
     });
-    expect(activeLabelColor).toBe("rgb(43, 135, 189)"); // --vxa-accent, azul — texto e ícone acompanham o accent
+    expect(activeLabelColor).toBe("rgb(230, 232, 236)"); // --vxa-fg, off-white — pedido explícito: item ativo não é mais azul
+
+    const inactiveLabelColor = await page.$$eval("aside a span.truncate", (spans) => {
+      const el = spans.find((s) => s.textContent === "Pipeline");
+      return el ? getComputedStyle(el).color : null;
+    });
+    expect(inactiveLabelColor).toBe("rgb(170, 176, 186)"); // --vxa-sidebar-inactive, um pouco mais claro que --vxa-muted
+
+    // Regressão: elementos SEM classe de cor própria (ex: o <h1> da página,
+    // o texto de preview de cada lembrete) herdam o "color" do <body> — que
+    // fica FORA de .vxa-preview na árvore e por isso nunca vê --vxa-fg
+    // redefinido aqui (herança de "color" copia o valor já resolvido do
+    // ancestral, não reavalia a variável CSS). Travado pelo "color:
+    // rgb(var(--vxa-fg))" declarado no próprio .vxa-preview (ver
+    // globals.css) — sem ele, este texto ficaria no --vexo-fg PADRÃO
+    // (rgb(241, 244, 248)), não no off-white da prévia.
+    const unstyledTextColor = await page.$eval("#page-content", (el) => getComputedStyle(el).color);
+    expect(unstyledTextColor).toBe("rgb(230, 232, 236)"); // --vxa-fg
 
     await page.close();
   });
