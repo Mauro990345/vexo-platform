@@ -253,6 +253,12 @@ export type NeverScheduledCard = {
   instagramProfileLink: string | null;
   reason: string;
   anchorAt: Date;
+  // Início da janela deste passo (ver computeReactivationWindow) — só pra
+  // agrupar "Atrasados"/"Hoje" na faixa "Para fazer hoje" do Painel (ver
+  // groupPanelCardsForDisplay, panel-cards.ts); mesmo papel de
+  // NoShowCard.dueDate/HotLeadCard.dueDate, já calculado de qualquer
+  // forma em buildNeverScheduledCardCandidates.
+  dueDate: Date;
   sentAt: Date | null;
 };
 
@@ -370,6 +376,7 @@ export async function getNeverScheduledCards(clinicId: string, now: Date = new D
       instagramProfileLink: igUsername ? buildInstagramProfileLink(igUsername) : null,
       reason: buildNeverScheduledCardReason(c.anchorAt, now, c.step),
       anchorAt: c.anchorAt,
+      dueDate: c.window.start,
       sentAt: sentAtByKey.get(`${c.conversationId}:${c.step}`) ?? null,
     };
   });

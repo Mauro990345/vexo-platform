@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { mergePanelCards, reactivationCardReason, reactivationCardReasonShort, truncateNameToTwoWords } from "./panel-cards";
+import { mergePanelCards, groupPanelCardsForDisplay, reactivationCardReason, reactivationCardReasonShort, truncateNameToTwoWords, type PanelCard } from "./panel-cards";
 import type { ReactivationCard } from "./reactivation";
 import type { NoShowCard } from "./no-show-cards";
 import type { HotLeadCard } from "./hot-lead-cards";
@@ -19,6 +19,7 @@ function hotLeadCard(overrides: Partial<HotLeadCard> = {}): HotLeadCard {
     instagramDmLink: "https://ig.me/m/ana.ig",
     instagramProfileLink: "https://www.instagram.com/ana.ig/",
     reason: "Perguntou sobre horário · há 6 dias · passo 1 de 3",
+    dueDate: new Date(),
     sentAt: null,
     dailyLimitReached: false,
     ...overrides,
@@ -40,6 +41,7 @@ function noShowCard(overrides: Partial<NoShowCard> = {}): NoShowCard {
     instagramProfileLink: null,
     reason: "Faltou há 3 dias · mensagem 1 de 2",
     noShowTriggeredAt: new Date(),
+    dueDate: new Date(),
     sentAt: null,
     dailyLimitReached: false,
     ...overrides,
@@ -79,6 +81,7 @@ function neverScheduledCard(overrides: Partial<NeverScheduledCard> = {}): NeverS
     instagramProfileLink: "https://www.instagram.com/daniela.ig/",
     reason: "Sem agendamento há 31 dias · mensagem 1 de 2",
     anchorAt: new Date(),
+    dueDate: new Date(),
     sentAt: null,
     ...overrides,
   };
@@ -279,5 +282,79 @@ describe("mergePanelCards", () => {
       neverScheduledCards: [neverScheduledCard()],
     });
     expect(merged[0]!.disabledReason).toBeUndefined();
+  });
+});
+
+// Faixa "Para fazer hoje" do Painel (ver ClientPanelView.tsx/
+// ReactivationRail.tsx) — pedido explícito: todos os pendentes, sem
+// rolagem interna, agrupados em "Atrasados"/"Hoje" e ordenados por
+// prioridade (mais atrasados primeiro).
+describe("groupPanelCardsForDisplay", () => {
+  const NOW = new Date("2026-11-10T12:00:00.000Z");
+
+  function card(overrides: Partial<PanelCard> = {}): PanelCard {
+    return {
+      kind: "REACTIVATION",
+      cardKey: "k1",
+      leadId: "lead-1",
+      name: "Ana",
+      igUsername: null,
+      profilePictureUrl: null,
+      message: "Oi!",
+      channel: "WHATSAPP",
+      whatsappLink: "https://wa.me/5511999999999",
+      instagramDmLink: null,
+      instagramProfileLink: null,
+      reason: "x",
+      reasonShort: "x",
+      dueDate: NOW,
+      sentAt: null,
+      actionKey: { kind: "REACTIVATION", appointmentId: "appt-1", thresholdDays: 30 },
+      ...overrides,
+    };
+  }
+
+  it("dueDate de hoje vai pro grupo Hoje", () => {
+    const groups = groupPanelCardsForDisplay([card({ cardKey: "a", dueDate: NOW })], NOW);
+    expect(groups.today.map((c) => c.cardKey)).toEqual(["a"]);
+    expect(groups.overdue).toEqual([]);
+    expect(groups.pendingCount).toBe(1);
+  });
+
+  it("dueDate de dias anteriores vai pro grupo Atrasados", () => {
+    const threeDaysAgo = new Date("2026-11-07T12:00:00.000Z");
+    const groups = groupPanelCardsForDisplay([card({ cardKey: "a", dueDate: threeDaysAgo })], NOW);
+    expect(groups.overdue.map((c) => c.cardKey)).toEqual(["a"]);
+    expect(groups.today).toEqual([]);
+  });
+
+  it("dentro de Atrasados, ordena do mais antigo (mais atrasado) pro mais recente", () => {
+    const d1 = new Date("2026-11-05T12:00:00.000Z");
+    const d2 = new Date("2026-11-08T12:00:00.000Z");
+    const d3 = new Date("2026-11-09T12:00:00.000Z");
+    const groups = groupPanelCardsForDisplay(
+      [card({ cardKey: "recente", dueDate: d3 }), card({ cardKey: "mais-antigo", dueDate: d1 }), card({ cardKey: "meio", dueDate: d2 })],
+      NOW
+    );
+    expect(groups.overdue.map((c) => c.cardKey)).toEqual(["mais-antigo", "meio", "recente"]);
+  });
+
+  it("enviados (sentAt preenchido) saem dos grupos por data e vão pra lista `sent`, sem contar em pendingCount", () => {
+    const groups = groupPanelCardsForDisplay(
+      [card({ cardKey: "pendente", dueDate: NOW }), card({ cardKey: "enviado", dueDate: new Date("2026-11-01T12:00:00.000Z"), sentAt: NOW })],
+      NOW
+    );
+    expect(groups.today.map((c) => c.cardKey)).toEqual(["pendente"]);
+    expect(groups.overdue).toEqual([]);
+    expect(groups.sent.map((c) => c.cardKey)).toEqual(["enviado"]);
+    expect(groups.pendingCount).toBe(1);
+  });
+
+  it("sem nenhum card pendente: os dois grupos ficam vazios e pendingCount é 0 (estado \"Tudo em dia hoje\")", () => {
+    const groups = groupPanelCardsForDisplay([], NOW);
+    expect(groups.overdue).toEqual([]);
+    expect(groups.today).toEqual([]);
+    expect(groups.sent).toEqual([]);
+    expect(groups.pendingCount).toBe(0);
   });
 });

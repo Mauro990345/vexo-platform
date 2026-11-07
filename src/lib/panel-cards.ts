@@ -3,6 +3,8 @@ import type { NoShowCard } from "@/lib/no-show-cards";
 import type { HotLeadCard } from "@/lib/hot-lead-cards";
 import { hotLeadCategoryLabel } from "@/lib/hot-lead-cards";
 import type { NeverScheduledCard } from "@/lib/never-scheduled-cards";
+import { startOfDay } from "@/lib/metrics";
+import { sortReactivationCardsForDisplay } from "@/lib/reactivation";
 
 // Une os QUATRO tipos de card da faixa de Reativação do Painel num único
 // formato pra exibição (ver PanelCardBadge.tsx/ReactivationRail.tsx) — a
@@ -40,6 +42,13 @@ export type PanelCard = {
   // MESMO texto de `reason` — pedido explícito "mantenha o texto curto
   // que já existe, na mesma posição", nada pra encurtar aqui.
   reasonShort: string;
+  // Início da janela deste card (ReactivationCard.completionDate ou
+  // *.dueDate dos outros três tipos — ver mergePanelCards abaixo) — usado
+  // só por groupPanelCardsForDisplay (mais abaixo) pra agrupar "Atrasados"
+  // (dueDate antes de hoje) e "Hoje" (dueDate hoje) na faixa "Para fazer
+  // hoje" do Painel (ver ClientPanelView.tsx/ReactivationRail.tsx); não
+  // influencia elegibilidade nem nenhuma outra regra.
+  dueDate: Date;
   sentAt: Date | null;
   actionKey: PanelCardActionKey;
   // Limite diário por clínica atingido (ver *.dailyLimitReached em cada
@@ -116,6 +125,7 @@ export function mergePanelCards(input: {
     instagramProfileLink: c.instagramProfileLink,
     reason: c.reason,
     reasonShort: hotLeadCategoryLabel(c.category),
+    dueDate: c.dueDate,
     sentAt: c.sentAt,
     actionKey: { kind: "HOT_LEAD", conversationId: c.conversationId, step: c.step },
     disabledReason: !c.sentAt && c.dailyLimitReached ? "Limite diário atingido" : undefined,
@@ -135,6 +145,7 @@ export function mergePanelCards(input: {
     instagramProfileLink: c.instagramProfileLink,
     reason: c.reason,
     reasonShort: c.reason,
+    dueDate: c.dueDate,
     sentAt: c.sentAt,
     actionKey: { kind: "NO_SHOW", appointmentId: c.appointmentId, step: c.step },
     disabledReason: !c.sentAt && c.dailyLimitReached ? "Limite diário atingido" : undefined,
@@ -154,6 +165,7 @@ export function mergePanelCards(input: {
     instagramProfileLink: c.instagramProfileLink,
     reason: reactivationCardReason(c.thresholdDays),
     reasonShort: reactivationCardReasonShort(c.thresholdDays),
+    dueDate: c.completionDate,
     sentAt: c.sentAt,
     actionKey: { kind: "REACTIVATION", appointmentId: c.appointmentId, thresholdDays: c.thresholdDays },
     disabledReason: !c.sentAt && c.dailyLimitReached ? "Limite diário atingido" : undefined,
@@ -173,10 +185,47 @@ export function mergePanelCards(input: {
     instagramProfileLink: c.instagramProfileLink,
     reason: c.reason,
     reasonShort: c.reason,
+    dueDate: c.dueDate,
     sentAt: c.sentAt,
     actionKey: { kind: "NEVER_SCHEDULED", conversationId: c.conversationId, step: c.step },
     disabledReason: undefined,
   }));
 
   return [...hotLead, ...noShow, ...reactivation, ...neverScheduled];
+}
+
+// Agrupamento da faixa "Para fazer hoje" do Painel (ver ClientPanelView.tsx/
+// ReactivationRail.tsx) — pedido explícito: mostrar TODOS os pendentes
+// (sem "ver todos", sem rolagem interna), ordenados por prioridade (mais
+// atrasados/antigos primeiro) e agrupados em "Atrasados" (dueDate antes de
+// hoje) e "Hoje" (dueDate hoje — nunca no futuro, já que um card só existe
+// quando sua janela já está aberta, ver isWithinReactivationWindow). Sort
+// ESTÁVEL por dueDate ascendente dentro de cada grupo (mais antigo
+// primeiro); cards com o mesmo dueDate mantêm a ordem relativa de origem
+// (mergePanelCards já concatena Quente/Faltou/Reativação/Não agendou nessa
+// prioridade fixa — o empate aqui preserva essa prioridade como critério
+// secundário, sem precisar repeti-la).
+//
+// Enviados (sentAt preenchido) continuam visíveis pro "✓" de desfazer
+// (comportamento de sempre, ver sortReactivationCardsForDisplay) — só saem
+// do agrupamento por data (iriam parar num grupo "Atrasados" cada vez mais
+// antigo, sem sentido pra algo já resolvido) e ficam numa lista própria, no
+// fim, na mesma ordem relativa de sempre.
+export type PanelTaskGroups = {
+  overdue: PanelCard[];
+  today: PanelCard[];
+  sent: PanelCard[];
+  pendingCount: number;
+};
+
+export function groupPanelCardsForDisplay(cards: PanelCard[], now: Date): PanelTaskGroups {
+  const todayStart = startOfDay(now);
+  const pending = cards.filter((c) => !c.sentAt);
+  const sent = sortReactivationCardsForDisplay(cards.filter((c) => c.sentAt));
+
+  const byDueDateAsc = (a: PanelCard, b: PanelCard) => a.dueDate.getTime() - b.dueDate.getTime();
+  const overdue = pending.filter((c) => startOfDay(c.dueDate).getTime() < todayStart.getTime()).sort(byDueDateAsc);
+  const today = pending.filter((c) => startOfDay(c.dueDate).getTime() >= todayStart.getTime()).sort(byDueDateAsc);
+
+  return { overdue, today, sent, pendingCount: pending.length };
 }

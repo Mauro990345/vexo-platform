@@ -204,6 +204,12 @@ export type HotLeadCard = {
   instagramDmLink: string | null;
   instagramProfileLink: string | null;
   reason: string;
+  // Início da janela deste passo (ver computeCalendarDayWindow) — só pra
+  // agrupar "Atrasados"/"Hoje" na faixa "Para fazer hoje" do Painel (ver
+  // groupPanelCardsForDisplay, panel-cards.ts); mesmo papel de
+  // NoShowCard.dueDate/NeverScheduledCard.dueDate, já calculado de
+  // qualquer forma em buildHotLeadCardCandidates.
+  dueDate: Date;
   sentAt: Date | null;
   dailyLimitReached: boolean;
 };
@@ -364,6 +370,7 @@ export async function getHotLeadCards(clinicId: string, now: Date = new Date()):
       instagramDmLink: resolveInstagramDmLink(igUsername, message),
       instagramProfileLink: igUsername ? buildInstagramProfileLink(igUsername) : null,
       reason: buildHotLeadCardReason(c.category, c.anchorAt, now, c.step),
+      dueDate: c.window.start,
       sentAt: existingStep?.sentAt ?? null,
       dailyLimitReached,
     };

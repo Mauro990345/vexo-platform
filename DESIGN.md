@@ -35,7 +35,7 @@
 ## Tokens de raio e espaçamento (Etapa 1 da migração — ver docs/design-audit.md)
 - Raio: `rounded-control` (0.5rem/8px — botões, campos, chips pequenos) e `rounded-block` (0.75rem/12px — cards/blocos de conteúdo), em `tailwind.config.ts`. Mesmos valores de `rounded-lg`/`rounded-xl` já usados hoje — só dão nome ao papel de cada um, pros componentes base consumirem. `rounded-card` (0.375rem/6px) continua existindo só pro Pipeline (não mexido nesta migração), não é o token pra blocos novos.
 - Espaçamento: `control-x` (0.625rem/10px), `control-y` (0.375rem/6px) e `block` (0.875rem/14px), também em `tailwind.config.ts` — mesmos valores de `px-2.5`/`py-1.5`/`p-3.5`, os paddings mais comuns hoje em botões/campos e em blocos.
-- `src/components/MobileCardScale.ts` continua como fonte PRÓPRIA e separada, só pro recorte mobile (abaixo de `sm`) das telas do Painel do cliente — não foi unificado com os tokens acima nesta rodada (o Painel está fora do escopo: vai ganhar um layout novo depois). Ao mexer nele, não duplicar um valor que já existe como token nomeado aqui.
+- `src/components/MobileCardScale.ts` continua como fonte PRÓPRIA e separada, só pro recorte mobile (abaixo de `sm`) de alguns elementos reaproveitados pelo Painel do cliente (ChannelStatusPill, LeadAvatar, NoShowButton/RetornoButton, botões de ação da faixa "Para fazer hoje") — não foi unificado com os tokens acima. O layout do Painel em si foi reorganizado na Etapa 4 (ver seção própria abaixo); boa parte dos valores antigos deste arquivo, específicos do layout anterior, foi removida junto com os componentes que só eles serviam. Ao mexer nele, não duplicar um valor que já existe como token nomeado aqui.
 
 ## Componentes base (Etapa 2 da migração)
 Novos, só com os tokens acima, visual idêntico ao que já existia solto nas telas — ainda sem
@@ -45,7 +45,25 @@ nenhuma tela consumindo (chegam na Etapa 3, começando pela Automações):
 - `Card` (`src/components/Card.tsx`) — bloco com borda fina + fundo (`surface`/`surface2`);
   `as="form"` quando o próprio bloco é um formulário.
 - `Badge` (`src/components/Badge.tsx`) — pílula com bolinha de cor, nas 5 famílias semânticas já
-  usadas (`accent`/`success`/`error`/`warning`/`muted`). Pensado pra no futuro unificar
-  `StatusBadge`/`AppointmentStatusBadge`/`PanelCardBadge` — nenhum dos três foi tocado ainda.
+  usadas (`accent`/`success`/`error`/`warning`/`muted`). Primeiro consumidor: faixa "Para fazer
+  hoje" do Painel (Etapa 4, ver seção abaixo) — `PanelCardBadge.tsx` (chip de tipo antigo) foi
+  removido, substituído por este componente.
 - `MetricCard` (`src/components/MetricCard.tsx`) — rótulo pequeno + valor grande, baseado no
-  `StatCard` existente. `PanelMetricCard` (Painel) não foi tocado nem unificado — fora do escopo.
+  `StatCard` existente. Ganhou `bare` (sem borda/fundo próprios, pra usar dentro de uma faixa já
+  dividida por linha) e `highlight` (tom de destaque customizável, `painel.highlight`) na Etapa 4,
+  ao se tornar o card de métrica do Painel — `PanelMetricCard.tsx` (antigo) foi removido.
+
+## Painel do cliente (Etapa 4 da migração — reorganização, ver docs/design-audit.md)
+Desktop: cabeçalho enxuto (nome da clínica + ícones de integração + seletor de Período, sem
+repetir "Painel" — já dito pela aba quando ela existe); faixa fina de 4 métricas (`MetricCard`
+`bare`) com linhas finas entre elas, no lugar dos 4 blocos grandes; navegação de semana/gráfico
+"Abordagens por dia" atrás de um link discreto "Ver semana"; duas colunas (~55%/45%): "Para fazer
+hoje" (`ReactivationRail.tsx`, SEMPRE aberta — une Reativação/Faltou/Quente/Não agendou numa lista
+só, agrupada em "Atrasados"/"Hoje" por prioridade, sem rolagem interna) e "Agendamentos"
+(`PanelAppointmentsColumn.tsx` — Próximos, depois Aguardando resposta, com o Histórico atrás de um
+link). Celular: mesma estrutura numa coluna só, métricas em 2x2. Linhas sem caixa individual
+(bloco único com `Card`, dividido por `divide-y`); status em ponto colorido + texto, não selo
+sólido (`AppointmentStatusBadge`, modo compact); ação secundária (ex.: "Não compareceu", quando
+"Retorno" também se aplica) num menu "⋯" (`OverflowMenu.tsx`). Componentes removidos, substituídos
+pelos de cima: `PanelActivityColumn.tsx`, `ApproachMetricsToggle.tsx`, `PanelMetricCard.tsx`,
+`PanelCardBadge.tsx`.
