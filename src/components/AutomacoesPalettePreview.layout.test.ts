@@ -77,7 +77,7 @@ describe("AutomacoesPalettePreview — ativa .vxa-preview só na aba Automaçõe
     return { page, markup };
   }
 
-  it("na aba Automações exata: .vxa-preview aplicada, sidebar vira cinza-azulado escuro e o item ativo fica branco/sutil com indicador", async () => {
+  it("na aba Automações exata: .vxa-preview aplicada, sidebar vira cinza-azulado escuro e o item ativo fica com fundo sutil, sem contorno nem indicador", async () => {
     const { page, markup } = await renderShell("/crm/clinicas/clinic-1/automacoes");
 
     expect(markup).toContain('class="vxa-preview"');
@@ -89,16 +89,17 @@ describe("AutomacoesPalettePreview — ativa .vxa-preview só na aba Automaçõe
 
     const activeLink = await page.$eval("a.bg-vexo-petrol.text-vexo-accent", (el) => {
       const s = getComputedStyle(el);
-      return { bg: s.backgroundColor, boxShadow: s.boxShadow };
+      return { bg: s.backgroundColor, boxShadow: s.boxShadow, outlineStyle: s.outlineStyle, border: s.border };
     });
-    expect(activeLink.bg).toBe("rgb(32, 40, 52)"); // --vxa-nav-active-bg, fundo sutil
-    expect(activeLink.boxShadow).toContain("rgb(91, 134, 176)"); // indicador vertical de 2px, cor do azul fosco
+    expect(activeLink.bg).toBe("rgb(25, 40, 54)"); // --vxa-nav-active-bg, fundo sutil
+    expect(activeLink.boxShadow).toBe("none"); // pedido explícito: sem indicador lateral
+    expect(activeLink.outlineStyle).toBe("none"); // pedido explícito: sem contorno
 
     const activeLabelColor = await page.$$eval("aside a span.truncate", (spans) => {
       const el = spans.find((s) => s.textContent === "Automações");
       return el ? getComputedStyle(el).color : null;
     });
-    expect(activeLabelColor).toBe("rgb(201, 204, 209)"); // --vxa-fg, branco acinzentado — não azul
+    expect(activeLabelColor).toBe("rgb(43, 135, 189)"); // --vxa-accent, azul — texto e ícone acompanham o accent
 
     await page.close();
   });
@@ -114,10 +115,10 @@ describe("AutomacoesPalettePreview — ativa .vxa-preview só na aba Automaçõe
     await page.close();
   });
 
-  it("logo/quadrado do VEXO fica no azul fosco dentro da prévia", async () => {
+  it("logo/quadrado do VEXO fica no azul novo dentro da prévia", async () => {
     const { page } = await renderShell("/crm/clinicas/clinic-1/automacoes");
     const logoBg = await page.$eval("aside span.bg-vexo-accent", (el) => getComputedStyle(el).backgroundColor);
-    expect(logoBg).toBe("rgb(91, 134, 176)");
+    expect(logoBg).toBe("rgb(43, 135, 189)");
     await page.close();
   });
 
