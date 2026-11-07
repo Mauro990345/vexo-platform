@@ -40,7 +40,7 @@ export const THEME_DEFAULTS: ThemeColors = {
   vexoBorderStrong: "#33404f",
   vexoMuted: "#8b96a8",
   vexoFg: "#f1f4f8",
-  vexoAccent: "#3b82f6",
+  vexoAccent: "#2b87bd",
   vexoAccentFg: "#ffffff",
   vexoPetrol: "#0B2436",
   vexoPetrolBorder: "#1e4459",

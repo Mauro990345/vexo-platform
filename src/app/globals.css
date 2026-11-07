@@ -32,8 +32,13 @@
   --vexo-muted: 139 150 168; /* #8b96a8 — texto secundário/apagado */
   --vexo-fg: 241 244 248; /* #f1f4f8 — texto principal */
 
-  /* Cor de marca / ação primária */
-  --vexo-accent: 59 130 246; /* #3b82f6 — azul da marca (botão primário, item ativo, links) */
+  /* Cor de marca / ação primária — tom aprovado depois de testado isolado
+     na aba Automações (PRs #185-189): era 59 130 246 (#3b82f6, azul
+     "padrão" genérico), agora 43 135 189 (#2b87bd, azul fosco/escuro com
+     mais corpo). Valendo em todo o app — botão primário, item ativo,
+     links, checkboxes/toggles, abas ativas, foco de campo, fundos de
+     estado ativo em baixa opacidade (bg-vexo-accent/10-15). */
+  --vexo-accent: 43 135 189; /* #2b87bd — azul da marca (botão primário, item ativo, links) */
   --vexo-accent-fg: 255 255 255; /* #ffffff — texto EM CIMA de um fundo accent (ex: texto do botão primário) */
 
   /* Azul petróleo — fundo do item selecionado/hover do menu lateral, e
@@ -53,14 +58,15 @@
   --vexo-error: 248 113 113; /* #f87171 — erro/negativo (falha, faltou, precisa de humano) */
   --vexo-warning: 251 191 36; /* #fbbf24 — alerta/atenção (conectando, pendente) */
 
-  /* Verde do "Bônus Full Face" (guia em si + a prévia de estilo testada na
-     tela Automações) — token PRÓPRIO, fixo, que NÃO acompanha a cor de
-     marca personalizável por clínica (--vexo-accent, acima, pode ser
-     trocada em Configurações/ThemeSettings) nem o token semântico de
+  /* Verde do "Bônus Full Face" — token PRÓPRIO, fixo, que NÃO acompanha a
+     cor de marca personalizável por clínica (--vexo-accent, acima, pode
+     ser trocada em Configurações/ThemeSettings) nem o token semântico de
      "sucesso" (--vexo-success, usado em badges). Pedido explícito: "uma
      única variável fácil de ajustar" — mude só este valor pra retocar as
      duas áreas juntas. Mesmo tom usado nas PRs #179/#180 (antes da troca
-     de paleta pra azul): mais claro/sutil que --vexo-success. */
+     de paleta pra azul): mais claro/sutil que --vexo-success. NÃO MUDA
+     com a troca do azul da marca (pedido explícito: "Bônus Full Face
+     mantém o verde e a identidade atuais"). */
   --bonus-green: 94 194 181; /* #5ec2b5 */
 
   /* Botão WhatsApp da Reativação (ver ReactivationActionButtonStyle.ts) —
@@ -78,41 +84,4 @@ body {
 
 ::selection {
   @apply bg-vexo-accent/40;
-}
-
-/* ---------------------------------------------------------------------------
- * Prévia isolada de paleta nova (5ª rodada — simplificação) — pedido
- * explícito: desfazer o teste de paleta, mantendo SÓ a mudança do tom do
- * azul. Rodadas anteriores testaram fundo/cards/bordas mais escuros, duas
- * camadas de texto (off-white/cinza), tipografia e ícones mais finos na
- * sidebar, e cores de destaque por seção (dourado/verde/laranja/roxo) —
- * tudo isso voltou ao visual de antes do teste (ver histórico do git,
- * commit 155bb51, anterior à PR #185). Só o azul (--vexo-accent) continua
- * valendo o tom novo testado, nos mesmos lugares em que o azul já era
- * usado (item ativo da sidebar, logo do VEXO, botão "Salvar configuração",
- * abas ativas, checkboxes/toggles — accent-vexo-accent — foco de campos e
- * fundos de estado ativo em baixa opacidade, tipo bg-vexo-accent/15) —
- * nenhum desses lugares precisou de classe nova, já usavam --vexo-accent.
- *
- * Mecanismo (sem mudança): a classe .vxa-preview é aplicada SÓ quando o
- * pathname é EXATAMENTE /crm/clinicas/[id]/automacoes, num wrapper
- * envolvendo o <AppShell> INTEIRO — ver AutomacoesPalettePreview.tsx,
- * usado em src/app/crm/clinicas/[id]/layout.tsx. Pipeline, Painel,
- * Follow-up, Agenda e o resto continuam exatamente como sempre foram.
- *
- * REVISÃO (decisão pendente do usuário):
- * - Aprovado: trocar o valor PADRÃO de --vexo-accent/--vexo-accent-fg
- *   (bloco :root acima) e de THEME_DEFAULTS (src/lib/theme.ts) pelo valor
- *   abaixo, e apagar este bloco + AutomacoesPalettePreview.tsx + a troca
- *   no layout.tsx (automacoes/page.tsx não tem mais nenhuma classe extra
- *   pra desfazer).
- * - Reprovado: apagar este bloco, AutomacoesPalettePreview.tsx e a
- *   referência a ele em clinicas/[id]/layout.tsx — zero rastro em
- *   qualquer outra tela.
- * ------------------------------------------------------------------------- */
-.vxa-preview {
-  /* Era 91 134 176 (#5b86b0, azul fosco original) -> 43 135 189 (#2b87bd,
-     um pouco mais vivo e escuro, pedido mantido de uma rodada anterior). */
-  --vexo-accent: 43 135 189; /* #2b87bd */
-  --vexo-accent-fg: 255 255 255;
 }
