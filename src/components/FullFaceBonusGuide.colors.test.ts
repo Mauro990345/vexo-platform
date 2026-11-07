@@ -39,7 +39,7 @@ const DEFAULT_VEXO_ROOT = `
   --vexo-border-strong: 51 64 79;
   --vexo-muted: 139 150 168;
   --vexo-fg: 241 244 248;
-  --vexo-accent: 59 130 246;
+  --vexo-accent: 43 135 189;
   --vexo-accent-fg: 255 255 255;
   --vexo-petrol: 11 36 54;
   --vexo-petrol-border: 30 68 89;
@@ -51,7 +51,7 @@ const BONUS_GREEN = "rgb(94, 194, 181)";
 const VEXO_SURFACE = "rgb(20, 26, 36)"; // fundo da página (.root) — sem verde
 const VEXO_SURFACE2 = "rgb(27, 34, 46)"; // blocos neutros (ex: .phrase)
 const VEXO_MUTED = "rgb(139, 150, 168)";
-const VEXO_ACCENT = "rgb(59, 130, 246)"; // azul — reservado fora do Bônus
+const VEXO_ACCENT = "rgb(43, 135, 189)"; // azul — reservado fora do Bônus
 
 const markup = `
 <div class="scope">

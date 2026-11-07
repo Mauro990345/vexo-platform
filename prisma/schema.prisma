@@ -1400,7 +1400,7 @@ model ThemeSettings {
   vexoBorderStrong String @default("#33404f")
   vexoMuted        String @default("#8b96a8")
   vexoFg           String @default("#f1f4f8")
-  vexoAccent       String @default("#3b82f6")
+  vexoAccent       String @default("#2b87bd")
   vexoAccentFg     String @default("#ffffff")
   vexoPetrol       String @default("#0B2436")
   vexoPetrolBorder String @default("#1e4459")
