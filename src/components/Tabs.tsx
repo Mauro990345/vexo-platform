@@ -41,11 +41,16 @@ export function Tabs({ tabs, defaultTabId }: { tabs: TabItem[]; defaultTabId?: s
             }}
             type="button"
             onClick={() => setActiveId(tab.id)}
-            className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap px-0.5 pb-2.5 text-xs font-medium transition-colors ${
-              activeId === tab.id ? "text-vexo-accent" : "text-vexo-fg/60 hover:text-vexo-fg"
-            }`}
+            className="flex shrink-0 items-center gap-1.5 whitespace-nowrap px-0.5 pb-2.5 text-xs font-medium text-vexo-tabFg transition-colors"
           >
-            {tab.icon}
+            {/* Ícone num span próprio, de cor independente do texto acima
+                (pedido explícito: "o texto das abas fica off-white... o
+                ícone [continua] em azul" na aba ativa) — sem isso, o ícone
+                herdaria currentColor do <button> (agora sempre off-white) e
+                perderia a indicação de qual aba está selecionada. */}
+            {tab.icon && (
+              <span className={activeId === tab.id ? "text-vexo-accent" : "text-vexo-fg/60"}>{tab.icon}</span>
+            )}
             {tab.label}
           </button>
         ))}

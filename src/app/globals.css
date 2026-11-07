@@ -32,6 +32,13 @@
   --vexo-muted: 139 150 168; /* #8b96a8 — texto secundário/apagado */
   --vexo-fg: 241 244 248; /* #f1f4f8 — texto principal */
 
+  /* Título das abas (ver Tabs.tsx) — token PRÓPRIO, fixo, que NÃO
+     acompanha --vexo-fg (pedido explícito: off-white ~#e6e8ec, nunca
+     branco puro — um pouco mais escuro que o texto principal padrão). Vale
+     pro texto da aba em QUALQUER estado (ativa ou não); só o sublinhado e
+     o ícone continuam indicando qual está selecionada. */
+  --vexo-tab-fg: 230 232 236; /* #e6e8ec */
+
   /* Cor de marca / ação primária — tom aprovado depois de testado isolado
      na aba Automações (PRs #185-189): era 59 130 246 (#3b82f6, azul
      "padrão" genérico), agora 43 135 189 (#2b87bd, azul fosco/escuro com
