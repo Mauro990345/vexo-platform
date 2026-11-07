@@ -51,18 +51,18 @@
   --vexo-tab-fg: 230 232 236; /* #e6e8ec */
 
   /* Cor do ÍCONE de cada aba — FIXA por posição (1ª, 2ª, 3ª, 4ª aba da
-     esquerda pra direita), não pela aba estar selecionada ou não (pedido
-     explícito: "substitui a regra anterior de ícone azul na ativa"). Tons
-     claros e foscos, derivados das cores já usadas no VEXO: marrom/
-     dourado, verde, roxo (coluna "Em conversa" do Pipeline) e uma versão
-     mais clara do azul da marca — ver Tabs.tsx (ciclo por índice, reinicia
-     em cada página/array de abas). Variáveis PRÓPRIAS, sem ligação com
-     nenhum token semântico (não mudam se o azul da marca mudar, por
-     exemplo) — pedido explícito "fáceis de ajustar depois". */
-  --tab-icon-1: 209 164 104; /* #d1a468 — marrom/dourado claro */
-  --tab-icon-2: 134 201 160; /* #86c9a0 — verde claro */
-  --tab-icon-3: 184 164 227; /* #b8a4e3 — roxo claro */
-  --tab-icon-4: 127 184 224; /* #7fb8e0 — azul claro */
+     esquerda pra direita), não pela aba estar selecionada ou não — ver
+     Tabs.tsx (ciclo por índice, reinicia em cada página/array de abas).
+     Variáveis PRÓPRIAS, sem ligação com nenhum token semântico (não mudam
+     se o azul da marca mudar, por exemplo) — pedido explícito "fáceis de
+     ajustar depois". Valores atualizados (2ª rodada) a partir de uma
+     referência visual passada pelo usuário — contraste conferido sobre
+     --vexo-bg (#0b0f17): de ~4.6:1 (azul mais escuro, --tab-icon-3) a
+     ~9.5:1 (âmbar, --tab-icon-2), todos legíveis. */
+  --tab-icon-1: 40 164 194; /* #28a4c2 — azul-ciano claro */
+  --tab-icon-2: 219 177 72; /* #dbb148 — âmbar */
+  --tab-icon-3: 84 122 202; /* #547aca — azul mais escuro */
+  --tab-icon-4: 73 183 108; /* #49b76c — verde */
 
   /* Cor de marca / ação primária — tom aprovado depois de testado isolado
      na aba Automações (PRs #185-189): era 59 130 246 (#3b82f6, azul
