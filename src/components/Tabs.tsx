@@ -39,7 +39,14 @@ export function Tabs({ tabs, defaultTabId }: { tabs: TabItem[]; defaultTabId?: s
 
   return (
     <div>
-      <div className="relative flex gap-8 border-b border-vexo-border">
+      {/* overflow-x-auto (pedido explícito, correção de rolagem horizontal
+          no celular) — com 3-4 abas de rótulo longo e whitespace-nowrap, a
+          linha é mais larga que telas pequenas; sem isso o excesso
+          vazava pra fora do container e estourava a largura da PÁGINA
+          inteira (o navegador então encolhia o zoom pra caber tudo). Agora
+          só esta linha rola, por dentro de si mesma — o resto da página
+          nunca se move. */}
+      <div className="relative flex gap-8 overflow-x-auto border-b border-vexo-border">
         {tabs.map((tab, index) => (
           <button
             key={tab.id}
