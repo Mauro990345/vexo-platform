@@ -18,6 +18,7 @@
     "prisma:seed:demo": "tsx prisma/seed-demo.ts",
     "prisma:seed:return-demo": "tsx prisma/seed-return-demo.ts",
     "prisma:seed:reactivation-showcase": "tsx prisma/seed-reactivation-showcase.ts",
+    "prisma:seed:reactivation-return-demo": "tsx prisma/seed-reactivation-return-demo.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {
