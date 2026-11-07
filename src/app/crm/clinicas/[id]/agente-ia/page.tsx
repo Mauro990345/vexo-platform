@@ -280,7 +280,7 @@ export default async function ClinicAiAgentPage({ params }: { params: { id: stri
                               <form action={deleteResultPhoto.bind(null, clinic.id, photo.id)}>
                                 <ConfirmSubmitButton
                                   confirmMessage="Remover esta foto? Essa ação não pode ser desfeita."
-                                  className="shrink-0 text-caption text-vexo-muted hover:text-red-500"
+                                  className="shrink-0 text-caption text-vexo-muted hover:text-vexo-error"
                                 >
                                   Remover
                                 </ConfirmSubmitButton>

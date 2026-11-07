@@ -30,3 +30,9 @@
 ## Regras técnicas
 - Todas as cores, tamanhos de fonte, espaçamentos, raios e bordas vêm de variáveis (tokens) em um único lugar. Proibido hex, rgb ou classe de cor escrita direto nas telas.
 - Telas usam componentes compartilhados (Botão, Card, Campo, Abas, Badge, Tabela, Sidebar). Não duplicar versões locais.
+- Erro/destrutivo: sempre a cor semântica `vexo-error` (nunca uma classe de cor solta tipo `red-500`), mesmo em hover de um botão "Remover".
+
+## Tokens de raio e espaçamento (Etapa 1 da migração — ver docs/design-audit.md)
+- Raio: `rounded-control` (0.5rem/8px — botões, campos, chips pequenos) e `rounded-block` (0.75rem/12px — cards/blocos de conteúdo), em `tailwind.config.ts`. Mesmos valores de `rounded-lg`/`rounded-xl` já usados hoje — só dão nome ao papel de cada um, pros componentes base consumirem. `rounded-card` (0.375rem/6px) continua existindo só pro Pipeline (não mexido nesta migração), não é o token pra blocos novos.
+- Espaçamento: `control-x` (0.625rem/10px), `control-y` (0.375rem/6px) e `block` (0.875rem/14px), também em `tailwind.config.ts` — mesmos valores de `px-2.5`/`py-1.5`/`p-3.5`, os paddings mais comuns hoje em botões/campos e em blocos.
+- `src/components/MobileCardScale.ts` continua como fonte PRÓPRIA e separada, só pro recorte mobile (abaixo de `sm`) das telas do Painel do cliente — não foi unificado com os tokens acima nesta rodada (o Painel está fora do escopo: vai ganhar um layout novo depois). Ao mexer nele, não duplicar um valor que já existe como token nomeado aqui.
