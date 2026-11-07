@@ -71,10 +71,10 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
 
                 <form
                   action={updateClinicSettings.bind(null, clinic.id)}
-                  className="mt-5 space-y-3 rounded-xl border border-vexo-border bg-vexo-surface2 p-3.5"
+                  className="mt-5 space-y-3 rounded-xl bg-vexo-surface p-3.5"
                 >
                   <div>
-                    <label className="mb-1 block text-xs text-vexo-fg" htmlFor="address">
+                    <label className="mb-1 block text-xs text-vexo-muted" htmlFor="address">
                       Endereço da clínica
                     </label>
                     <input
@@ -91,7 +91,7 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
                   </div>
 
                   <div>
-                    <label className="mb-1 block text-xs text-vexo-fg" htmlFor="clientWhatsappNumber">
+                    <label className="mb-1 block text-xs text-vexo-muted" htmlFor="clientWhatsappNumber">
                       WhatsApp da clínica
                     </label>
                     <input
@@ -111,14 +111,14 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
                   </div>
 
                   <div>
-                    <label className="flex items-center gap-2 text-xs text-vexo-fg">
+                    <label className="flex items-center gap-2 text-xs text-vexo-muted">
                       <input
                         type="checkbox"
                         name="active"
                         defaultChecked={clinic.active}
                         className="rounded border-vexo-border accent-vexo-accent"
                       />
-                      Clínica <span className="text-[rgb(var(--vxa-green))]">ativa</span>
+                      Clínica ativa
                     </label>
                     <p className="mt-1 text-caption text-vexo-muted">
                       Mostra a clínica como ativa (bolinha verde) ou inativa (cinza) na lista de
@@ -127,7 +127,7 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
                   </div>
 
                   <div>
-                    <label className="flex items-center gap-2 text-xs text-vexo-fg">
+                    <label className="flex items-center gap-2 text-xs text-vexo-muted">
                       <input
                         type="checkbox"
                         name="fullFaceBonusEnabled"
@@ -158,17 +158,14 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
                     endereço, WhatsApp e ativa/inativa só por mexer num
                     lembrete. */}
                 <div className="mt-5">
-                  <h2 className="text-xs font-semibold uppercase tracking-wide text-[rgb(var(--vxa-brown))]">Lembretes de agendamento</h2>
+                  <h2 className="text-xs font-semibold">Lembretes de agendamento</h2>
                   <p className="mt-1 text-caption text-vexo-muted">
-                    Enviados automaticamente ao lead pelo <span className="text-[rgb(var(--vxa-brown))]">Instagram (Direct)</span>, nas horas configuradas
-                    antes do horário marcado — <span className="text-[rgb(var(--vxa-brown))]">nunca por WhatsApp</span>.
+                    Enviados automaticamente ao lead pelo Instagram (Direct), nas horas configuradas
+                    antes do horário marcado — nunca por WhatsApp.
                   </p>
 
                   <form action={updateClinicReminders.bind(null, clinic.id)} className="mt-2 space-y-2">
-                    <details
-                      name="automacoes-lembretes"
-                      className="group rounded-xl border border-vexo-border bg-vexo-surface2"
-                    >
+                    <details name="automacoes-lembretes" className="group rounded-xl bg-vexo-surface">
                       <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5">
                         <div className="flex min-w-0 items-center gap-2.5">
                           <span className="shrink-0 text-card text-vexo-muted">
@@ -182,7 +179,7 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
                       </summary>
                       <div className="space-y-2.5 px-3 pb-3 pt-2.5">
                         <div>
-                          <label className="mb-1 block text-xs text-vexo-fg" htmlFor="firstReminderHours">
+                          <label className="mb-1 block text-xs text-vexo-muted" htmlFor="firstReminderHours">
                             Horas antes
                           </label>
                           <input
@@ -207,10 +204,7 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
                       </div>
                     </details>
 
-                    <details
-                      name="automacoes-lembretes"
-                      className="group rounded-xl border border-vexo-border bg-vexo-surface2"
-                    >
+                    <details name="automacoes-lembretes" className="group rounded-xl bg-vexo-surface">
                       <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5">
                         <div className="flex min-w-0 items-center gap-2.5">
                           <span className="shrink-0 text-card text-vexo-muted">
@@ -224,7 +218,7 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
                       </summary>
                       <div className="space-y-2.5 px-3 pb-3 pt-2.5">
                         <div>
-                          <label className="mb-1 block text-xs text-vexo-fg" htmlFor="secondReminderHours">
+                          <label className="mb-1 block text-xs text-vexo-muted" htmlFor="secondReminderHours">
                             Horas antes
                           </label>
                           <input
@@ -276,17 +270,17 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
                     daqui — agora globais, editadas em Follow-up → "Cards
                     do Painel" (ver updatePanelCardSettings, actions.ts). */}
                 <div className="mt-5">
-                  <h2 className="text-xs font-semibold uppercase tracking-wide text-[rgb(var(--vxa-green))]">Prazos de retorno</h2>
+                  <h2 className="text-xs font-semibold">Prazos de retorno</h2>
                   <p className="mt-1 text-caption text-vexo-muted">
                     A secretária marca o prazo de retorno de cada paciente atendido no botão
-                    "<span className="text-[rgb(var(--vxa-green))]">Retorno</span>" do card de agendamento. Sem marcação, valem os prazos padrão
+                    "Retorno" do card de agendamento. Sem marcação, valem os prazos padrão
                     abaixo. Na data de contato (atendimento + prazo), um card de Reativação
                     aparece no Painel com uma mensagem sugerida — por WhatsApp (com fallback
                     pra Instagram sem telefone/desconectado) — nada é enviado automaticamente.
                     Os textos das mensagens são globais, em Follow-up → "Cards do Painel".
                   </p>
 
-                  <div className="mt-2 space-y-3 rounded-xl border border-vexo-border bg-vexo-surface2 p-3">
+                  <div className="mt-2 space-y-3 rounded-xl bg-vexo-surface p-3">
                     <ReturnPeriodChipsForm
                       action={updateClinicReturnPeriods.bind(null, clinic.id, "available")}
                       label="Prazos disponíveis para a secretária"
@@ -316,17 +310,17 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
                     saíram daqui — agora globais, em Follow-up → "Cards do
                     Painel". */}
                 <div className="mt-5">
-                  <h2 className="text-xs font-semibold uppercase tracking-wide text-[rgb(var(--vxa-orange))]">Quente</h2>
+                  <h2 className="text-xs font-semibold">Quente</h2>
                   <p className="mt-1 text-caption text-vexo-muted">
                     Lead que nunca agendou, que perguntou sobre horário, preço ou endereço —
-                    aparece no Painel com um botão de <span className="text-[rgb(var(--vxa-orange))]">Instagram</span> (copiar e abrir a conversa) em 3
+                    aparece no Painel com um botão de Instagram (copiar e abrir a conversa) em 3
                     tentativas (2, 4 e 15 dias desde a última mensagem dele, uma sequência só por
                     lead). Limite diário de envios por clínica, pra evitar excesso de contato pela
                     mesma conta. Os textos das mensagens são globais, em Follow-up → "Cards do
                     Painel".
                   </p>
 
-                  <div className="mt-2 space-y-2 rounded-xl border border-vexo-border bg-vexo-surface2 p-3">
+                  <div className="mt-2 space-y-2 rounded-xl bg-vexo-surface p-3">
                     <HotLeadDailyLimitForm
                       action={updateClinicHotLeadDailyLimit.bind(null, clinic.id)}
                       dailyLimit={clinic.hotLeadConfig?.dailyLimit ?? 5}
@@ -349,10 +343,10 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
 
                 <form
                   action={logApproach.bind(null, clinic.id)}
-                  className="mt-5 flex flex-col gap-2 rounded-xl border border-vexo-border bg-vexo-surface2 p-3.5"
+                  className="mt-5 flex flex-col gap-2 rounded-xl bg-vexo-surface p-3.5"
                 >
                   <div>
-                    <label className="mb-1 block text-xs text-vexo-fg" htmlFor="count">
+                    <label className="mb-1 block text-xs text-vexo-muted" htmlFor="count">
                       Quantidade abordada hoje
                     </label>
                     <input

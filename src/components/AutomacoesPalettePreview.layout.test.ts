@@ -1,20 +1,21 @@
-// Prévia isolada de paleta nova (testa a 4ª rodada) — pedido explícito:
-// "testar numa página só" = SÓ Automações desta vez (/crm/clinicas/[id]/
-// automacoes), sidebar incluída enquanto nessa página; a Pipeline (alvo
-// errado da 1ª rodada) foi revertida e fica fora do escopo. O mecanismo
-// (ver AutomacoesPalettePreview.tsx e o bloco .vxa-preview em
-// src/app/globals.css) depende de dois pressupostos que este teste trava:
+// Prévia isolada de paleta nova (5ª rodada — simplificação) — pedido
+// explícito: desfazer o teste de paleta das rodadas 2-4, mantendo SÓ a
+// mudança do tom do azul. "Testar numa página só" continua valendo: SÓ
+// Automações (/crm/clinicas/[id]/automacoes), sidebar incluída enquanto
+// nessa página; a Pipeline (alvo errado da 1ª rodada) fica fora do
+// escopo. O mecanismo (ver AutomacoesPalettePreview.tsx e o bloco
+// .vxa-preview em src/app/globals.css) depende de um pressuposto que este
+// teste trava:
 //
-// 1. A classe .vxa-preview só é aplicada quando o pathname é EXATAMENTE
-//    /crm/clinicas/[id]/automacoes — a Pipeline (mesma clínica, rota
-//    irmã) NÃO ativa a prévia, então continua 100% no visual azul padrão.
-// 2. globals.css usa um SELETOR CSS (".bg-vexo-petrol.text-vexo-accent",
-//    ".text-sidebar-item.font-medium") pra estilizar só o item ATIVO da
-//    sidebar, sem editar AppShell.tsx — depende do className exato que
-//    AppShell.tsx usa hoje pro link ativo. Se mudar no futuro, o seletor
-//    para de bater e a prévia volta ao visual antigo silenciosamente;
-//    este teste confirma que a combinação de classes ainda existe no HTML
-//    renderizado de verdade.
+// A classe .vxa-preview só é aplicada quando o pathname é EXATAMENTE
+// /crm/clinicas/[id]/automacoes — a Pipeline (mesma clínica, rota irmã)
+// NÃO ativa a prévia, então continua 100% no visual azul padrão.
+//
+// Tudo que as rodadas 2-4 tinham travado aqui (fundo/sidebar/card mais
+// escuros, item ativo sem contorno/com cor própria, tipografia e ícones
+// mais finos, off-white/cinza em duas camadas) voltou ao padrão global —
+// não precisa mais de teste aqui, porque .vxa-preview não sobrescreve
+// mais nada disso.
 import { describe, it, expect, vi, beforeAll, afterAll } from "vitest";
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync } from "node:fs";
@@ -77,46 +78,25 @@ describe("AutomacoesPalettePreview — ativa .vxa-preview só na aba Automaçõe
     return { page, markup };
   }
 
-  it("na aba Automações exata: .vxa-preview aplicada, sidebar vira cinza-azulado escuro e o item ativo fica com fundo sutil, sem contorno nem indicador", async () => {
+  it("na aba Automações exata: .vxa-preview aplicada, sidebar e item ativo continuam no padrão global — só o azul muda", async () => {
     const { page, markup } = await renderShell("/crm/clinicas/clinic-1/automacoes");
 
     expect(markup).toContain('class="vxa-preview"');
     expect(markup).toMatch(/class="[^"]*\bbg-vexo-petrol\b[^"]*\btext-vexo-accent\b[^"]*"/);
-    expect(markup).toMatch(/class="[^"]*\btext-sidebar-item\b[^"]*\bfont-medium\b[^"]*"/);
 
     const sidebarBg = await page.$eval("aside", (el) => getComputedStyle(el).backgroundColor);
-    expect(sidebarBg).toBe("rgb(22, 25, 32)"); // --vxa-sidebar, #161920
+    expect(sidebarBg).toBe("rgb(20, 26, 36)"); // --vexo-surface padrão, inalterado — não é mais sobrescrito
 
     const activeLink = await page.$eval("a.bg-vexo-petrol.text-vexo-accent", (el) => {
       const s = getComputedStyle(el);
-      return { bg: s.backgroundColor, boxShadow: s.boxShadow, outlineStyle: s.outlineStyle, border: s.border };
+      return { bg: s.backgroundColor, color: s.color, boxShadow: s.boxShadow, outlineStyle: s.outlineStyle, fontWeight: s.fontWeight, fontSize: s.fontSize };
     });
-    expect(activeLink.bg).toBe("rgb(25, 40, 54)"); // --vxa-nav-active-bg, fundo sutil
-    expect(activeLink.boxShadow).toBe("none"); // pedido explícito: sem indicador lateral
-    expect(activeLink.outlineStyle).toBe("none"); // pedido explícito: sem contorno
-
-    const activeLabelColor = await page.$$eval("aside a span.truncate", (spans) => {
-      const el = spans.find((s) => s.textContent === "Automações");
-      return el ? getComputedStyle(el).color : null;
-    });
-    expect(activeLabelColor).toBe("rgb(230, 232, 236)"); // --vxa-fg, off-white — pedido explícito: item ativo não é mais azul
-
-    const inactiveLabelColor = await page.$$eval("aside a span.truncate", (spans) => {
-      const el = spans.find((s) => s.textContent === "Pipeline");
-      return el ? getComputedStyle(el).color : null;
-    });
-    expect(inactiveLabelColor).toBe("rgb(170, 176, 186)"); // --vxa-sidebar-inactive, um pouco mais claro que --vxa-muted
-
-    // Regressão: elementos SEM classe de cor própria (ex: o <h1> da página,
-    // o texto de preview de cada lembrete) herdam o "color" do <body> — que
-    // fica FORA de .vxa-preview na árvore e por isso nunca vê --vxa-fg
-    // redefinido aqui (herança de "color" copia o valor já resolvido do
-    // ancestral, não reavalia a variável CSS). Travado pelo "color:
-    // rgb(var(--vxa-fg))" declarado no próprio .vxa-preview (ver
-    // globals.css) — sem ele, este texto ficaria no --vexo-fg PADRÃO
-    // (rgb(241, 244, 248)), não no off-white da prévia.
-    const unstyledTextColor = await page.$eval("#page-content", (el) => getComputedStyle(el).color);
-    expect(unstyledTextColor).toBe("rgb(230, 232, 236)"); // --vxa-fg
+    expect(activeLink.bg).toBe("rgb(11, 36, 54)"); // --vexo-petrol padrão, inalterado — não é mais sobrescrito
+    expect(activeLink.color).toBe("rgb(43, 135, 189)"); // --vexo-accent, o azul novo — único resquício do teste
+    expect(activeLink.boxShadow).toBe("none");
+    expect(activeLink.outlineStyle).toBe("none");
+    expect(activeLink.fontWeight).toBe("500"); // peso padrão do text-sidebar-item, sem override
+    expect(activeLink.fontSize).toBe("13px"); // tamanho padrão do text-sidebar-item, sem override
 
     await page.close();
   });
@@ -136,24 +116,6 @@ describe("AutomacoesPalettePreview — ativa .vxa-preview só na aba Automaçõe
     const { page } = await renderShell("/crm/clinicas/clinic-1/automacoes");
     const logoBg = await page.$eval("aside span.bg-vexo-accent", (el) => getComputedStyle(el).backgroundColor);
     expect(logoBg).toBe("rgb(43, 135, 189)");
-    await page.close();
-  });
-
-  it("ícones ficam com traço mais fino dentro da prévia (1.5px, era 2px)", async () => {
-    const { page } = await renderShell("/crm/clinicas/clinic-1/automacoes");
-    const strokeWidth = await page.$eval('[data-testid="icon-automacoes"]', (el) => getComputedStyle(el).strokeWidth);
-    expect(strokeWidth).toBe("1.5px");
-    await page.close();
-  });
-
-  it("rótulo do menu mais discreto (peso 400/12px, eram 500/13px)", async () => {
-    const { page } = await renderShell("/crm/clinicas/clinic-1/automacoes");
-    const style = await page.$eval("a.bg-vexo-petrol.text-vexo-accent", (el) => {
-      const s = getComputedStyle(el);
-      return { fontWeight: s.fontWeight, fontSize: s.fontSize };
-    });
-    expect(style.fontWeight).toBe("400");
-    expect(style.fontSize).toBe("12px");
     await page.close();
   });
 });
