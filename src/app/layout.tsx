@@ -1,15 +1,29 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
 import { Providers } from "./providers";
 import { getThemeColors, buildThemeCssVars } from "@/lib/theme";
 import { getPageStyleOverrides, buildPageStyleCssVars } from "@/lib/page-style-overrides";
 import "./globals.css";
-
-const inter = Inter({
-  subsets: ["latin"],
-  variable: "--font-inter",
-  display: "swap",
-});
+// Inter self-hospedada (pacote @fontsource-variable, não next/font/google) —
+// pedido explícito: o build do Railway baixava a fonte de fonts.googleapis.com
+// durante "next build" e falhava sempre que essa rede estava instável (ver
+// falha real na 1ª tentativa de deploy da PR #192, log citado no pedido).
+// Pacote vem no npm ci, zero chamada de rede durante o build. Mesma família
+// (Inter), mesmo eixo de peso variável (100-900, igual ao default do
+// next/font/google sem "weight" explícito) e display:swap já embutidos no
+// CSS do pacote — ver node_modules/@fontsource-variable/inter/wght.css.
+// --font-inter (consumida por tailwind.config.ts, fontFamily.sans) é
+// declarada em globals.css (:root) como "Inter Variable", o nome de
+// font-family que esse pacote usa — mesmo papel que inter.variable fazia
+// antes, só que sem gerar a classe em runtime.
+import "@fontsource-variable/inter/wght.css";
+// Bricolage Grotesque/Figtree — fontes do guia "Bônus Full Face" (ver
+// src/lib/bonus-fonts.ts), mesmo motivo acima. Pesos exatamente iguais aos
+// que o next/font/google carregava (Bricolage 500/700, Figtree 400/500/600).
+import "@fontsource/bricolage-grotesque/500.css";
+import "@fontsource/bricolage-grotesque/700.css";
+import "@fontsource/figtree/400.css";
+import "@fontsource/figtree/500.css";
+import "@fontsource/figtree/600.css";
 
 export const metadata: Metadata = {
   title: "VEXO | M8 Growth",
@@ -36,7 +50,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   };
 
   return (
-    <html lang="pt-BR" className={`dark ${inter.variable}`} style={themeVars as React.CSSProperties}>
+    <html lang="pt-BR" className="dark" style={themeVars as React.CSSProperties}>
       <body>
         <Providers>{children}</Providers>
       </body>

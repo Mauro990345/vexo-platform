@@ -19,6 +19,16 @@
 :root {
   color-scheme: dark;
 
+  /* Fonte do app inteiro (ver tailwind.config.ts, fontFamily.sans) —
+     "Inter Variable" é o font-family que o pacote self-hospedado
+     @fontsource-variable/inter declara (ver import em src/app/layout.tsx).
+     Antes vinha de inter.variable (next/font/google), que baixava a fonte
+     de fonts.googleapis.com durante "next build" — removido pra tirar essa
+     chamada de rede do build (causa real de falhas intermitentes no
+     deploy do Railway). Mesma família, mesmo eixo de peso, mesmo
+     display:swap — só a origem do arquivo mudou. */
+  --font-inter: "Inter Variable";
+
   /* Fundos e superfícies (do mais escuro/geral ao mais claro/aninhado) */
   --vexo-bg: 11 15 23; /* #0b0f17 — fundo geral da aplicação */
   --vexo-surface: 20 26 36; /* #141a24 — sidebar + cards principais */
@@ -98,6 +108,21 @@
      Token próprio de propósito: o botão não pode mudar de aparência
      quando a cor do badge mudar ou for personalizada por clínica. */
   --vexo-whatsapp-action-border: 31 122 77; /* #1f7a4d */
+}
+
+/* Fontes do guia "Bônus Full Face" (ver src/lib/bonus-fonts.ts,
+   FullFaceBonusGuide.module.css) — self-hospedadas (@fontsource, não
+   next/font/google), mesmo motivo do --font-inter acima: tirar a chamada
+   de rede a fonts.googleapis.com do "next build". Essas duas classes
+   substituem o papel que bonusTitleFont.variable/bonusBodyFont.variable
+   faziam antes (next/font gerava a classe e a variável junto); aqui as
+   duas existem separadas — a classe só declara a variável CSS, o @font-face
+   de verdade vem do import em src/app/layout.tsx. */
+.bonus-font-title-var {
+  --bonus-font-title: "Bricolage Grotesque";
+}
+.bonus-font-body-var {
+  --bonus-font-body: "Figtree";
 }
 
 body {
