@@ -21,6 +21,7 @@ const config: Config = {
           borderStrong: "rgb(var(--vexo-border-strong) / <alpha-value>)",
           muted: "rgb(var(--vexo-muted) / <alpha-value>)",
           fg: "rgb(var(--vexo-fg) / <alpha-value>)",
+          tabFg: "rgb(var(--vexo-tab-fg) / <alpha-value>)",
           accent: "rgb(var(--vexo-accent) / <alpha-value>)",
           accentFg: "rgb(var(--vexo-accent-fg) / <alpha-value>)",
           petrol: "rgb(var(--vexo-petrol) / <alpha-value>)",

@@ -31,8 +31,8 @@ export function ClientPanelTabs({
             key={item.id}
             href={item.href}
             aria-current={isActive ? "page" : undefined}
-            className={`-mb-px whitespace-nowrap border-b px-0.5 pb-2.5 text-[16px] font-medium transition-colors sm:text-xs ${
-              isActive ? "border-vexo-accent text-vexo-accent" : "border-transparent text-vexo-fg/60 hover:text-vexo-fg"
+            className={`-mb-px whitespace-nowrap border-b px-0.5 pb-2.5 text-[16px] font-medium text-vexo-tabFg transition-colors sm:text-xs ${
+              isActive ? "border-vexo-accent" : "border-transparent"
             }`}
           >
             {item.label}
