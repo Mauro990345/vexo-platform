@@ -56,47 +56,34 @@ const STATUS_CLASSES: Record<string, string> = {
 // page-style-overrides.ts) — border/text fixos nos tokens neutros já
 // usados em toda a tela (vexo-border, vexo-muted).
 //
-// "Compareceu" ficou um verde um pouco mais vivo (ver defaultHex em
-// page-style-overrides.ts) pra se diferenciar claramente do cinza de
-// "Agendado" — ganhou também o "✓" antes do texto (ver render abaixo).
-function statusTint(status: string): { bg: string; text: string; border?: string } {
-  switch (status) {
-    case "SCHEDULED":
-    case "CONFIRMED":
-      return { bg: "", text: "text-vexo-muted", border: "border border-vexo-border" };
-    case "COMPLETED":
-      return { bg: "bg-vexo-panelStatusCompletedBg/80", text: "text-vexo-fg" };
-    case "NO_SHOW":
-      return { bg: "bg-vexo-panelStatusNegativeBg/80", text: "text-vexo-fg" };
-    default: // CANCELLED e qualquer status futuro sem grupo definido
-      return { bg: "bg-vexo-border/60", text: "text-vexo-muted" };
-  }
-}
+// Ponto colorido + texto (sem selo sólido) — pedido explícito da
+// reorganização do Painel (ver docs/design-audit.md): "status em texto
+// pequeno ou ponto colorido, não selo sólido", trocando o antigo fundo
+// preenchido de "Compareceu"/"Faltou" (statusTint, removida) por um ponto
+// na MESMA cor personalizável de antes (vexo-panelStatusCompletedBg/
+// vexo-panelStatusNegativeBg, ver page-style-overrides.ts — Configurações
+// → Painel continua surtindo efeito, só que num ponto pequeno em vez de
+// um fundo preenchido) + o rótulo em texto neutro. "Agendado"/"Confirmado"
+// continuam neutros (vexo-muted) — nunca azul/verde, mesmo motivo de
+// sempre (não confundir com "Compareceu" à primeira vista).
+const STATUS_DOT_CLASSES: Record<string, string> = {
+  COMPLETED: "bg-vexo-panelStatusCompletedBg",
+  NO_SHOW: "bg-vexo-panelStatusNegativeBg",
+};
 
 export function AppointmentStatusBadge({ status, compact }: { status: string; compact?: boolean }) {
   const label = STATUS_LABELS[status] ?? status;
 
   if (compact) {
-    const tint = statusTint(status);
+    // SÓ CELULAR (lista de Agendamentos do Painel, ver MobileCardScale.ts):
+    // fonte alinhada com o resto da linha data/status/telefone
+    // (MOBILE_APPOINTMENT_INFO_TEXT). `sm:` com os valores de sempre — essa
+    // é a versão `compact`, usada só no Painel (a não-compact, na tela de
+    // conversa do CRM interno, não muda em nada). Não é um botão (só texto
+    // informativo), por isso sem piso de toque.
     return (
-      // SÓ CELULAR (lista de Agendamentos do Painel, ver
-      // MobileCardScale.ts): padding/fonte alinhados com o resto da
-      // linha data/status/telefone (MOBILE_APPOINTMENT_INFO_TEXT).
-      // AJUSTE (2026-10-29, 3ª rodada): padding 9px/3px -> 5px/1px, fonte
-      // 15px -> 12px — pedido explícito pra caber no card do tamanho de
-      // um card de métrica. AJUSTE (2026-10-29, 5ª rodada, pedido
-      // explícito "texto da tag de status +1px"): 12 -> 13px — trocou de
-      // MOBILE_APPOINTMENT_SECONDARY_TEXT (que ficou INALTERADA, pois
-      // também serve o texto dos botões "Retorno"/"Não compareceu", fora
-      // do pedido) pra MOBILE_APPOINTMENT_INFO_TEXT (nova). `sm:` com os
-      // valores de sempre — essa é a versão `compact`, usada só no Painel
-      // (a não-compact, na tela de conversa do CRM interno, não muda em
-      // nada). Não é um botão (só texto informativo), por isso sem piso
-      // de toque.
-      <span
-        className={`inline-flex items-center gap-[2px] sm:gap-0.5 rounded-sm px-[5px] py-[1px] sm:px-1.5 sm:py-0.5 ${MOBILE_APPOINTMENT_INFO_TEXT} font-medium leading-none ${tint.bg} ${tint.text} ${tint.border ?? ""}`}
-      >
-        {status === "COMPLETED" && <span aria-hidden="true">✓</span>}
+      <span className={`inline-flex items-center gap-1 ${MOBILE_APPOINTMENT_INFO_TEXT} font-medium leading-none text-vexo-muted`}>
+        <span aria-hidden="true" className={`h-1.5 w-1.5 shrink-0 rounded-full ${STATUS_DOT_CLASSES[status] ?? "bg-vexo-muted"}`} />
         {label}
       </span>
     );

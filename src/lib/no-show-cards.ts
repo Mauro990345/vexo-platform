@@ -212,6 +212,12 @@ export type NoShowCard = {
   instagramProfileLink: string | null;
   reason: string;
   noShowTriggeredAt: Date;
+  // Início da janela deste passo (ver computeReactivationWindow) — só pra
+  // agrupar "Atrasados"/"Hoje" na faixa "Para fazer hoje" do Painel (ver
+  // groupPanelCardsForDisplay, panel-cards.ts); não influencia elegibilidade
+  // nem nenhuma outra regra, já calculado de qualquer forma em
+  // buildNoShowCardCandidates.
+  dueDate: Date;
   sentAt: Date | null;
   // Limite diário de WhatsApp (Reativação + Faltou, compartilhado — ver
   // countTodaysWhatsappSends/ReactivationConfig.dailyWhatsappLimit em
@@ -349,6 +355,7 @@ export async function getNoShowCards(clinicId: string, now: Date = new Date()): 
       instagramProfileLink: igUsername ? buildInstagramProfileLink(igUsername) : null,
       reason: buildNoShowCardReason(c.noShowTriggeredAt, now, c.step),
       noShowTriggeredAt: c.noShowTriggeredAt,
+      dueDate: c.window.start,
       sentAt: sentAtByKey.get(`${c.appointmentId}:${c.step}`) ?? null,
       dailyLimitReached: channel === "WHATSAPP" && !sentAtByKey.get(`${c.appointmentId}:${c.step}`) && whatsappDailyLimitReached,
     };

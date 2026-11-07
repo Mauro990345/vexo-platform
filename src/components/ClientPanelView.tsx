@@ -1,55 +1,18 @@
-import Link from "next/link";
-import { Calendar } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { getClinicMetrics, getAttendanceMetrics, appointmentDisplayStatus, getDailyApproachCounts, startOfDay, addDays } from "@/lib/metrics";
-import { ApproachChart } from "@/components/ApproachChart";
-import { AppointmentStatusBadge } from "@/components/AppointmentStatusBadge";
-import { NoShowButton } from "@/components/NoShowButton";
-import { RetornoButton } from "@/components/RetornoButton";
-import { ChannelStatusPill } from "@/components/ChannelStatusPill";
-import { normalizeBrazilianWhatsappNumber } from "@/lib/whatsapp";
 import { leadDisplayParts } from "@/lib/lead-display";
-import { LeadAvatar } from "@/components/LeadAvatar";
 import { ClientPanelTabs } from "@/components/ClientPanelTabs";
-import { InstagramGlyphIcon, WhatsAppGlyphIcon } from "@/components/BrandIcons";
-import { NeedsHumanBanner, type NeedsHumanLead } from "@/components/NeedsHumanBanner";
-import { PanelActivityColumn } from "@/components/PanelActivityColumn";
+import type { NeedsHumanLead } from "@/components/NeedsHumanBanner";
+import { PanelOverview } from "@/components/PanelOverview";
+import { PanelAppointmentsColumn, type PanelAppointmentItem } from "@/components/PanelAppointmentsColumn";
 import { getReactivationCards, getReactivationReturnStats, RETURN_PERIOD_OPTIONS, type SendReactivationWhatsAppResult } from "@/lib/reactivation";
 import { isAppointmentVisibleInList, type SetAppointmentReturnPeriodResult } from "@/lib/appointments";
 import { getNoShowCards } from "@/lib/no-show-cards";
 import { getHotLeadCards } from "@/lib/hot-lead-cards";
 import { getNeverScheduledCards } from "@/lib/never-scheduled-cards";
 import { mergePanelCards } from "@/lib/panel-cards";
+import { groupAppointmentsForPanel } from "@/lib/panel-appointments";
 import type { ToggleHotLeadCardSentResult } from "@/lib/hot-lead-cards";
-import {
-  MOBILE_APPOINTMENT_ROW_PADDING,
-  MOBILE_APPOINTMENT_ACTION_GAP,
-  MOBILE_ROW_GAP,
-  MOBILE_LIST_GAP,
-  MOBILE_DATE_ROW_GAP,
-  MOBILE_DATE_ROW_MARGIN_TOP,
-  MOBILE_NAME_TEXT_APPOINTMENT,
-  MOBILE_APPOINTMENT_HANDLE_TEXT,
-  MOBILE_APPOINTMENT_HANDLE_CAP,
-  MOBILE_APPOINTMENT_INFO_TEXT,
-  MOBILE_CARD_MIN_HEIGHT,
-  MOBILE_TITLE_TEXT,
-  MOBILE_SUBTITLE_TEXT,
-  MOBILE_CLINIC_NAME_TEXT,
-  MOBILE_CLINIC_DOT_SIZE,
-  MOBILE_STATUS_BADGE_SIZE,
-  MOBILE_STATUS_BADGE_ICON_SIZE,
-  MOBILE_NAV_TEXT,
-  MOBILE_NAV_BUTTON_MIN,
-  MOBILE_NAV_BUTTON_PADDING,
-  MOBILE_CHART_ROW_TEXT,
-  MOBILE_SECTION_TITLE_TEXT,
-  MOBILE_SECTION_DOT_SIZE,
-} from "@/components/MobileCardScale";
-
-// Marcar "Não compareceu" só faz sentido pra agendamento ainda em aberto —
-// já compareceu ou já foi cancelado não tem o que alternar aqui.
-const ACTIONABLE_STATUSES = ["SCHEDULED", "CONFIRMED", "NO_SHOW"];
 
 // Condição pra mostrar as abas "Painel / Bônus Full Face" — só a conta
 // (Clinic.fullFaceBonusEnabled). Pura e exportada de propósito (testável
@@ -74,7 +37,7 @@ function toDateParam(d: Date): string {
 }
 
 // Períodos do seletor "Abordados / Em conversa / Agendaram" (ver
-// ApproachMetricsToggle) — 21 dias adicionado pra cobrir um piloto de teste
+// PanelOverview.tsx) — 21 dias adicionado pra cobrir um piloto de teste
 // rodando por esse período inteiro (revisão do funil completo com a
 // clínica no fim do teste); 14/28 dias junto por serem os mesmos múltiplos
 // de semana que já faziam sentido no meio do caminho. N dias sempre inclui
@@ -101,9 +64,16 @@ const PANEL_PERIODS: { days: number; label: string }[] = [
 // é injetável porque a ação por trás do botão "Não compareceu" precisa
 // rodar sob uma sessão diferente em cada contexto (CLIENT vs
 // INTERNAL_ADMIN/STAFF) — ver NoShowButton. headerAction é um slot opcional
-// ao lado do título "Painel" (canto superior direito) — só o Painel de
+// ao lado do nome da clínica (ver PanelOverview.tsx) — só o Painel de
 // dentro do contexto de uma clínica usa (botão "Criar painel", ver
 // ClientAccessModal); /dashboard e /crm/painel-cliente/[id] não passam nada.
+//
+// Reorganização visual (ver docs/design-audit.md): o corpo da tela (layout,
+// agrupamento, componentes de apresentação) foi reescrito nesta rodada —
+// PanelOverview.tsx/PanelAppointmentsColumn.tsx/ReactivationRail.tsx. Esta
+// função continua responsável só por BUSCAR os dados e calcular os
+// agrupamentos puros (mergePanelCards/groupAppointmentsForPanel) — nenhuma
+// query, regra de elegibilidade, parâmetro de URL (?week) ou dado mudou.
 export async function ClientPanelView({
   clinicId,
   week,
@@ -189,7 +159,7 @@ export async function ClientPanelView({
       })
     ),
     // "N enviadas · M voltaram" do cabeçalho da Reativação (ver
-    // ReactivationRail.tsx/PanelActivityColumn.tsx) — mesmas janelas de
+    // ReactivationRail.tsx/PanelOverview.tsx) — mesmas janelas de
     // PANEL_PERIODS acima, pra acompanhar o seletor de período já existente.
     getReactivationReturnStats(clinicId, PANEL_PERIODS, now),
     // AJUSTE (2026-10-29, 6ª rodada, pedido explícito "exclua da lista os
@@ -249,6 +219,24 @@ export async function ClientPanelView({
   // testes/vídeos; nas demais clínicas, nada muda.
   const visibleAppointments = appointments.filter((a) => isAppointmentVisibleInList(a, now, clinicId));
 
+  const appointmentItems: PanelAppointmentItem[] = visibleAppointments.map((a) => {
+    const { primary, handle } = leadDisplayParts(a.lead, a.manualTitle);
+    return {
+      id: a.id,
+      scheduledAt: a.scheduledAt,
+      status: a.status,
+      displayStatus: appointmentDisplayStatus(a, now),
+      leadId: a.leadId,
+      primary,
+      handle,
+      profilePictureUrl: a.lead?.profilePictureUrl ?? null,
+      phone: a.lead?.phone ?? null,
+      returnPeriodDays: a.returnPeriodDays,
+      locked: lockedReturnPeriodAppointmentIds.has(a.id),
+    };
+  });
+  const { upcoming, awaitingResponse, history } = groupAppointmentsForPanel(appointmentItems, now);
+
   const needsHumanLeads: NeedsHumanLead[] = needsHumanConversations.map((conv) => {
     const { primary } = leadDisplayParts(conv.lead, null);
     return {
@@ -259,291 +247,49 @@ export async function ClientPanelView({
     };
   });
 
+  const weekNav = {
+    prevHref: `${base}?week=${toDateParam(addDays(weekStart, -7))}`,
+    todayHref: base,
+    nextHref: `${base}?week=${toDateParam(addDays(weekStart, 7))}`,
+    label: `${weekStart.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })} – ${addDays(weekStart, 6).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}`,
+  };
+
   return (
     <div className={standalone ? "min-h-screen bg-vexo-bg px-4 pt-4 pb-6 sm:px-8 sm:pt-6 sm:pb-8" : undefined}>
       <div className={standalone ? "mx-auto max-w-6xl" : undefined}>
         {shouldShowClientBonusTab(bonusHref, clinic.fullFaceBonusEnabled) && (
           <ClientPanelTabs active="painel" panelHref={base} bonusHref={bonusHref!} />
         )}
-        <div className="mb-8 flex items-start justify-between gap-3">
-          <div>
-            {/* SÓ CELULAR (pedido explícito, 2026-10-29, 2ª rodada):
-                leading-tight nos dois — sem isso, a entrelinha padrão
-                (1.5 do Preflight) deixa a quebra de linha do subtítulo
-                com espaço vertical grande demais, e o próprio título
-                empurra o subtítulo mais pra baixo (a entrelinha extra
-                conta pro espaço ABAIXO da linha de texto também).
-                mt-[2px] fixa um gap pequeno e controlado entre os dois,
-                em vez de depender da sobra da entrelinha do título.
-                `sm:leading-normal`/`sm:mt-0` revertem pro visual de
-                sempre em desktop (entrelinha 1.5 herdada, sem margem). */}
-            <h1 className={`${MOBILE_TITLE_TEXT} font-semibold leading-tight sm:leading-normal tracking-tight`}>Painel</h1>
-            <p className={`mt-[2px] sm:mt-0 ${MOBILE_SUBTITLE_TEXT} leading-tight sm:leading-normal text-vexo-muted`}>
-              Acompanhamento em tempo real das abordagens no Instagram.
-            </p>
-          </div>
-          {headerAction}
-        </div>
 
-        <div className="grid gap-6 lg:grid-cols-2">
-          {/* min-w-0 nas duas colunas (2026-10-29, 4ª rodada — bug real
-              achado na validação ao vivo desta rodada): um item de grid
-              sem `min-width` explícito usa `min-width: auto` por padrão,
-              que pra uma faixa (`grid-template-columns`) com trilha
-              "auto" (como aqui — não há `grid-cols-1` explícito no
-              celular, só o `lg:grid-cols-2`) deixa o item crescer até o
-              tamanho MAX-CONTENT do conteúdo em vez de ficar preso à
-              largura da tela — passou despercebido até agora porque
-              nenhum conteúdo tinha um max-content tão largo quanto o
-              novo card de Agendamentos (nome+@+telefone+botão numa
-              largura mínima de conteúdo que passa de 700px se não for
-              contido). Mesma categoria de bug do "min-w-0" já usado em
-              vários lugares deste arquivo pra filhos de flex — aqui é a
-              versão pro container `grid`. */}
-          {/* Coluna esquerda: status de canais, semana e números */}
-          <div className="min-w-0 space-y-6">
-            <div className="space-y-3">
-              {/* Linha do nome da clínica + pills — solta, sem card ao redor,
-                  pra começar exatamente na mesma altura que o título
-                  "Agendamentos" da coluna direita (mesmo critério: nenhum
-                  padding/borda acima de nenhum dos dois). */}
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <span className={`shrink-0 rounded-full bg-vexo-success ${MOBILE_CLINIC_DOT_SIZE}`} />
-                  <h2 className={`${MOBILE_CLINIC_NAME_TEXT} font-medium`}>{clinic.name}</h2>
-                </div>
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <ChannelStatusPill
-                    connected={Boolean(clinic.instagramAccount)}
-                    label="Instagram"
-                    icon={<InstagramGlyphIcon className={MOBILE_STATUS_BADGE_SIZE} />}
-                    iconBg=""
-                  />
-                  <ChannelStatusPill
-                    connected={Boolean(clinic.googleCalendarAccount)}
-                    label="Google Calendar"
-                    icon={<Calendar className={MOBILE_STATUS_BADGE_ICON_SIZE} strokeWidth={2.5} />}
-                    iconBg="bg-blue-500"
-                  />
-                  <ChannelStatusPill
-                    connected={clinic.whatsappStatus === "open"}
-                    label="WhatsApp"
-                    icon={<WhatsAppGlyphIcon className={MOBILE_STATUS_BADGE_SIZE} />}
-                    iconBg=""
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-3 rounded-2xl border border-vexo-border bg-vexo-surface p-3.5">
-                <div className="flex items-center justify-between gap-1.5">
-                  <Link
-                    href={`${base}?week=${toDateParam(addDays(weekStart, -7))}`}
-                    className={`inline-flex items-center justify-center rounded-lg border border-vexo-border ${MOBILE_NAV_BUTTON_MIN} ${MOBILE_NAV_BUTTON_PADDING} ${MOBILE_NAV_TEXT} hover:border-vexo-accent`}
-                  >
-                    ← Semana
-                  </Link>
-                  <Link
-                    href={base}
-                    className={`inline-flex items-center justify-center rounded-lg border border-vexo-border ${MOBILE_NAV_BUTTON_MIN} ${MOBILE_NAV_BUTTON_PADDING} ${MOBILE_NAV_TEXT} hover:border-vexo-accent`}
-                  >
-                    Hoje
-                  </Link>
-                  <Link
-                    href={`${base}?week=${toDateParam(addDays(weekStart, 7))}`}
-                    className={`inline-flex items-center justify-center rounded-lg border border-vexo-border ${MOBILE_NAV_BUTTON_MIN} ${MOBILE_NAV_BUTTON_PADDING} ${MOBILE_NAV_TEXT} hover:border-vexo-accent`}
-                  >
-                    Semana →
-                  </Link>
-                </div>
-
-                <div className="space-y-2 border-t border-vexo-border pt-3">
-                  <p className={`${MOBILE_CHART_ROW_TEXT} font-medium uppercase tracking-wide text-vexo-muted`}>
-                    Abordagens por dia · {weekStart.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })} –{" "}
-                    {addDays(weekStart, 6).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}
-                  </p>
-                  <ApproachChart counts={dailyApproached} />
-                </div>
-              </div>
-            </div>
-
-            <PanelActivityColumn
-              periods={periods}
-              returnPeriods={returnPeriods}
-              cards={panelCards}
-              action={reactivationSentAction}
-              sendWhatsappAction={reactivationSendWhatsappAction}
-              noShowToggleAction={noShowCardSentAction}
-              noShowSendWhatsappAction={noShowCardSendWhatsappAction}
-              hotLeadToggleAction={hotLeadCardSentAction}
-              neverScheduledToggleAction={neverScheduledCardSentAction}
+        <PanelOverview
+          clinicName={clinic.name}
+          instagramConnected={Boolean(clinic.instagramAccount)}
+          googleConnected={Boolean(clinic.googleCalendarAccount)}
+          whatsappConnected={clinic.whatsappStatus === "open"}
+          headerAction={headerAction}
+          periods={periods}
+          returnPeriods={returnPeriods}
+          weekNav={weekNav}
+          dailyApproached={dailyApproached}
+          cards={panelCards}
+          action={reactivationSentAction}
+          sendWhatsappAction={reactivationSendWhatsappAction}
+          noShowToggleAction={noShowCardSentAction}
+          noShowSendWhatsappAction={noShowCardSendWhatsappAction}
+          hotLeadToggleAction={hotLeadCardSentAction}
+          neverScheduledToggleAction={neverScheduledCardSentAction}
+          rightColumn={
+            <PanelAppointmentsColumn
+              upcoming={upcoming}
+              awaitingResponse={awaitingResponse}
+              history={history}
+              needsHumanLeads={needsHumanLeads}
+              availableReturnPeriods={availableReturnPeriods}
+              noShowAction={noShowAction}
+              returnPeriodAction={returnPeriodAction}
             />
-          </div>
-
-          {/* Coluna direita: agendamentos */}
-          <div className="min-w-0 space-y-3">
-            <div className="flex items-center gap-2">
-              <span className={`shrink-0 rounded-full bg-vexo-accent ${MOBILE_SECTION_DOT_SIZE}`} />
-              <h2 className={`${MOBILE_SECTION_TITLE_TEXT} font-semibold text-vexo-fg`}>Agendamentos</h2>
-            </div>
-            <NeedsHumanBanner leads={needsHumanLeads} />
-            <div className={MOBILE_LIST_GAP}>
-              {visibleAppointments.map((a) => {
-                const { primary, handle } = leadDisplayParts(a.lead, a.manualTitle);
-                return (
-                <div
-                  key={a.id}
-                  // SÓ CELULAR (abaixo de sm/640px): padding vertical
-                  // 12px (era 8px na rodada anterior — ver AJUSTE abaixo),
-                  // altura mínima ~56px. Deixou de empilhar em flex-col:
-                  // volta a ser uma linha só (conteúdo + botão lado a
-                  // lado), igual desktop já era — a reorganização em 2
-                  // linhas pedida fica DENTRO do conteúdo (nome+@ na
-                  // linha 1, data/status/telefone na linha 2), não mais
-                  // entre conteúdo e botão.
-                  //
-                  // AJUSTE (2026-10-29, 4ª rodada, pedido explícito): a
-                  // altura comum (~77px) ficou um pouco menor que a dos
-                  // cards de métrica (~89,5px) — aumentado o padding
-                  // vertical (8->12px, ver MOBILE_APPOINTMENT_ROW_PADDING)
-                  // e o espaço entre as 2 linhas (2->6px, ver
-                  // MOBILE_DATE_ROW_MARGIN_TOP) pra chegar em ~85-90px,
-                  // sem mexer na largura dos botões nem em mais nada.
-                  //
-                  // `relative`: contexto de posicionamento do popover do
-                  // botão "Retorno" — ver RetornoButton.tsx (`sm:relative`
-                  // no wrapper do botão, não mais `relative` sem prefixo)
-                  // — SÓ CELULAR o popover passa a ocupar a largura do
-                  // CARD (o ancestral `relative` MAIS PRÓXIMO), não mais
-                  // a largura pequena do botão. Em desktop isso não muda
-                  // nada: o wrapper do botão (mais próximo que o card, já
-                  // que fica DENTRO dele) volta a ser `sm:relative`, então
-                  // o popover ancora nele primeiro, igual sempre foi —
-                  // `relative` aqui no card fica inofensivo (sem
-                  // top/left/etc., só estabelece o contexto, sem mudar a
-                  // posição do próprio card no layout).
-                  className={`relative flex w-full items-center justify-between ${MOBILE_APPOINTMENT_ACTION_GAP} rounded-lg border border-vexo-border bg-vexo-surface ${MOBILE_APPOINTMENT_ROW_PADDING} ${MOBILE_CARD_MIN_HEIGHT}`}
-                >
-                  <div className={`flex min-w-0 flex-1 items-center ${MOBILE_ROW_GAP}`}>
-                    <LeadAvatar profilePictureUrl={a.lead?.profilePictureUrl} name={primary} size="appointment" />
-                    <div className="min-w-0 flex-1">
-                      {/* Nome como elemento principal, @ do Instagram como
-                          secundário — ver histórico do formato em
-                          lead-display.ts. AJUSTE (2026-10-29, 3ª rodada):
-                          nome e @ numa linha SÓ (pedido explícito), com
-                          reticências se não couber — nome como flex-1
-                          (prioridade: encolhe por último) e @ com teto de
-                          40% da linha (MOBILE_APPOINTMENT_HANDLE_CAP) pra
-                          um @ incomumente longo não tomar a linha inteira
-                          e deixar só 1-2 letras pro nome. Deixou de
-                          empilhar (2 linhas) — igual desktop já era. */}
-                      <div className="flex min-w-0 items-baseline gap-[5px]">
-                        <p className={`min-w-0 flex-1 truncate ${MOBILE_NAME_TEXT_APPOINTMENT} font-medium`}>{primary}</p>
-                        {handle && (
-                          <span className={`${MOBILE_APPOINTMENT_HANDLE_CAP} ${MOBILE_APPOINTMENT_HANDLE_TEXT} text-vexo-muted`}>@{handle}</span>
-                        )}
-                      </div>
-                      {/* Data, tag e telefone — AJUSTE (2026-10-29, 3ª
-                          rodada): agrupados em 3 blocos atômicos ("data ·",
-                          badge, "· telefone") com flex-wrap — cada bloco só
-                          quebra pra linha de baixo INTEIRO, nunca deixando
-                          um "·" sozinho numa linha (bug visto nesta
-                          rodada: separadores soltos como filhos
-                          individuais do flex podiam ficar órfãos no ponto
-                          de quebra). Normalmente cabe tudo numa linha só;
-                          em telas muito estreitas ou com conteúdo mais
-                          longo (nome+@ grande, status "Compareceu", botão
-                          "Retorno · N dias"), o telefone quebra pra uma
-                          3ª linha — ainda dentro da margem de altura
-                          medida contra o card de métrica (+15%, ver
-                          MOBILE_CARD_MIN_HEIGHT). Link wa.me do telefone
-                          inalterado (mesmo comportamento de antes) — ver
-                          BUG REAL corrigido historicamente: "inline" aqui
-                          (não um <div> de bloco) já limita a área
-                          clicável ao próprio texto, sem precisar de
-                          inline-flex. */}
-                      <div
-                        className={`${MOBILE_DATE_ROW_MARGIN_TOP} flex flex-wrap items-center ${MOBILE_DATE_ROW_GAP} ${MOBILE_APPOINTMENT_INFO_TEXT} text-vexo-muted`}
-                      >
-                        <span className="shrink-0">
-                          {a.scheduledAt.toLocaleString("pt-BR", {
-                            day: "2-digit",
-                            month: "2-digit",
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })}{" "}
-                          ·
-                        </span>
-                        <AppointmentStatusBadge status={appointmentDisplayStatus(a, now)} compact />
-                        {a.lead?.phone && (
-                          <span className="inline-flex shrink-0 items-center gap-[4px]">
-                            <span>·</span>
-                            <a
-                              href={`https://wa.me/${normalizeBrazilianWhatsappNumber(a.lead.phone)}`}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="text-vexo-accent hover:underline"
-                            >
-                              {a.lead.phone}
-                            </a>
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex shrink-0 flex-col items-end gap-[4px]">
-                    {/* Botão "Retorno" (item 2 do pedido) — agendamento já
-                        passado (status derivado COMPLETED — ver
-                        appointmentDisplayStatus, metrics.ts, mesmo cálculo
-                        do badge de status da linha), com lead vinculado
-                        (sem Lead, não tem quem reativar). SEMPRE visível
-                        nesse caso, mesmo já marcado — vira só "travado"
-                        depois de enviado (ver lockedReturnPeriodAppointmentIds).
-                        AJUSTE (2026-10-29, 3ª rodada): volta a ficar do
-                        lado do conteúdo em QUALQUER tamanho de tela — a
-                        "linha própria embaixo" da rodada anterior foi
-                        revertida (pedido explícito: "nunca em linha
-                        própria embaixo").
-                        CORREÇÃO (2026-10-29, 4ª rodada — achado na
-                        validação ao vivo desta rodada): os dois botões
-                        PODEM aparecer juntos sim — displayStatus
-                        "COMPLETED" é DERIVADO (status cru SCHEDULED/
-                        CONFIRMED + data no passado), mas ACTIONABLE_STATUSES
-                        testa o status CRU (`a.status`), que continua
-                        "SCHEDULED" até alguém marcar explicitamente —
-                        um agendamento vencido e ainda não marcado mostra
-                        Retorno E Não compareceu ao mesmo tempo (comentário
-                        anterior, que dizia o contrário, estava errado).
-                        flex-col aqui (empilha em vez de lado a lado)
-                        pra esse caso não espremer o conteúdo contra a
-                        parede — sem aumentar a largura de nenhum botão,
-                        só reorganiza em até 2 linhas quando os dois
-                        aparecem; com só um botão, fica idêntico a antes
-                        (flex-col de 1 item só não muda nada visualmente). */}
-                    {appointmentDisplayStatus(a, now) === "COMPLETED" && a.leadId && (
-                      <RetornoButton
-                        appointmentId={a.id}
-                        availablePeriods={availableReturnPeriods}
-                        returnPeriodDays={a.returnPeriodDays}
-                        locked={lockedReturnPeriodAppointmentIds.has(a.id)}
-                        action={returnPeriodAction}
-                      />
-                    )}
-                    {ACTIONABLE_STATUSES.includes(a.status) && (
-                      <NoShowButton appointmentId={a.id} status={a.status} action={noShowAction} />
-                    )}
-                  </div>
-                </div>
-                );
-              })}
-
-              {visibleAppointments.length === 0 && (
-                <p className="rounded-lg border border-vexo-border bg-vexo-surface p-4 text-center text-sm text-vexo-muted">
-                  Nenhum agendamento ainda.
-                </p>
-              )}
-            </div>
-          </div>
-        </div>
+          }
+        />
       </div>
     </div>
   );
