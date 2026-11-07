@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { PanelMetricCard } from "@/components/PanelMetricCard";
 import { MOBILE_CHART_TEXT, MOBILE_NAV_BUTTON_MIN, MOBILE_SELECT_PADDING } from "@/components/MobileCardScale";
 
@@ -21,9 +21,19 @@ export type PeriodOption = { days: number; label: string; metrics: PeriodMetrics
 // dias, pedido pra acompanhar um piloto de 21 dias inteiro) sem poluir a
 // barra: um <select> já É um dropdown discreto e clicável por natureza,
 // sem precisar de nenhum componente de menu customizado pra isso.
-export function ApproachMetricsToggle({ periods }: { periods: PeriodOption[] }) {
+// onPeriodChange: opcional, avisa um ancestral (via useEffect, incluindo no
+// mount) qual período está selecionado aqui — usado pela linha "N enviadas
+// · M voltaram" do cabeçalho da Reativação (ver ReactivationRail.tsx), que
+// precisa acompanhar O MESMO seletor (pedido explícito) sem duplicar este
+// <select> nem introduzir query param. Continua funcionando sozinho (sem
+// esse prop) exatamente como antes.
+export function ApproachMetricsToggle({ periods, onPeriodChange }: { periods: PeriodOption[]; onPeriodChange?: (days: number) => void }) {
   const [days, setDays] = useState(periods[0]?.days);
   const current = periods.find((p) => p.days === days) ?? periods[0];
+
+  useEffect(() => {
+    if (days !== undefined) onPeriodChange?.(days);
+  }, [days, onPeriodChange]);
 
   if (!current) return null;
 

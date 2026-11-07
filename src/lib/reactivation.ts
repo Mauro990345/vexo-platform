@@ -894,3 +894,195 @@ export async function sendReactivationWhatsAppMessage(
 
   return { ok: true, alreadySent: false, clinicId };
 }
+
+// Métrica "N enviadas · M voltaram" do cabeçalho da Reativação (ver
+// ReactivationRail.tsx) — quantos pacientes que receberam um card de
+// Reativação voltaram a agendar depois. Lógica pura aqui (testável sem
+// Prisma, mesmo padrão do resto do arquivo), wrapper com Prisma embaixo.
+//
+// Constante NOMEADA de propósito (pedido explícito): ainda não temos dado
+// real suficiente pra calibrar — 35 dias é um ponto de partida, provável
+// de ajustar depois que a Reativação rodar de verdade por um tempo.
+export const RETURN_ATTRIBUTION_DAYS = 35;
+
+export type ReturnMetricSlotInput = {
+  slotId: string;
+  // Agendamento que GEROU o card — nunca conta como "voltou" dele mesmo.
+  appointmentId: string;
+  sentAt: Date;
+  leadId: string | null;
+  leadPhone: string | null;
+};
+
+export type ReturnMetricAppointmentInput = {
+  appointmentId: string;
+  // "Conta no momento em que agenda, não quando comparece" (pedido
+  // explícito) — createdAt, não scheduledAt.
+  createdAt: Date;
+  leadId: string | null;
+  leadPhone: string | null;
+  status: "SCHEDULED" | "CONFIRMED" | "COMPLETED" | "NO_SHOW" | "CANCELLED";
+};
+
+export type ReactivationReturnPeriod = { days: number; label: string };
+export type ReactivationReturnStat = ReactivationReturnPeriod & { sent: number; returned: number };
+
+// Identificação do paciente: pelo leadId e, quando houver telefone dos
+// dois lados, também pelo telefone normalizado (pedido explícito) — um
+// union-find simples (duas leads diferentes que compartilham o mesmo
+// telefone viram o MESMO paciente pra fins de atribuição). Conservador de
+// propósito: sem leadId em nenhum dos dois lados, nunca agrupa (melhor
+// subestimar do que inflar — ver comentário em computeReactivationReturnStats).
+function buildPatientGroups(
+  records: { leadId: string | null; leadPhone: string | null }[]
+): (leadId: string | null) => string | null {
+  const parent = new Map<string, string>();
+  function find(x: string): string {
+    let root = x;
+    while (parent.get(root) && parent.get(root) !== root) root = parent.get(root)!;
+    let cur = x;
+    while (parent.get(cur) && parent.get(cur) !== root) {
+      const next = parent.get(cur)!;
+      parent.set(cur, root);
+      cur = next;
+    }
+    return root;
+  }
+  function ensure(key: string) {
+    if (!parent.has(key)) parent.set(key, key);
+  }
+  function union(a: string, b: string) {
+    const ra = find(a);
+    const rb = find(b);
+    if (ra !== rb) parent.set(ra, rb);
+  }
+
+  for (const r of records) {
+    if (!r.leadId) continue;
+    const leadKey = `lead:${r.leadId}`;
+    ensure(leadKey);
+    if (r.leadPhone) {
+      const normalized = normalizeBrazilianWhatsappNumber(r.leadPhone);
+      if (normalized) {
+        const phoneKey = `phone:${normalized}`;
+        ensure(phoneKey);
+        union(leadKey, phoneKey);
+      }
+    }
+  }
+
+  return (leadId: string | null) => {
+    if (!leadId) return null;
+    const key = `lead:${leadId}`;
+    return parent.has(key) ? find(key) : key;
+  };
+}
+
+// Pedido explícito, regra conservadora: card "voltou" quando existe um
+// agendamento NOVO (appointmentId diferente do que gerou o card), do MESMO
+// paciente, status != CANCELLED, COM lead vinculado, criado (createdAt) em
+// até RETURN_ATTRIBUTION_DAYS dias depois do envio do card (sentAt) — e
+// esse card é o ÚLTIMO enviado àquele paciente antes desse agendamento
+// (nunca o penúltimo). Cada card conta no máximo UMA vez como "voltou",
+// mesmo que, hipoteticamente, mais de um agendamento novo o elegesse como
+// "o último antes dele" — o que importa é SE voltou, não quantas vezes.
+//
+// Agendamento sem leadId (ex: importado direto do Google Calendar sem
+// Lead) nunca é candidato a "voltou" — o VEXO não tem como confirmar que é
+// o mesmo paciente, e a regra pede explicitamente subestimar em vez de
+// arriscar inflar.
+export function computeReactivationReturnStats(
+  slots: ReturnMetricSlotInput[],
+  appointments: ReturnMetricAppointmentInput[],
+  periods: ReactivationReturnPeriod[],
+  now: Date
+): ReactivationReturnStat[] {
+  const patientGroupOf = buildPatientGroups([...slots, ...appointments]);
+  const windowMs = RETURN_ATTRIBUTION_DAYS * 24 * 60 * 60 * 1000;
+
+  const slotsByGroup = new Map<string, ReturnMetricSlotInput[]>();
+  for (const slot of slots) {
+    const group = patientGroupOf(slot.leadId);
+    if (!group) continue;
+    const bucket = slotsByGroup.get(group);
+    if (bucket) bucket.push(slot);
+    else slotsByGroup.set(group, [slot]);
+  }
+
+  const returnedSlotIds = new Set<string>();
+  for (const appointment of appointments) {
+    if (appointment.status === "CANCELLED" || !appointment.leadId) continue;
+    const group = patientGroupOf(appointment.leadId);
+    if (!group) continue;
+    const candidateSlots = slotsByGroup.get(group);
+    if (!candidateSlots) continue;
+
+    let lastEligible: ReturnMetricSlotInput | null = null;
+    for (const slot of candidateSlots) {
+      if (slot.appointmentId === appointment.appointmentId) continue; // o próprio agendamento original do card
+      const diffMs = appointment.createdAt.getTime() - slot.sentAt.getTime();
+      if (diffMs < 0 || diffMs > windowMs) continue;
+      if (!lastEligible || slot.sentAt.getTime() > lastEligible.sentAt.getTime()) lastEligible = slot;
+    }
+    if (lastEligible) returnedSlotIds.add(lastEligible.slotId);
+  }
+
+  return periods.map((period) => {
+    const from = addDays(startOfDay(now), -(period.days - 1));
+    const to = addDays(startOfDay(now), 1);
+    const sentInPeriod = slots.filter((slot) => slot.sentAt >= from && slot.sentAt < to);
+    const returned = sentInPeriod.filter((slot) => returnedSlotIds.has(slot.slotId)).length;
+    return { ...period, sent: sentInPeriod.length, returned };
+  });
+}
+
+// Pra formatar "18 enviadas · 5 voltaram" (singular quando for 1) — ver
+// ReactivationRail.tsx.
+export function formatReactivationReturnLine(sent: number, returned: number): string {
+  const sentWord = sent === 1 ? "enviada" : "enviadas";
+  const returnedWord = returned === 1 ? "voltou" : "voltaram";
+  return `${sent} ${sentWord} · ${returned} ${returnedWord}`;
+}
+
+export async function getReactivationReturnStats(
+  clinicId: string,
+  periods: ReactivationReturnPeriod[],
+  now: Date = new Date()
+): Promise<ReactivationReturnStat[]> {
+  const [slotRows, appointmentRows] = await Promise.all([
+    prisma.reactivationCardSlot.findMany({
+      where: { sentAt: { not: null }, appointment: { clinicId } },
+      select: {
+        id: true,
+        sentAt: true,
+        appointmentId: true,
+        appointment: { select: { leadId: true, lead: { select: { phone: true } } } },
+      },
+    }),
+    // Sem limite (take) de propósito — diferente da lista de exibição em
+    // ClientPanelView.tsx (capada em 100, só pra mostrar na tela), esta é
+    // uma agregação: cortar o histórico sub-contaria retornos de verdade.
+    prisma.appointment.findMany({
+      where: { clinicId },
+      select: { id: true, createdAt: true, leadId: true, status: true, lead: { select: { phone: true } } },
+    }),
+  ]);
+
+  const slots: ReturnMetricSlotInput[] = slotRows.map((row) => ({
+    slotId: row.id,
+    appointmentId: row.appointmentId,
+    sentAt: row.sentAt!,
+    leadId: row.appointment.leadId,
+    leadPhone: row.appointment.lead?.phone ?? null,
+  }));
+
+  const appointments: ReturnMetricAppointmentInput[] = appointmentRows.map((row) => ({
+    appointmentId: row.id,
+    createdAt: row.createdAt,
+    leadId: row.leadId,
+    leadPhone: row.lead?.phone ?? null,
+    status: row.status,
+  }));
+
+  return computeReactivationReturnStats(slots, appointments, periods, now);
+}

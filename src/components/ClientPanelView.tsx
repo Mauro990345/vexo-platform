@@ -3,7 +3,6 @@ import { Calendar } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { getClinicMetrics, getAttendanceMetrics, appointmentDisplayStatus, getDailyApproachCounts, startOfDay, addDays } from "@/lib/metrics";
 import { ApproachChart } from "@/components/ApproachChart";
-import { ApproachMetricsToggle } from "@/components/ApproachMetricsToggle";
 import { AppointmentStatusBadge } from "@/components/AppointmentStatusBadge";
 import { NoShowButton } from "@/components/NoShowButton";
 import { RetornoButton } from "@/components/RetornoButton";
@@ -14,8 +13,8 @@ import { LeadAvatar } from "@/components/LeadAvatar";
 import { ClientPanelTabs } from "@/components/ClientPanelTabs";
 import { InstagramGlyphIcon, WhatsAppGlyphIcon } from "@/components/BrandIcons";
 import { NeedsHumanBanner, type NeedsHumanLead } from "@/components/NeedsHumanBanner";
-import { ReactivationRail } from "@/components/ReactivationRail";
-import { getReactivationCards, RETURN_PERIOD_OPTIONS, type SendReactivationWhatsAppResult } from "@/lib/reactivation";
+import { PanelActivityColumn } from "@/components/PanelActivityColumn";
+import { getReactivationCards, getReactivationReturnStats, RETURN_PERIOD_OPTIONS, type SendReactivationWhatsAppResult } from "@/lib/reactivation";
 import { isAppointmentVisibleInList, type SetAppointmentReturnPeriodResult } from "@/lib/appointments";
 import { getNoShowCards } from "@/lib/no-show-cards";
 import { getHotLeadCards } from "@/lib/hot-lead-cards";
@@ -161,7 +160,7 @@ export async function ClientPanelView({
   const parsedRef = week ? new Date(week) : now;
   const weekStart = startOfWeek(Number.isNaN(parsedRef.getTime()) ? now : parsedRef);
 
-  const [clinic, periods, appointments, dailyApproached, needsHumanConversations, reactivationCards, noShowCards, hotLeadCards, neverScheduledCards, sentReactivationSlots] = await Promise.all([
+  const [clinic, periods, returnPeriods, appointments, dailyApproached, needsHumanConversations, reactivationCards, noShowCards, hotLeadCards, neverScheduledCards, sentReactivationSlots] = await Promise.all([
     prisma.clinic.findUniqueOrThrow({
       where: { id: clinicId },
       select: {
@@ -189,6 +188,10 @@ export async function ClientPanelView({
         return { ...p, metrics, attendance };
       })
     ),
+    // "N enviadas · M voltaram" do cabeçalho da Reativação (ver
+    // ReactivationRail.tsx/PanelActivityColumn.tsx) — mesmas janelas de
+    // PANEL_PERIODS acima, pra acompanhar o seletor de período já existente.
+    getReactivationReturnStats(clinicId, PANEL_PERIODS, now),
     // AJUSTE (2026-10-29, 6ª rodada, pedido explícito "exclua da lista os
     // agendamentos cancelados"): status: { not: "CANCELLED" } — só filtro
     // de EXIBIÇÃO desta lista; nada é apagado do banco (um agendamento
@@ -363,9 +366,9 @@ export async function ClientPanelView({
               </div>
             </div>
 
-            <ApproachMetricsToggle periods={periods} />
-
-            <ReactivationRail
+            <PanelActivityColumn
+              periods={periods}
+              returnPeriods={returnPeriods}
               cards={panelCards}
               action={reactivationSentAction}
               sendWhatsappAction={reactivationSendWhatsappAction}
