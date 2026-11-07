@@ -1055,6 +1055,35 @@ model ReactivationShowcaseBackup {
   createdAt DateTime @default(now())
 }
 
+// Backup/estado de prisma/seed-reactivation-return-demo.ts — script
+// restrito à Clínica Demo (ver assertDemoClinic) que valida a métrica
+// "N enviadas · M voltaram" (ver getReactivationReturnStats,
+// reactivation.ts) marcando 1-2 cards FIXOS (ReactivationShowcaseBackup)
+// como enviados e criando UM Appointment novo (a "volta") pro mesmo
+// leadId de um deles. Cada linha aqui é UMA ação reversível tomada pelo
+// script — nunca as duas coisas na mesma linha, pra --restore poder
+// desfazer cada uma de forma independente e simples:
+// - cardSlotId preenchido: linha sobre um ReactivationCardSlot cujo
+//   sentAt o script mudou pra "agora" — originalSentAt é o valor de ANTES
+//   (pode legitimamente ser null, se o card estava pendente).
+// - createdAppointmentId preenchido: linha sobre o Appointment que o
+//   script CRIOU do zero (a "volta") — --restore simplesmente apaga essa
+//   linha do Appointment (nunca existia antes do script).
+// Nunca os dois juntos na mesma linha (o código grava sempre só um).
+model ReactivationReturnDemoBackup {
+  id       String @id @default(cuid())
+  clinicId String
+
+  cardSlotId     String?
+  originalSentAt DateTime?
+
+  createdAppointmentId String? @unique
+
+  createdAt DateTime @default(now())
+
+  @@index([clinicId])
+}
+
 // Textos dos dois passos do card "Faltou" (D3 e D10 após o não-
 // comparecimento, ver no-show-cards.ts) — GLOBAL, mesmo padrão de
 // FollowUpSettings/FollowUpStep (a sequência automática de não-
