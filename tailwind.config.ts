@@ -81,8 +81,27 @@ const config: Config = {
       },
       // Raio de canto nomeado por uso — os cards de agendamento na Agenda
       // usavam rounded-md (6px) direto; vira um token com o mesmo valor.
+      // "card" aqui é só do Pipeline (ver clinicas/[id]/page.tsx) — nome
+      // antigo, mantido como está pra não mexer em outra página (pedido
+      // explícito desta rodada). "control"/"block" são os 2 papéis novos
+      // (ver DESIGN.md), com os MESMOS valores de rounded-lg/rounded-xl já
+      // usados hoje — nenhum componente existente muda de aparência; são
+      // só os nomes que os componentes base da Etapa 2 vão consumir.
       borderRadius: {
         card: "0.375rem",
+        control: "0.5rem", // = rounded-lg (botões, campos, chips pequenos)
+        block: "0.75rem", // = rounded-xl (cards/blocos de conteúdo)
+      },
+      // Espaçamento nomeado pros componentes base da Etapa 2 — mesmos
+      // valores dos paddings mais usados hoje em botões/campos (px-2.5/
+      // py-1.5) e em blocos/cards (p-3.5), só documentados com nome em vez
+      // de reaproveitados "de olho" tela por tela (ver auditoria,
+      // docs/design-audit.md). Aditivo: a escala numérica padrão do
+      // Tailwind continua disponível, nada existente muda.
+      spacing: {
+        "control-x": "0.625rem", // 10px = px-2.5
+        "control-y": "0.375rem", // 6px = py-1.5
+        block: "0.875rem", // 14px = p-3.5
       },
       boxShadow: {
         card: "0 1px 2px 0 rgb(0 0 0 / 0.4)",
