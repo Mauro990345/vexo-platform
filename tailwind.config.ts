@@ -22,6 +22,12 @@ const config: Config = {
           muted: "rgb(var(--vexo-muted) / <alpha-value>)",
           fg: "rgb(var(--vexo-fg) / <alpha-value>)",
           tabFg: "rgb(var(--vexo-tab-fg) / <alpha-value>)",
+          // Cor do ícone de cada aba, fixa por posição — ver Tabs.tsx e o
+          // comentário grande em globals.css.
+          tabIcon1: "rgb(var(--tab-icon-1) / <alpha-value>)",
+          tabIcon2: "rgb(var(--tab-icon-2) / <alpha-value>)",
+          tabIcon3: "rgb(var(--tab-icon-3) / <alpha-value>)",
+          tabIcon4: "rgb(var(--tab-icon-4) / <alpha-value>)",
           accent: "rgb(var(--vexo-accent) / <alpha-value>)",
           accentFg: "rgb(var(--vexo-accent-fg) / <alpha-value>)",
           petrol: "rgb(var(--vexo-petrol) / <alpha-value>)",

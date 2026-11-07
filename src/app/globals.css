@@ -35,9 +35,24 @@
   /* Título das abas (ver Tabs.tsx) — token PRÓPRIO, fixo, que NÃO
      acompanha --vexo-fg (pedido explícito: off-white ~#e6e8ec, nunca
      branco puro — um pouco mais escuro que o texto principal padrão). Vale
-     pro texto da aba em QUALQUER estado (ativa ou não); só o sublinhado e
-     o ícone continuam indicando qual está selecionada. */
+     pro texto da aba em QUALQUER estado (ativa ou não) — só o sublinhado
+     continua indicando qual está selecionada (o ícone agora tem cor FIXA
+     por posição, ver --tab-icon-1..4 abaixo). */
   --vexo-tab-fg: 230 232 236; /* #e6e8ec */
+
+  /* Cor do ÍCONE de cada aba — FIXA por posição (1ª, 2ª, 3ª, 4ª aba da
+     esquerda pra direita), não pela aba estar selecionada ou não (pedido
+     explícito: "substitui a regra anterior de ícone azul na ativa"). Tons
+     claros e foscos, derivados das cores já usadas no VEXO: marrom/
+     dourado, verde, roxo (coluna "Em conversa" do Pipeline) e uma versão
+     mais clara do azul da marca — ver Tabs.tsx (ciclo por índice, reinicia
+     em cada página/array de abas). Variáveis PRÓPRIAS, sem ligação com
+     nenhum token semântico (não mudam se o azul da marca mudar, por
+     exemplo) — pedido explícito "fáceis de ajustar depois". */
+  --tab-icon-1: 209 164 104; /* #d1a468 — marrom/dourado claro */
+  --tab-icon-2: 134 201 160; /* #86c9a0 — verde claro */
+  --tab-icon-3: 184 164 227; /* #b8a4e3 — roxo claro */
+  --tab-icon-4: 127 184 224; /* #7fb8e0 — azul claro */
 
   /* Cor de marca / ação primária — tom aprovado depois de testado isolado
      na aba Automações (PRs #185-189): era 59 130 246 (#3b82f6, azul
