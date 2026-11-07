@@ -32,12 +32,24 @@ import {
   toggleHotLeadCardSentClientAction,
   toggleNeverScheduledCardSentClientAction,
 } from "@/app/dashboard/actions";
-import { sortReactivationCardsForDisplay, countPendingReactivationCards, type SendReactivationWhatsAppResult } from "@/lib/reactivation";
+import {
+  sortReactivationCardsForDisplay,
+  countPendingReactivationCards,
+  formatReactivationReturnLine,
+  type SendReactivationWhatsAppResult,
+} from "@/lib/reactivation";
 import type { ToggleHotLeadCardSentResult } from "@/lib/hot-lead-cards";
 import { truncateNameToTwoWords, type PanelCard } from "@/lib/panel-cards";
 
 function pendingCountLabel(n: number): string {
   return n === 1 ? "1 pendente" : `${n} pendentes`;
+}
+
+// Lógica pura (testável sem renderizar o componente, mesmo padrão de
+// shouldShowClientBonusTab em ClientPanelView.tsx) — pedido explícito: "se
+// não houver nenhuma enviada no período, não mostrar a linha".
+export function shouldShowReactivationReturnLine(returnMetric: { sent: number; returned: number } | undefined): boolean {
+  return Boolean(returnMetric && returnMetric.sent > 0);
 }
 
 // Acima de ~6 linhas a lista ganha rolagem INTERNA (nunca horizontal) —
@@ -78,6 +90,21 @@ function noticeForFailure(reason: WhatsAppFailureReason): string {
 // verdade pelo VEXO com as travas de sempre, Instagram copia + abre),
 // agora dispatchado por `card.actionKey.kind` em vez de assumir que todo
 // card é de Reativação.
+export type ReactivationRailProps = {
+  cards: PanelCard[];
+  action?: (appointmentId: string, thresholdDays: number) => Promise<unknown>;
+  sendWhatsappAction?: (appointmentId: string, thresholdDays: number) => Promise<SendReactivationWhatsAppResult>;
+  noShowToggleAction?: (appointmentId: string, step: number) => Promise<unknown>;
+  noShowSendWhatsappAction?: (appointmentId: string, step: number) => Promise<SendReactivationWhatsAppResult>;
+  hotLeadToggleAction?: (conversationId: string, step: number) => Promise<ToggleHotLeadCardSentResult>;
+  neverScheduledToggleAction?: (conversationId: string, step: number) => Promise<unknown>;
+  // "N enviadas · M voltaram" do período selecionado (ver
+  // PanelActivityColumn.tsx/reactivation.ts) — undefined/sent=0 não mostra
+  // nada (pedido explícito: "se não houver nenhuma enviada no período, não
+  // mostrar a linha").
+  returnMetric?: { sent: number; returned: number };
+};
+
 export function ReactivationRail({
   cards,
   action = toggleReactivationCardSentClientAction,
@@ -86,15 +113,8 @@ export function ReactivationRail({
   noShowSendWhatsappAction = sendNoShowCardWhatsAppMessageClientAction,
   hotLeadToggleAction = toggleHotLeadCardSentClientAction,
   neverScheduledToggleAction = toggleNeverScheduledCardSentClientAction,
-}: {
-  cards: PanelCard[];
-  action?: (appointmentId: string, thresholdDays: number) => Promise<unknown>;
-  sendWhatsappAction?: (appointmentId: string, thresholdDays: number) => Promise<SendReactivationWhatsAppResult>;
-  noShowToggleAction?: (appointmentId: string, step: number) => Promise<unknown>;
-  noShowSendWhatsappAction?: (appointmentId: string, step: number) => Promise<SendReactivationWhatsAppResult>;
-  hotLeadToggleAction?: (conversationId: string, step: number) => Promise<ToggleHotLeadCardSentResult>;
-  neverScheduledToggleAction?: (conversationId: string, step: number) => Promise<unknown>;
-}) {
+  returnMetric,
+}: ReactivationRailProps) {
   const [localCards, setLocalCards] = useState(cards);
   useEffect(() => setLocalCards(cards), [cards]);
 
@@ -231,6 +251,15 @@ export function ReactivationRail({
         </div>
         <span className={`${MOBILE_SECTION_COUNTER_TEXT} text-vexo-muted`}>{pendingCountLabel(pendingCount)}</span>
       </div>
+      {/* "N enviadas · M voltaram" (pedido explícito) — linha pequena e
+          discreta, mesmo tamanho/cor do contador de pendentes acima, pra
+          não pesar o cabeçalho. Nada quando não há nenhuma enviada no
+          período selecionado (returnMetric ausente ou sent=0). */}
+      {shouldShowReactivationReturnLine(returnMetric) && returnMetric && (
+        <p className={`${MOBILE_SECTION_COUNTER_TEXT} text-vexo-muted`}>
+          {formatReactivationReturnLine(returnMetric.sent, returnMetric.returned)}
+        </p>
+      )}
       <div className={`${MOBILE_LIST_GAP} ${needsScroll ? "max-h-72 overflow-y-auto pr-1" : ""}`}>
         {sortedCards.map((card) => {
           const isSent = Boolean(card.sentAt);

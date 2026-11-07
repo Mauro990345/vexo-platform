@@ -109,8 +109,13 @@ import {
   isDailyWhatsappLimitReached,
   sendReactivationWhatsAppMessage,
   REACTIVATION_WHATSAPP_MIN_INTERVAL_MS,
+  computeReactivationReturnStats,
+  formatReactivationReturnLine,
+  RETURN_ATTRIBUTION_DAYS,
   type ReactivationSourceAppointment,
   type ReactivationCandidate,
+  type ReturnMetricSlotInput,
+  type ReturnMetricAppointmentInput,
 } from "./reactivation";
 
 function appt(overrides: Partial<ReactivationSourceAppointment> = {}): ReactivationSourceAppointment {
@@ -1333,5 +1338,148 @@ describe("sendReactivationWhatsAppMessage — envio direto pelo VEXO", () => {
     await sendReactivationWhatsAppMessage("appt-1", 90, new Date("2026-04-01T12:00:00.000Z"));
 
     expect(sendWhatsappMessageMock).toHaveBeenCalledWith("clinic-1-instance", "5511987654321", "Oi, Fulana! Em quinta-feira (01/01) às 12h.");
+  });
+});
+
+// "N enviadas · M voltaram" do cabeçalho da Reativação — pedido explícito:
+// quantos pacientes que receberam um card voltaram a agendar depois.
+// Lógica 100% pura (sem Prisma), mesmo padrão do resto do arquivo.
+describe("computeReactivationReturnStats", () => {
+  const SENT_AT = new Date("2026-01-01T00:00:00.000Z");
+  const DAY_MS = 24 * 60 * 60 * 1000;
+  // Período bem largo, cobrindo qualquer SENT_AT usado nos testes abaixo —
+  // evita que o próprio filtro de período interfira nos testes que não são
+  // sobre o filtro de período em si (esse tem describe/teste dedicado).
+  const WIDE_PERIOD = [{ days: 400, label: "tudo" }];
+  const NOW = new Date("2026-06-01T00:00:00.000Z");
+
+  function slot(overrides: Partial<ReturnMetricSlotInput> = {}): ReturnMetricSlotInput {
+    return {
+      slotId: "slot-1",
+      appointmentId: "appt-original-1",
+      sentAt: SENT_AT,
+      leadId: "lead-1",
+      leadPhone: "11987654321",
+      ...overrides,
+    };
+  }
+
+  function apptInput(overrides: Partial<ReturnMetricAppointmentInput> = {}): ReturnMetricAppointmentInput {
+    return {
+      appointmentId: "appt-new-1",
+      createdAt: new Date(SENT_AT.getTime() + 10 * DAY_MS),
+      leadId: "lead-1",
+      leadPhone: "11987654321",
+      status: "SCHEDULED",
+      ...overrides,
+    };
+  }
+
+  it(`limite de ${RETURN_ATTRIBUTION_DAYS} dias: agendamento criado exatamente no dia ${RETURN_ATTRIBUTION_DAYS} conta como retorno`, () => {
+    const candidate = apptInput({ createdAt: new Date(SENT_AT.getTime() + RETURN_ATTRIBUTION_DAYS * DAY_MS) });
+    const stats = computeReactivationReturnStats([slot()], [candidate], WIDE_PERIOD, NOW);
+    expect(stats[0]).toEqual({ days: 400, label: "tudo", sent: 1, returned: 1 });
+  });
+
+  it(`limite de ${RETURN_ATTRIBUTION_DAYS} dias: agendamento criado no dia ${RETURN_ATTRIBUTION_DAYS + 1} NÃO conta`, () => {
+    const candidate = apptInput({ createdAt: new Date(SENT_AT.getTime() + (RETURN_ATTRIBUTION_DAYS + 1) * DAY_MS) });
+    const stats = computeReactivationReturnStats([slot()], [candidate], WIDE_PERIOD, NOW);
+    expect(stats[0]).toEqual({ days: 400, label: "tudo", sent: 1, returned: 0 });
+  });
+
+  it("o agendamento ORIGINAL que gerou o card nunca conta como retorno dele mesmo, mesmo com data dentro da janela", () => {
+    // Mesmo appointmentId do card — sem a exclusão explícita, isso
+    // contaria (está dentro dos 35 dias, mesmo paciente).
+    const originalAsIfReturn = apptInput({ appointmentId: "appt-original-1", createdAt: new Date(SENT_AT.getTime() + 5 * DAY_MS) });
+    const stats = computeReactivationReturnStats([slot()], [originalAsIfReturn], WIDE_PERIOD, NOW);
+    expect(stats[0]!.returned).toBe(0);
+  });
+
+  it("agendamento CANCELADO não conta como retorno", () => {
+    const cancelled = apptInput({ status: "CANCELLED" });
+    const stats = computeReactivationReturnStats([slot()], [cancelled], WIDE_PERIOD, NOW);
+    expect(stats[0]!.returned).toBe(0);
+  });
+
+  it("agendamento SEM lead (ex: importado do Google Calendar direto) não conta — melhor subestimar do que inflar", () => {
+    const withoutLead = apptInput({ leadId: null, leadPhone: null });
+    const stats = computeReactivationReturnStats([slot()], [withoutLead], WIDE_PERIOD, NOW);
+    expect(stats[0]!.returned).toBe(0);
+  });
+
+  it("mesmo paciente identificado só pelo telefone (leads diferentes): conta como retorno", () => {
+    const candidate = apptInput({ leadId: "lead-2", leadPhone: "11987654321" }); // mesmo telefone, lead diferente
+    const stats = computeReactivationReturnStats([slot({ leadId: "lead-1", leadPhone: "11987654321" })], [candidate], WIDE_PERIOD, NOW);
+    expect(stats[0]!.returned).toBe(1);
+  });
+
+  it("telefones diferentes e leads diferentes: NÃO conta (não é o mesmo paciente)", () => {
+    const candidate = apptInput({ leadId: "lead-2", leadPhone: "11900000000" });
+    const stats = computeReactivationReturnStats([slot({ leadId: "lead-1", leadPhone: "11987654321" })], [candidate], WIDE_PERIOD, NOW);
+    expect(stats[0]!.returned).toBe(0);
+  });
+
+  it("atribuição ao ÚLTIMO card: paciente com 2 cards enviados, o retorno conta pro mais recente antes dele, não pro mais antigo", () => {
+    // Horário ao meio-dia UTC (propositalmente, não meia-noite) — evita
+    // qualquer ambiguidade de fuso na borda do dia (ver startOfBrazilDay,
+    // timezone.ts: o "dia" aqui é o dia em Brasília, UTC-3).
+    const slotA = slot({ slotId: "slot-a", sentAt: new Date("2026-01-01T12:00:00.000Z"), appointmentId: "appt-original-a" });
+    const slotB = slot({ slotId: "slot-b", sentAt: new Date("2026-01-11T12:00:00.000Z"), appointmentId: "appt-original-b" });
+    const candidate = apptInput({ createdAt: new Date("2026-01-21T12:00:00.000Z") }); // 20 dias após A, 10 dias após B — ambos dentro da janela
+
+    // Período estreito cobrindo só o dia de slotA — se o retorno fosse
+    // atribuído (incorretamente) a slotA, apareceria aqui.
+    const periodA = [{ days: 1, label: "dia de A" }];
+    const statsA = computeReactivationReturnStats([slotA, slotB], [candidate], periodA, new Date("2026-01-01T18:00:00.000Z"));
+    expect(statsA[0]).toEqual({ days: 1, label: "dia de A", sent: 1, returned: 0 });
+
+    // Período estreito cobrindo só o dia de slotB — é quem deveria ganhar
+    // a atribuição (o card mais recente antes do agendamento novo).
+    const periodB = [{ days: 1, label: "dia de B" }];
+    const statsB = computeReactivationReturnStats([slotA, slotB], [candidate], periodB, new Date("2026-01-11T18:00:00.000Z"));
+    expect(statsB[0]).toEqual({ days: 1, label: "dia de B", sent: 1, returned: 1 });
+  });
+
+  it("um card conta no máximo UMA vez como 'voltou', mesmo com 2 agendamentos novos elegíveis pro mesmo card", () => {
+    const onlySlot = slot();
+    const candidate1 = apptInput({ appointmentId: "appt-new-1", createdAt: new Date(SENT_AT.getTime() + 5 * DAY_MS) });
+    const candidate2 = apptInput({ appointmentId: "appt-new-2", createdAt: new Date(SENT_AT.getTime() + 15 * DAY_MS) });
+    const stats = computeReactivationReturnStats([onlySlot], [candidate1, candidate2], WIDE_PERIOD, NOW);
+    expect(stats[0]).toEqual({ days: 400, label: "tudo", sent: 1, returned: 1 });
+  });
+
+  it("filtro de período: só conta 'enviada' quem foi enviado dentro da janela do período selecionado", () => {
+    const recent = slot({ slotId: "slot-recent", sentAt: new Date("2026-05-28T00:00:00.000Z") }); // há 4 dias de NOW
+    const old = slot({ slotId: "slot-old", sentAt: new Date("2026-04-01T00:00:00.000Z") }); // há ~2 meses de NOW
+    const periods = [
+      { days: 7, label: "7 dias" },
+      { days: 28, label: "28 dias" },
+    ];
+    const stats = computeReactivationReturnStats([recent, old], [], periods, NOW);
+
+    const sevenDays = stats.find((s) => s.days === 7)!;
+    expect(sevenDays.sent).toBe(1); // só "recent" cai na janela de 7 dias
+
+    const twentyEightDays = stats.find((s) => s.days === 28)!;
+    expect(twentyEightDays.sent).toBe(1); // "old" (~60 dias atrás) continua de fora até da janela de 28 dias
+  });
+
+  it("zero enviadas no período: sent=0 e returned=0 (gatilho pra UI esconder a linha, ver ReactivationRail.test.ts)", () => {
+    const stats = computeReactivationReturnStats([], [], WIDE_PERIOD, NOW);
+    expect(stats[0]).toEqual({ days: 400, label: "tudo", sent: 0, returned: 0 });
+  });
+});
+
+describe("formatReactivationReturnLine", () => {
+  it("plural padrão", () => {
+    expect(formatReactivationReturnLine(18, 5)).toBe("18 enviadas · 5 voltaram");
+  });
+
+  it("singular quando for 1 enviada e 1 retorno", () => {
+    expect(formatReactivationReturnLine(1, 1)).toBe("1 enviada · 1 voltou");
+  });
+
+  it("zero retornos, plural de enviadas", () => {
+    expect(formatReactivationReturnLine(3, 0)).toBe("3 enviadas · 0 voltaram");
   });
 });
