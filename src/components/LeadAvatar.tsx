@@ -27,15 +27,18 @@ const ICON_SIZE_CLASSES = {
 // selling (Kommo, Clint) pra indicar o canal de origem do lead direto no
 // avatar, sem precisar de um selo/texto separado.
 //
-// "appointment" ajustado (pedido explícito, ajuste do Painel): ~12px ->
-// 18px — maior que os outros dois tamanhos porque o avatar deste tamanho
-// também é o maior dos três; ganhou um anel (border-2, não só 1px) na cor
-// do fundo da página pra destacar mais sobre a foto, já que o badge ficou
-// maior.
+// "appointment": tamanho em px isolado numa constante pra ser fácil de
+// reajustar depois — mudar só o número aqui (o Tailwind exige a classe
+// "h-[Npx]"/"w-[Npx]" escrita por extenso no arquivo pra gerar o CSS, por
+// isso não dá pra montar a classe dinamicamente a partir da constante).
+// Já passou de ~12px -> 18px (grande demais) -> 15px (ajuste atual);
+// ganhou um anel (border-2, não só 1px) na cor do fundo da página pra
+// destacar mais sobre a foto.
+const APPOINTMENT_BADGE_SIZE_PX = 15;
 const BADGE_SIZE_CLASSES = {
   sm: "h-2.5 w-2.5",
   lg: "h-3.5 w-3.5",
-  appointment: "h-[18px] w-[18px]",
+  appointment: "h-[15px] w-[15px]",
 } as const;
 const BADGE_RING_CLASSES = {
   sm: "border border-vexo-bg",
