@@ -38,10 +38,6 @@ export const MOBILE_APPOINTMENT_INFO_TEXT = "text-[13px] sm:text-caption";
 // ReactivationActionButtonStyle.ts).
 export const MOBILE_BUTTON_TEXT = "text-[12px] sm:text-card";
 
-// Ícones mono (WhatsApp/Instagram) dentro dos botões de ação da faixa
-// "Para fazer hoje" (ver ReactivationRail.tsx/InstagramDmButton.tsx).
-export const MOBILE_ICON_SIZE = "h-[12px] w-[12px] sm:h-3 sm:w-3";
-
 // Avatar (LeadAvatar.tsx) — "md" é usado pelo banner "precisa de humano"
 // através do tamanho "sm" (não afetado); "appointment" é o tamanho usado
 // pela faixa "Para fazer hoje" e pela coluna Agendamentos do Painel.

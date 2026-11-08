@@ -7,7 +7,6 @@ import { NoShowButton } from "@/components/NoShowButton";
 import { RetornoButton, type RetornoAction } from "@/components/RetornoButton";
 import { OverflowMenu } from "@/components/OverflowMenu";
 import { Button } from "@/components/Button";
-import { Card } from "@/components/Card";
 import { NeedsHumanBanner, type NeedsHumanLead } from "@/components/NeedsHumanBanner";
 import { normalizeBrazilianWhatsappNumber } from "@/lib/whatsapp";
 import { ACTIONABLE_STATUSES } from "@/lib/panel-appointments";
@@ -31,17 +30,21 @@ function formatDateTime(d: Date): string {
 }
 
 // Coluna "Agendamentos" do Painel do cliente (item 4 da reorganização, ver
-// docs/design-audit.md) — primeiro os próximos (hoje e futuros), depois
+// docs/design-audit.md) — "Próximos" (hoje e futuros, SEMPRE visível,
+// mesmo vazio — nesse caso uma linha discreta "Sem agendamentos
+// próximos", nunca mais a caixa grande "Nenhum agendamento ainda" de
+// antes, que confundia porque o Histórico já existe logo abaixo), depois
 // "Aguardando resposta" (passados que ainda pedem Compareceu/Não
-// compareceu), ambos SEMPRE visíveis; o histórico de atendidos/faltados
-// (ver groupAppointmentsForPanel, panel-appointments.ts) fica atrás de um
-// link "Histórico (N)". SEM caixa individual por item — linhas dentro de
-// um único bloco, separadas só por uma linha fina; uma ação visível por
-// linha, a secundária ("Não compareceu", quando os dois botões se aplicam
-// ao mesmo agendamento) fica num menu "⋯" (ver OverflowMenu.tsx). "use
-// client" só pelo toggle do histórico — cada linha em si usa os mesmos
-// componentes client de sempre (NoShowButton/RetornoButton), sem nenhuma
-// mudança de comportamento.
+// compareceu, só aparece quando há algum); o histórico de atendidos/
+// faltados (ver groupAppointmentsForPanel, panel-appointments.ts) fica
+// atrás de um link "Histórico (N)", recolhido por padrão. Cada item é um
+// cartão leve/separado (ajuste explícito — fundo sutil, borda fina, ~8px
+// de espaço entre eles via `space-y-2`); uma ação visível por linha, a
+// secundária ("Não compareceu", quando os dois botões se aplicam ao mesmo
+// agendamento) fica num menu "⋯" (ver OverflowMenu.tsx). "use client" só
+// pelo toggle do histórico — cada linha em si usa os mesmos componentes
+// client de sempre (NoShowButton/RetornoButton), sem nenhuma mudança de
+// comportamento.
 export function PanelAppointmentsColumn({
   upcoming,
   awaitingResponse,
@@ -66,6 +69,11 @@ export function PanelAppointmentsColumn({
     const showNoShow = ACTIONABLE_STATUSES.includes(a.status);
 
     return (
+      // Cada linha volta a ser um cartão leve e separado (pedido explícito
+      // do ajuste pós-reorganização — fundo sutil, borda fina), não mais
+      // uma linha dentro de um bloco único com divide-y; o espaçamento
+      // entre cartões (~8px) vem do `space-y-2` do container-pai.
+      //
       // `relative`: contexto de posicionamento do popover do botão "Retorno"
       // SÓ CELULAR (ver RetornoButton.tsx, `sm:relative` no wrapper do botão,
       // não mais `relative` sem prefixo) — sem isso o popover (position:
@@ -73,7 +81,7 @@ export function PanelAppointmentsColumn({
       // posicionado próximo e acabaria relativo à viewport. Em desktop
       // (`sm:relative`) o próprio wrapper do botão já ancora primeiro, então
       // isto aqui fica inofensivo (sem top/left, só estabelece o contexto).
-      <div key={a.id} className="relative flex items-center gap-2.5 py-2.5">
+      <div key={a.id} className="relative flex items-center gap-2.5 rounded-control border border-vexo-border bg-vexo-surface p-2.5">
         <LeadAvatar profilePictureUrl={a.profilePictureUrl} name={a.primary} size="appointment" />
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 items-baseline gap-1">
@@ -109,8 +117,6 @@ export function PanelAppointmentsColumn({
     );
   }
 
-  const visibleRows = [...upcoming, ...awaitingResponse];
-
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2">
@@ -119,24 +125,33 @@ export function PanelAppointmentsColumn({
       </div>
       <NeedsHumanBanner leads={needsHumanLeads} />
 
-      <Card>
-        {visibleRows.length === 0 ? (
-          <p className="py-6 text-center text-xs text-vexo-muted">Nenhum agendamento ainda.</p>
+      {/* "Próximos" com rótulo próprio (pedido explícito — antes "Nenhum
+          agendamento ainda" aparecia sem contexto, confundindo com o
+          Histórico que existe logo abaixo); vazio = linha discreta, nunca
+          mais uma caixa grande. Rótulo neutro, igual ao de "Para fazer
+          hoje" (ReactivationRail.tsx) — nunca vermelho. */}
+      <div>
+        <p className="text-caption font-semibold uppercase tracking-wide text-vexo-muted">Próximos</p>
+        {upcoming.length > 0 ? (
+          <div className="mt-1.5 space-y-2">{upcoming.map(renderRow)}</div>
         ) : (
-          <div className="divide-y divide-vexo-border">{visibleRows.map(renderRow)}</div>
+          <p className="mt-1.5 text-caption text-vexo-muted">Sem agendamentos próximos</p>
         )}
-      </Card>
+      </div>
+
+      {awaitingResponse.length > 0 && (
+        <div>
+          <p className="text-caption font-semibold uppercase tracking-wide text-vexo-muted">Aguardando resposta</p>
+          <div className="mt-1.5 space-y-2">{awaitingResponse.map(renderRow)}</div>
+        </div>
+      )}
 
       {history.length > 0 && (
         <div>
           <Button type="button" variant="ghost" size="sm" onClick={() => setHistoryOpen((o) => !o)}>
             {historyOpen ? "Ocultar histórico" : `Histórico (${history.length})`}
           </Button>
-          {historyOpen && (
-            <Card className="mt-2">
-              <div className="divide-y divide-vexo-border">{history.map(renderRow)}</div>
-            </Card>
-          )}
+          {historyOpen && <div className="mt-2 space-y-2">{history.map(renderRow)}</div>}
         </div>
       )}
     </div>

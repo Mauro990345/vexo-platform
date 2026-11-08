@@ -60,12 +60,12 @@ describe("ReactivationRail", () => {
     expect(markup).toContain("Para fazer hoje · 2");
   });
 
-  it("card já enviado (sentAt preenchido) aparece numa seção própria, dimmed, e não conta no contador", () => {
+  it('card já enviado (sentAt preenchido) fica num grupo recolhido "Enviados (N)" no fim, não conta no contador, e não aparece até abrir o grupo', () => {
     const cards = [card({ cardKey: "enviado", name: "Enviado Lead", sentAt: new Date() })];
     const markup = renderToStaticMarkup(<ReactivationRail cards={cards} {...noopActions} />);
-    expect(markup).toContain("Enviado Lead");
     expect(markup).toContain("Para fazer hoje · 0");
-    expect(markup).toContain("opacity-50");
+    expect(markup).toContain("Enviados (1)");
+    expect(markup).not.toContain("Enviado Lead");
   });
 
   it('"N enviadas · M voltaram" só aparece quando sent > 0', () => {
@@ -74,5 +74,23 @@ describe("ReactivationRail", () => {
 
     const withMetric = renderToStaticMarkup(<ReactivationRail cards={[]} {...noopActions} returnMetric={{ sent: 3, returned: 1 }} />);
     expect(withMetric).toContain("3 enviadas · 1 voltou");
+  });
+
+  it('rótulo de grupo "Atrasados" é neutro (cinza), nunca vermelho (vexo-error)', () => {
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const markup = renderToStaticMarkup(<ReactivationRail cards={[card({ dueDate: yesterday })]} {...noopActions} />);
+    expect(markup).toContain("Atrasados");
+    expect(markup).not.toContain("vexo-error");
+  });
+
+  it("nome completo do paciente aparece numa linha própria (não cortado pela etiqueta/@ do Instagram)", () => {
+    const markup = renderToStaticMarkup(
+      <ReactivationRail cards={[card({ name: "Maria Fernanda de Albuquerque", igUsername: "maria.ig", reasonShort: "30 dias após" })]} {...noopActions} />
+    );
+    expect(markup).toContain("Maria Fernanda de Albuquerque");
+    expect(markup).toContain("@maria.ig");
+    expect(markup).toContain("30 dias após");
+    expect(markup).toContain("Reativação"); // etiqueta de tipo, ainda presente, só discreta
   });
 });

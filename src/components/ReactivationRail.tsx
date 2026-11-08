@@ -2,12 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { LeadAvatar } from "@/components/LeadAvatar";
-import { WhatsAppMonoIcon } from "@/components/BrandIcons";
+import { WhatsAppGlyphIcon } from "@/components/BrandIcons";
 import { InstagramDmButton } from "@/components/InstagramDmButton";
-import { Card } from "@/components/Card";
-import { Badge, type BadgeVariant } from "@/components/Badge";
+import { Button } from "@/components/Button";
 import { WHATSAPP_ACTION_BUTTON_CLASS, REACTIVATION_UNDO_BUTTON_CLASS } from "@/components/ReactivationActionButtonStyle";
-import { MOBILE_ICON_SIZE } from "@/components/MobileCardScale";
 import {
   toggleReactivationCardSentClientAction,
   sendReactivationWhatsAppMessageClientAction,
@@ -20,18 +18,17 @@ import { formatReactivationReturnLine, type SendReactivationWhatsAppResult } fro
 import type { ToggleHotLeadCardSentResult } from "@/lib/hot-lead-cards";
 import { groupPanelCardsForDisplay, type PanelCard, type PanelCardKind } from "@/lib/panel-cards";
 
-// Rótulo + variante do Badge (Etapa 2 da migração de design, ver
-// docs/design-audit.md) por tipo de card — substitui as 4 cores novas do
-// antigo PanelCardTypeChip (removido, ver PanelCardBadge.tsx) pelas
-// variantes semânticas já existentes, mais alinhadas ao DESIGN.md ("no
-// máximo 2 matizes de destaque por bloco"). Mapeamento: Quente (mais
-// urgente) -> warning; Faltou -> error; Reativação -> accent (cor da
-// marca); Não agendou (lead menos qualificado) -> muted.
-const KIND_BADGE: Record<PanelCardKind, { label: string; variant: BadgeVariant }> = {
-  HOT_LEAD: { label: "Quente", variant: "warning" },
-  NO_SHOW: { label: "Faltou", variant: "error" },
-  REACTIVATION: { label: "Reativação", variant: "accent" },
-  NEVER_SCHEDULED: { label: "Não agendou", variant: "muted" },
+// Rótulo por tipo de card — pedido explícito (ajuste pós-reorganização,
+// ver docs/design-audit.md): a etiqueta deixou de usar o componente Badge
+// (selo grande, com cor própria por tipo — "competia" com a cor do botão
+// de ação) e virou um texto pequeno com fundo bem sutil, igual pros 4
+// tipos (ver renderRow abaixo) — só o RÓTULO ainda diferencia o tipo, não
+// mais a cor.
+const KIND_LABEL: Record<PanelCardKind, string> = {
+  HOT_LEAD: "Quente",
+  NO_SHOW: "Faltou",
+  REACTIVATION: "Reativação",
+  NEVER_SCHEDULED: "Não agendou",
 };
 
 // Lógica pura (testável sem renderizar o componente, mesmo padrão de
@@ -74,10 +71,12 @@ function noticeForFailure(reason: WhatsAppFailureReason): string {
 // (Reativação/Faltou/Quente/Não agendou, já mesclados em `cards` por
 // mergePanelCards, panel-cards.ts) numa lista ÚNICA, agrupada em
 // "Atrasados"/"Hoje" por prioridade (groupPanelCardsForDisplay) e SEM
-// rolagem interna nem "ver todos" — mostra todos os pendentes. Os botões
-// de ação à direita continuam EXATAMENTE como sempre foram (WhatsApp envia
-// de verdade pelo VEXO com as travas de sempre, Instagram copia + abre),
-// dispatchados por `card.actionKey.kind`.
+// rolagem interna nem "ver todos" — mostra todos os pendentes. Os já
+// enviados ficam num grupo recolhido "Enviados (N)" no fim (pedido
+// explícito do ajuste pós-reorganização — antes apareciam misturados,
+// só dimmed). Os botões de ação à direita continuam EXATAMENTE como
+// sempre foram (WhatsApp envia de verdade pelo VEXO com as travas de
+// sempre, Instagram copia + abre), dispatchados por `card.actionKey.kind`.
 export type ReactivationRailProps = {
   cards: PanelCard[];
   action?: (appointmentId: string, thresholdDays: number) => Promise<unknown>;
@@ -105,6 +104,7 @@ export function ReactivationRail({
 }: ReactivationRailProps) {
   const [localCards, setLocalCards] = useState(cards);
   useEffect(() => setLocalCards(cards), [cards]);
+  const [sentOpen, setSentOpen] = useState(false);
 
   // Só pro canal WhatsApp (Reativação e Faltou): quais cards estão com o
   // envio em andamento (botão desabilitado, "Enviando…"), o aviso discreto
@@ -235,7 +235,6 @@ export function ReactivationRail({
     // nunca desabilita um card já enviado (precisa continuar clicável pra
     // desfazer).
     const isDisabledByLimit = Boolean(card.disabledReason) && !isSent;
-    const kindBadge = KIND_BADGE[card.kind];
 
     const actionNode = isSent ? (
       <button type="button" title="Desfazer" aria-label="Desfazer envio" onClick={() => handleToggleSent(card)} className={REACTIVATION_UNDO_BUTTON_CLASS}>
@@ -253,12 +252,12 @@ export function ReactivationRail({
             // sempre (abre o wa.me já preenchido, a clínica manda pelo
             // próprio app).
             <a href={card.whatsappLink} target="_blank" rel="noreferrer" onClick={() => handleToggleSent(card)} className={WHATSAPP_ACTION_BUTTON_CLASS}>
-              <WhatsAppMonoIcon className={MOBILE_ICON_SIZE} />
+              <WhatsAppGlyphIcon className="h-4 w-4 shrink-0" />
               WhatsApp
             </a>
           ) : (
             <button type="button" disabled={isSending} onClick={() => handleSendWhatsapp(card)} className={WHATSAPP_ACTION_BUTTON_CLASS}>
-              <WhatsAppMonoIcon className={MOBILE_ICON_SIZE} />
+              <WhatsAppGlyphIcon className="h-4 w-4 shrink-0" />
               {isSending ? "Enviando…" : "WhatsApp"}
             </button>
           )}
@@ -277,29 +276,43 @@ export function ReactivationRail({
     );
 
     return (
-      <div key={key} className={`flex items-center gap-2.5 py-2.5 transition-opacity duration-150 ${isSent ? "opacity-50" : ""}`}>
+      // Cada linha volta a ser um cartão leve e separado (pedido explícito
+      // do ajuste pós-reorganização — fundo sutil, borda fina), não mais
+      // uma linha dentro de um bloco único com divide-y. O espaçamento
+      // entre cartões (~8px) vem do `space-y-2` do container-pai (ver
+      // abaixo), não daqui.
+      <div
+        key={key}
+        className={`flex items-center gap-2.5 rounded-control border border-vexo-border bg-vexo-surface p-2.5 transition-opacity duration-150 ${isSent ? "opacity-50" : ""}`}
+      >
         <LeadAvatar profilePictureUrl={card.profilePictureUrl} name={card.name} size="appointment" />
         <div className="min-w-0 flex-1">
-          <div className="flex min-w-0 items-center gap-1.5">
-            <Badge variant={kindBadge.variant} className="shrink-0">
-              {kindBadge.label}
-            </Badge>
-            <p className="min-w-0 flex-1 truncate text-xs font-medium">{card.name}</p>
+          {/* 1ª linha: NOME completo em destaque (pedido explícito — antes
+              a etiqueta de tipo + o @ competiam por espaço com o nome,
+              cortando ele quase sempre); reticências só se não couber. */}
+          <p className="truncate text-sm font-medium">{card.name}</p>
+          {/* 2ª linha: etiqueta do tipo (pequena, fundo bem sutil, nunca
+              mais o selo grande/colorido de antes — ver KIND_LABEL acima),
+              motivo em cinza, @ do Instagram em cinza ainda menor. */}
+          <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
+            <span className="shrink-0 whitespace-nowrap rounded-sm bg-vexo-surface2 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-vexo-muted">
+              {KIND_LABEL[card.kind]}
+            </span>
+            <p className="min-w-0 flex-1 truncate text-caption text-vexo-muted">{card.reasonShort}</p>
             {card.igUsername &&
               (card.instagramProfileLink ? (
                 <a
                   href={card.instagramProfileLink}
                   target="_blank"
                   rel="noreferrer"
-                  className="shrink-0 truncate text-caption text-vexo-muted hover:text-vexo-accent hover:underline"
+                  className="shrink-0 truncate text-[11px] text-vexo-muted hover:text-vexo-accent hover:underline"
                 >
                   @{card.igUsername}
                 </a>
               ) : (
-                <span className="shrink-0 truncate text-caption text-vexo-muted">@{card.igUsername}</span>
+                <span className="shrink-0 truncate text-[11px] text-vexo-muted">@{card.igUsername}</span>
               ))}
           </div>
-          <p className="mt-0.5 truncate text-caption text-vexo-muted">{card.reasonShort}</p>
         </div>
         {actionNode}
       </div>
@@ -309,33 +322,49 @@ export function ReactivationRail({
   const { overdue, today, sent, pendingCount } = groupPanelCardsForDisplay(localCards, new Date());
 
   return (
-    <Card>
-      <div className="flex items-baseline justify-between gap-2">
+    <div>
+      {/* Mesmo padrão de cabeçalho da coluna "Agendamentos" (ponto +
+          título, ver PanelAppointmentsColumn.tsx) — ajuste de alinhamento:
+          antes só "Agendamentos" tinha o ponto, deixando os dois
+          cabeçalhos de coluna visualmente diferentes. */}
+      <div className="flex items-center gap-2">
+        <span className="h-2 w-2 shrink-0 rounded-full bg-vexo-accent" />
         <h2 className="text-sm font-semibold">Para fazer hoje · {pendingCount}</h2>
       </div>
       {shouldShowReactivationReturnLine(returnMetric) && returnMetric && (
         <p className="mt-0.5 text-caption text-vexo-muted">{formatReactivationReturnLine(returnMetric.sent, returnMetric.returned)}</p>
       )}
 
-      {pendingCount === 0 && sent.length === 0 && <p className="py-6 text-center text-xs text-vexo-muted">Tudo em dia hoje</p>}
+      {pendingCount === 0 && <p className="mt-3 text-xs text-vexo-muted">Tudo em dia hoje</p>}
 
+      {/* Rótulos de grupo neutros (pedido explícito — nunca vermelho, nem
+          pra "Atrasados": cinza discreto em caixa alta pequena, igual a
+          "Hoje"). */}
       {overdue.length > 0 && (
         <div className="mt-3">
-          <p className="text-caption font-semibold uppercase tracking-wide text-vexo-error">Atrasados</p>
-          <div className="divide-y divide-vexo-border">{overdue.map(renderRow)}</div>
+          <p className="text-caption font-semibold uppercase tracking-wide text-vexo-muted">Atrasados</p>
+          <div className="mt-1.5 space-y-2">{overdue.map(renderRow)}</div>
         </div>
       )}
 
       {today.length > 0 && (
         <div className="mt-3">
           <p className="text-caption font-semibold uppercase tracking-wide text-vexo-muted">Hoje</p>
-          <div className="divide-y divide-vexo-border">{today.map(renderRow)}</div>
+          <div className="mt-1.5 space-y-2">{today.map(renderRow)}</div>
         </div>
       )}
 
-      {pendingCount === 0 && sent.length > 0 && <p className="mt-3 text-center text-xs text-vexo-muted">Tudo em dia hoje</p>}
-
-      {sent.length > 0 && <div className="mt-3 divide-y divide-vexo-border border-t border-vexo-border">{sent.map(renderRow)}</div>}
-    </Card>
+      {/* Enviados — grupo recolhido no fim (pedido explícito: antes
+          ficavam misturados, só dimmed); a contagem do título considera só
+          os pendentes (pendingCount acima), nunca estes. */}
+      {sent.length > 0 && (
+        <div className="mt-3">
+          <Button type="button" variant="ghost" size="sm" onClick={() => setSentOpen((o) => !o)}>
+            {sentOpen ? "Ocultar enviados" : `Enviados (${sent.length})`}
+          </Button>
+          {sentOpen && <div className="mt-2 space-y-2">{sent.map(renderRow)}</div>}
+        </div>
+      )}
+    </div>
   );
 }

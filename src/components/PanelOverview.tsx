@@ -6,6 +6,7 @@ import { Calendar } from "lucide-react";
 import { ApproachChart } from "@/components/ApproachChart";
 import { ChannelStatusPill } from "@/components/ChannelStatusPill";
 import { InstagramGlyphIcon, WhatsAppGlyphIcon } from "@/components/BrandIcons";
+import { MOBILE_STATUS_BADGE_SIZE } from "@/components/MobileCardScale";
 import { MetricCard } from "@/components/MetricCard";
 import { Button } from "@/components/Button";
 import { Card } from "@/components/Card";
@@ -75,10 +76,17 @@ export function PanelOverview({
         <div className="flex flex-wrap items-center gap-2">
           <span className="h-2 w-2 shrink-0 rounded-full bg-vexo-success" />
           <h2 className="text-base font-medium">{clinicName}</h2>
+          {/* Padronizados (pedido explícito do ajuste pós-reorganização):
+              mesmo tamanho (ícone preenchendo o badge inteiro, não só uma
+              fração dele — antes só o Google tinha esse preenchimento,
+              via iconBg; Instagram/WhatsApp ficavam com um ícone pequeno
+              "boiando" num badge maior, lendo como formato diferente) e
+              mesma posição de ponto de status (MOBILE_STATUS_BADGE_SIZE,
+              já compartilhado pelos 3 — ver ChannelStatusPill.tsx). */}
           <div className="flex flex-wrap items-center gap-1.5">
-            <ChannelStatusPill connected={instagramConnected} label="Instagram" icon={<InstagramGlyphIcon className="h-3.5 w-3.5" />} iconBg="" />
-            <ChannelStatusPill connected={googleConnected} label="Google Calendar" icon={<Calendar className="h-3 w-3" strokeWidth={2.5} />} iconBg="bg-blue-500" />
-            <ChannelStatusPill connected={whatsappConnected} label="WhatsApp" icon={<WhatsAppGlyphIcon className="h-3.5 w-3.5" />} iconBg="" />
+            <ChannelStatusPill connected={instagramConnected} label="Instagram" icon={<InstagramGlyphIcon className={MOBILE_STATUS_BADGE_SIZE} />} iconBg="" />
+            <ChannelStatusPill connected={googleConnected} label="Google Calendar" icon={<Calendar className="h-3.5 w-3.5" strokeWidth={2.5} />} iconBg="bg-blue-500" />
+            <ChannelStatusPill connected={whatsappConnected} label="WhatsApp" icon={<WhatsAppGlyphIcon className={MOBILE_STATUS_BADGE_SIZE} />} iconBg="" />
           </div>
         </div>
         <div className="flex items-center gap-2">

@@ -45,9 +45,10 @@ nenhuma tela consumindo (chegam na Etapa 3, começando pela Automações):
 - `Card` (`src/components/Card.tsx`) — bloco com borda fina + fundo (`surface`/`surface2`);
   `as="form"` quando o próprio bloco é um formulário.
 - `Badge` (`src/components/Badge.tsx`) — pílula com bolinha de cor, nas 5 famílias semânticas já
-  usadas (`accent`/`success`/`error`/`warning`/`muted`). Primeiro consumidor: faixa "Para fazer
-  hoje" do Painel (Etapa 4, ver seção abaixo) — `PanelCardBadge.tsx` (chip de tipo antigo) foi
-  removido, substituído por este componente.
+  usadas (`accent`/`success`/`error`/`warning`/`muted`). Chegou a ser o chip de tipo da faixa "Para
+  fazer hoje" do Painel (Etapa 4), mas voltou a ficar sem tela consumindo no ajuste seguinte — ver
+  seção do Painel abaixo: a etiqueta de tipo lá precisava ser mais discreta (texto + fundo bem
+  sutil, igual pros 4 tipos) do que o selo colorido por família que o Badge produz.
 - `MetricCard` (`src/components/MetricCard.tsx`) — rótulo pequeno + valor grande, baseado no
   `StatCard` existente. Ganhou `bare` (sem borda/fundo próprios, pra usar dentro de uma faixa já
   dividida por linha) e `highlight` (tom de destaque customizável, `painel.highlight`) na Etapa 4,
@@ -60,10 +61,32 @@ repetir "Painel" — já dito pela aba quando ela existe); faixa fina de 4 métr
 "Abordagens por dia" atrás de um link discreto "Ver semana"; duas colunas (~55%/45%): "Para fazer
 hoje" (`ReactivationRail.tsx`, SEMPRE aberta — une Reativação/Faltou/Quente/Não agendou numa lista
 só, agrupada em "Atrasados"/"Hoje" por prioridade, sem rolagem interna) e "Agendamentos"
-(`PanelAppointmentsColumn.tsx` — Próximos, depois Aguardando resposta, com o Histórico atrás de um
-link). Celular: mesma estrutura numa coluna só, métricas em 2x2. Linhas sem caixa individual
-(bloco único com `Card`, dividido por `divide-y`); status em ponto colorido + texto, não selo
-sólido (`AppointmentStatusBadge`, modo compact); ação secundária (ex.: "Não compareceu", quando
-"Retorno" também se aplica) num menu "⋯" (`OverflowMenu.tsx`). Componentes removidos, substituídos
-pelos de cima: `PanelActivityColumn.tsx`, `ApproachMetricsToggle.tsx`, `PanelMetricCard.tsx`,
-`PanelCardBadge.tsx`.
+(`PanelAppointmentsColumn.tsx` — "Próximos" primeiro, sempre visível mesmo vazio — nesse caso uma
+linha discreta "Sem agendamentos próximos", nunca uma caixa grande —, depois "Aguardando
+resposta", com o Histórico atrás de um link). Celular: mesma estrutura numa coluna só, métricas em
+2x2.
+
+Ajustes feitos num segundo momento (mesma Etapa 4): cada item voltou a ser um cartão leve e
+separado (`rounded-control`/borda fina/fundo sutil, ~8px de espaço entre eles via `space-y-2`) —
+não mais uma linha dentro de um bloco único com `divide-y` (bordas duplicadas). Ícones de
+integração do cabeçalho (Instagram/Google Calendar/WhatsApp, `ChannelStatusPill.tsx`) preenchem o
+mesmo badge de ~24px por igual — antes só o Google tinha esse preenchimento (via `iconBg`),
+Instagram/WhatsApp ficavam com um ícone pequeno boiando num badge maior. Linha de "Para fazer
+hoje": nome completo do paciente em destaque na 1ª linha (nunca mais cortado pela etiqueta/@); 2ª
+linha com a etiqueta de tipo (texto pequeno, fundo bem sutil — `bg-vexo-surface2`/`text-vexo-muted`
+— igual pros 4 tipos, nunca mais o selo colorido por família), o motivo em cinza e o @ do Instagram
+em cinza ainda menor. Rótulos de grupo ("Atrasados"/"Hoje"/"Próximos"/"Aguardando resposta") sempre
+neutros (cinza, caixa alta pequena) — nunca vermelho, nem para "Atrasados". Botões de ação
+(WhatsApp/Instagram) neutros (contorno `vexo-border`, texto `vexo-muted`) — a cor da marca fica só
+no ícone (`WhatsAppGlyphIcon`/`InstagramGlyphIcon`, squircle colorido real da marca, mesmo usado no
+cabeçalho/avatar), nunca mais na borda/texto do botão (que antes competia com a etiqueta de tipo).
+Itens já enviados ficam num grupo recolhido "Enviados (N)" no fim de "Para fazer hoje" — a
+contagem do título conta só os pendentes. Status em ponto colorido + texto, não selo sólido
+(`AppointmentStatusBadge`, modo compact). Ação secundária (ex.: "Não compareceu", quando "Retorno"
+também se aplica) num menu "⋯" (`OverflowMenu.tsx`).
+
+Componentes removidos, substituídos pelos de cima: `PanelActivityColumn.tsx`,
+`ApproachMetricsToggle.tsx`, `PanelMetricCard.tsx`, `PanelCardBadge.tsx`. Ícones removidos (ficaram
+sem nenhum uso depois da troca pros botões neutros): `InstagramMonoIcon`/`WhatsAppMonoIcon`
+(`BrandIcons.tsx`) e a borda em degradê do Instagram (`INSTAGRAM_ACTION_GRADIENT`,
+`ReactivationActionButtonStyle.ts`).
