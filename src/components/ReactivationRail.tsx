@@ -286,32 +286,34 @@ export function ReactivationRail({
         className={`flex items-center gap-2.5 rounded-control border border-vexo-border bg-vexo-surface p-2.5 transition-opacity duration-150 ${isSent ? "opacity-50" : ""}`}
       >
         <LeadAvatar profilePictureUrl={card.profilePictureUrl} name={card.name} size="appointment" />
-        <div className="min-w-0 flex-1">
-          {/* 1ª linha: NOME completo em destaque (pedido explícito — antes
-              a etiqueta de tipo + o @ competiam por espaço com o nome,
-              cortando ele quase sempre); reticências só se não couber. */}
-          <p className="truncate text-sm font-medium">{card.name}</p>
+        <div className="min-w-0 flex-1 space-y-0.5">
+          {/* 1ª linha: NOME completo em destaque, com o @ do Instagram logo
+              ao lado, alinhado a ele (pedido explícito — antes o @ ficava
+              afastado, numa 2ª linha à direita, longe do nome). `flex-wrap`
+              (não um `truncate` competindo com o @ pela mesma linha): se
+              não houver largura pros dois juntos, é o @ que quebra pra uma
+              linha própria, alinhado à esquerda com o nome — o nome nunca
+              é cortado antes do @, mesmo princípio usado em
+              PanelAppointmentsColumn.tsx (coluna Agendamentos). */}
+          <div className="flex flex-wrap items-baseline gap-x-1.5">
+            <p className="max-w-full truncate text-sm font-medium">{card.name}</p>
+            {card.igUsername &&
+              (card.instagramProfileLink ? (
+                <a href={card.instagramProfileLink} target="_blank" rel="noreferrer" className="truncate text-caption text-vexo-muted hover:text-vexo-accent hover:underline">
+                  @{card.igUsername}
+                </a>
+              ) : (
+                <span className="truncate text-caption text-vexo-muted">@{card.igUsername}</span>
+              ))}
+          </div>
           {/* 2ª linha: etiqueta do tipo (pequena, fundo bem sutil, nunca
-              mais o selo grande/colorido de antes — ver KIND_LABEL acima),
-              motivo em cinza, @ do Instagram em cinza ainda menor. */}
-          <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
+              mais o selo grande/colorido de antes — ver KIND_LABEL acima) +
+              motivo em cinza. */}
+          <div className="flex min-w-0 items-center gap-1.5">
             <span className="shrink-0 whitespace-nowrap rounded-sm bg-vexo-surface2 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-vexo-muted">
               {KIND_LABEL[card.kind]}
             </span>
             <p className="min-w-0 flex-1 truncate text-caption text-vexo-muted">{card.reasonShort}</p>
-            {card.igUsername &&
-              (card.instagramProfileLink ? (
-                <a
-                  href={card.instagramProfileLink}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="shrink-0 truncate text-[11px] text-vexo-muted hover:text-vexo-accent hover:underline"
-                >
-                  @{card.igUsername}
-                </a>
-              ) : (
-                <span className="shrink-0 truncate text-[11px] text-vexo-muted">@{card.igUsername}</span>
-              ))}
           </div>
         </div>
         {actionNode}

@@ -93,4 +93,9 @@ describe("ReactivationRail", () => {
     expect(markup).toContain("30 dias após");
     expect(markup).toContain("Reativação"); // etiqueta de tipo, ainda presente, só discreta
   });
+
+  it("nome e @ do Instagram ficam colados, na mesma linha 1 (ajuste explícito — antes o @ ficava afastado, à direita, junto da etiqueta/motivo)", () => {
+    const markup = renderToStaticMarkup(<ReactivationRail cards={[card({ name: "Joana Lima", igUsername: "joana.ig" })]} {...noopActions} />);
+    expect(markup).toMatch(/Joana Lima<\/p><span[^>]*>@joana\.ig/);
+  });
 });

@@ -152,7 +152,14 @@ export function RetornoButton({
   }
 
   const marked = localDays != null;
-  const label = localDays != null ? `Retorno · ${localDays} dias` : "Retorno";
+  // Pedido explícito (ajuste pós-reorganização do Painel): com um prazo já
+  // configurado, o rótulo visível vira só "N dias" (sem a palavra
+  // "Retorno", que deixava o botão largo e espremia o resto da linha) —
+  // "Retorno" continua no tooltip/aria-label pra não perder contexto pra
+  // quem usa leitor de tela ou passa o mouse. Sem prazo configurado, o
+  // rótulo continua "Retorno" normalmente (nada a abreviar).
+  const label = marked ? `${localDays} dias` : "Retorno";
+  const fullLabel = marked ? `Retorno em ${localDays} dias` : "Retorno";
 
   return (
     // AJUSTE (2026-10-29, 4ª rodada): `sm:relative` (não mais `relative`
@@ -191,7 +198,8 @@ export function RetornoButton({
           coerente com o tom novo. */}
       <button
         type="button"
-        title={locked ? "Já enviado — prazo não pode mais ser alterado" : undefined}
+        title={locked ? "Já enviado — prazo não pode mais ser alterado" : marked ? fullLabel : undefined}
+        aria-label={fullLabel}
         onClick={() => !locked && setOpen((o) => !o)}
         disabled={locked}
         className={`inline-flex items-center justify-center ${MOBILE_TOGGLE_BUTTON_MIN} ${MOBILE_INLINE_GAP} rounded-lg border px-[8px] py-[6px] sm:px-2 sm:py-1 ${MOBILE_APPOINTMENT_SECONDARY_TEXT} font-medium transition disabled:cursor-not-allowed disabled:opacity-60 ${

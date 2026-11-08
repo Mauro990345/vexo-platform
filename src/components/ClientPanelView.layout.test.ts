@@ -23,7 +23,15 @@ const BASE_APPOINTMENT = {
 
 function makeAppointments(now: Date) {
   const inThreeDays = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
-  const twoHoursAgo = new Date(now.getTime() - 2 * 60 * 60 * 1000);
+  // 1 minuto atrás (não "2 horas atrás", pedido original): qualquer
+  // subtração de horas arrisca cair no dia civil ANTERIOR em
+  // America/Sao_Paulo (UTC-3) quando o teste roda de madrugada em UTC
+  // (00h-03h UTC = 21h-24h do dia anterior em BR) — isso mudaria o
+  // agrupamento esperado (Aguardando resposta vs Histórico, ver
+  // panelAppointmentGroup, panel-appointments.ts). 1 minuto reduz essa
+  // janela de risco pra ~1 minuto por dia, sem precisar mockar o relógio
+  // global (que quebra o Playwright/child_process deste teste).
+  const oneMinuteAgo = new Date(now.getTime() - 60 * 1000);
   const threeDaysAgo = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000);
   return [
     {
@@ -34,11 +42,16 @@ function makeAppointments(now: Date) {
       lead: { profilePictureUrl: null, phone: "11999990000", name: "Futura Paciente", igUsername: "futura.ig" },
     },
     {
+      // Caso mais apertado de propósito (pedido explícito — conferir se
+      // precisa do "Plano B"): Retorno JÁ configurado (120 dias, o rótulo
+      // compacto mais largo possível) E Não compareceu, os dois visíveis
+      // ao mesmo tempo, com nome+@+telefone também presentes.
       ...BASE_APPOINTMENT,
       id: "appt-awaiting",
-      scheduledAt: twoHoursAgo,
+      scheduledAt: oneMinuteAgo,
       status: "SCHEDULED",
-      lead: { profilePictureUrl: null, phone: "11999990001", name: "Aguardando Resposta", igUsername: null },
+      returnPeriodDays: 120,
+      lead: { profilePictureUrl: null, phone: "11999990001", name: "Aguardando Resposta", igUsername: "aguardando.resposta.ig" },
     },
     {
       ...BASE_APPOINTMENT,
@@ -218,4 +231,41 @@ describe("Painel do cliente — layout real da reorganização (Etapa 4 da migra
 
     await page.close();
   });
+
+  // Caso mais apertado (item 3 do pedido — conferir se precisa do "Plano
+  // B"): agendamento "Aguardando Resposta" com Retorno JÁ configurado
+  // (120 dias, o rótulo compacto mais largo) E Não compareceu, os dois
+  // visíveis ao mesmo tempo (empilhados, nunca escondidos num menu),
+  // junto de nome + @ + telefone. Mede a área de TEXTO de verdade no DOM
+  // (não só scrollWidth da página) pra confirmar que não fica espremida a
+  // ponto de precisar mover os botões pra uma linha própria.
+  for (const width of [...MOBILE_WIDTHS, DESKTOP_WIDTH]) {
+    it(`${width}px: linha "Aguardando Resposta" (Retorno · 120 dias + Não compareceu, os dois visíveis) sem espremer o texto`, async () => {
+      const page = await browser.newPage({ viewport: { width, height: 1400 } });
+      await page.setContent(html);
+      await page.waitForTimeout(30);
+
+      const row = page.locator("div.rounded-control.border.bg-vexo-surface", { hasText: "Aguardando Resposta" });
+      const rowBox = await row.boundingBox();
+      expect(rowBox, `linha não encontrada em ${width}px`).not.toBeNull();
+
+      const nameBox = await row.getByText("Aguardando Resposta", { exact: true }).boundingBox();
+      const retornoBox = await row.getByRole("button", { name: "Retorno em 120 dias" }).boundingBox();
+      const naoCompareceuBox = await row.getByRole("button", { name: "Não compareceu" }).boundingBox();
+
+      expect(nameBox, "nome não encontrado").not.toBeNull();
+      expect(retornoBox, "botão Retorno (120 dias) não encontrado/visível").not.toBeNull();
+      expect(naoCompareceuBox, "botão Não compareceu não encontrado/visível").not.toBeNull();
+
+      // Área de texto nunca espremida a ponto de ficar inutilizável —
+      // confere que sobrou espaço de verdade pro nome (nenhuma quebra
+      // "feia" tipo 1 letra por linha).
+      expect(nameBox!.width, `nome com só ${nameBox!.width}px em ${width}px`).toBeGreaterThan(60);
+      // Linha inteira sempre dentro do viewport (sem rolagem horizontal
+      // localizada nesta linha especificamente).
+      expect(rowBox!.x + rowBox!.width).toBeLessThanOrEqual(width + 1);
+
+      await page.close();
+    });
+  }
 });

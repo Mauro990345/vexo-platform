@@ -77,7 +77,7 @@ describe("PanelAppointmentsColumn", () => {
     expect(markup).not.toContain("divide-y");
   });
 
-  it("quando Retorno e Não compareceu se aplicam ao mesmo agendamento, Não compareceu fica no menu ⋯ (não visível direto)", () => {
+  it('quando Retorno e Não compareceu se aplicam ao mesmo agendamento, os DOIS ficam visíveis (sem menu "⋯")', () => {
     const markup = renderToStaticMarkup(
       <PanelAppointmentsColumn
         upcoming={[]}
@@ -88,11 +88,11 @@ describe("PanelAppointmentsColumn", () => {
       />
     );
     expect(markup).toContain("Retorno");
-    expect(markup).toContain('aria-label="Mais ações deste agendamento"');
-    expect(markup).not.toContain("Não compareceu");
+    expect(markup).toContain("Não compareceu");
+    expect(markup).not.toContain("Mais ações");
   });
 
-  it("só Não compareceu se aplica (agendamento futuro, não atendido): aparece direto, sem menu", () => {
+  it("só Não compareceu se aplica (agendamento futuro, não atendido): aparece direto", () => {
     const markup = renderToStaticMarkup(
       <PanelAppointmentsColumn
         upcoming={[appointment({ status: "SCHEDULED", displayStatus: "SCHEDULED" })]}
@@ -103,6 +103,39 @@ describe("PanelAppointmentsColumn", () => {
       />
     );
     expect(markup).toContain("Não compareceu");
-    expect(markup).not.toContain('aria-label="Mais ações deste agendamento"');
+  });
+
+  it("nome e @ do Instagram ficam juntos, colados (mesma linha 1), não distantes um do outro", () => {
+    const markup = renderToStaticMarkup(
+      <PanelAppointmentsColumn
+        upcoming={[appointment({ primary: "Fernanda Souza", handle: "fernanda.ig" })]}
+        awaitingResponse={[]}
+        history={[]}
+        needsHumanLeads={[]}
+        availableReturnPeriods={[30]}
+      />
+    );
+    // nome e @ aparecem como irmãos dentro do mesmo container flex-wrap
+    expect(markup).toMatch(/Fernanda Souza<\/p><span[^>]*>@fernanda\.ig/);
+  });
+
+  it("telefone aparece numa linha própria, separada de data/status", () => {
+    const markup = renderToStaticMarkup(
+      <PanelAppointmentsColumn
+        upcoming={[appointment({ phone: "11988887777" })]}
+        awaitingResponse={[]}
+        history={[]}
+        needsHumanLeads={[]}
+        availableReturnPeriods={[30]}
+      />
+    );
+    expect(markup).toContain("11988887777");
+  });
+
+  it("padding do item usa o token `p-block` (~14px), mais respirado que antes", () => {
+    const markup = renderToStaticMarkup(
+      <PanelAppointmentsColumn upcoming={[appointment()]} awaitingResponse={[]} history={[]} needsHumanLeads={[]} availableReturnPeriods={[30]} />
+    );
+    expect(markup).toContain("p-block");
   });
 });
