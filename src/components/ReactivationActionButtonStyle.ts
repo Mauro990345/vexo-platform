@@ -1,19 +1,18 @@
-import {
-  MOBILE_ACTION_BUTTON_HEIGHT,
-  MOBILE_ACTION_BUTTON_SQUARE,
-  MOBILE_ACTION_BUTTON_PADDING_X,
-  MOBILE_BUTTON_TEXT,
-  MOBILE_INLINE_GAP,
-} from "@/components/MobileCardScale";
+import { MOBILE_ACTION_BUTTON_HEIGHT, MOBILE_ACTION_BUTTON_SQUARE, MOBILE_ACTION_BUTTON_PADDING_X, MOBILE_BUTTON_TEXT, MOBILE_INLINE_GAP } from "@/components/MobileCardScale";
 
-// Estilo compartilhado dos botões de ação da lista de Reativação
+// Estilo compartilhado dos botões de ação da lista "Para fazer hoje"
 // (WhatsApp e Instagram, ver ReactivationRail.tsx/InstagramDmButton.tsx) —
 // CONTORNO minimalista, bem compacto: ~23px de altura, fonte 11px
-// (text-card), ícone 12-13px (h-3, ver uso em ReactivationRail.tsx/
-// InstagramDmButton.tsx), padding horizontal reduzido, sem sombra/brilho.
-// Mesmo tamanho/formato nos dois canais — só a cor da borda e do hover
-// muda. A linha da lista não cresce com isso (botão sempre menor que a
-// altura da linha).
+// (text-card), padding horizontal reduzido, sem sombra/brilho.
+//
+// NEUTRO (pedido explícito do ajuste pós-reorganização do Painel, ver
+// docs/design-audit.md): antes cada canal tinha sua própria cor de borda/
+// texto (verde WhatsApp, degradê Instagram), competindo visualmente com a
+// etiqueta de tipo da linha. Agora os dois usam a MESMA classe (contorno
+// cinza fino, texto neutro) — a cor da marca fica só no ÍCONE
+// (WhatsAppGlyphIcon/InstagramGlyphIcon, ver BrandIcons.tsx — já é a cor
+// real da marca, mesmo tratamento usado no cabeçalho/avatar), nunca mais
+// no botão em si.
 //
 // SÓ CELULAR (abaixo de sm/640px, pedido explícito — fator único 1,45
 // sobre os valores de desktop + piso de toque de 48px, ver
@@ -23,33 +22,14 @@ import {
 // de celular) — em tablet/notebook/desktop nada muda. Mobile-first: a
 // classe sem prefixo vale até sm, a com `sm:` assume a partir de 640px.
 export const REACTIVATION_ACTION_BUTTON_BASE_CLASS =
-  `inline-flex ${MOBILE_ACTION_BUTTON_HEIGHT} shrink-0 items-center justify-center ${MOBILE_INLINE_GAP} rounded-lg ${MOBILE_ACTION_BUTTON_PADDING_X} ${MOBILE_BUTTON_TEXT} font-semibold leading-none transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-vexo-accent focus-visible:ring-offset-1 focus-visible:ring-offset-vexo-surface disabled:cursor-not-allowed disabled:opacity-40`;
+  `inline-flex ${MOBILE_ACTION_BUTTON_HEIGHT} shrink-0 items-center justify-center ${MOBILE_INLINE_GAP} rounded-lg border border-vexo-border ${MOBILE_ACTION_BUTTON_PADDING_X} ${MOBILE_BUTTON_TEXT} font-semibold leading-none text-vexo-muted transition-colors duration-150 hover:border-vexo-accent hover:text-vexo-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-vexo-accent focus-visible:ring-offset-1 focus-visible:ring-offset-vexo-surface disabled:cursor-not-allowed disabled:opacity-40`;
 
-// WhatsApp: borda num token PRÓPRIO e fixo (vexo-whatsappActionBorder,
-// ver globals.css) — não mais o mesmo token do badge "Compareceu"
-// (vexo-panelStatusCompletedBg). Motivo (ajuste de 2026-10): o badge
-// "Compareceu" passou a usar um verde mais vivo, e esse badge também pode
-// ser personalizado por clínica em Configurações — o botão NÃO pode
-// acompanhar nenhuma dessas mudanças (pedido explícito, aparência
-// idêntica), por isso um valor travado, igual ao que o badge usava antes
-// desse ajuste (#1f7a4d). Texto/ícone continuam em vexo-success (token já
-// existente, inalterado por este ajuste). Hover continua no tom da BORDA
-// a 10% de opacidade (pedido explícito — não muda).
-export const WHATSAPP_ACTION_BUTTON_CLASS = `${REACTIVATION_ACTION_BUTTON_BASE_CLASS} border border-vexo-whatsappActionBorder text-vexo-success hover:bg-vexo-whatsappActionBorder/10`;
-
-// Instagram: CSS não tem "borda em degradê" direto — sem token/cor nova
-// pra resolver isso, a forma mais simples e robusta é o truque do wrapper
-// com 1px de padding preenchido pelo degradê (ver INSTAGRAM_ACTION_GRADIENT
-// abaixo) + um "miolo" com a cor de fundo do card por dentro (bg-vexo-surface,
-// a mesma da linha da lista) — sobra só 1px visível do degradê, como uma
-// borda. Implementado em InstagramDmButton.tsx. Texto/ícone no tom claro
-// já usado em toda a tela pra texto sobre fundo escuro (text-vexo-fg) —
-// nenhum dos 4 tons do degradê (amarelo/laranja/magenta/azul) é "claro" o
-// bastante pra servir de cor de texto legível, então reaproveitar vexo-fg
-// (em vez de inventar um "branco rosado" que não existe na paleta) é o
-// que respeita o pedido de só usar cor que já existe.
-export const INSTAGRAM_ACTION_GRADIENT = "linear-gradient(135deg, #F47133 0%, #BC3081 55%, #4F5BD5 100%)";
-export const INSTAGRAM_ACTION_BUTTON_CLASS = `${REACTIVATION_ACTION_BUTTON_BASE_CLASS} relative z-10 w-full border-none bg-transparent text-vexo-fg`;
+// Os dois canais usam exatamente a mesma classe agora — mantidos como
+// nomes separados só pra não precisar tocar nos call-sites
+// (ReactivationRail.tsx/InstagramDmButton.tsx continuam importando cada
+// um pelo nome do seu próprio canal).
+export const WHATSAPP_ACTION_BUTTON_CLASS = REACTIVATION_ACTION_BUTTON_BASE_CLASS;
+export const INSTAGRAM_ACTION_BUTTON_CLASS = REACTIVATION_ACTION_BUTTON_BASE_CLASS;
 
 // Substitui o botão de ação (WhatsApp OU Instagram, mesmo lugar na linha)
 // quando o card já foi marcado como enviado (ver ReactivationRail) — só um

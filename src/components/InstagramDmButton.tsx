@@ -1,9 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { InstagramMonoIcon } from "@/components/BrandIcons";
-import { INSTAGRAM_ACTION_BUTTON_CLASS, INSTAGRAM_ACTION_GRADIENT } from "@/components/ReactivationActionButtonStyle";
-import { MOBILE_ICON_SIZE } from "@/components/MobileCardScale";
+import { InstagramGlyphIcon } from "@/components/BrandIcons";
+import { INSTAGRAM_ACTION_BUTTON_CLASS } from "@/components/ReactivationActionButtonStyle";
 
 const LABEL_RESET_DELAY_MS = 2000;
 const TOAST_DURATION_MS = 2500;
@@ -87,29 +86,16 @@ export function InstagramDmButton({
   }
 
   return (
-    <div className={`group relative shrink-0 ${dmLink ? "" : "opacity-40"}`}>
-      {/* Borda em degradê: CSS não tem isso direto — wrapper com 1px de
-          padding preenchido pelo degradê + "miolo" com a cor de fundo do
-          card por dentro (bg-vexo-surface, a mesma da linha da lista) —
-          sobra só 1px visível do degradê, como uma borda. */}
-      <div className="rounded-lg p-px" style={{ background: INSTAGRAM_ACTION_GRADIENT }}>
-        <div className="relative overflow-hidden rounded-[7px] bg-vexo-surface">
-          {/* Tingimento do hover: o mesmo degradê a 10% de opacidade,
-              numa camada própria (não dá pra fazer hover:bg com um
-              gradiente via inline style) — group-hover porque o elemento
-              hover-ável de verdade é o <button>, não esta camada. */}
-          <span
-            aria-hidden="true"
-            className="pointer-events-none absolute inset-0 opacity-0 transition-opacity duration-150 group-hover:opacity-10"
-            style={{ background: INSTAGRAM_ACTION_GRADIENT }}
-          />
-          <button type="button" onClick={handleClick} disabled={!dmLink} className={INSTAGRAM_ACTION_BUTTON_CLASS}>
-            {/* SÓ CELULAR (ver MobileCardScale.ts): 12px -> 17px. */}
-            <InstagramMonoIcon className={MOBILE_ICON_SIZE} />
-            {copied ? "Copiado ✓" : "Instagram"}
-          </button>
-        </div>
-      </div>
+    // Botão neutro (pedido explícito do ajuste pós-reorganização do
+    // Painel, ver docs/design-audit.md e ReactivationActionButtonStyle.ts)
+    // — a borda em degradê de antes foi removida; a cor da marca fica só
+    // no ícone (InstagramGlyphIcon, já é o squircle colorido real da
+    // marca, mesmo usado no cabeçalho/avatar), não mais no botão.
+    <div className={`relative shrink-0 ${dmLink ? "" : "opacity-40"}`}>
+      <button type="button" onClick={handleClick} disabled={!dmLink} className={INSTAGRAM_ACTION_BUTTON_CLASS}>
+        <InstagramGlyphIcon className="h-4 w-4 shrink-0" />
+        {copied ? "Copiado ✓" : "Instagram"}
+      </button>
       {toast && (
         <span className="absolute -top-7 right-0 whitespace-nowrap rounded-md bg-vexo-surface2 px-2 py-1 text-caption text-vexo-fg shadow-card">
           {toast}
