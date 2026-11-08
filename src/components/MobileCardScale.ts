@@ -38,12 +38,8 @@ export const MOBILE_APPOINTMENT_INFO_TEXT = "text-[13px] sm:text-caption";
 // ReactivationActionButtonStyle.ts).
 export const MOBILE_BUTTON_TEXT = "text-[12px] sm:text-card";
 
-// Avatar (LeadAvatar.tsx) — "md" é usado pelo banner "precisa de humano"
-// através do tamanho "sm" (não afetado); "appointment" é o tamanho usado
-// pela faixa "Para fazer hoje" e pela coluna Agendamentos do Painel.
-export const MOBILE_AVATAR_SIZE = "h-[28px] w-[28px] sm:h-8 sm:w-8";
-export const MOBILE_AVATAR_ICON_SIZE = "h-[14px] w-[14px] sm:h-4 sm:w-4";
-export const MOBILE_AVATAR_BADGE_SIZE = "h-[10px] w-[10px] sm:h-3 sm:w-3";
+// Avatar (LeadAvatar.tsx) — "appointment" é o tamanho usado pela faixa
+// "Para fazer hoje" e pela coluna Agendamentos do Painel.
 export const MOBILE_APPOINTMENT_AVATAR_SIZE = "h-[34px] w-[34px] sm:h-8 sm:w-8";
 export const MOBILE_APPOINTMENT_AVATAR_ICON_SIZE = "h-[17px] w-[17px] sm:h-4 sm:w-4";
 

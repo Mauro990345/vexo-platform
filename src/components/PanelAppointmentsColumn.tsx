@@ -5,7 +5,6 @@ import { LeadAvatar } from "@/components/LeadAvatar";
 import { AppointmentStatusBadge } from "@/components/AppointmentStatusBadge";
 import { NoShowButton } from "@/components/NoShowButton";
 import { RetornoButton, type RetornoAction } from "@/components/RetornoButton";
-import { OverflowMenu } from "@/components/OverflowMenu";
 import { Button } from "@/components/Button";
 import { NeedsHumanBanner, type NeedsHumanLead } from "@/components/NeedsHumanBanner";
 import { normalizeBrazilianWhatsappNumber } from "@/lib/whatsapp";
@@ -38,12 +37,16 @@ function formatDateTime(d: Date): string {
 // compareceu, só aparece quando há algum); o histórico de atendidos/
 // faltados (ver groupAppointmentsForPanel, panel-appointments.ts) fica
 // atrás de um link "Histórico (N)", recolhido por padrão. Cada item é um
-// cartão leve/separado (ajuste explícito — fundo sutil, borda fina, ~8px
-// de espaço entre eles via `space-y-2`); uma ação visível por linha, a
-// secundária ("Não compareceu", quando os dois botões se aplicam ao mesmo
-// agendamento) fica num menu "⋯" (ver OverflowMenu.tsx). "use client" só
-// pelo toggle do histórico — cada linha em si usa os mesmos componentes
-// client de sempre (NoShowButton/RetornoButton), sem nenhuma mudança de
+// cartão leve/separado (fundo sutil, borda fina, ~8px de espaço entre
+// eles via `space-y-2`, padding vertical ~14px — ajuste seguinte: um
+// pouco mais respirado, já que são poucos agendamentos por dia). "Não
+// compareceu" voltou a ficar SEMPRE visível, empilhado sob "Retorno"
+// (ajuste explícito — o menu "⋯"/OverflowMenu.tsx, usado só pra esconder
+// esse botão, foi removido: "Retorno" ficou curto o bastante — ver
+// RetornoButton.tsx — pra os dois caberem empilhados em qualquer largura
+// suportada, sem precisar escondê-lo). "use client" só pelo toggle do
+// histórico — cada linha em si usa os mesmos componentes client de
+// sempre (NoShowButton/RetornoButton), sem nenhuma mudança de
 // comportamento.
 export function PanelAppointmentsColumn({
   upcoming,
@@ -81,37 +84,41 @@ export function PanelAppointmentsColumn({
       // posicionado próximo e acabaria relativo à viewport. Em desktop
       // (`sm:relative`) o próprio wrapper do botão já ancora primeiro, então
       // isto aqui fica inofensivo (sem top/left, só estabelece o contexto).
-      <div key={a.id} className="relative flex items-center gap-2.5 rounded-control border border-vexo-border bg-vexo-surface p-2.5">
+      <div key={a.id} className="relative flex items-start gap-2.5 rounded-control border border-vexo-border bg-vexo-surface p-block">
         <LeadAvatar profilePictureUrl={a.profilePictureUrl} name={a.primary} size="appointment" />
-        <div className="min-w-0 flex-1">
-          <div className="flex min-w-0 items-baseline gap-1">
-            <p className="min-w-0 flex-1 truncate text-sm font-medium">{a.primary}</p>
-            {a.handle && <span className="max-w-[40%] shrink-0 truncate text-caption text-vexo-muted">@{a.handle}</span>}
+        <div className="min-w-0 flex-1 space-y-1">
+          {/* Linha 1: nome em destaque + @ do Instagram logo ao lado,
+              alinhado a ele — `flex-wrap` (não um `truncate` competindo
+              com o @ pela mesma linha) é o que garante que o NOME nunca é
+              cortado antes do @: se não houver largura pros dois juntos,
+              é o @ que quebra pra uma linha própria, alinhado à esquerda
+              com o nome (mesmo início de linha) — nunca o contrário. */}
+          <div className="flex flex-wrap items-baseline gap-x-1.5">
+            <p className="max-w-full truncate text-sm font-medium">{a.primary}</p>
+            {a.handle && <span className="truncate text-caption text-vexo-muted">@{a.handle}</span>}
           </div>
-          <div className="mt-0.5 flex flex-wrap items-center gap-1 text-caption text-vexo-muted">
-            <span className="shrink-0">{formatDateTime(a.scheduledAt)} ·</span>
+          {/* Linha 2: data/hora + status (ponto colorido + texto, ver
+              AppointmentStatusBadge compact). */}
+          <div className="flex items-center gap-1.5 text-caption text-vexo-muted">
+            <span className="shrink-0">{formatDateTime(a.scheduledAt)}</span>
             <AppointmentStatusBadge status={a.displayStatus} compact />
-            {a.phone && (
-              <span className="inline-flex shrink-0 items-center gap-1">
-                <span>·</span>
-                <a href={`https://wa.me/${normalizeBrazilianWhatsappNumber(a.phone)}`} target="_blank" rel="noreferrer" className="text-vexo-accent hover:underline">
-                  {a.phone}
-                </a>
-              </span>
-            )}
           </div>
+          {/* Linha 3, só quando houver telefone. */}
+          {a.phone && (
+            <div className="text-caption">
+              <a href={`https://wa.me/${normalizeBrazilianWhatsappNumber(a.phone)}`} target="_blank" rel="noreferrer" className="text-vexo-accent hover:underline">
+                {a.phone}
+              </a>
+            </div>
+          )}
         </div>
-        <div className="flex shrink-0 items-center gap-1">
+        {/* Ações sempre visíveis, empilhadas (pedido explícito — "Não
+            compareceu" não fica mais escondido num menu). */}
+        <div className="flex shrink-0 flex-col items-end gap-1.5">
           {showRetorno && (
             <RetornoButton appointmentId={a.id} availablePeriods={availableReturnPeriods} returnPeriodDays={a.returnPeriodDays} locked={a.locked} action={returnPeriodAction} />
           )}
-          {showNoShow && showRetorno ? (
-            <OverflowMenu label="Mais ações deste agendamento">
-              <NoShowButton appointmentId={a.id} status={a.status} action={noShowAction} />
-            </OverflowMenu>
-          ) : (
-            showNoShow && <NoShowButton appointmentId={a.id} status={a.status} action={noShowAction} />
-          )}
+          {showNoShow && <NoShowButton appointmentId={a.id} status={a.status} action={noShowAction} />}
         </div>
       </div>
     );
