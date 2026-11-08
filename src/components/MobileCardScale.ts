@@ -32,8 +32,12 @@ export const MOBILE_INLINE_GAP = "gap-[5px] sm:gap-1";
 export const MOBILE_SECONDARY_TEXT = "text-[13px] sm:text-caption";
 export const MOBILE_APPOINTMENT_SECONDARY_TEXT = "text-[12px] sm:text-caption";
 // Texto da tag de status compacta (AppointmentStatusBadge, modo compact) na
-// coluna Agendamentos do Painel.
-export const MOBILE_APPOINTMENT_INFO_TEXT = "text-[13px] sm:text-caption";
+// coluna Agendamentos do Painel. Ajuste de leitura (pedido explícito,
+// +1px): 13px->14px no celular, text-caption(10px)->text-card(11px) no
+// computador — mesmo +1 aplicado à data/hora, @ e telefone na própria
+// linha (PanelAppointmentsColumn.tsx), que já usam text-card direto (não
+// têm valor mobile próprio, diferente deste).
+export const MOBILE_APPOINTMENT_INFO_TEXT = "text-[14px] sm:text-card";
 // Texto dos botões de ação (WhatsApp/Instagram/"Enviando…"/"✓" — ver
 // ReactivationActionButtonStyle.ts).
 export const MOBILE_BUTTON_TEXT = "text-[12px] sm:text-card";
