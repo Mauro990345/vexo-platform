@@ -66,6 +66,11 @@ const config: Config = {
           // Token fixo e independente do badge "Compareceu" acima — usado só
           // pelo botão WhatsApp da Reativação, ver globals.css.
           whatsappActionBorder: "rgb(var(--vexo-whatsapp-action-border) / <alpha-value>)",
+          // Cor por tipo de card na lista "Para fazer hoje" do Painel — ver
+          // comentário grande em globals.css.
+          cardTypeReativacao: "rgb(var(--vexo-card-type-reativacao) / <alpha-value>)",
+          cardTypeReativacaoText: "rgb(var(--vexo-card-type-reativacao-text) / <alpha-value>)",
+          cardTypeFollowup: "rgb(var(--vexo-card-type-followup) / <alpha-value>)",
         },
       },
       fontFamily: {

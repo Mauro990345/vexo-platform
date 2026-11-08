@@ -31,6 +31,24 @@ const KIND_LABEL: Record<PanelCardKind, string> = {
   NEVER_SCHEDULED: "Não agendou",
 };
 
+// Cor por tipo (ajuste dedicado — ver globals.css/DESIGN.md): Reativação
+// no azul da marca, Follow-up e seus subtipos (Faltou/Não agendou/Quente)
+// no marrom/dourado já usado no VEXO. Sem faixa lateral grossa — só a
+// borda fina do cartão (inteira) tingida a ~35% e o fundo da etiqueta a
+// ~16%, aplicados abaixo em CARD_BORDER_CLASS/KIND_TAG_CLASS.
+const CARD_BORDER_CLASS: Record<PanelCardKind, string> = {
+  REACTIVATION: "border-vexo-cardTypeReativacao/35",
+  HOT_LEAD: "border-vexo-cardTypeFollowup/35",
+  NO_SHOW: "border-vexo-cardTypeFollowup/35",
+  NEVER_SCHEDULED: "border-vexo-cardTypeFollowup/35",
+};
+const KIND_TAG_CLASS: Record<PanelCardKind, string> = {
+  REACTIVATION: "bg-vexo-cardTypeReativacao/16 text-vexo-cardTypeReativacaoText",
+  HOT_LEAD: "bg-vexo-cardTypeFollowup/16 text-vexo-cardTypeFollowup",
+  NO_SHOW: "bg-vexo-cardTypeFollowup/16 text-vexo-cardTypeFollowup",
+  NEVER_SCHEDULED: "bg-vexo-cardTypeFollowup/16 text-vexo-cardTypeFollowup",
+};
+
 // Lógica pura (testável sem renderizar o componente, mesmo padrão de
 // shouldShowClientBonusTab em ClientPanelView.tsx) — pedido explícito: "se
 // não houver nenhuma enviada no período, não mostrar a linha".
@@ -283,7 +301,7 @@ export function ReactivationRail({
       // abaixo), não daqui.
       <div
         key={key}
-        className={`flex items-center gap-2.5 rounded-control border border-vexo-border bg-vexo-surface p-2.5 transition-opacity duration-150 ${isSent ? "opacity-50" : ""}`}
+        className={`flex items-center gap-2.5 rounded-control border bg-vexo-surface p-2.5 transition-opacity duration-150 ${isSent ? "border-vexo-border opacity-50" : CARD_BORDER_CLASS[card.kind]}`}
       >
         <LeadAvatar profilePictureUrl={card.profilePictureUrl} name={card.name} size="appointment" />
         <div className="min-w-0 flex-1 space-y-0.5">
@@ -310,7 +328,9 @@ export function ReactivationRail({
               mais o selo grande/colorido de antes — ver KIND_LABEL acima) +
               motivo em cinza. */}
           <div className="flex min-w-0 items-center gap-1.5">
-            <span className="shrink-0 whitespace-nowrap rounded-sm bg-vexo-surface2 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-vexo-muted">
+            <span
+              className={`shrink-0 whitespace-nowrap rounded-sm px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide ${isSent ? "bg-vexo-surface2 text-vexo-muted" : KIND_TAG_CLASS[card.kind]}`}
+            >
               {KIND_LABEL[card.kind]}
             </span>
             <p className="min-w-0 flex-1 truncate text-caption text-vexo-muted">{card.reasonShort}</p>

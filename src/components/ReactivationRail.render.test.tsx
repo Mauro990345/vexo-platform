@@ -98,4 +98,35 @@ describe("ReactivationRail", () => {
     const markup = renderToStaticMarkup(<ReactivationRail cards={[card({ name: "Joana Lima", igUsername: "joana.ig" })]} {...noopActions} />);
     expect(markup).toMatch(/Joana Lima<\/p><span[^>]*>@joana\.ig/);
   });
+
+  // Ajuste dedicado (cor por tipo, ver DESIGN.md): Reativação no azul da
+  // marca (borda do cartão + etiqueta), Follow-up e os 3 subtipos
+  // (Faltou/Não agendou/Quente) no marrom/dourado — SEM faixa lateral
+  // grossa, só a borda fina inteira tingida.
+  it('Reativação: borda do cartão e etiqueta tingidas de azul (card-type-reativacao), sem faixa lateral', () => {
+    const markup = renderToStaticMarkup(<ReactivationRail cards={[card({ kind: "REACTIVATION" })]} {...noopActions} />);
+    expect(markup).toContain("border-vexo-cardTypeReativacao/35");
+    expect(markup).toContain("bg-vexo-cardTypeReativacao/16");
+    expect(markup).toContain("text-vexo-cardTypeReativacaoText");
+    expect(markup).not.toContain("border-l-4");
+    expect(markup).not.toContain("border-l-2");
+  });
+
+  it.each([
+    ["Faltou", "NO_SHOW" as const, { kind: "NO_SHOW" as const, appointmentId: "appt-1", step: 1 }],
+    ["Não agendou", "NEVER_SCHEDULED" as const, { kind: "NEVER_SCHEDULED" as const, conversationId: "conv-1", step: 1 }],
+    ["Quente", "HOT_LEAD" as const, { kind: "HOT_LEAD" as const, conversationId: "conv-1", step: 1 }],
+  ])('Follow-up / %s: borda e etiqueta tingidas de marrom/dourado (card-type-followup)', (_label, kind, actionKey) => {
+    const markup = renderToStaticMarkup(<ReactivationRail cards={[card({ kind, actionKey, channel: "INSTAGRAM" })]} {...noopActions} />);
+    expect(markup).toContain("border-vexo-cardTypeFollowup/35");
+    expect(markup).toContain("bg-vexo-cardTypeFollowup/16");
+    expect(markup).toContain("text-vexo-cardTypeFollowup");
+  });
+
+  it('card já enviado (grupo "Enviados") fica neutro mesmo sendo Reativação — não carrega a cor do tipo', () => {
+    const markup = renderToStaticMarkup(<ReactivationRail cards={[card({ kind: "REACTIVATION", sentAt: new Date() })]} {...noopActions} />);
+    expect(markup).toContain("Enviados (1)");
+    expect(markup).not.toContain("border-vexo-cardTypeReativacao");
+    expect(markup).not.toContain("bg-vexo-cardTypeReativacao");
+  });
 });
