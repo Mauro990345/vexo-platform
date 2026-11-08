@@ -238,7 +238,12 @@ describe("Painel do cliente — layout real da reorganização (Etapa 4 da migra
   // visíveis ao mesmo tempo (empilhados, nunca escondidos num menu),
   // junto de nome + @ + telefone. Mede a área de TEXTO de verdade no DOM
   // (não só scrollWidth da página) pra confirmar que não fica espremida a
-  // ponto de precisar mover os botões pra uma linha própria.
+  // ponto de precisar mover os botões pra uma linha própria. Mesmo caso
+  // reaproveitado pro ajuste seguinte (alinhamento vertical do bloco da
+  // esquerda + leitura — fonte +1px de data/status/@/telefone): é o pior
+  // cenário possível (botões empilhados = item mais alto + os 4 textos
+  // maiores ao mesmo tempo), então qualquer quebra feia ou desalinhamento
+  // apareceria primeiro aqui.
   for (const width of [...MOBILE_WIDTHS, DESKTOP_WIDTH]) {
     it(`${width}px: linha "Aguardando Resposta" (Retorno · 120 dias + Não compareceu, os dois visíveis) sem espremer o texto`, async () => {
       const page = await browser.newPage({ viewport: { width, height: 1400 } });
@@ -264,6 +269,34 @@ describe("Painel do cliente — layout real da reorganização (Etapa 4 da migra
       // Linha inteira sempre dentro do viewport (sem rolagem horizontal
       // localizada nesta linha especificamente).
       expect(rowBox!.x + rowBox!.width).toBeLessThanOrEqual(width + 1);
+
+      // Ajuste de alinhamento (pedido explícito): como os botões
+      // empilhados deixam o item mais alto que o bloco da esquerda, o
+      // BLOCO de texto (contêiner inteiro, não a 1ª linha de texto nele —
+      // line-height/métrica de fonte deixa uma folga que não é o que está
+      // sendo medido aqui) e a coluna de botões precisam ficar CENTRADOS
+      // na altura do item: o centro vertical de cada contêiner deve
+      // coincidir com o centro vertical da linha inteira.
+      const textBlockBox = await row.locator("div.min-w-0.flex-1").boundingBox();
+      const actionsColBox = await row.locator("div.flex.shrink-0.flex-col").boundingBox();
+      expect(textBlockBox, "bloco de texto não encontrado").not.toBeNull();
+      expect(actionsColBox, "coluna de botões não encontrada").not.toBeNull();
+
+      const rowMidY = rowBox!.y + rowBox!.height / 2;
+      const textMidY = textBlockBox!.y + textBlockBox!.height / 2;
+      const actionsMidY = actionsColBox!.y + actionsColBox!.height / 2;
+      expect(Math.abs(textMidY - rowMidY), `centro do texto a ${Math.abs(textMidY - rowMidY)}px do centro da linha, em ${width}px`).toBeLessThan(1);
+      expect(Math.abs(actionsMidY - rowMidY), `centro dos botões a ${Math.abs(actionsMidY - rowMidY)}px do centro da linha, em ${width}px`).toBeLessThan(1);
+
+      // @ do Instagram e telefone não quebram de forma feia (linha "oca",
+      // de 1 letra) com a fonte maior — cada um mede o bastante pra não
+      // ser só um caractere solto numa linha própria.
+      const handleBox = await row.getByText("@aguardando.resposta.ig", { exact: true }).boundingBox();
+      const phoneBox = await row.getByText("11999990001", { exact: true }).boundingBox();
+      expect(handleBox, "@ não encontrado").not.toBeNull();
+      expect(phoneBox, "telefone não encontrado").not.toBeNull();
+      expect(handleBox!.width, `@ com só ${handleBox!.width}px em ${width}px`).toBeGreaterThan(40);
+      expect(phoneBox!.width, `telefone com só ${phoneBox!.width}px em ${width}px`).toBeGreaterThan(60);
 
       await page.close();
     });

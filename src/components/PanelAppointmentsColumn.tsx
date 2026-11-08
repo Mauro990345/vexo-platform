@@ -84,7 +84,7 @@ export function PanelAppointmentsColumn({
       // posicionado próximo e acabaria relativo à viewport. Em desktop
       // (`sm:relative`) o próprio wrapper do botão já ancora primeiro, então
       // isto aqui fica inofensivo (sem top/left, só estabelece o contexto).
-      <div key={a.id} className="relative flex items-start gap-2.5 rounded-control border border-vexo-border bg-vexo-surface p-block">
+      <div key={a.id} className="relative flex items-center gap-2.5 rounded-control border border-vexo-border bg-vexo-surface p-block">
         <LeadAvatar profilePictureUrl={a.profilePictureUrl} name={a.primary} size="appointment" />
         <div className="min-w-0 flex-1 space-y-1">
           {/* Linha 1: nome em destaque + @ do Instagram logo ao lado,
@@ -95,17 +95,23 @@ export function PanelAppointmentsColumn({
               com o nome (mesmo início de linha) — nunca o contrário. */}
           <div className="flex flex-wrap items-baseline gap-x-1.5">
             <p className="max-w-full truncate text-sm font-medium">{a.primary}</p>
-            {a.handle && <span className="truncate text-caption text-vexo-muted">@{a.handle}</span>}
+            {/* `text-card` (11px) — um tamanho acima de `text-caption`
+                (10px, ver tailwind.config.ts), pedido explícito de
+                leitura: data/hora, status, @ e telefone, mas não o nome
+                (continua text-sm) — já é o token certo no design system
+                pro texto secundário "um nível acima do caption", usado em
+                telas inteiras do CRM (ver grep de text-card). */}
+            {a.handle && <span className="truncate text-card text-vexo-muted">@{a.handle}</span>}
           </div>
           {/* Linha 2: data/hora + status (ponto colorido + texto, ver
               AppointmentStatusBadge compact). */}
-          <div className="flex items-center gap-1.5 text-caption text-vexo-muted">
+          <div className="flex items-center gap-1.5 text-card text-vexo-muted">
             <span className="shrink-0">{formatDateTime(a.scheduledAt)}</span>
             <AppointmentStatusBadge status={a.displayStatus} compact />
           </div>
           {/* Linha 3, só quando houver telefone. */}
           {a.phone && (
-            <div className="text-caption">
+            <div className="text-card">
               <a href={`https://wa.me/${normalizeBrazilianWhatsappNumber(a.phone)}`} target="_blank" rel="noreferrer" className="text-vexo-accent hover:underline">
                 {a.phone}
               </a>
