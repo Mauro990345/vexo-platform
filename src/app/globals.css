@@ -101,6 +101,19 @@
      mantém o verde e a identidade atuais"). */
   --bonus-green: 94 194 181; /* #5ec2b5 */
 
+  /* Cor por tipo de card na lista "Para fazer hoje" do Painel (ajuste
+     dedicado, só visual — ver ReactivationRail.tsx e DESIGN.md). Cada
+     bloco é UM valor só, reaproveitado pra borda fina do cartão (~35% de
+     opacidade) e fundo da etiqueta de tipo (~16%); o texto da etiqueta
+     usa o tom cheio (Reativação) ou o próprio valor (Follow-up — já é
+     claro o bastante sobre o fundo sutil). Qualquer outro tipo de card e
+     o grupo recolhido "Enviados" continuam neutros (vexo-border/vexo-
+     surface2/vexo-muted, sem usar nenhuma destas duas). Fáceis de
+     reajustar depois — mudar só o valor aqui. */
+  --vexo-card-type-reativacao: 43 135 189; /* #2b87bd — mesmo azul da marca (--vexo-accent) */
+  --vexo-card-type-reativacao-text: 90 168 214; /* #5aa8d6 — tom mais claro do mesmo azul, só pro texto da etiqueta */
+  --vexo-card-type-followup: 209 164 104; /* #d1a468 — marrom/dourado já usado no VEXO (Quente/Faltou); cobre Follow-up e os subtipos Faltou/Não agendou/Quente */
+
   /* Botão WhatsApp da Reativação (ver ReactivationActionButtonStyle.ts) —
      valor FIXO, travado no verde que o badge "Compareceu" usava antes do
      ajuste de 2026-10 (ver painel.status.completed.background em

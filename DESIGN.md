@@ -89,4 +89,25 @@ Componentes removidos, substituídos pelos de cima: `PanelActivityColumn.tsx`,
 `ApproachMetricsToggle.tsx`, `PanelMetricCard.tsx`, `PanelCardBadge.tsx`. Ícones removidos (ficaram
 sem nenhum uso depois da troca pros botões neutros): `InstagramMonoIcon`/`WhatsAppMonoIcon`
 (`BrandIcons.tsx`) e a borda em degradê do Instagram (`INSTAGRAM_ACTION_GRADIENT`,
-`ReactivationActionButtonStyle.ts`).
+`ReactivationActionButtonStyle.ts`). O menu "⋯" (`OverflowMenu.tsx`) foi removido num ajuste
+seguinte — "Não compareceu" voltou a ficar sempre visível, empilhado com "Retorno".
+
+### Cor por tipo em "Para fazer hoje" (ajuste dedicado, só nesta lista — Agendamentos não muda)
+Cada item passou a ter a borda fina (1px) do cartão e o fundo da etiqueta de tipo tingidos pela
+cor do tipo, em vez de neutros — SEM faixa lateral grossa, só a borda fina inteira. Dois grupos:
+- **Reativação**: azul da marca (`--vexo-card-type-reativacao`, mesmo valor de `--vexo-accent`,
+  #2b87bd). Borda do cartão a ~35% de opacidade (`border-vexo-cardTypeReativacao/35`), fundo da
+  etiqueta a ~16% (`bg-vexo-cardTypeReativacao/16`); o texto da etiqueta usa um tom mais claro do
+  mesmo azul, próprio pra legibilidade (`--vexo-card-type-reativacao-text`, #5aa8d6).
+- **Follow-up e seus subtipos** (Faltou/Não agendou/Quente): marrom/dourado já usado no VEXO
+  (`--vexo-card-type-followup`, #d1a468) — mesmo valor pra borda (~35%), fundo da etiqueta (~16%) e
+  texto da etiqueta (100%).
+- Qualquer outro tipo de card, e o grupo recolhido "Enviados (N)" (mesmo quando é um card de
+  Reativação ou Follow-up): continuam neutros (`border-vexo-border`/`bg-vexo-surface2`/
+  `text-vexo-muted`), igual a antes.
+
+Os botões de ação continuam neutros (contorno `vexo-border`, cor só no ícone da marca) — a cor do
+tipo não chega neles. Tokens em `globals.css`/`tailwind.config.ts` (ver comentário grande em
+`globals.css`), nomeados pra reajuste fácil depois (`--vexo-card-type-reativacao[-text]`,
+`--vexo-card-type-followup`) — igual ao padrão de `--vexo-whatsapp-action-border`/`--bonus-green`:
+valores FIXOS, não acompanham o azul de marca personalizável nem nenhum token semântico existente.
