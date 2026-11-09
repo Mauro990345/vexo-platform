@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import type { FollowUpStep, FollowUpTrigger } from "@prisma/client";
 import { Clock, CalendarX, LayoutPanelTop } from "lucide-react";
 import { Tabs } from "@/components/Tabs";
+import { Button } from "@/components/Button";
 import { TemplateMessageField } from "@/components/TemplateMessageField";
 import { AttachmentField } from "@/components/AttachmentField";
 import {
@@ -43,7 +44,7 @@ function StepList({
           <details
             key={step.id}
             name={`followup-steps-${trigger}`}
-            className="group rounded-xl border border-vexo-border bg-vexo-surface"
+            className="group rounded-block bg-vexo-surface"
           >
             <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5">
               <div className="flex min-w-0 items-center gap-2.5">
@@ -168,12 +169,9 @@ function StepList({
                   </div>
                 )}
 
-                <button
-                  type="submit"
-                  className="rounded-lg border border-vexo-accent px-2.5 py-1 text-card font-medium text-vexo-accent hover:bg-vexo-accent/10"
-                >
+                <Button type="submit" variant="outline">
                   Salvar passo {i + 1}
-                </button>
+                </Button>
               </form>
             </div>
           </details>
@@ -181,7 +179,7 @@ function StepList({
       </div>
 
       {allowAddStep && (
-        <form action={addFollowUpStep.bind(null, trigger)} className="space-y-2.5 rounded-xl border border-dashed border-vexo-border p-3.5">
+        <form action={addFollowUpStep.bind(null, trigger)} className="space-y-2.5 rounded-block border border-dashed border-vexo-border p-block">
           <h3 className="text-xs font-medium text-vexo-muted">Adicionar passo {steps.length + 1}</h3>
 
           <div>
@@ -223,12 +221,9 @@ function StepList({
             <AttachmentField key={steps.length} helpText="JPG, PNG, WEBP, GIF, MP4, MOV ou WEBM — até 25MB." />
           </div>
 
-          <button
-            type="submit"
-            className="rounded-lg bg-vexo-accent px-2.5 py-1.5 text-xs font-medium text-vexo-accentFg hover:opacity-90"
-          >
+          <Button type="submit" variant="primary">
             Adicionar passo
-          </button>
+          </Button>
         </form>
       )}
     </div>
@@ -301,7 +296,7 @@ export async function FollowUpView() {
 
                 <form
                   action={updateFollowUpSettings}
-                  className="mt-5 flex flex-wrap items-end gap-2.5 rounded-xl border border-vexo-border bg-vexo-surface p-3.5"
+                  className="mt-5 flex flex-wrap items-end gap-2.5 rounded-block bg-vexo-surface p-block"
                 >
                   <div>
                     <label className="mb-1 block text-xs text-vexo-muted" htmlFor="silenceHours">
@@ -320,12 +315,9 @@ export async function FollowUpView() {
                       <span className="text-xs text-vexo-muted">horas</span>
                     </div>
                   </div>
-                  <button
-                    type="submit"
-                    className="rounded-lg border border-vexo-accent px-2.5 py-1.5 text-xs font-medium text-vexo-accent hover:bg-vexo-accent/10"
-                  >
+                  <Button type="submit" variant="outline">
                     Salvar prazo
-                  </button>
+                  </Button>
                 </form>
 
                 <div className="mt-5">
@@ -352,7 +344,7 @@ export async function FollowUpView() {
                 {noShowSteps.length > 0 && (
                   <form
                     action={updateNoShowFirstStepDelay}
-                    className="mt-5 flex flex-wrap items-end gap-2.5 rounded-xl border border-vexo-border bg-vexo-surface p-3.5"
+                    className="mt-5 flex flex-wrap items-end gap-2.5 rounded-block bg-vexo-surface p-block"
                   >
                     <div>
                       <label className="mb-1 block text-xs text-vexo-muted" htmlFor="noShowFirstDelay">
@@ -373,12 +365,9 @@ export async function FollowUpView() {
                         </span>
                       </div>
                     </div>
-                    <button
-                      type="submit"
-                      className="rounded-lg border border-vexo-accent px-2.5 py-1.5 text-xs font-medium text-vexo-accent hover:bg-vexo-accent/10"
-                    >
+                    <Button type="submit" variant="outline">
                       Salvar prazo
-                    </button>
+                    </Button>
                   </form>
                 )}
 
@@ -422,7 +411,7 @@ export async function FollowUpView() {
                     numa única tela GLOBAL" — saíram de lá, entraram aqui,
                     mesmo texto/rodízio pra todas as clínicas agora. */}
                 <form action={updatePanelCardSettings} className="mt-3 space-y-2">
-                  <details name="panel-card-groups" className="group rounded-xl border border-vexo-border bg-vexo-surface">
+                  <details name="panel-card-groups" className="group rounded-block bg-vexo-surface">
                     {/* Texto de apoio sempre visível (pedido explícito —
                         "logo abaixo do título... também com o grupo
                         fechado") tem que ficar DENTRO de <summary>: é a
@@ -497,7 +486,7 @@ export async function FollowUpView() {
                     </div>
                   </details>
 
-                  <details name="panel-card-groups" className="group rounded-xl border border-vexo-border bg-vexo-surface">
+                  <details name="panel-card-groups" className="group rounded-block bg-vexo-surface">
                     <summary className="flex cursor-pointer list-none flex-col gap-1 px-3 py-2.5">
                       <div className="flex items-center justify-between gap-3">
                         <div className="flex min-w-0 items-center gap-2.5">
@@ -566,7 +555,7 @@ export async function FollowUpView() {
                     </div>
                   </details>
 
-                  <details name="panel-card-groups" className="group rounded-xl border border-vexo-border bg-vexo-surface">
+                  <details name="panel-card-groups" className="group rounded-block bg-vexo-surface">
                     {/* Texto de apoio estático, sem dias (pedido
                         explícito desta rodada: "não colocar nenhuma
                         informação sobre a janela de ±3 dias da
@@ -608,7 +597,7 @@ export async function FollowUpView() {
                     </div>
                   </details>
 
-                  <details name="panel-card-groups" className="group rounded-xl border border-vexo-border bg-vexo-surface">
+                  <details name="panel-card-groups" className="group rounded-block bg-vexo-surface">
                     <summary className="flex cursor-pointer list-none flex-col gap-1 px-3 py-2.5">
                       <div className="flex items-center justify-between gap-3">
                         <div className="flex min-w-0 items-center gap-2.5">
@@ -640,12 +629,9 @@ export async function FollowUpView() {
                     </div>
                   </details>
 
-                  <button
-                    type="submit"
-                    className="rounded-lg border border-vexo-accent px-2.5 py-1.5 text-xs font-medium text-vexo-accent hover:bg-vexo-accent/10"
-                  >
+                  <Button type="submit" variant="outline">
                     Salvar textos
-                  </button>
+                  </Button>
                 </form>
               </section>
             ),

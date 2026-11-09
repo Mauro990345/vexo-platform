@@ -111,3 +111,29 @@ tipo não chega neles. Tokens em `globals.css`/`tailwind.config.ts` (ver coment�
 `globals.css`), nomeados pra reajuste fácil depois (`--vexo-card-type-reativacao[-text]`,
 `--vexo-card-type-followup`) — igual ao padrão de `--vexo-whatsapp-action-border`/`--bonus-green`:
 valores FIXOS, não acompanham o azul de marca personalizável nem nenhum token semântico existente.
+
+## Follow-up (tela piloto do mesmo padrão visual do Painel — aguardando aprovação no celular)
+`FollowUpView.tsx` é uma tela de CONFIGURAÇÃO (textos/prazos das sequências automáticas e dos
+cards manuais), sem nenhuma lista de pacientes/agendamentos — diferente do Painel, aqui não existem
+nome/@ do Instagram/telefone/avatar nem itens "pendentes" pra ordenar em Atrasados/Hoje/Próximos ou
+agrupar em "Enviados (N)"/"Histórico (N)". Por isso, dos princípios do Painel, só os que fazem
+sentido pra uma tela de configuração foram aplicados aqui:
+- Blocos de conteúdo (os `<details>` recolhíveis de cada passo/grupo de textos, e os `<form>`
+  "Salvar prazo") passam de `rounded-xl border border-vexo-border bg-vexo-surface` pra
+  `rounded-block bg-vexo-surface` — mesmo valor de raio (12px), token nomeado em vez de solto, SEM
+  borda (mesmo padrão que Automações já usa pros seus próprios blocos/`<details>`, ver
+  `automacoes/page.tsx`) — a separação do fundo da página vem só do tom de superfície, não de uma
+  borda. O bloco tracejado "Adicionar passo" mantém a borda (`border-dashed`, pedido visual
+  deliberado de "adicionar algo novo", sem equivalente em Automações pra comparar), só o raio e o
+  padding (`p-3.5` → `p-block`) acompanham o mesmo ajuste.
+- Botões de salvar/adicionar (que antes eram `<button className="...">` cru, repetindo a mesma
+  string de classe em 5 lugares) passam a usar o componente `Button` (`variant="outline"` pros
+  "Salvar X", `variant="primary"` pro único "Adicionar passo") — mesmo componente/hierarquia que
+  Automações já usa. Os botões pequenos ↑/↓/Remover (reordenar/remover um passo) continuam como
+  estão: não há uma variante "destrutiva" no `Button` hoje, e inventar uma só pra isto ficaria fora
+  do escopo de um ajuste só visual.
+- Título em off-white e texto de apoio em cinza já valiam antes do ajuste (herdam `text-vexo-fg`/
+  usam `text-vexo-muted`, sem nenhuma cor solta) — nada mudou aí.
+- Não aplicável aqui (sem lista de itens pendentes pra reorganizar): "Atrasados/Hoje/Próximos",
+  seções com contador tipo "Atrasados (N)", "Enviados (N)"/"Histórico (N)", tamanho de fonte de
+  nome/@/telefone, avatar e selo do Instagram — nenhum desses elementos existe em Follow-up.
