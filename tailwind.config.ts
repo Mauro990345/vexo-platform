@@ -27,6 +27,9 @@ const config: Config = {
           tabIcon1: "rgb(var(--tab-icon-1) / <alpha-value>)",
           reportCaption: "rgb(var(--vexo-report-caption) / <alpha-value>)",
           reportPositive: "rgb(var(--vexo-report-positive) / <alpha-value>)",
+          reportInset: "rgb(var(--vexo-report-inset) / <alpha-value>)",
+          // Bordas/separadores finos do Relatório: branco a 7%, opacidade fixa.
+          reportLine: "rgb(var(--vexo-report-edge) / 0.07)",
           tabIcon2: "rgb(var(--tab-icon-2) / <alpha-value>)",
           tabIcon3: "rgb(var(--tab-icon-3) / <alpha-value>)",
           tabIcon4: "rgb(var(--tab-icon-4) / <alpha-value>)",
@@ -86,8 +89,8 @@ const config: Config = {
         card: "11px",
         caption: "10px",
         // Relatório (ver DESIGN.md): número dos boxes e frase de abertura.
-        "report-value": ["1.75rem", { lineHeight: "1" }], // 28px
-        "report-value-lg": ["1.875rem", { lineHeight: "1" }], // 30px (a partir de sm)
+        "report-value": ["1.5rem", { lineHeight: "1" }], // 24px
+        "report-value-lg": ["1.625rem", { lineHeight: "1" }], // 26px (a partir de sm)
         "report-lead": ["1.125rem", { lineHeight: "1.4" }], // 18px
       },
       // Raio de canto nomeado por uso — os cards de agendamento na Agenda

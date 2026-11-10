@@ -23,7 +23,7 @@ function contrast(a: [number, number, number], b: [number, number, number]): num
 }
 
 describe("tokens do Relatório — contraste AA (4.5:1) sobre o painel e o fundo", () => {
-  const backgrounds = ["vexo-report-panel-top", "vexo-report-panel-bottom", "vexo-bg"];
+  const backgrounds = ["vexo-report-base-top", "vexo-report-base-bottom", "vexo-report-raised-top", "vexo-report-raised-bottom", "vexo-report-inset", "vexo-bg"];
   const texts = ["vexo-report-caption", "vexo-report-positive", "vexo-tab-fg"];
   for (const bg of backgrounds) {
     for (const fg of texts) {
@@ -33,8 +33,15 @@ describe("tokens do Relatório — contraste AA (4.5:1) sobre o painel e o fundo
     }
   }
 
-  it("painel fica sempre acima do fundo da página (topo mais claro que a base)", () => {
-    expect(luminance(token("vexo-report-panel-top"))).toBeGreaterThan(luminance(token("vexo-report-panel-bottom")));
-    expect(luminance(token("vexo-report-panel-bottom"))).toBeGreaterThan(luminance(token("vexo-bg")));
+  it("dois níveis de bloco, todos acima do fundo: base (escuro) < raised (claro); topo de cada um mais claro que a base", () => {
+    const L = (n: string) => luminance(token(n));
+    expect(L("vexo-report-base-top")).toBeGreaterThan(L("vexo-report-base-bottom"));
+    expect(L("vexo-report-raised-top")).toBeGreaterThan(L("vexo-report-raised-bottom"));
+    expect(L("vexo-report-base-bottom")).toBeGreaterThan(L("vexo-bg"));
+    expect(L("vexo-report-raised-bottom")).toBeGreaterThan(L("vexo-report-base-top"));
+  });
+
+  it("área rebaixada (inset) é mais escura que o bloco de gráfico que a contém", () => {
+    expect(luminance(token("vexo-report-inset"))).toBeLessThan(luminance(token("vexo-report-raised-bottom")));
   });
 });

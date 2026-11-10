@@ -123,13 +123,23 @@
   --vexo-whatsapp-action-border: 31 122 77; /* #1f7a4d */
 
   /* Relatório de resultados (página /relatorio/[token] + preview admin) —
-     SÓ desta tela (ver DESIGN.md, "Relatório", 4ª rodada). Elevação:
-     painel com degradê vertical sutil (topo um pouco mais claro que a
-     base, ambos acima do --vexo-bg da página), borda clara de baixa
-     opacidade e sombra escura suave — sem brilho colorido. */
-  --vexo-report-panel-top: 31 39 52; /* #1f2734 */
-  --vexo-report-panel-bottom: 26 33 44; /* #1a212c */
-  --vexo-report-edge: 255 255 255; /* borda clara, usada a ~7% */
+     SÓ desta tela (ver DESIGN.md, "Relatório", 5ª rodada). Superfícies em
+     DOIS NÍVEIS, todas acima do --vexo-bg da página (que não muda):
+     - "base" (mais escuro): blocos separados por linha fina — Resumo
+       (números + taxas) e Follow-up/Reativação;
+     - "raised" (um tom mais claro): blocos de gráfico — anel + semanas,
+       Evolução;
+     - "inset" (rebaixado): área interna dos gráficos (trilha do anel,
+       fundo das barras), mais escura que o bloco que a contém.
+     Cada nível é um degradê vertical sutil (topo um pouco mais claro). Como
+     o contraste entre blocos escuros é baixo, a separação conta com a borda
+     de 1px clara a ~7% e a sombra escura suave. */
+  --vexo-report-base-top: 22 28 38; /* #161c26 */
+  --vexo-report-base-bottom: 18 23 32; /* #121720 */
+  --vexo-report-raised-top: 30 38 50; /* #1e2632 */
+  --vexo-report-raised-bottom: 26 33 44; /* #1a212c */
+  --vexo-report-inset: 15 20 28; /* #0f141c */
+  --vexo-report-edge: 255 255 255; /* bordas e separadores, sempre a ~7% */
   --vexo-report-shadow: 0 1px 2px rgb(0 0 0 / 0.35), 0 10px 24px -14px rgb(0 0 0 / 0.7);
   /* Legendas pequenas do relatório (pedido explícito: #8b909a) — 4.7:1
      sobre o topo do painel, 6:1 sobre o fundo da página (AA). */
@@ -145,10 +155,18 @@
    degradê + borda translúcida + sombra composta não cabem numa classe
    Tailwind só; todos os valores vêm dos tokens acima. */
 @layer components {
-  .report-panel {
-    background-image: linear-gradient(to bottom, rgb(var(--vexo-report-panel-top) / 1), rgb(var(--vexo-report-panel-bottom) / 1));
+  .report-panel,
+  .report-panel-raised {
     border: 1px solid rgb(var(--vexo-report-edge) / 0.07);
     box-shadow: var(--vexo-report-shadow);
+  }
+  /* Nível base (mais escuro) — Resumo e Follow-up/Reativação. */
+  .report-panel {
+    background-image: linear-gradient(to bottom, rgb(var(--vexo-report-base-top) / 1), rgb(var(--vexo-report-base-bottom) / 1));
+  }
+  /* Nível raised (um tom mais claro) — blocos de gráfico. */
+  .report-panel-raised {
+    background-image: linear-gradient(to bottom, rgb(var(--vexo-report-raised-top) / 1), rgb(var(--vexo-report-raised-bottom) / 1));
   }
   /* Brilho azul bem suave atrás do cabeçalho (~13% do azul da marca).
      closest-side: o brilho chega a zero exatamente nas bordas da caixa,

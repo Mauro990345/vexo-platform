@@ -42,7 +42,7 @@ export default async function ClinicReportPreviewPage({ params }: { params: { id
 
   return (
     <main className="min-h-screen bg-vexo-bg px-4 py-6 text-vexo-fg">
-      <div className="mx-auto w-full max-w-md sm:max-w-xl">
+      <div className="mx-auto w-full max-w-md sm:max-w-xl lg:max-w-4xl">
         <ClinicReportPeriodToggle
           monthly={<ClinicReportContent clinicName={clinic.name} frequency="MONTHLY" numbers={monthlyNumbers} />}
           biweekly={<ClinicReportContent clinicName={clinic.name} frequency="BIWEEKLY" numbers={biweeklyNumbers} />}
