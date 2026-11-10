@@ -210,6 +210,50 @@ export function formatReportPeriodLabel(frequency: ReportFrequency, period: Repo
   return day === 1 ? `1ª quinzena de ${monthLabel}` : `2ª quinzena de ${monthLabel}`;
 }
 
+export type ReportWeek = { start: Date; end: Date };
+
+// Semanas civis de SEGUNDA a DOMINGO (dia de Brasília), recortadas nas
+// bordas do período — a 1ª semana pode começar no meio de uma semana
+// civil (quando period.start não é segunda) e a última pode terminar no
+// meio (quando period.end não é a segunda seguinte). Cobertura EXATA de
+// [period.start, period.end), sem lacuna nem sobreposição entre semanas —
+// é isso que garante que qualquer métrica aditiva por data (ex.:
+// abordagens, ver computeWeeklyApproached em report-metrics.ts) some,
+// semana a semana, exatamente o mesmo total do período inteiro (pedido
+// explícito, item 5: "a soma das barras deve bater com o box
+// 'Abordados'").
+export function splitIntoWeeks(period: ReportPeriod): ReportWeek[] {
+  const weeks: ReportWeek[] = [];
+  let cursor = period.start;
+  while (cursor.getTime() < period.end.getTime()) {
+    const { year, month0, day } = brazilDateParts(cursor);
+    // getUTCDay() do instante "deslocado" (mesmo truque de brazilDateParts)
+    // dá o dia da semana EM BRASÍLIA: 0=domingo..6=sábado. Convertido pra
+    // ISO (1=segunda..7=domingo) pra achar em quantos dias cai a PRÓXIMA
+    // segunda-feira a partir de `cursor` (sempre entre 1 e 7 dias).
+    const shifted = new Date(cursor.getTime() - SAO_PAULO_UTC_OFFSET_HOURS * 60 * 60 * 1000);
+    const isoDow = shifted.getUTCDay() === 0 ? 7 : shifted.getUTCDay();
+    const daysUntilNextMonday = 8 - isoDow;
+    const nextMonday = brazilDayStart(year, month0, day + daysUntilNextMonday);
+    const weekEnd = nextMonday.getTime() < period.end.getTime() ? nextMonday : period.end;
+    weeks.push({ start: cursor, end: weekEnd });
+    cursor = weekEnd;
+  }
+  return weeks;
+}
+
+// Prefixo da FRASE DE ABERTURA do relatório (pedido explícito, item 2) —
+// "Em outubro" (mensal) / "Na 1ª quinzena de novembro" (quinzenal), sem o
+// ano (diferente de formatReportPeriodLabel, que é o rótulo completo
+// mostrado no cabeçalho). Mesma fonte de nome de mês/quinzena, uma única
+// definição.
+export function formatReportOpeningPrefix(frequency: ReportFrequency, period: ReportPeriod): string {
+  const { month0, day } = brazilDateParts(period.start);
+  const monthName = MONTH_NAMES_PT[month0];
+  if (frequency === "MONTHLY") return `Em ${monthName}`;
+  return day === 1 ? `Na 1ª quinzena de ${monthName}` : `Na 2ª quinzena de ${monthName}`;
+}
+
 // "01/11 a 15/11" / "01/11 a 30/11" — datas inicial e final do período,
 // sempre mostradas junto do rótulo acima (pedido explícito, item 3) na
 // página pública/preview do relatório. `period.end` é EXCLUSIVO (ver

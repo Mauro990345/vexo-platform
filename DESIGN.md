@@ -156,25 +156,65 @@ Nova tela, administrada pela página "Contas" (`/crm`, só admin — ver DESIGN.
   `clinic-nav.tsx`, só alcançável pelo botão "Ver relatório" do painel, numa aba nova do
   navegador): zero componente/token novo pra exibir número — tudo reaproveita `MetricCard` e os
   containers já existentes do Painel.
+  - **Ordem da página (3ª rodada)**: cabeçalho → **frase de abertura** → Resumo (4 boxes) →
+    **gráficos** (anel de comparecimento + barras de abordagens por semana, lado a lado a partir
+    de `sm`, empilhados no celular) → Follow-up/Reativação numa faixa só. O bloco "Não
+    compareceram" (box próprio) e a seção "Funil" separada da rodada anterior saíram — o primeiro
+    porque dá pra deduzir do Resumo, o segundo porque duplicava os mesmos 4 números.
+  - **Frase de abertura**: uma linha calculada SÓ com os números do Resumo (nunca um dado novo —
+    ver `buildOpeningSentence`, `report-opening-sentence.ts`), em `text-vexo-tabFg` (off-white,
+    mesmo token do texto das abas) e `text-sm` (14px, maior que o `text-xs` do texto de apoio ao
+    lado). Singular/plural tratados por ramo (nunca "0 pessoas"/"0 agendaram"); abordados=0 vira
+    uma única linha neutra, sem mês/quinzena; agendaram=0 ou compareceram=0 (com o resto > 0)
+    trocam só a cláusula correspondente por uma frase neutra, nunca "0 X".
   - **Resumo (início do funil)**: 4 boxes — Abordados/Em conversa/Agendaram/Compareceram (mesmos
     nomes do Painel, nunca "Contatados") — na MESMA faixa `rounded-block border bg-vexo-surface2
     divide-x`/`MetricCard bare` de `PanelOverview.tsx`, literalmente o mesmo container, não uma
     cópia parecida. A taxa de comparecimento não é mais um box: é uma linha (`hint`) dentro do
-    próprio box "Compareceram" (ex.: "78% dos agendados"). Não existe mais a seção "Funil"
-    separada — duplicava os mesmos 4 números do Resumo.
-  - **"Não compareceram"**: box próprio, no mesmo estilo, logo abaixo do Resumo.
-  - **Follow-up**: um box, "Leads retomados" (mesma contagem de sempre). **Reativação**: dois
-    boxes, "Enviadas" e "Voltaram". Sem nenhum envio no período, a seção aparece com os dois boxes
-    em 0 (discreto) em vez de ser escondida.
-  - **Cor — uma regra só, igual ao Painel**: só o valor de "Agendaram" usa o destaque
-    `text-vexo-panelHighlight` (`#caa85c`) — exatamente como `PanelOverview.tsx` já faz hoje (lá
-    também só "Agendaram" é `highlight`; nenhum box novo ganhou cor própria, isto NÃO é uma
-    inconsistência do relatório, é o próprio comportamento do Painel reaproduzido à risca — regra
-    gente: "em caso de dúvida entre inovar e ficar igual ao Painel, fique igual ao Painel"). A
-    comparação com o período anterior usa o azul da marca (`text-vexo-accent`) só quando a
-    variação é positiva; negativa, zero ou sem base fica em `text-vexo-muted` (cinza) — nunca
-    vermelho/rosa em lugar nenhum da tela. Esse azul-só-no-positivo é o único toque de identidade
-    novo desta tela; fora dele, qualquer dúvida de cor segue o Painel, não o contrário.
+    próprio box "Compareceram", agora como **"X% de comparecimento"** (3ª rodada: o rótulo antigo,
+    "X% dos agendados", prometia uma base — `funnel.scheduled`/"Agendaram", agendamentos CRIADOS
+    no período — diferente da que a conta usa, `attended/pastDue` — agendamentos cuja DATA já
+    passou dentro do período, mesma definição de `getAttendanceMetrics`/Painel; as duas bases
+    coincidem na maioria dos casos mas podem divergir nas bordas do período, o que já produziu um
+    "100% dos agendados" com 9 de 10 reais — 90%, não 100%. A CONTA não mudou, só o rótulo passou a
+    descrever honestamente a base que ela sempre usou).
+  - **Gráficos**: **anel de comparecimento** (`AttendanceRing.tsx`, SVG simples sem biblioteca,
+    `role="img"` com `aria-label` do valor) — mesma taxa do box "Compareceram", nunca uma segunda
+    conta; traço em degradê `--tab-icon-1` (#28a4c2, ciano) → `--tab-icon-4` (#49b76c, verde),
+    mesmos tokens já usados nos ícones das abas, sobre uma trilha `vexo-border`. Sem base (nenhum
+    atendimento no período): anel vazio, "—". **Barras "Abordagens por semana"**
+    (`WeeklyApproachesChart.tsx`, puro HTML/CSS, sem SVG/biblioteca) — uma barra por semana civil
+    (segunda a domingo, recortada nas bordas do período — ver `splitIntoWeeks`,
+    `report-period.ts`), REUTILIZANDO `getClinicMetrics` por semana (mesma definição de
+    "abordados" do Painel/Resumo, nenhuma métrica nova) com um ajuste final de arredondamento
+    (`allocateToTotal`, método dos restos maiores) que garante a SOMA das barras bater sempre,
+    exatamente, com o box "Abordados" — testado. Barras normais em degradê `--vexo-accent`
+    (#2b87bd) → `--tab-icon-1` (#28a4c2); a semana com mais abordagens (só uma, mesmo em empate —
+    a primeira) em âmbar sólido `--tab-icon-2` (#dbb148) — nenhuma cor nova em nenhum dos dois
+    gráficos, mesmos tokens já usados nos ícones das abas.
+  - **Follow-up + Reativação numa faixa só**: um container (`rounded-block border bg-vexo-surface2
+    p-block`) com "Follow-up" (box "Leads retomados") de um lado e "Reativação" (boxes "Enviadas"
+    e "Voltaram") do outro, divididos por uma borda fina a partir de `sm`; no celular empilham
+    (Follow-up acima, Reativação com seus 2 boxes abaixo — ambos ocupando a largura toda do
+    container, sem sobrar espaço vazio ao lado). Sem nenhuma reativação enviada no período, mostra
+    os 2 boxes em 0 em vez de esconder a seção.
+  - **Cor — uma regra só, SÓ NO RELATÓRIO**: nenhum dos 4 boxes do Resumo usa `highlight` (3ª
+    rodada: removido também de "Agendaram") — decisão revista explicitamente pelo usuário após a
+    rodada anterior já ter documentado o destaque como "igual ao Painel"; o Painel
+    (`PanelOverview.tsx`) continua intocado, com o destaque `text-vexo-panelHighlight` (`#caa85c`)
+    só em "Agendaram" ali — a regra "uma cor só" vale SÓ pra esta tela. A comparação com o período
+    anterior usa o azul da marca (`text-vexo-accent`) só quando a variação é positiva; negativa,
+    zero ou sem base fica em `text-vexo-muted` (cinza) — nunca vermelho/rosa em lugar nenhum da
+    tela. Esse azul-só-no-positivo é o único toque de cor novo desta tela; fora dele, qualquer
+    dúvida de cor segue o Painel.
+  - **Títulos e profundidade (3ª rodada)**: títulos de seção (Resumo/Follow-up/Reativação/dos dois
+    gráficos) em `text-vexo-tabFg` (off-white, mesmo token do texto das abas) e `text-card` (11px —
+    um token já existente, +1px sobre o `text-caption` de 10px usado antes), em vez do cinza
+    apagado da rodada anterior. Todo bloco (Resumo, gráficos, Follow-up/Reativação) ganha
+    profundidade com o mesmo par já usado em todo o app — `bg-vexo-surface2` (um tom acima do
+    `bg-vexo-bg` da página) + `border border-vexo-border` fina — nenhum token novo precisou ser
+    criado nesta rodada: os tons de superfície, as cores dos ícones das abas e o azul da marca já
+    cobriam tudo que esta tela precisava.
   - **Comparação com o período anterior**: aparece discreta só nos 4 boxes do Resumo (ex.: "+12%
     vs. anterior"). Quando o período anterior é zero ou não existe, não mostra percentual nenhum
     pra aquele box (nunca "-infinito%"/"-100%" artificial).
@@ -190,8 +230,10 @@ Nova tela, administrada pela página "Contas" (`/crm`, só admin — ver DESIGN.
     `isEmptyFunnel`, `report-metrics.ts`) — qualquer sinal real diferente de zero já mostra dados
     reais, nunca troca por simulado. Quando simula, o período ATUAL e o ANTERIOR saem da mesma
     fonte simulada (decisão tomada uma única vez a partir do período atual), pra comparação
-    aparecer de forma coerente — nunca compara um lado simulado com o outro real/vazio. Clínica
-    real nunca recebe número simulado, nunca.
+    aparecer de forma coerente — nunca compara um lado simulado com o outro real/vazio. A série
+    semanal do gráfico de barras também sai simulada junto (`buildSimulatedWeeklyApproached`),
+    somando sempre exatamente o "Abordados" simulado. Clínica real nunca recebe número simulado,
+    nunca.
   - **Preview admin (`/crm/clinicas/[id]/relatorio-preview`)**: abre sempre no último período
     FECHADO de cada tipo (mês ou quinzena cheios, nunca o que está em andamento) — ver
     `computeLastClosedPeriod`, `report-period.ts`. Evita o artefato de comparar um período parcial

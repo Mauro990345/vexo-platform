@@ -13,6 +13,8 @@ import {
   formatReportDateRange,
   resolvePreviousPeriod,
   computeLastClosedPeriod,
+  splitIntoWeeks,
+  formatReportOpeningPrefix,
 } from "./report-period";
 
 // Instantes em UTC escolhidos ao MEIO-DIA (não meia-noite) de propósito —
@@ -271,5 +273,84 @@ describe("computeLastClosedPeriod", () => {
   it("virada de ano: dezembro -> último fechado é novembro", () => {
     const result = computeLastClosedPeriod("MONTHLY", brtNoon("2026-12-05"));
     expect(formatReportDateRange(result)).toBe("01/11 a 30/11");
+  });
+});
+
+// splitIntoWeeks — gráfico "Abordagens por semana" (pedido explícito, 3ª
+// rodada, item 5). Cobertura exata e contígua (sem lacuna/sobreposição) é
+// o que garante que a soma de uma métrica aditiva por semana bate com o
+// total do período inteiro.
+function expectExactCoverage(period: ReturnType<typeof computeMonthlyPeriod>, weeks: ReturnType<typeof splitIntoWeeks>) {
+  expect(weeks.length).toBeGreaterThan(0);
+  expect(weeks[0]!.start.getTime()).toBe(period.start.getTime());
+  expect(weeks[weeks.length - 1]!.end.getTime()).toBe(period.end.getTime());
+  for (let i = 1; i < weeks.length; i++) {
+    expect(weeks[i]!.start.getTime()).toBe(weeks[i - 1]!.end.getTime());
+  }
+  const totalDays = weeks.reduce((sum, w) => sum + Math.round((w.end.getTime() - w.start.getTime()) / 86_400_000), 0);
+  expect(totalDays).toBe(periodLengthDays(period));
+}
+
+describe("splitIntoWeeks", () => {
+  it("mês de 30 dias (novembro/2026, começa num domingo): cobertura exata, nenhuma semana com mais de 7 dias", () => {
+    const period = computeMonthlyPeriod(brtNoon("2026-11-15"));
+    const weeks = splitIntoWeeks(period);
+    expectExactCoverage(period, weeks);
+    for (const w of weeks) {
+      const days = Math.round((w.end.getTime() - w.start.getTime()) / 86_400_000);
+      expect(days).toBeGreaterThan(0);
+      expect(days).toBeLessThanOrEqual(7);
+    }
+  });
+
+  it("mês de 28 dias (fevereiro não bissexto)", () => {
+    const period = computeMonthlyPeriod(brtNoon("2026-02-10"));
+    expectExactCoverage(period, splitIntoWeeks(period));
+  });
+
+  it("mês de 29 dias (fevereiro bissexto)", () => {
+    const period = computeMonthlyPeriod(brtNoon("2024-02-10"));
+    expectExactCoverage(period, splitIntoWeeks(period));
+  });
+
+  it("mês de 31 dias", () => {
+    const period = computeMonthlyPeriod(brtNoon("2026-10-10"));
+    expectExactCoverage(period, splitIntoWeeks(period));
+  });
+
+  it("quinzena de 15 dias (1ª quinzena)", () => {
+    const period = computeBiweeklyPeriod(brtNoon("2026-11-05"));
+    expectExactCoverage(period, splitIntoWeeks(period));
+  });
+
+  it("quinzena de 13 dias (2ª quinzena de fevereiro não bissexto)", () => {
+    const period = computeBiweeklyPeriod(brtNoon("2026-02-20"));
+    expectExactCoverage(period, splitIntoWeeks(period));
+  });
+
+  it("1ª semana começa exatamente numa segunda-feira quando o período já começa numa segunda", () => {
+    // 2026-11-16 é uma segunda-feira (ver teste de quinzena acima).
+    const period = computeBiweeklyPeriod(brtNoon("2026-11-20"));
+    const weeks = splitIntoWeeks(period);
+    expect(weeks[0]!.start.getTime()).toBe(period.start.getTime());
+    const firstWeekDays = Math.round((weeks[0]!.end.getTime() - weeks[0]!.start.getTime()) / 86_400_000);
+    expect(firstWeekDays).toBe(7);
+  });
+});
+
+describe("formatReportOpeningPrefix", () => {
+  it("mensal: 'Em <mês>', sem ano", () => {
+    const period = computeMonthlyPeriod(brtNoon("2026-10-15"));
+    expect(formatReportOpeningPrefix("MONTHLY", period)).toBe("Em outubro");
+  });
+
+  it("quinzenal, 1ª quinzena: 'Na 1ª quinzena de <mês>'", () => {
+    const period = computeBiweeklyPeriod(brtNoon("2026-11-05"));
+    expect(formatReportOpeningPrefix("BIWEEKLY", period)).toBe("Na 1ª quinzena de novembro");
+  });
+
+  it("quinzenal, 2ª quinzena: 'Na 2ª quinzena de <mês>'", () => {
+    const period = computeBiweeklyPeriod(brtNoon("2026-11-20"));
+    expect(formatReportOpeningPrefix("BIWEEKLY", period)).toBe("Na 2ª quinzena de novembro");
   });
 });

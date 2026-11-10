@@ -2,7 +2,12 @@ import { describe, it, expect } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { ClinicReportContent } from "./ClinicReportContent";
 import { computeMonthlyPeriod } from "@/lib/report-period";
-import type { ReportNumbersWithComparison } from "@/lib/report-metrics";
+import type { ReportNumbersWithComparison, WeeklyApproached } from "@/lib/report-metrics";
+
+function weeks(counts: number[]): WeeklyApproached[] {
+  const base = new Date("2026-11-02T03:00:00.000Z");
+  return counts.map((count, i) => ({ start: new Date(base.getTime() + i * 7 * 86400000), end: new Date(base.getTime() + (i + 1) * 7 * 86400000), count }));
+}
 
 // Privacidade (pedido explícito): o relatório mostra SÓ agregados — nunca
 // nome, @ do Instagram ou telefone de paciente nenhum. A garantia de
@@ -20,6 +25,7 @@ function numbers(overrides: Partial<ReportNumbersWithComparison> = {}): ReportNu
     reactivation: { sent: 5, returned: 2 },
     isSimulated: false,
     previousComparison: { contactedPct: 10, inConversationPct: 16, scheduledPct: 25, attendedPct: null },
+    weeklyApproached: weeks([5, 6, 4, 7]),
     ...overrides,
   };
 }
@@ -58,6 +64,28 @@ describe("ClinicReportContent — privacidade: só agregados, nunca dado pessoal
   });
 });
 
+describe("ClinicReportContent — ordem da página (item 1)", () => {
+  it("frase de abertura vem depois do período e antes do Resumo", () => {
+    const markup = renderToStaticMarkup(<ClinicReportContent clinicName="Clínica Teste" frequency="MONTHLY" numbers={numbers()} />);
+    const periodoIndex = markup.indexOf("01/11 a 30/11");
+    const fraseIndex = markup.indexOf("o VEXO IA abordou");
+    const resumoIndex = markup.indexOf("Resumo");
+    expect(fraseIndex).toBeGreaterThan(periodoIndex);
+    expect(resumoIndex).toBeGreaterThan(fraseIndex);
+  });
+
+  it("gráficos (Comparecimento/Abordagens por semana) vêm depois do Resumo e antes de Follow-up/Reativação", () => {
+    const markup = renderToStaticMarkup(<ClinicReportContent clinicName="Clínica Teste" frequency="MONTHLY" numbers={numbers()} />);
+    const resumoIndex = markup.indexOf("Resumo");
+    const comparecimentoIndex = markup.indexOf("Comparecimento");
+    const semanaIndex = markup.indexOf("Abordagens por semana");
+    const followUpIndex = markup.indexOf("Follow-up");
+    expect(comparecimentoIndex).toBeGreaterThan(resumoIndex);
+    expect(semanaIndex).toBeGreaterThan(comparecimentoIndex);
+    expect(followUpIndex).toBeGreaterThan(semanaIndex);
+  });
+});
+
 describe("ClinicReportContent — Resumo (4 boxes) com o início do funil", () => {
   it("mostra Abordados/Em conversa/Agendaram/Compareceram (nomes iguais ao Painel, 'Abordados' não 'Contatados')", () => {
     const markup = renderToStaticMarkup(<ClinicReportContent clinicName="Clínica Teste" frequency="MONTHLY" numbers={numbers()} />);
@@ -73,18 +101,15 @@ describe("ClinicReportContent — Resumo (4 boxes) com o início do funil", () =
     expect(markup).not.toContain("Funil");
   });
 
-  it("taxa de comparecimento vira uma linha dentro do box 'Compareceram', não um box separado", () => {
+  it("taxa de comparecimento vira uma linha honesta ('X% de comparecimento') dentro do box 'Compareceram', nunca 'dos agendados'", () => {
     const markup = renderToStaticMarkup(<ClinicReportContent clinicName="Clínica Teste" frequency="MONTHLY" numbers={numbers({ attendanceRate: 0.78 })} />);
-    expect(markup).toContain("78% dos agendados");
-    expect(markup).not.toContain("Taxa de comparecimento");
+    expect(markup).toContain("78% de comparecimento");
+    expect(markup).not.toContain("dos agendados");
   });
 
-  it("'Não compareceram' é um box próprio, logo depois do Resumo", () => {
+  it("'Não compareceram' NÃO é mais um box do relatório (removido, item 3 — já se deduz do Resumo)", () => {
     const markup = renderToStaticMarkup(<ClinicReportContent clinicName="Clínica Teste" frequency="MONTHLY" numbers={numbers()} />);
-    expect(markup).toContain("Não compareceram");
-    const resumoIndex = markup.indexOf("Resumo");
-    const naoCompareceuIndex = markup.indexOf("Não compareceram");
-    expect(naoCompareceuIndex).toBeGreaterThan(resumoIndex);
+    expect(markup).not.toContain("Não compareceram");
   });
 
   it("Follow-up mostra 'Leads retomados' num box", () => {
@@ -107,9 +132,50 @@ describe("ClinicReportContent — Resumo (4 boxes) com o início do funil", () =
   });
 });
 
+describe("ClinicReportContent — frase de abertura (item 2)", () => {
+  it("frase com todos os números presentes, plural correto", () => {
+    const markup = renderToStaticMarkup(
+      <ClinicReportContent clinicName="Clínica Teste" frequency="MONTHLY" numbers={numbers({ funnel: { contacted: 21, inConversation: 15, scheduled: 10, attended: 9, noShow: 1 } })} />
+    );
+    expect(markup).toContain("Em novembro, o VEXO IA abordou 21 pessoas, 10 agendaram e 9 compareceram.");
+  });
+
+  it("singular correto quando os números são 1", () => {
+    const markup = renderToStaticMarkup(
+      <ClinicReportContent clinicName="Clínica Teste" frequency="MONTHLY" numbers={numbers({ funnel: { contacted: 1, inConversation: 1, scheduled: 1, attended: 1, noShow: 0 } })} />
+    );
+    expect(markup).toContain("1 pessoa, 1 agendou e 1 compareceu");
+  });
+
+  it("abordados=0: uma única linha neutra, sem mês/quinzena", () => {
+    const markup = renderToStaticMarkup(
+      <ClinicReportContent clinicName="Clínica Teste" frequency="MONTHLY" numbers={numbers({ funnel: { contacted: 0, inConversation: 0, scheduled: 0, attended: 0, noShow: 0 } })} />
+    );
+    expect(markup).toContain("Neste período ainda não houve abordagens registradas.");
+  });
+
+  it("agendaram=0 (mas abordados>0): frase neutra sobre agendamentos, sem '0 agendaram'", () => {
+    const markup = renderToStaticMarkup(
+      <ClinicReportContent clinicName="Clínica Teste" frequency="MONTHLY" numbers={numbers({ funnel: { contacted: 5, inConversation: 3, scheduled: 0, attended: 0, noShow: 0 } })} />
+    );
+    expect(markup).toContain("Neste período ainda não houve agendamentos.");
+    expect(markup).not.toContain("0 agendaram");
+  });
+
+  it("compareceram=0 (mas agendaram>0): frase neutra sobre comparecimento, sem '0 compareceram'", () => {
+    const markup = renderToStaticMarkup(
+      <ClinicReportContent clinicName="Clínica Teste" frequency="MONTHLY" numbers={numbers({ funnel: { contacted: 5, inConversation: 3, scheduled: 2, attended: 0, noShow: 0 } })} />
+    );
+    expect(markup).toContain("Ainda não houve comparecimentos neste período.");
+    expect(markup).not.toContain("0 compareceram");
+  });
+});
+
 describe("ClinicReportContent — comparação com o período anterior", () => {
   it("mostra a comparação quando há base (ex.: +10% vs. anterior)", () => {
-    const markup = renderToStaticMarkup(<ClinicReportContent clinicName="Clínica Teste" frequency="MONTHLY" numbers={numbers({ previousComparison: { contactedPct: 10, inConversationPct: 0, scheduledPct: 0, attendedPct: 0 } })} />);
+    const markup = renderToStaticMarkup(
+      <ClinicReportContent clinicName="Clínica Teste" frequency="MONTHLY" numbers={numbers({ previousComparison: { contactedPct: 10, inConversationPct: 0, scheduledPct: 0, attendedPct: 0 } })} />
+    );
     expect(markup).toContain("+10% vs. anterior");
   });
 
@@ -126,34 +192,60 @@ describe("ClinicReportContent — comparação com o período anterior", () => {
   });
 
   it("queda real (negativa): mostra o percentual negativo normalmente, só não em azul", () => {
-    const markup = renderToStaticMarkup(<ClinicReportContent clinicName="Clínica Teste" frequency="MONTHLY" numbers={numbers({ previousComparison: { contactedPct: -15, inConversationPct: 0, scheduledPct: 0, attendedPct: 0 } })} />);
+    const markup = renderToStaticMarkup(
+      <ClinicReportContent clinicName="Clínica Teste" frequency="MONTHLY" numbers={numbers({ previousComparison: { contactedPct: -15, inConversationPct: 0, scheduledPct: 0, attendedPct: 0 } })} />
+    );
     expect(markup).toContain("-15% vs. anterior");
   });
 });
 
-describe("ClinicReportContent — cor consistente entre os boxes (item 5)", () => {
-  it("só 'Agendaram' usa o destaque (vexo-panelHighlight) — nenhum outro box de número usa cor diferente", () => {
+describe("ClinicReportContent — cor única entre os boxes (item 3)", () => {
+  it("NENHUM box do Resumo usa o destaque do Painel (vexo-panelHighlight) — nem Agendaram, só no relatório", () => {
     const markup = renderToStaticMarkup(<ClinicReportContent clinicName="Clínica Teste" frequency="MONTHLY" numbers={numbers()} />);
-    const highlightCount = markup.split("text-vexo-panelHighlight").length - 1;
-    expect(highlightCount).toBe(1);
+    expect(markup).not.toContain("text-vexo-panelHighlight");
   });
 
   it("comparação positiva usa o azul da marca (text-vexo-accent) — mesma regra em qualquer box", () => {
-    const markup = renderToStaticMarkup(<ClinicReportContent clinicName="Clínica Teste" frequency="MONTHLY" numbers={numbers({ previousComparison: { contactedPct: 12, inConversationPct: 8, scheduledPct: 5, attendedPct: 20 } })} />);
+    const markup = renderToStaticMarkup(
+      <ClinicReportContent clinicName="Clínica Teste" frequency="MONTHLY" numbers={numbers({ previousComparison: { contactedPct: 12, inConversationPct: 8, scheduledPct: 5, attendedPct: 20 } })} />
+    );
     const accentCount = markup.split("text-vexo-accent").length - 1;
     expect(accentCount).toBe(4); // os 4 boxes do Resumo, todos com delta positivo
   });
 
   it("comparação negativa ou nula NUNCA usa o azul (fica cinza, vexo-muted)", () => {
-    const markup = renderToStaticMarkup(<ClinicReportContent clinicName="Clínica Teste" frequency="MONTHLY" numbers={numbers({ previousComparison: { contactedPct: -5, inConversationPct: null, scheduledPct: 0, attendedPct: null } })} />);
+    const markup = renderToStaticMarkup(
+      <ClinicReportContent clinicName="Clínica Teste" frequency="MONTHLY" numbers={numbers({ previousComparison: { contactedPct: -5, inConversationPct: null, scheduledPct: 0, attendedPct: null } })} />
+    );
     expect(markup).not.toContain('class="mt-0.5 text-card text-vexo-accent"');
   });
 
   it("nenhuma cor vermelha/rosa em lugar nenhum (sem vexo-error, sem classes red-/pink- soltas)", () => {
-    const markup = renderToStaticMarkup(<ClinicReportContent clinicName="Clínica Teste" frequency="MONTHLY" numbers={numbers({ previousComparison: { contactedPct: -40, inConversationPct: -30, scheduledPct: -20, attendedPct: -10 } })} />);
+    const markup = renderToStaticMarkup(
+      <ClinicReportContent clinicName="Clínica Teste" frequency="MONTHLY" numbers={numbers({ previousComparison: { contactedPct: -40, inConversationPct: -30, scheduledPct: -20, attendedPct: -10 } })} />
+    );
     expect(markup).not.toContain("vexo-error");
     expect(markup).not.toMatch(/\bred-\d/);
     expect(markup).not.toMatch(/\bpink-\d/);
+  });
+});
+
+describe("ClinicReportContent — gráficos (itens 4 e 5)", () => {
+  it("anel de comparecimento mostra o percentual (mesma taxa do box Compareceram)", () => {
+    const markup = renderToStaticMarkup(<ClinicReportContent clinicName="Clínica Teste" frequency="MONTHLY" numbers={numbers({ attendanceRate: 0.7 })} />);
+    expect(markup).toContain("70%");
+    expect(markup).toContain("comparecimento");
+  });
+
+  it("sem base pra taxa (null): anel mostra '—'", () => {
+    const markup = renderToStaticMarkup(<ClinicReportContent clinicName="Clínica Teste" frequency="MONTHLY" numbers={numbers({ attendanceRate: null })} />);
+    expect(markup).toContain("Taxa de comparecimento indisponível");
+  });
+
+  it("barras de abordagens por semana aparecem com os valores recebidos", () => {
+    const markup = renderToStaticMarkup(<ClinicReportContent clinicName="Clínica Teste" frequency="MONTHLY" numbers={numbers({ weeklyApproached: weeks([3, 9, 5]) })} />);
+    expect(markup).toContain("Abordagens por semana");
+    expect(markup).toContain(">9<");
   });
 });
 
