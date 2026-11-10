@@ -23,7 +23,7 @@ export function WeeklyApproachesChart({ weeks }: { weeks: WeeklyApproached[] }) 
   if (allZero) {
     return (
       <div className="flex items-center justify-center rounded-control border border-dashed border-vexo-border/60 py-3">
-        <p className="text-card leading-none text-vexo-muted">Sem abordagens registradas no período</p>
+        <p className="text-card leading-none text-vexo-reportCaption">Sem abordagens registradas no período</p>
       </div>
     );
   }
@@ -37,17 +37,17 @@ export function WeeklyApproachesChart({ weeks }: { weeks: WeeklyApproached[] }) 
         const heightPct = max > 0 ? Math.round((week.count / max) * 10000) / 100 : 0;
         return (
           <div key={i} className="flex flex-1 flex-col items-center gap-1">
-            <span className="text-card font-medium leading-none">{week.count}</span>
-            <div className="flex h-16 w-full items-end overflow-hidden rounded-sm bg-vexo-surface" aria-hidden="true">
+            <span className="text-card font-medium leading-none text-vexo-tabFg">{week.count}</span>
+            {/* Cantos superiores arredondados (4ª rodada) — base reta,
+                apoiada no eixo. Degradê/âmbar pelos tokens de sempre
+                (.report-bar-fill em globals.css, bg-vexo-tabIcon2). */}
+            <div className="flex h-16 w-full items-end overflow-hidden rounded-t-md bg-vexo-bg/25" aria-hidden="true">
               <div
-                className={`w-full rounded-sm ${isMax ? "bg-vexo-tabIcon2" : ""}`}
-                style={{
-                  height: `${Math.max(heightPct, week.count > 0 ? 4 : 0)}%`,
-                  background: isMax ? undefined : "linear-gradient(to top, rgb(var(--vexo-accent) / 1), rgb(var(--tab-icon-1) / 1))",
-                }}
+                className={`w-full rounded-t-md ${isMax ? "bg-vexo-tabIcon2" : "report-bar-fill"}`}
+                style={{ height: `${Math.max(heightPct, week.count > 0 ? 4 : 0)}%` }}
               />
             </div>
-            <span className="text-caption leading-none text-vexo-muted">{formatWeekLabel(week)}</span>
+            <span className="text-caption leading-none text-vexo-reportCaption">{formatWeekLabel(week)}</span>
           </div>
         );
       })}

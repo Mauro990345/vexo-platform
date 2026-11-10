@@ -25,6 +25,8 @@ const config: Config = {
           // Cor do ícone de cada aba, fixa por posição — ver Tabs.tsx e o
           // comentário grande em globals.css.
           tabIcon1: "rgb(var(--tab-icon-1) / <alpha-value>)",
+          reportCaption: "rgb(var(--vexo-report-caption) / <alpha-value>)",
+          reportPositive: "rgb(var(--vexo-report-positive) / <alpha-value>)",
           tabIcon2: "rgb(var(--tab-icon-2) / <alpha-value>)",
           tabIcon3: "rgb(var(--tab-icon-3) / <alpha-value>)",
           tabIcon4: "rgb(var(--tab-icon-4) / <alpha-value>)",
@@ -83,6 +85,10 @@ const config: Config = {
         "sidebar-item": "13px",
         card: "11px",
         caption: "10px",
+        // Relatório (ver DESIGN.md): número dos boxes e frase de abertura.
+        "report-value": ["1.75rem", { lineHeight: "1" }], // 28px
+        "report-value-lg": ["1.875rem", { lineHeight: "1" }], // 30px (a partir de sm)
+        "report-lead": ["1.125rem", { lineHeight: "1.4" }], // 18px
       },
       // Raio de canto nomeado por uso — os cards de agendamento na Agenda
       // usavam rounded-md (6px) direto; vira um token com o mesmo valor.
@@ -96,6 +102,7 @@ const config: Config = {
         card: "0.375rem",
         control: "0.5rem", // = rounded-lg (botões, campos, chips pequenos)
         block: "0.75rem", // = rounded-xl (cards/blocos de conteúdo)
+        report: "0.875rem", // 14px = block + 2px, só nos painéis do Relatório
       },
       // Espaçamento nomeado pros componentes base da Etapa 2 — mesmos
       // valores dos paddings mais usados hoje em botões/campos (px-2.5/

@@ -13,6 +13,8 @@ export function MetricCard({
   highlight = false,
   bare = false,
   className = "",
+  labelClassName = "text-vexo-muted",
+  valueClassName = "text-xl",
 }: {
   label: string;
   value: string;
@@ -26,11 +28,16 @@ export function MetricCard({
   // ao redor, não cada métrica individualmente.
   bare?: boolean;
   className?: string;
+  // Sobrescrevem só o tamanho/cor do rótulo e do valor (opcional — sem
+  // eles, visual idêntico ao de sempre; o Painel não passa nenhum). Usados
+  // pelo Relatório, que pede número maior e legenda no cinza dele.
+  labelClassName?: string;
+  valueClassName?: string;
 }) {
   return (
     <div className={`${bare ? "" : "rounded-control border border-vexo-border bg-vexo-surface2 p-2.5"} ${className}`}>
-      <p className="truncate text-card font-medium text-vexo-muted">{label}</p>
-      <p className={`mt-1 text-xl font-semibold leading-none tracking-tight ${highlight ? "text-vexo-panelHighlight" : ""}`}>{value}</p>
+      <p className={`truncate text-card font-medium ${labelClassName}`}>{label}</p>
+      <p className={`mt-1 font-semibold leading-none tracking-tight ${valueClassName} ${highlight ? "text-vexo-panelHighlight" : ""}`}>{value}</p>
       {hint && <p className="mt-1 text-card text-vexo-muted">{hint}</p>}
     </div>
   );

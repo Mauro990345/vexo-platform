@@ -14,7 +14,7 @@ import { createElement } from "react";
 import { chromium, type Browser } from "playwright";
 import { ClinicReportContent } from "./ClinicReportContent";
 import { computeMonthlyPeriod, splitIntoWeeks } from "@/lib/report-period";
-import { allocateToTotal, type ReportNumbersWithComparison } from "@/lib/report-metrics";
+import { allocateToTotal, evolutionPeriods, type ReportNumbersWithComparison } from "@/lib/report-metrics";
 
 const PROJECT_ROOT = path.resolve(__dirname, "../..");
 
@@ -32,11 +32,16 @@ const NUMBERS: ReportNumbersWithComparison = {
   period: PERIOD,
   funnel: { contacted: 128, inConversation: 94, scheduled: 47, attended: 36, noShow: 8 },
   attendanceRate: 0.766,
+  attendanceBase: 47,
+  contactedFromApproachLogs: true,
   followUpRecovered: 12,
   reactivation: { sent: 23, returned: 9 },
   isSimulated: false,
   previousComparison: { contactedPct: 14, inConversationPct: 9, scheduledPct: 22, attendedPct: 18 },
   weeklyApproached: WEEKS.map((w, i) => ({ ...w, count: WEEKLY_COUNTS[i]! })),
+  // 6 períodos com valores de 3 dígitos — pior caso de largura do gráfico
+  // de evolução em 360px.
+  evolution: evolutionPeriods("MONTHLY", PERIOD).map((p, i) => ({ ...p, scheduled: 120 + i * 9, attended: 100 + i * 7 })),
 };
 
 const MOBILE_WIDTHS = [360, 390, 414];
@@ -52,6 +57,11 @@ const EXPECTED_LABELS = [
   "Voltaram",
   "Comparecimento",
   "Abordagens por semana",
+  "Evolução · últimos 6 meses",
+  "Abordados → Em conversa",
+  "Em conversa → Agendaram",
+  "Agendaram → Compareceram",
+  "36 de 47 atendimentos com data no período",
 ];
 
 describe("ClinicReportContent — layout real, sem rolagem horizontal nem rótulo cortado", () => {
@@ -96,25 +106,70 @@ describe("ClinicReportContent — layout real, sem rolagem horizontal nem rótul
       for (const label of EXPECTED_LABELS) {
         const locator = page.getByText(label, { exact: true });
         const count = await locator.count();
-        expect(count, `rótulo "${label}" não encontrado por extenso em ${width}px (pode estar cortado)`).toBe(1);
+        // >= 1: "Agendaram"/"Compareceram" também aparecem na legenda do
+        // gráfico de evolução — todas as ocorrências precisam estar inteiras.
+        expect(count, `rótulo "${label}" não encontrado por extenso em ${width}px (pode estar cortado)`).toBeGreaterThanOrEqual(1);
 
-        const isTruncated = await locator.evaluate((el) => el.scrollWidth > el.clientWidth + 1);
-        expect(isTruncated, `rótulo "${label}" está visualmente cortado em ${width}px`).toBe(false);
+        const truncated = await locator.evaluateAll((els) => els.some((el) => el.scrollWidth > el.clientWidth + 1));
+        expect(truncated, `rótulo "${label}" está visualmente cortado em ${width}px`).toBe(false);
       }
 
       await page.close();
     });
   }
 
-  it("mostra a taxa de comparecimento e a comparação dentro do box 'Compareceram', sem cortar nenhuma das duas linhas em 360px", async () => {
+  it("mostra a base da taxa de comparecimento e a comparação, em 360px", async () => {
     const page = await browser.newPage({ viewport: { width: 360, height: 1200 } });
     await page.setContent(html);
     await page.waitForTimeout(30);
 
     const bodyText = await page.textContent("body");
-    expect(bodyText).toContain("de comparecimento");
+    expect(bodyText).toContain("atendimentos com data no período");
     expect(bodyText).toContain("vs. anterior");
 
+    await page.close();
+  });
+
+  for (const width of [...MOBILE_WIDTHS, DESKTOP_WIDTH]) {
+    it(`${width}px: NENHUM texto da página transborda o próprio elemento nem sai do container`, async () => {
+      const page = await browser.newPage({ viewport: { width, height: 1600 } });
+      await page.setContent(html);
+      await page.waitForTimeout(30);
+
+      const problems = await page.evaluate(() => {
+        const out: string[] = [];
+        const root = document.querySelector("main")!.getBoundingClientRect();
+        for (const el of Array.from(document.querySelectorAll("main p, main span, main h1"))) {
+          const text = (el.textContent || "").trim();
+          if (!text) continue;
+          const r = el.getBoundingClientRect();
+          if (el.scrollWidth > el.clientWidth + 1 && getComputedStyle(el).display !== "inline") out.push(`transborda: "${text}"`);
+          if (r.right > root.right + 1 || r.left < root.left - 1) out.push(`fora do container: "${text}"`);
+        }
+        return out;
+      });
+      expect(problems).toEqual([]);
+      await page.close();
+    });
+  }
+
+  it("tela estreita (360px): blocos ocupam a largura toda (sem espaço vazio lateral)", async () => {
+    const page = await browser.newPage({ viewport: { width: 360, height: 1600 } });
+    await page.setContent(html);
+    await page.waitForTimeout(30);
+    const widths = await page.evaluate(() => Array.from(document.querySelectorAll("main .report-panel")).map((el) => Math.round(el.getBoundingClientRect().width)));
+    expect(widths.length).toBeGreaterThanOrEqual(5);
+    for (const w of widths) expect(w).toBe(360 - 32);
+    await page.close();
+  });
+
+  it("gráficos têm texto alternativo (role=img + aria-label) com os valores", async () => {
+    const page = await browser.newPage({ viewport: { width: 390, height: 1600 } });
+    await page.setContent(html);
+    const labels = await page.evaluate(() => Array.from(document.querySelectorAll('[role="img"]')).map((el) => el.getAttribute("aria-label") || ""));
+    expect(labels.some((l) => l.startsWith("Taxa de comparecimento: 77%"))).toBe(true);
+    expect(labels.some((l) => l.startsWith("Abordagens por semana —"))).toBe(true);
+    expect(labels.some((l) => l.startsWith("Evolução dos últimos 6 períodos —") && l.includes("nov: 165 agendaram, 135 compareceram"))).toBe(true);
     await page.close();
   });
 });

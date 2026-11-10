@@ -21,11 +21,14 @@ function numbers(overrides: Partial<ReportNumbersWithComparison> = {}): ReportNu
     period,
     funnel: { contacted: 22, inConversation: 14, scheduled: 10, attended: 7, noShow: 1 },
     attendanceRate: 0.7,
+    attendanceBase: 10,
+    contactedFromApproachLogs: true,
     followUpRecovered: 3,
     reactivation: { sent: 5, returned: 2 },
     isSimulated: false,
     previousComparison: { contactedPct: 10, inConversationPct: 16, scheduledPct: 25, attendedPct: null },
     weeklyApproached: weeks([5, 6, 4, 7]),
+    evolution: [],
     ...overrides,
   };
 }
@@ -101,10 +104,21 @@ describe("ClinicReportContent — Resumo (4 boxes) com o início do funil", () =
     expect(markup).not.toContain("Funil");
   });
 
-  it("taxa de comparecimento vira uma linha honesta ('X% de comparecimento') dentro do box 'Compareceram', nunca 'dos agendados'", () => {
-    const markup = renderToStaticMarkup(<ClinicReportContent clinicName="Clínica Teste" frequency="MONTHLY" numbers={numbers({ attendanceRate: 0.78 })} />);
-    expect(markup).toContain("78% de comparecimento");
+  it("coerência (caso real da Demo em outubro: 10 agendaram, 9 compareceram, 9 de 9 com data no período): o anel mostra 100% COM a base exata, e a faixa de conversão mostra 90% (9/10) — nunca um '100% de comparecimento' solto no box", () => {
+    const markup = renderToStaticMarkup(
+      <ClinicReportContent
+        clinicName="Clínica Teste"
+        frequency="MONTHLY"
+        numbers={numbers({ funnel: { contacted: 21, inConversation: 21, scheduled: 10, attended: 9, noShow: 0 }, attendanceRate: 1, attendanceBase: 9, contactedFromApproachLogs: false })}
+      />
+    );
+    expect(markup).not.toMatch(/\d+% de comparecimento</);
     expect(markup).not.toContain("dos agendados");
+    expect(markup).toContain("9 de 9 atendimentos com data no período");
+    expect(markup).toContain("Agendaram para Compareceram: 90%");
+    // "Em conversa" = "Abordados" (sem registro manual de abordagem): a 1ª
+    // taxa vira "—", nunca um 100% artificial.
+    expect(markup).toContain("Abordados para Em conversa: sem taxa");
   });
 
   it("'Não compareceram' NÃO é mais um box do relatório (removido, item 3 — já se deduz do Resumo)", () => {
@@ -205,19 +219,27 @@ describe("ClinicReportContent — cor única entre os boxes (item 3)", () => {
     expect(markup).not.toContain("text-vexo-panelHighlight");
   });
 
-  it("comparação positiva usa o azul da marca (text-vexo-accent) — mesma regra em qualquer box", () => {
+  it("comparação positiva usa o azul de destaque (text-vexo-reportPositive, tom AA do azul da marca) — mesma regra em qualquer box", () => {
     const markup = renderToStaticMarkup(
       <ClinicReportContent clinicName="Clínica Teste" frequency="MONTHLY" numbers={numbers({ previousComparison: { contactedPct: 12, inConversationPct: 8, scheduledPct: 5, attendedPct: 20 } })} />
     );
-    const accentCount = markup.split("text-vexo-accent").length - 1;
+    const accentCount = markup.split("text-vexo-reportPositive").length - 1;
     expect(accentCount).toBe(4); // os 4 boxes do Resumo, todos com delta positivo
   });
 
-  it("comparação negativa ou nula NUNCA usa o azul (fica cinza, vexo-muted)", () => {
+  it("comparação negativa ou nula NUNCA usa o azul (fica cinza)", () => {
     const markup = renderToStaticMarkup(
       <ClinicReportContent clinicName="Clínica Teste" frequency="MONTHLY" numbers={numbers({ previousComparison: { contactedPct: -5, inConversationPct: null, scheduledPct: 0, attendedPct: null } })} />
     );
-    expect(markup).not.toContain('class="mt-0.5 text-card text-vexo-accent"');
+    expect(markup).not.toContain("text-vexo-reportPositive");
+    expect(markup).toContain("-5% vs. anterior");
+  });
+
+  it("os 4 boxes têm EXATAMENTE as mesmas classes (cor única)", () => {
+    const markup = renderToStaticMarkup(<ClinicReportContent clinicName="Clínica Teste" frequency="MONTHLY" numbers={numbers()} />);
+    const valueClasses = [...markup.matchAll(/<p class="(mt-1 font-semibold[^"]*)">/g)].map((m) => m[1]);
+    expect(valueClasses.length).toBeGreaterThanOrEqual(4);
+    expect(new Set(valueClasses.slice(0, 4)).size).toBe(1);
   });
 
   it("nenhuma cor vermelha/rosa em lugar nenhum (sem vexo-error, sem classes red-/pink- soltas)", () => {
@@ -258,5 +280,117 @@ describe("ClinicReportContent — Dados de exemplo (Demo)", () => {
   it("não mostra 'Dados de exemplo' pra dados reais", () => {
     const markup = renderToStaticMarkup(<ClinicReportContent clinicName="Clínica Teste" frequency="MONTHLY" numbers={numbers({ isSimulated: false })} />);
     expect(markup).not.toContain("Dados de exemplo");
+  });
+});
+
+function evo(pairs: Array<[number, number]>) {
+  const base = new Date("2026-06-01T03:00:00.000Z").getTime();
+  return pairs.map(([scheduled, attended], i) => ({
+    start: new Date(Date.UTC(2026, 5 + i, 1, 3)),
+    end: new Date(Date.UTC(2026, 6 + i, 1, 3)),
+    scheduled,
+    attended,
+  })).map((p) => (base ? p : p));
+}
+
+describe("ClinicReportContent — faixa de taxas de conversão (item 6a)", () => {
+  it("calcula a partir dos MESMOS números dos boxes (denominador = box anterior)", () => {
+    const markup = renderToStaticMarkup(
+      <ClinicReportContent clinicName="Clínica Teste" frequency="MONTHLY" numbers={numbers({ funnel: { contacted: 40, inConversation: 20, scheduled: 10, attended: 8, noShow: 1 } })} />
+    );
+    expect(markup).toContain("Abordados para Em conversa: 50%");
+    expect(markup).toContain("Em conversa para Agendaram: 50%");
+    expect(markup).toContain("Agendaram para Compareceram: 80%");
+  });
+
+  it("denominador zero: '—', nunca NaN/Infinity", () => {
+    const markup = renderToStaticMarkup(
+      <ClinicReportContent clinicName="Clínica Teste" frequency="MONTHLY" numbers={numbers({ funnel: { contacted: 0, inConversation: 0, scheduled: 0, attended: 0, noShow: 0 } })} />
+    );
+    expect(markup).toContain("Abordados para Em conversa: sem taxa");
+    expect(markup).toContain("Em conversa para Agendaram: sem taxa");
+    expect(markup).toContain("Agendaram para Compareceram: sem taxa");
+    expect(markup).not.toMatch(/NaN|Infinity/);
+  });
+
+  it("taxa acima de 100% por diferença de base (ex.: 3 compareceram de 2 agendaram): '—', nunca '150%'", () => {
+    const markup = renderToStaticMarkup(
+      <ClinicReportContent clinicName="Clínica Teste" frequency="MONTHLY" numbers={numbers({ funnel: { contacted: 10, inConversation: 6, scheduled: 2, attended: 3, noShow: 0 } })} />
+    );
+    expect(markup).toContain("Agendaram para Compareceram: sem taxa");
+    expect(markup).not.toContain("150%");
+  });
+
+  it("fica logo abaixo dos 4 boxes e antes dos gráficos", () => {
+    const markup = renderToStaticMarkup(<ClinicReportContent clinicName="Clínica Teste" frequency="MONTHLY" numbers={numbers()} />);
+    const compareceramBox = markup.indexOf(">Compareceram<");
+    const strip = markup.indexOf("Taxas de conversão entre etapas");
+    const ring = markup.indexOf(">Comparecimento<");
+    expect(strip).toBeGreaterThan(compareceramBox);
+    expect(ring).toBeGreaterThan(strip);
+  });
+});
+
+describe("ClinicReportContent — evolução dos últimos 6 períodos (item 6c)", () => {
+  it("6 meses com dados: mostra o gráfico com rótulos curtos ('jun'...'nov'), depois dos gráficos e antes de Follow-up", () => {
+    const markup = renderToStaticMarkup(
+      <ClinicReportContent clinicName="Clínica Teste" frequency="MONTHLY" numbers={numbers({ evolution: evo([[4, 3], [6, 5], [5, 4], [8, 7], [9, 8], [10, 7]]) })} />
+    );
+    expect(markup).toContain("Evolução · últimos 6 meses");
+    for (const m of ["jun", "jul", "ago", "set", "out", "nov"]) expect(markup).toContain(`>${m}<`);
+    const evolutionIdx = markup.indexOf("Evolução");
+    expect(evolutionIdx).toBeGreaterThan(markup.indexOf("Abordagens por semana"));
+    expect(markup.indexOf("Follow-up")).toBeGreaterThan(evolutionIdx);
+    expect(markup).toContain('role="img" aria-label="Evolução dos últimos 6 períodos');
+  });
+
+  it("menos de 3 períodos com dados: o gráfico some", () => {
+    const markup = renderToStaticMarkup(
+      <ClinicReportContent clinicName="Clínica Teste" frequency="MONTHLY" numbers={numbers({ evolution: evo([[0, 0], [0, 0], [0, 0], [0, 0], [3, 2], [10, 7]]) })} />
+    );
+    expect(markup).not.toContain("Evolução");
+  });
+
+  it("quinzenal: rótulos '1ª out'/'2ª out' e título em quinzenas", () => {
+    const points = [
+      ["2026-08-16", "2026-09-01"],
+      ["2026-09-01", "2026-09-16"],
+      ["2026-09-16", "2026-10-01"],
+      ["2026-10-01", "2026-10-16"],
+      ["2026-10-16", "2026-11-01"],
+      ["2026-11-01", "2026-11-16"],
+    ].map(([a, b], i) => ({ start: new Date(`${a}T03:00:00.000Z`), end: new Date(`${b}T03:00:00.000Z`), scheduled: 3 + i, attended: 2 + i }));
+    const markup = renderToStaticMarkup(<ClinicReportContent clinicName="Clínica Teste" frequency="BIWEEKLY" numbers={numbers({ evolution: points })} />);
+    expect(markup).toContain("Evolução · últimas 6 quinzenas");
+    expect(markup).toContain(">1ª out<");
+    expect(markup).toContain(">2ª out<");
+  });
+});
+
+describe("ClinicReportContent — Follow-up e Reativação (item 6d)", () => {
+  it("'Voltaram' mostra a taxa sobre 'Enviadas'", () => {
+    const markup = renderToStaticMarkup(<ClinicReportContent clinicName="Clínica Teste" frequency="MONTHLY" numbers={numbers({ reactivation: { sent: 8, returned: 2 } })} />);
+    expect(markup).toContain("25% das enviadas");
+  });
+
+  it("nenhuma enviada: taxa oculta", () => {
+    const markup = renderToStaticMarkup(<ClinicReportContent clinicName="Clínica Teste" frequency="MONTHLY" numbers={numbers({ reactivation: { sent: 0, returned: 0 } })} />);
+    expect(markup).not.toContain("das enviadas");
+  });
+
+  it("'Leads retomados' fica sem taxa (não há total confiável de follow-ups enviados por período)", () => {
+    const markup = renderToStaticMarkup(<ClinicReportContent clinicName="Clínica Teste" frequency="MONTHLY" numbers={numbers()} />);
+    expect(markup).not.toContain("dos follow-ups");
+  });
+});
+
+describe("ClinicReportContent — topo com identidade e elevação (itens 2 e 4)", () => {
+  it("cabeçalho com brilho e filete; blocos usam o painel elevado do Relatório", () => {
+    const markup = renderToStaticMarkup(<ClinicReportContent clinicName="Clínica Teste" frequency="MONTHLY" numbers={numbers()} />);
+    expect(markup).toContain("report-header-glow");
+    expect(markup).toContain("report-title-rule");
+    expect(markup.split("report-panel").length - 1).toBeGreaterThanOrEqual(4);
+    // nenhum hex solto no markup
+    expect(markup).not.toMatch(/#[0-9a-fA-F]{6}\b/);
   });
 });

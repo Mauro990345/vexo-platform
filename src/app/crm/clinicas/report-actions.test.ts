@@ -171,14 +171,39 @@ describe("sendClinicReportNow", () => {
     expect(sendClinicReportDeliveryMock).not.toHaveBeenCalled();
   });
 
-  it("delega para sendClinicReportDelivery com trigger MANUAL e o período ATUAL da frequência configurada", async () => {
-    configFindUniqueMock.mockResolvedValue({ whatsappNumber: "11988887777", frequency: "MONTHLY" });
-    sendClinicReportDeliveryMock.mockResolvedValue({ ok: true, alreadySent: false });
+  it("delega para sendClinicReportDelivery com trigger MANUAL e o ÚLTIMO PERÍODO FECHADO (mesmo do preview), nunca o mês em andamento", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-11-10T15:00:00.000Z")); // 10/11, novembro em andamento
+    try {
+      configFindUniqueMock.mockResolvedValue({ whatsappNumber: "11988887777", frequency: "MONTHLY" });
+      sendClinicReportDeliveryMock.mockResolvedValue({ ok: true, alreadySent: false });
 
-    const result = await sendClinicReportNow("clinic-1");
+      const result = await sendClinicReportNow("clinic-1");
 
-    expect(result).toEqual({ ok: true, alreadySent: false });
-    expect(sendClinicReportDeliveryMock).toHaveBeenCalledWith(expect.objectContaining({ clinicId: "clinic-1", frequency: "MONTHLY", trigger: "MANUAL" }));
+      expect(result).toEqual({ ok: true, alreadySent: false });
+      const args = sendClinicReportDeliveryMock.mock.calls[0]![0];
+      expect(args).toEqual(expect.objectContaining({ clinicId: "clinic-1", frequency: "MONTHLY", trigger: "MANUAL" }));
+      // outubro/2026 inteiro (01/10 00:00 a 01/11 00:00 de Brasília)
+      expect(args.period.start.toISOString()).toBe("2026-10-01T03:00:00.000Z");
+      expect(args.period.end.toISOString()).toBe("2026-11-01T03:00:00.000Z");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("quinzenal: no dia 10/11 envia a 2ª quinzena de outubro (último período fechado)", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-11-10T15:00:00.000Z"));
+    try {
+      configFindUniqueMock.mockResolvedValue({ whatsappNumber: "11988887777", frequency: "BIWEEKLY" });
+      sendClinicReportDeliveryMock.mockResolvedValue({ ok: true, alreadySent: false });
+      await sendClinicReportNow("clinic-1");
+      const args = sendClinicReportDeliveryMock.mock.calls[0]![0];
+      expect(args.period.start.toISOString()).toBe("2026-10-16T03:00:00.000Z");
+      expect(args.period.end.toISOString()).toBe("2026-11-01T03:00:00.000Z");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

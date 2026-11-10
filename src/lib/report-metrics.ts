@@ -1,8 +1,12 @@
 import { prisma } from "@/lib/prisma";
-import { getClinicMetrics, getAttendanceMetrics } from "@/lib/metrics";
+import { getClinicMetrics, getAttendanceMetrics, computeAttendanceMetrics } from "@/lib/metrics";
 import { getReactivationReturnStats, RETURN_ATTRIBUTION_DAYS } from "@/lib/reactivation";
 import { DEMO_CLINIC_ID } from "@/lib/demo-clinic";
 import { resolvePreviousPeriod, periodLengthDays, splitIntoWeeks, type ReportFrequency, type ReportPeriod, type ReportWeek } from "@/lib/report-period";
+import { computePercentDelta, type EvolutionPoint } from "@/lib/report-rates";
+
+export { computePercentDelta };
+export type { EvolutionPoint };
 
 // Números do Relatório de resultados (quinzenal/mensal) — ver DESIGN.md e
 // ClinicReportDelivery no schema. REUTILIZA as mesmas queries/definições
@@ -46,6 +50,17 @@ export type ReportNumbers = {
   period: ReportPeriod;
   funnel: ReportFunnel;
   attendanceRate: number | null; // attended / pastDue (mesma definição do Painel)
+  // Base da taxa acima (pastDue: atendimentos com DATA no período cujo
+  // horário já passou, ver getAttendanceMetrics) — exibida junto do anel
+  // ("9 de 9 atendimentos com data no período") pra a taxa nunca parecer
+  // contradizer o box "Agendaram" (que conta agendamentos CRIADOS no
+  // período, outra base — ver DESIGN.md, 4ª rodada).
+  attendanceBase: number;
+  // true quando "Abordados" veio de registro manual de abordagem
+  // (ApproachLog) — e não do fallback Math.max de getClinicMetrics, que
+  // sem registro manual faz "Abordados" = nº de conversas ("Em conversa").
+  // Ver computeConversionRates (report-rates.ts).
+  contactedFromApproachLogs: boolean;
   followUpRecovered: number;
   reactivation: { sent: number; returned: number };
   isSimulated: boolean;
@@ -70,14 +85,14 @@ export type ReportNumbersWithComparison = ReportNumbers & {
   // (que só entra na comparação discreta acima, não tem gráfico próprio).
   // Ver computeWeeklyApproached/buildSimulatedWeeklyApproached abaixo.
   weeklyApproached: WeeklyApproached[];
+  // Agendaram/Compareceram dos últimos EVOLUTION_PERIODS períodos do mesmo
+  // tipo, terminando no período do relatório (o último ponto é SEMPRE o
+  // próprio período atual, com os mesmos números do Resumo). A tela só
+  // mostra o gráfico com >= 3 períodos com dados (shouldShowEvolution).
+  evolution: EvolutionPoint[];
 };
 
-// Delta percentual simples (current vs previous) — null quando previous=0
-// (sem base: "+infinito%" não é uma comparação útil, melhor omitir).
-export function computePercentDelta(current: number, previous: number): number | null {
-  if (previous === 0) return null;
-  return Math.round(((current - previous) / previous) * 100);
-}
+export const EVOLUTION_PERIODS = 6;
 
 async function fetchRealReportNumbers(clinicId: string, period: ReportPeriod, now: Date): Promise<Omit<ReportNumbers, "isSimulated">> {
   const [clinicMetrics, attendance] = await Promise.all([
@@ -109,6 +124,8 @@ async function fetchRealReportNumbers(clinicId: string, period: ReportPeriod, no
       noShow: clinicMetrics.noShow,
     },
     attendanceRate: attendance.pastDue > 0 ? attendance.attended / attendance.pastDue : null,
+    attendanceBase: attendance.pastDue,
+    contactedFromApproachLogs: clinicMetrics.approachLogged > 0 && clinicMetrics.approachLogged >= clinicMetrics.responded,
     followUpRecovered,
     reactivation: { sent: reactivationStat?.sent ?? 0, returned: reactivationStat?.returned ?? 0 },
   };
@@ -221,14 +238,75 @@ function buildSimulatedReportNumbers(period: ReportPeriod): Omit<ReportNumbers, 
   const attended = Math.max(0, scheduled - noShow - Math.round(scheduled * 0.05));
   const sent = Math.max(1, Math.round(scheduled * 0.2));
   const returned = Math.round(sent * (0.25 + rand() * 0.15));
+  // Base da taxa = atendimentos com data no período já realizados
+  // (compareceram + faltaram) — mesma DEFINIÇÃO da conta real
+  // (attended/pastDue). Os ~5% restantes de "Agendaram" ficam de fora de
+  // propósito (agendamentos pra depois do período/cancelados), como
+  // acontece com dado real.
+  const attendanceBase = attended + noShow;
 
   return {
     period,
     funnel: { contacted, inConversation, scheduled, attended, noShow },
-    attendanceRate: scheduled > 0 ? attended / scheduled : null,
+    attendanceRate: attendanceBase > 0 ? attended / attendanceBase : null,
+    attendanceBase,
+    contactedFromApproachLogs: true,
     followUpRecovered: Math.max(0, Math.round(inConversation * 0.08)),
     reactivation: { sent, returned },
   };
+}
+
+// Evolução dos últimos N períodos (pedido explícito, item 6c) — UMA
+// consulta só pros N-1 períodos anteriores juntos (agendamentos com
+// createdAt OU scheduledAt dentro da janela inteira), agregada em memória
+// pelas MESMAS definições do Resumo: "Agendaram" = agendamentos CRIADOS no
+// período (mesmo filtro de getClinicMetrics.scheduled, metrics.ts) e
+// "Compareceram" = computeAttendanceMetrics (a MESMA função pura usada por
+// getAttendanceMetrics/Painel). O último ponto (período do relatório) não
+// é recalculado: usa os números já mostrados no Resumo — garante que o
+// gráfico termina exatamente no que o box diz.
+export function evolutionPeriods(frequency: ReportFrequency, period: ReportPeriod, count: number = EVOLUTION_PERIODS): ReportPeriod[] {
+  const periods: ReportPeriod[] = [period];
+  while (periods.length < count) periods.unshift(resolvePreviousPeriod(frequency, periods[0]!));
+  return periods;
+}
+
+async function computeRealEvolution(
+  clinicId: string,
+  frequency: ReportFrequency,
+  period: ReportPeriod,
+  currentFunnel: ReportFunnel,
+  now: Date
+): Promise<EvolutionPoint[]> {
+  const periods = evolutionPeriods(frequency, period);
+  const earlier = periods.slice(0, -1);
+  const windowStart = earlier[0]!.start;
+  const windowEnd = period.start;
+  const appointments = await prisma.appointment.findMany({
+    where: {
+      clinicId,
+      OR: [{ createdAt: { gte: windowStart, lt: windowEnd } }, { scheduledAt: { gte: windowStart, lt: windowEnd } }],
+    },
+    select: { createdAt: true, scheduledAt: true, conversationId: true, status: true },
+  });
+  const points = earlier.map((p) => ({
+    start: p.start,
+    end: p.end,
+    scheduled: appointments.filter((a) => a.createdAt >= p.start && a.createdAt < p.end).length,
+    attended: computeAttendanceMetrics(appointments, p.start, p.end, now).attended,
+  }));
+  return [...points, { start: period.start, end: period.end, scheduled: currentFunnel.scheduled, attended: currentFunnel.attended }];
+}
+
+// Versão simulada (só Demo, mesma decisão simular-ou-não do período atual)
+// — cada ponto é o MESMO buildSimulatedReportNumbers daquele período, então
+// o último ponto bate com o Resumo simulado e cada ponto respeita
+// Agendaram >= Compareceram por construção.
+function buildSimulatedEvolution(frequency: ReportFrequency, period: ReportPeriod): EvolutionPoint[] {
+  return evolutionPeriods(frequency, period).map((p) => {
+    const sim = buildSimulatedReportNumbers(p);
+    return { start: p.start, end: p.end, scheduled: sim.funnel.scheduled, attended: sim.funnel.attended };
+  });
 }
 
 // Critério de "dados insuficientes" (documentado, pedido explícito, item
@@ -292,9 +370,12 @@ export async function getReportNumbersWithComparison(
   // comparação com o anterior já é só a discreta acima, sem gráfico
   // próprio pro anterior). Mesma decisão simular-ou-não já tomada acima,
   // nunca uma segunda decisão independente.
-  const weeklyApproached = shouldSimulate
-    ? buildSimulatedWeeklyApproached(period, current.funnel.contacted)
-    : await computeWeeklyApproached(clinicId, period, current.funnel.contacted);
+  const [weeklyApproached, evolution] = shouldSimulate
+    ? [buildSimulatedWeeklyApproached(period, current.funnel.contacted), buildSimulatedEvolution(frequency, period)]
+    : await Promise.all([
+        computeWeeklyApproached(clinicId, period, current.funnel.contacted),
+        computeRealEvolution(clinicId, frequency, period, current.funnel, now),
+      ]);
 
   return {
     ...current,
@@ -305,6 +386,7 @@ export async function getReportNumbersWithComparison(
       attendedPct: computePercentDelta(current.funnel.attended, previous.funnel.attended),
     },
     weeklyApproached,
+    evolution,
   };
 }
 

@@ -154,8 +154,50 @@ Nova tela, administrada pela página "Contas" (`/crm`, só admin — ver DESIGN.
 - **Página do relatório** (`/relatorio/[token]`, pública, sem login, e o preview admin em
   `/crm/clinicas/[id]/relatorio-preview`, que NÃO é uma aba da clínica — não entra em
   `clinic-nav.tsx`, só alcançável pelo botão "Ver relatório" do painel, numa aba nova do
-  navegador): zero componente/token novo pra exibir número — tudo reaproveita `MetricCard` e os
-  containers já existentes do Painel.
+  navegador): tudo reaproveita `MetricCard` e os containers já existentes do Painel; a 4ª rodada
+  criou tokens próprios SÓ desta tela (elevação, legenda, azul positivo — ver abaixo).
+  - **4ª rodada — vale sobre o que as rodadas anteriores dizem abaixo quando houver conflito:**
+    - **Ordem**: cabeçalho (brilho + filete) → frase de abertura → Resumo (4 boxes) → **faixa de
+      taxas de conversão** → anel + barras por semana → **evolução dos últimos 6 períodos** →
+      Follow-up/Reativação (faixa única). No celular tudo empilha em largura total (testado: todo
+      `.report-panel` com a largura do container em 360px). Container da página `max-w-md` no
+      celular e `sm:max-w-xl` a partir de `sm` (os 4 boxes em linha cabem sem quebrar "vs. anterior").
+    - **Elevação** (`.report-panel`, `globals.css`): degradê vertical sutil `--vexo-report-panel-top`
+      (#1f2734) → `--vexo-report-panel-bottom` (#1a212c), ambos acima do `--vexo-bg`; borda 1px
+      `--vexo-report-edge` (branco) a 7%; sombra escura suave `--vexo-report-shadow` (sem brilho
+      colorido); raio `rounded-report` (14px = `block` + 2px). Sem esferas, formas decorativas,
+      neumorfismo nem "HUD".
+    - **Tipografia**: números dos boxes `text-report-value` (28px) / `sm:text-report-value-lg`
+      (30px), semibold, off-white (`vexo-tabFg`) — via `valueClassName`/`labelClassName`, props
+      opcionais novas do `MetricCard` (sem elas o visual é o de sempre; o Painel não passa nenhuma).
+      Legendas em `vexo-reportCaption` (#8b909a). Títulos de seção `text-xs` (12px) off-white,
+      caixa alta. Frase de abertura `text-report-lead` (18px).
+    - **Topo**: `.report-header-glow` (radial do azul da marca a ~13%, `closest-side` — some antes
+      das bordas, sem quina dura) + `.report-title-rule` (2px, `--vexo-accent` → `--tab-icon-1`) sob
+      o nome da clínica. Nada além disso.
+    - **Gráficos**: anel com traço 11 (era 9, ~20% mais grosso), mesmo degradê ciano → verde; barras
+      com cantos superiores arredondados (`rounded-t-md`), mesmo degradê `.report-bar-fill` e a
+      única barra âmbar na semana de pico. **Evolução** (`PeriodEvolutionChart.tsx`): Agendaram
+      (`.report-bar-fill`) e Compareceram (`.report-attended-fill`, as cores do anel) por período,
+      rótulos curtos ("mai", "1ª out" — `formatReportPeriodShortLabel`); só aparece com >= 3
+      períodos com dados (`shouldShowEvolution`). Dados por UMA consulta agregada de agendamentos
+      (mesmo filtro de "Agendaram" + `computeAttendanceMetrics`), último ponto = números do Resumo.
+    - **Faixa de conversão** (`computeConversionRates`, `report-rates.ts`): Abordados → Em conversa,
+      Em conversa → Agendaram, Agendaram → Compareceram, sempre com os números dos boxes
+      (denominador = box anterior). "—" quando o denominador é 0, quando a taxa passaria de 100%
+      (bases diferentes) e, na 1ª, quando "Abordados" não veio de registro manual de abordagem
+      (`ApproachLog` < conversas → `getClinicMetrics` usa o nº de conversas como "Abordados", e a
+      taxa seria um 100% artificial).
+    - **Comparecimento**: o box "Compareceram" não tem mais linha de taxa. O anel mostra a taxa
+      (attended/pastDue, definição do Painel) e logo abaixo a base exata ("9 de 9 atendimentos com
+      data no período") — a taxa nunca parece contradizer "Agendaram" (outra base).
+    - **Comparação "vs. anterior"**: só quando atual > 0 E anterior > 0 (`computePercentDelta`);
+      positiva em `vexo-reportPositive` (#5aa8d6 — o #2b87bd puro dá ~3.8:1 sobre o painel, reprova
+      AA em 11px), negativa/zero em `vexo-reportCaption`. Nunca vermelho/rosa, nunca "-100%".
+    - **Reativação**: "Voltaram" ganha "X% das enviadas" (oculto sem envio). **Follow-up**: "Leads
+      retomados" segue SEM taxa — não existe total confiável de follow-ups enviados por período
+      (`FollowUpLog` só guarda o último passo, que avança também em passo descartado sem envio).
+    - Contraste dos tokens novos testado em `report-tokens.test.ts` (>= 4.5:1 sobre painel e fundo).
   - **Ordem da página (3ª rodada)**: cabeçalho → **frase de abertura** → Resumo (4 boxes) →
     **gráficos** (anel de comparecimento + barras de abordagens por semana, lado a lado a partir
     de `sm`, empilhados no celular) → Follow-up/Reativação numa faixa só. O bloco "Não
@@ -237,8 +279,10 @@ Nova tela, administrada pela página "Contas" (`/crm`, só admin — ver DESIGN.
   - **Preview admin (`/crm/clinicas/[id]/relatorio-preview`)**: abre sempre no último período
     FECHADO de cada tipo (mês ou quinzena cheios, nunca o que está em andamento) — ver
     `computeLastClosedPeriod`, `report-period.ts`. Evita o artefato de comparar um período parcial
-    contra um anterior completo (queda falsa só por o mês ainda não ter terminado). Relatório já
-    ENVIADO continua cobrindo o período que contém o momento do envio — isto não muda.
+    contra um anterior completo (queda falsa só por o mês ainda não ter terminado). **"Enviar agora"
+    usa este MESMO período** (4ª rodada — antes mandava o mês em andamento, todo zerado); o envio
+    AGENDADO continua cobrindo o período que contém o momento do envio. O link sempre mostra o
+    período gravado na entrega.
 - Números REUTILIZADOS das mesmas fontes do Painel — nenhuma segunda definição: `getClinicMetrics`/
   `getAttendanceMetrics` (`metrics.ts`) pro resumo/funil, `getReactivationReturnStats`/
   `RETURN_ATTRIBUTION_DAYS` (`reactivation.ts`, via um adapter que reproduz o período de

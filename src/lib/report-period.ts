@@ -267,3 +267,13 @@ export function formatReportDateRange(period: ReportPeriod): string {
   const lastDayInstant = new Date(period.end.getTime() - DAY_MS);
   return `${fmt(period.start)} a ${fmt(lastDayInstant)}`;
 }
+
+// Rótulo curto do período pro gráfico de evolução (4ª rodada): "mai",
+// "jun" (mensal) / "1ª mai", "2ª mai" (quinzenal). Mesma fonte de nomes de
+// mês de formatReportPeriodLabel — 3 primeiras letras ("mar" de "março").
+export function formatReportPeriodShortLabel(frequency: ReportFrequency, period: ReportPeriod): string {
+  const { month0, day } = brazilDateParts(period.start);
+  const short = MONTH_NAMES_PT[month0]!.slice(0, 3);
+  if (frequency === "MONTHLY") return short;
+  return day === 1 ? `1ª ${short}` : `2ª ${short}`;
+}

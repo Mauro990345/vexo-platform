@@ -3,10 +3,6 @@ import { DEMO_CLINIC_ID } from "@/lib/demo-clinic";
 
 const getClinicMetricsMock = vi.fn();
 const getAttendanceMetricsMock = vi.fn();
-vi.mock("@/lib/metrics", () => ({
-  getClinicMetrics: getClinicMetricsMock,
-  getAttendanceMetrics: getAttendanceMetricsMock,
-}));
 
 const getReactivationReturnStatsMock = vi.fn();
 vi.mock("@/lib/reactivation", async (importOriginal) => {
@@ -15,9 +11,14 @@ vi.mock("@/lib/reactivation", async (importOriginal) => {
 });
 
 const followUpLogFindManyMock = vi.fn();
+const appointmentFindManyMock = vi.fn().mockResolvedValue([]);
 vi.mock("@/lib/prisma", () => ({
-  prisma: { followUpLog: { findMany: followUpLogFindManyMock } },
+  prisma: { followUpLog: { findMany: followUpLogFindManyMock }, appointment: { findMany: appointmentFindManyMock } },
 }));
+vi.mock("@/lib/metrics", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/metrics")>();
+  return { ...actual, getClinicMetrics: getClinicMetricsMock, getAttendanceMetrics: getAttendanceMetricsMock };
+});
 
 const { getReportNumbers, getReportNumbersWithComparison, computePercentDelta, allocateToTotal, RETURN_ATTRIBUTION_DAYS } = await import("./report-metrics");
 const { computeMonthlyPeriod, computeBiweeklyPeriod, splitIntoWeeks } = await import("./report-period");
@@ -159,6 +160,14 @@ describe("computePercentDelta", () => {
   it("sem variação: 0", () => {
     expect(computePercentDelta(10, 10)).toBe(0);
   });
+
+  it("período ATUAL zerado: null (nunca '-100%')", () => {
+    expect(computePercentDelta(0, 20)).toBeNull();
+  });
+
+  it("os dois zerados: null", () => {
+    expect(computePercentDelta(0, 0)).toBeNull();
+  });
 });
 
 describe("getReportNumbersWithComparison", () => {
@@ -269,10 +278,12 @@ describe("buildSimulatedReportNumbers (via getReportNumbers) — coerência inte
     expect(numbers.funnel.attended + numbers.funnel.noShow).toBeLessThanOrEqual(numbers.funnel.scheduled);
   });
 
-  it("taxa de comparecimento consistente com attended/scheduled", async () => {
+  it("taxa de comparecimento = attended / attendanceBase (mesma definição da conta real), base <= Agendaram", async () => {
     const numbers = await getReportNumbers(DEMO_CLINIC_ID, PERIOD, NOW);
     expect(numbers.attendanceRate).not.toBeNull();
-    expect(numbers.attendanceRate).toBeCloseTo(numbers.funnel.attended / numbers.funnel.scheduled);
+    expect(numbers.attendanceBase).toBe(numbers.funnel.attended + numbers.funnel.noShow);
+    expect(numbers.attendanceBase).toBeLessThanOrEqual(numbers.funnel.scheduled);
+    expect(numbers.attendanceRate).toBeCloseTo(numbers.funnel.attended / numbers.attendanceBase);
   });
 
   it("Reativação simulada: 'voltaram' nunca passa de 'enviadas'", async () => {
@@ -376,5 +387,126 @@ describe("getReportNumbersWithComparison — série semanal (gráfico 'Abordagen
     const first = await getReportNumbersWithComparison(DEMO_CLINIC_ID, "MONTHLY", PERIOD, NOW);
     const second = await getReportNumbersWithComparison(DEMO_CLINIC_ID, "MONTHLY", PERIOD, NOW);
     expect(first.weeklyApproached.map((w) => w.count)).toEqual(second.weeklyApproached.map((w) => w.count));
+  });
+});
+
+describe("report-metrics — 'Abordados' veio de registro manual? (contactedFromApproachLogs)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    getAttendanceMetricsMock.mockResolvedValue({ attended: 9, pastDue: 9 });
+    getReactivationReturnStatsMock.mockResolvedValue([{ days: 31, label: "período", sent: 2, returned: 1 }]);
+    followUpLogFindManyMock.mockResolvedValue([]);
+  });
+
+  it("sem ApproachLog (caso da Demo em outubro: 21 = 21): Abordados cai no fallback = nº de conversas -> false", async () => {
+    getClinicMetricsMock.mockResolvedValue({ approached: 21, approachLogged: 0, responded: 21, responseRate: 1, scheduled: 10, completed: 0, noShow: 0 });
+    const numbers = await getReportNumbers(REAL_CLINIC_ID, PERIOD, NOW);
+    expect(numbers.funnel.contacted).toBe(numbers.funnel.inConversation);
+    expect(numbers.contactedFromApproachLogs).toBe(false);
+  });
+
+  it("ApproachLog menor que o nº de conversas (fallback do Math.max também) -> false", async () => {
+    getClinicMetricsMock.mockResolvedValue({ approached: 21, approachLogged: 5, responded: 21, responseRate: 1, scheduled: 10, completed: 0, noShow: 0 });
+    const numbers = await getReportNumbers(REAL_CLINIC_ID, PERIOD, NOW);
+    expect(numbers.contactedFromApproachLogs).toBe(false);
+  });
+
+  it("ApproachLog >= conversas: Abordados é independente -> true", async () => {
+    getClinicMetricsMock.mockResolvedValue({ approached: 60, approachLogged: 60, responded: 21, responseRate: 0.35, scheduled: 10, completed: 0, noShow: 0 });
+    const numbers = await getReportNumbers(REAL_CLINIC_ID, PERIOD, NOW);
+    expect(numbers.contactedFromApproachLogs).toBe(true);
+    expect(numbers.attendanceBase).toBe(9);
+  });
+});
+
+describe("getReportNumbersWithComparison — evolução dos últimos 6 períodos", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    getClinicMetricsMock.mockResolvedValue({ approached: 22, approachLogged: 22, responded: 14, responseRate: 0.6, scheduled: 10, completed: 0, noShow: 1 });
+    getAttendanceMetricsMock.mockResolvedValue({ attended: 7, pastDue: 8 });
+    getReactivationReturnStatsMock.mockResolvedValue([{ days: 30, label: "período", sent: 5, returned: 2 }]);
+    followUpLogFindManyMock.mockResolvedValue([]);
+  });
+
+  it("mensal: 6 meses terminando no período do relatório, UMA consulta agregada, último ponto = números do Resumo", async () => {
+    const at = (iso: string) => new Date(iso);
+    appointmentFindManyMock.mockResolvedValueOnce([
+      // junho: criado e realizado em junho (compareceu)
+      { createdAt: at("2026-06-05T15:00:00Z"), scheduledAt: at("2026-06-10T15:00:00Z"), conversationId: "c1", status: "CONFIRMED" },
+      // setembro: criado em setembro, realizado em outubro (faltou)
+      { createdAt: at("2026-09-28T15:00:00Z"), scheduledAt: at("2026-10-02T15:00:00Z"), conversationId: "c2", status: "NO_SHOW" },
+      // outubro: realizado (compareceu); cancelado não conta como compareceu
+      { createdAt: at("2026-10-01T15:00:00Z"), scheduledAt: at("2026-10-05T15:00:00Z"), conversationId: "c3", status: "SCHEDULED" },
+      { createdAt: at("2026-10-02T15:00:00Z"), scheduledAt: at("2026-10-06T15:00:00Z"), conversationId: "c4", status: "CANCELLED" },
+      // importado do Google (sem conversationId): conta em Agendaram, nunca em Compareceram
+      { createdAt: at("2026-10-03T15:00:00Z"), scheduledAt: at("2026-10-07T15:00:00Z"), conversationId: null, status: "SCHEDULED" },
+    ]);
+
+    const result = await getReportNumbersWithComparison(REAL_CLINIC_ID, "MONTHLY", PERIOD, NOW);
+
+    expect(appointmentFindManyMock).toHaveBeenCalledTimes(1);
+    const where = appointmentFindManyMock.mock.calls[0]![0].where;
+    expect(where.OR[0].createdAt.gte.toISOString()).toBe("2026-06-01T03:00:00.000Z");
+    expect(where.OR[0].createdAt.lt.toISOString()).toBe(PERIOD.start.toISOString());
+
+    expect(result.evolution).toHaveLength(6);
+    expect(result.evolution.map((p) => p.start.toISOString())).toEqual([
+      "2026-06-01T03:00:00.000Z",
+      "2026-07-01T03:00:00.000Z",
+      "2026-08-01T03:00:00.000Z",
+      "2026-09-01T03:00:00.000Z",
+      "2026-10-01T03:00:00.000Z",
+      "2026-11-01T03:00:00.000Z",
+    ]);
+    expect(result.evolution.map((p) => [p.scheduled, p.attended])).toEqual([
+      [1, 1], // jun
+      [0, 0],
+      [0, 0],
+      [1, 0], // set: criado em setembro, realizado em outubro
+      [3, 1], // out: 3 criados; 1 compareceu (faltou/cancelado/sem conversa não contam)
+      [10, 7], // nov = Resumo
+    ]);
+    const last = result.evolution[5]!;
+    expect(last.scheduled).toBe(result.funnel.scheduled);
+    expect(last.attended).toBe(result.funnel.attended);
+  });
+
+  it("quinzenal: 6 quinzenas consecutivas terminando na quinzena do relatório", async () => {
+    const biweekly = computeBiweeklyPeriod(new Date("2026-11-05T12:00:00.000Z"));
+    const result = await getReportNumbersWithComparison(REAL_CLINIC_ID, "BIWEEKLY", biweekly, NOW);
+    expect(result.evolution.map((p) => p.start.toISOString())).toEqual([
+      "2026-08-16T03:00:00.000Z",
+      "2026-09-01T03:00:00.000Z",
+      "2026-09-16T03:00:00.000Z",
+      "2026-10-01T03:00:00.000Z",
+      "2026-10-16T03:00:00.000Z",
+      "2026-11-01T03:00:00.000Z",
+    ]);
+    expect(result.evolution[5]!.end.getTime()).toBe(biweekly.end.getTime());
+  });
+
+  it("Demo simulada: série de 6 coerente (Agendaram >= Compareceram em todo ponto, último = Resumo simulado), sem consulta ao banco", async () => {
+    getClinicMetricsMock.mockResolvedValue(emptyClinicMetrics());
+    getAttendanceMetricsMock.mockResolvedValue({ attended: 0, pastDue: 0 });
+    getReactivationReturnStatsMock.mockResolvedValue([{ days: 30, label: "período", sent: 0, returned: 0 }]);
+
+    const result = await getReportNumbersWithComparison(DEMO_CLINIC_ID, "MONTHLY", PERIOD, NOW);
+
+    expect(result.isSimulated).toBe(true);
+    expect(appointmentFindManyMock).not.toHaveBeenCalled();
+    expect(result.evolution).toHaveLength(6);
+    for (const p of result.evolution) {
+      expect(p.scheduled).toBeGreaterThan(0);
+      expect(p.scheduled).toBeGreaterThanOrEqual(p.attended);
+    }
+    expect(result.evolution[5]!.scheduled).toBe(result.funnel.scheduled);
+    expect(result.evolution[5]!.attended).toBe(result.funnel.attended);
+    // Funil simulado + taxas coerentes com os números exibidos
+    const f = result.funnel;
+    expect(f.contacted).toBeGreaterThanOrEqual(f.inConversation);
+    expect(f.inConversation).toBeGreaterThanOrEqual(f.scheduled);
+    expect(f.scheduled).toBeGreaterThanOrEqual(f.attended);
+    expect(result.weeklyApproached.reduce((a, w) => a + w.count, 0)).toBe(f.contacted);
+    expect(result.contactedFromApproachLogs).toBe(true);
   });
 });

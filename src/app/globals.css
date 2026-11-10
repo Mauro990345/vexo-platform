@@ -121,6 +121,53 @@
      Token próprio de propósito: o botão não pode mudar de aparência
      quando a cor do badge mudar ou for personalizada por clínica. */
   --vexo-whatsapp-action-border: 31 122 77; /* #1f7a4d */
+
+  /* Relatório de resultados (página /relatorio/[token] + preview admin) —
+     SÓ desta tela (ver DESIGN.md, "Relatório", 4ª rodada). Elevação:
+     painel com degradê vertical sutil (topo um pouco mais claro que a
+     base, ambos acima do --vexo-bg da página), borda clara de baixa
+     opacidade e sombra escura suave — sem brilho colorido. */
+  --vexo-report-panel-top: 31 39 52; /* #1f2734 */
+  --vexo-report-panel-bottom: 26 33 44; /* #1a212c */
+  --vexo-report-edge: 255 255 255; /* borda clara, usada a ~7% */
+  --vexo-report-shadow: 0 1px 2px rgb(0 0 0 / 0.35), 0 10px 24px -14px rgb(0 0 0 / 0.7);
+  /* Legendas pequenas do relatório (pedido explícito: #8b909a) — 4.7:1
+     sobre o topo do painel, 6:1 sobre o fundo da página (AA). */
+  --vexo-report-caption: 139 144 154; /* #8b909a */
+  /* Comparação positiva ("+12% vs. anterior"): tom mais claro do azul da
+     marca. O #2b87bd puro dá só ~3.8:1 sobre o painel (reprova AA em
+     texto de 11-12px); este dá ~5.7:1. Mesmo valor de
+     --vexo-card-type-reativacao-text, token próprio pra não acoplar. */
+  --vexo-report-positive: 90 168 214; /* #5aa8d6 */
+}
+
+/* Superfícies do Relatório — classes (e não utilitários soltos) porque
+   degradê + borda translúcida + sombra composta não cabem numa classe
+   Tailwind só; todos os valores vêm dos tokens acima. */
+@layer components {
+  .report-panel {
+    background-image: linear-gradient(to bottom, rgb(var(--vexo-report-panel-top) / 1), rgb(var(--vexo-report-panel-bottom) / 1));
+    border: 1px solid rgb(var(--vexo-report-edge) / 0.07);
+    box-shadow: var(--vexo-report-shadow);
+  }
+  /* Brilho azul bem suave atrás do cabeçalho (~13% do azul da marca).
+     closest-side: o brilho chega a zero exatamente nas bordas da caixa,
+     então nunca aparece um "retângulo" com quina dura. */
+  .report-header-glow {
+    background-image: radial-gradient(closest-side at 35% 50%, rgb(var(--vexo-accent) / 0.13), transparent);
+  }
+  /* Filete de 2px sob o título: azul da marca -> ciano (--tab-icon-1). */
+  .report-title-rule {
+    height: 2px;
+    background-image: linear-gradient(to right, rgb(var(--vexo-accent) / 1), rgb(var(--tab-icon-1) / 1));
+  }
+  /* Degradês dos gráficos (mesmos tokens de sempre). */
+  .report-bar-fill {
+    background-image: linear-gradient(to top, rgb(var(--vexo-accent) / 1), rgb(var(--tab-icon-1) / 1));
+  }
+  .report-attended-fill {
+    background-image: linear-gradient(to top, rgb(var(--tab-icon-1) / 1), rgb(var(--tab-icon-4) / 1));
+  }
 }
 
 /* Fontes do guia "Bônus Full Face" (ver src/lib/bonus-fonts.ts,

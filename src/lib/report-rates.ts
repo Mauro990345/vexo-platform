@@ -1,0 +1,63 @@
+// Taxas do Relatório (4ª rodada, ver DESIGN.md) — lógica PURA (sem Prisma),
+// importável pelo componente presentacional. Todas calculadas SÓ a partir
+// dos MESMOS números já exibidos na página (boxes do Resumo, boxes da
+// Reativação) — nunca um dado novo — e nunca exibidas quando contradiriam
+// esses números (denominador zero, ou numerador maior que o denominador
+// por diferença de base entre as métricas — ver comentário de cada uma).
+
+// num/den em [0, 1], ou null quando não é uma taxa honesta pra mostrar:
+// den <= 0 (sem base) ou num > den (as duas métricas vêm de bases
+// diferentes — ex.: "Agendaram" conta agendamentos CRIADOS no período e
+// "Compareceram" conta atendimentos com DATA no período, então perto das
+// bordas o 2º pode superar o 1º; uma "taxa" acima de 100% contradiria os
+// próprios números mostrados lado a lado).
+export function safeRate(num: number, den: number): number | null {
+  if (!(den > 0) || num < 0 || num > den) return null;
+  return num / den;
+}
+
+export function formatRatePct(rate: number | null): string {
+  return rate === null ? "—" : `${Math.round(rate * 100)}%`;
+}
+
+export type ConversionRates = {
+  contactedToConversation: number | null; // Abordados → Em conversa
+  conversationToScheduled: number | null; // Em conversa → Agendaram
+  scheduledToAttended: number | null; // Agendaram → Compareceram
+};
+
+// Faixa de conversão entre etapas (pedido explícito, item 6a) — denominador
+// = box anterior. `contactedIsIndependent` = "Abordados" veio de registro
+// manual de abordagem (ApproachLog) e não do fallback de getClinicMetrics
+// (Math.max com o nº de conversas — ver metrics.ts). Sem registro manual,
+// "Abordados" É o próprio nº de conversas, e a 1ª taxa seria um 100%
+// artificial que não diz nada sobre resposta de verdade — vira "—".
+export function computeConversionRates(
+  funnel: { contacted: number; inConversation: number; scheduled: number; attended: number },
+  contactedIsIndependent: boolean
+): ConversionRates {
+  return {
+    contactedToConversation: contactedIsIndependent ? safeRate(funnel.inConversation, funnel.contacted) : null,
+    conversationToScheduled: safeRate(funnel.scheduled, funnel.inConversation),
+    scheduledToAttended: safeRate(funnel.attended, funnel.scheduled),
+  };
+}
+
+// Comparação "vs. anterior" (pedido explícito, item 1): só existe quando o
+// valor ATUAL e o do período ANTERIOR são ambos > 0. Qualquer outro caso
+// (atual 0 → "-100%"; anterior 0 → "+infinito%") some por completo.
+export function computePercentDelta(current: number, previous: number): number | null {
+  if (!(current > 0) || !(previous > 0)) return null;
+  return Math.round(((current - previous) / previous) * 100);
+}
+
+export type EvolutionPoint = { start: Date; end: Date; scheduled: number; attended: number };
+
+// Mínimo de períodos COM DADOS (agendaram ou compareceram > 0) pra o
+// gráfico de evolução aparecer (pedido explícito, item 6c) — abaixo disso
+// a "evolução" seria 1-2 pontos soltos, mais ruído do que informação.
+export const EVOLUTION_MIN_PERIODS_WITH_DATA = 3;
+
+export function shouldShowEvolution(points: EvolutionPoint[]): boolean {
+  return points.filter((p) => p.scheduled > 0 || p.attended > 0).length >= EVOLUTION_MIN_PERIODS_WITH_DATA;
+}
