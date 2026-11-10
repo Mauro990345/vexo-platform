@@ -4,8 +4,9 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { deleteClinic } from "@/app/crm/clinicas/actions";
 import { ConfirmSubmitButton } from "@/components/ConfirmSubmitButton";
+import { ClinicReportTrigger } from "@/components/ClinicReportPanel";
 
-type ClinicRow = { id: string; name: string; active: boolean };
+type ClinicRow = { id: string; name: string; active: boolean; reportNextSendDateLabel: string | null };
 
 // Busca client-side simples (sem round-trip) — a lista de clínicas já
 // costuma ser pequena o bastante pra filtrar direto no navegador.
@@ -40,14 +41,21 @@ export function ClinicSearchList({ clinics }: { clinics: ClinicRow[] }) {
               />
               <span className="truncate">{clinic.name}</span>
             </Link>
-            <form action={deleteClinic.bind(null, clinic.id)} className="shrink-0 pr-3">
-              <ConfirmSubmitButton
-                confirmMessage={`Excluir a clínica "${clinic.name}" permanentemente? Isso apaga todos os dados dela (leads, conversas, agendamentos, histórico) e não pode ser desfeito.`}
-                className="rounded-md border border-vexo-border px-2 py-1 text-card text-vexo-muted hover:border-vexo-error hover:text-vexo-error"
-              >
-                Excluir
-              </ConfirmSubmitButton>
-            </form>
+            {/* Espaço (gap-2) entre "Relatório" e "Excluir" de propósito
+                (pedido explícito) — evita clique errado entre as duas
+                ações bem diferentes (uma abre configuração, a outra
+                apaga a clínica inteira). */}
+            <div className="flex shrink-0 items-center gap-2 pr-3">
+              <ClinicReportTrigger clinicId={clinic.id} clinicName={clinic.name} nextSendDateLabel={clinic.reportNextSendDateLabel} />
+              <form action={deleteClinic.bind(null, clinic.id)}>
+                <ConfirmSubmitButton
+                  confirmMessage={`Excluir a clínica "${clinic.name}" permanentemente? Isso apaga todos os dados dela (leads, conversas, agendamentos, histórico) e não pode ser desfeito.`}
+                  className="rounded-md border border-vexo-border px-2 py-1 text-card text-vexo-muted hover:border-vexo-error hover:text-vexo-error"
+                >
+                  Excluir
+                </ConfirmSubmitButton>
+              </form>
+            </div>
           </li>
         ))}
 
