@@ -127,6 +127,8 @@ model Clinic {
   clientPanelLink       ClientPanelLink?
   briefingLink          BriefingLink?
   briefing              Briefing?
+  reportConfig          ClinicReportConfig?
+  reportDeliveries      ClinicReportDelivery[]
 
   users           User[]
   leads           Lead[]
@@ -1565,4 +1567,122 @@ model WebhookLog {
   processingError String? @db.Text
 
   @@index([receivedAt])
+}
+
+// ---------------------------------------------------------------------------
+// Relatório de resultados (quinzenal/mensal) — envio automático por WhatsApp,
+// administrado pela página "Contas" (admin). Aditivo: nenhum dado existente
+// muda; ClinicReportConfig é 1:1 com Clinic (criado só quando o admin abre o
+// painel "Relatório" da clínica pela primeira vez), ClinicReportDelivery
+// guarda o HISTÓRICO de cada relatório gerado (um por período) — token,
+// status do envio e tentativas. Ver src/lib/report-period.ts (cálculo do
+// período), src/lib/report-metrics.ts (números do relatório, reaproveitando
+// getClinicMetrics/getAttendanceMetrics/getReactivationReturnStats já
+// usados pelo Painel) e src/lib/clinic-reports.ts (worker).
+// ---------------------------------------------------------------------------
+
+enum ReportFrequency {
+  MONTHLY
+  BIWEEKLY
+}
+
+// Só vale pra MONTHLY — BIWEEKLY é sempre dia 15 e último dia do mês, fixo,
+// sem necessidade de um modo (ver computeBiweeklyPeriod, report-period.ts).
+enum ReportMonthlyDayMode {
+  LAST_DAY
+  FIXED_DAY
+}
+
+enum ReportDeliveryStatus {
+  SENT
+  FAILED
+}
+
+// Quem disparou aquele envio específico — "Enviar agora" (teste manual, só
+// clínica Demo durante a fase de testes, ver clinic-reports.ts) ou o worker
+// automático. Mesma linha/mesmo token nos dois casos (upsert por
+// clinicId+periodType+periodStart) — um clique manual sobre um período já
+// marcado como enviado automaticamente REENVIA de propósito (é a ferramenta
+// de teste pedida explicitamente), mas nunca cria uma segunda linha pro
+// mesmo período.
+enum ReportDeliveryTrigger {
+  AUTO
+  MANUAL
+}
+
+model ClinicReportConfig {
+  id       String @id @default(cuid())
+  clinicId String @unique
+  clinic   Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  // Número que recebe o relatório por WhatsApp — DIFERENTE, por regra de
+  // negócio, do número que a clínica usa pra atender pacientes
+  // (Clinic.clientWhatsappNumber): o envio sai pela instância WhatsApp já
+  // conectada da clínica (whatsappInstanceName, mesmo mecanismo usado em
+  // todo o resto do sistema — não existe um número "do VEXO" separado,
+  // ver comentário grande em clinic-reports.ts) — mandar pro MESMO número
+  // da conexão seria a clínica mandando uma mensagem pra si mesma, que a
+  // Evolution API rejeita. Validado no servidor contra esse autoenvio em
+  // toda escrita (ver updateClinicReportConfig, report-actions.ts).
+  whatsappNumber String?
+
+  frequency ReportFrequency @default(MONTHLY)
+
+  monthlyDayMode  ReportMonthlyDayMode @default(LAST_DAY)
+  // 1-28 — só usado quando monthlyDayMode = FIXED_DAY; null quando LAST_DAY.
+  monthlyFixedDay Int?
+
+  // Horário de envio (America/Sao_Paulo) — padrão 17h00, ajustável.
+  sendHour   Int @default(17)
+  sendMinute Int @default(0)
+
+  // Desligado até o número ser informado (pedido explícito) — a tela de
+  // configuração já reforça isso na validação, este default é só a rede de
+  // segurança do lado do banco.
+  autoSendEnabled Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ClinicReportDelivery {
+  id       String @id @default(cuid())
+  clinicId String
+  clinic   Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  // Tipo + início do período fecham a chave de idempotência abaixo — nunca
+  // existem duas linhas pro mesmo período da mesma clínica, mesmo com
+  // reinício/redeploy do worker no meio do processamento (ver
+  // processClinicReports, clinic-reports.ts).
+  periodType  ReportFrequency
+  periodStart DateTime
+  // Exclusivo (meia-noite de Brasília do dia seguinte ao último dia do
+  // período) — mesma convenção [periodStart, periodEnd) usada no resto do
+  // sistema pra filtros de data (ver metrics.ts/reactivation.ts).
+  periodEnd   DateTime
+
+  // Token de leitura pública (ver /relatorio/[token]) — null depois de
+  // revogado (revokeClinicReportLink, report-actions.ts); "regenerar" troca
+  // pra um token novo sem apagar o histórico de envio desta linha.
+  token String? @unique
+
+  trigger ReportDeliveryTrigger @default(AUTO)
+  status  ReportDeliveryStatus?
+
+  // Quantas tentativas de ENVIO (WhatsApp) já aconteceram pra esta linha —
+  // máximo 3 (ver REPORT_MAX_SEND_ATTEMPTS, clinic-reports.ts); ao chegar
+  // em 3 sem sucesso, o worker para de tentar e o status FAILED fica
+  // visível no painel.
+  attempt       Int       @default(0)
+  lastAttemptAt DateTime?
+  lastError     String?   @db.Text
+  // Só preenchido quando o envio de fato teve sucesso — é o que marca o
+  // período como "já coberto", nunca reenviado automaticamente de novo.
+  sentAt        DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([clinicId, periodType, periodStart])
+  @@index([clinicId, periodStart])
 }

@@ -137,3 +137,32 @@ sentido pra uma tela de configuração foram aplicados aqui:
 - Não aplicável aqui (sem lista de itens pendentes pra reorganizar): "Atrasados/Hoje/Próximos",
   seções com contador tipo "Atrasados (N)", "Enviados (N)"/"Histórico (N)", tamanho de fonte de
   nome/@/telefone, avatar e selo do Instagram — nenhum desses elementos existe em Follow-up.
+
+## Relatório de resultados (quinzenal/mensal) — envio automático por WhatsApp
+Nova tela, administrada pela página "Contas" (`/crm`, só admin — ver DESIGN.md/CLAUDE.md,
+`ClinicReportPanel.tsx`/`report-actions.ts`). Mesmos tokens/componentes de sempre, nenhuma cor solta:
+- **Lista de Contas**: botão pequeno e discreto "Relatório" (`rounded-md border border-vexo-border
+  text-vexo-muted`, mesmo padrão do "Excluir" ao lado — `gap-2` entre os dois de propósito, pra
+  evitar clique errado entre "abrir configuração" e "apagar a clínica"). Quando o envio automático
+  está ligado, o próprio texto do botão ganha o sufixo discreto " · DD/MM" (próximo envio) — sem
+  segunda linha, a linha da lista não cresce.
+- **Painel** (clicar em "Relatório" abre): modal no mesmo padrão já usado em `ClientAccessModal.tsx`
+  (`rounded-2xl` + overlay + Escape pra fechar) — dentro dele, blocos `Card surface="surface2"` e
+  botões pelo componente `Button` (`outline` pros de ação, texto/borda neutros pros de link
+  secundários), igual ao resto do app. Compacto (`max-w-md`, `max-h-[85vh]` com scroll próprio em
+  telas baixas) — nada grande.
+- **Página do relatório** (`/relatorio/[token]`, pública, sem login, e o preview admin em
+  `/crm/clinicas/[id]/relatorio-preview`, que NÃO é uma aba da clínica — não entra em
+  `clinic-nav.tsx`, só alcançável pelo botão "Ver relatório" do painel, numa aba nova do
+  navegador): mesma faixa de métricas `MetricCard`/`bare`/`highlight` e a mesma grade
+  `rounded-block border bg-vexo-surface2 divide-x` já usadas em `PanelOverview.tsx` — zero
+  componente/token novo pra exibir número. "Dados de exemplo" (fallback simulado, só Clínica Demo)
+  é um selo pequeno, mesmo padrão da etiqueta de tipo de "Para fazer hoje" (`bg-vexo-surface2`,
+  texto `vexo-muted`, caixa alta pequena) — nunca uma cor de alerta.
+- Números REUTILIZADOS das mesmas fontes do Painel — nenhuma segunda definição: `getClinicMetrics`/
+  `getAttendanceMetrics` (`metrics.ts`) pro resumo/funil, `getReactivationReturnStats`/
+  `RETURN_ATTRIBUTION_DAYS` (`reactivation.ts`, via um adapter que reproduz o período de
+  calendário pedido através da MESMA janela rolante existente, sem mexer numa linha daquele
+  arquivo) pra Reativação. "Retomados" (Follow-up) é a única contagem nova, mas reaproveita um
+  campo que já existia e já era escrito hoje (`FollowUpLog.respondedAt`), só uma agregação nova em
+  cima dele — ver `report-metrics.ts`.

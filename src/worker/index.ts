@@ -3,6 +3,7 @@ import { dispatchDueMessages } from "@/lib/dispatch";
 import { processReminders } from "@/lib/reminders";
 import { processFollowUps } from "@/lib/follow-up";
 import { sendWeeklySummaries } from "@/lib/weekly-summary";
+import { processClinicReports } from "@/lib/clinic-reports";
 import { syncAllGoogleCalendars } from "@/lib/google-calendar-sync";
 import { backfillLeadInstagramUsernames } from "@/lib/lead-username-backfill";
 import { refreshLeadProfilePictures } from "@/lib/lead-profile-picture-backfill";
@@ -11,8 +12,9 @@ import { processAttendanceConfirmationTimeouts } from "@/lib/conversation-pipeli
 // Worker de background do VEXO — processo separado (serviço próprio no
 // Railway) que compartilha o mesmo banco Postgres da aplicação web.
 // Responsável por: despachar mensagens agendadas (timing adaptativo),
-// lembretes de agendamento, detecção de follow-up, resumo semanal e
-// sincronização de leitura do Google Calendar.
+// lembretes de agendamento, detecção de follow-up, resumo semanal,
+// Relatório de resultados quinzenal/mensal e sincronização de leitura do
+// Google Calendar.
 
 const TIMEZONE = "America/Sao_Paulo";
 
@@ -24,6 +26,7 @@ const GOOGLE_CALENDAR_SYNC_INTERVAL_MS = 5 * 60 * 1000;
 const USERNAME_BACKFILL_INTERVAL_MS = 10 * 60 * 1000;
 const PROFILE_PICTURE_BACKFILL_INTERVAL_MS = 10 * 60 * 1000;
 const ATTENDANCE_CONFIRMATION_TIMEOUT_INTERVAL_MS = 3 * 60 * 1000;
+const CLINIC_REPORTS_INTERVAL_MS = 15 * 60 * 1000;
 
 // Alarme de atraso cumulativo — ver diagnóstico de capacidade (avaliação de
 // escala pra 100 clínicas): node-cron não tem proteção nenhuma contra
@@ -117,6 +120,16 @@ cron.schedule(
   "*/3 * * * *",
   () => runSafely("processAttendanceConfirmationTimeouts", processAttendanceConfirmationTimeouts, ATTENDANCE_CONFIRMATION_TIMEOUT_INTERVAL_MS)
 );
+
+// Relatório de resultados (quinzenal/mensal, ver DESIGN.md e
+// clinic-reports.ts) — a cada 15 minutos é preciso o bastante pra um
+// horário de envio configurado em HORA/MINUTO (mesma granularidade dos
+// lembretes de agendamento, REMINDERS_INTERVAL_MS, acima) sem sobrecarga
+// nenhuma: no máximo 2 envios por clínica por mês (mensal) ou 2 por
+// quinzena. Timezone de Brasília tratado inteiramente dentro de
+// isReportSendMoment/report-period.ts — `new Date()` aqui é só o
+// instante UTC de sempre, nenhuma conversão de fuso acontece neste nível.
+cron.schedule("*/15 * * * *", () => runSafely("processClinicReports", processClinicReports, CLINIC_REPORTS_INTERVAL_MS));
 
 // Backfill do @ do Instagram (Lead.igUsername) pra leads que já existiam
 // antes desse lookup existir (ver comentário grande em

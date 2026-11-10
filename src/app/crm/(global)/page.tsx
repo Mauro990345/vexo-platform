@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { ClinicSearchList } from "@/components/ClinicSearchList";
+import { getClinicReportRowSummaries } from "@/app/crm/clinicas/report-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +17,12 @@ export default async function ClinicsOverviewPage({
     orderBy: { name: "asc" },
     select: { id: true, name: true, active: true },
   });
+
+  // Texto discreto "Relatório · 30/11" (pedido explícito, item 1) — uma
+  // query em lote só, nunca N chamadas por linha (ver
+  // getClinicReportRowSummaries, report-actions.ts).
+  const reportSummaries = await getClinicReportRowSummaries(clinics.map((c) => c.id));
+  const clinicsWithReport = clinics.map((c) => ({ ...c, reportNextSendDateLabel: reportSummaries[c.id]?.nextSendDateLabel ?? null }));
 
   return (
     <div>
@@ -41,7 +48,7 @@ export default async function ClinicsOverviewPage({
         </p>
       )}
 
-      <ClinicSearchList clinics={clinics} />
+      <ClinicSearchList clinics={clinicsWithReport} />
     </div>
   );
 }
