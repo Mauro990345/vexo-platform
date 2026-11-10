@@ -44,6 +44,12 @@ export async function getClinicMetrics(clinicId: string, from: Date, to: Date) {
 
   return {
     approached,
+    // Soma crua dos registros manuais de abordagem (ApproachLog) — campo
+    // ADITIVO (o Painel não usa): só o Relatório precisa saber se
+    // "Abordados" veio desses registros ou caiu no fallback do Math.max
+    // acima (sem registro manual suficiente, `approached` vira o próprio
+    // nº de conversas, e "Abordados → Em conversa" daria 100% artificial).
+    approachLogged: approachLogs._sum.count ?? 0,
     responded: respondedCount,
     responseRate,
     scheduled: scheduledCount,

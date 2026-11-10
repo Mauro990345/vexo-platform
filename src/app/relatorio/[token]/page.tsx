@@ -55,7 +55,7 @@ export default async function ClinicReportPublicPage({ params }: { params: { tok
 
   return (
     <main className="min-h-screen bg-vexo-bg px-4 py-6 text-vexo-fg">
-      <div className="mx-auto w-full max-w-md">
+      <div className="mx-auto w-full max-w-md sm:max-w-xl">
         <ClinicReportContent clinicName={delivery.clinic.name} frequency={delivery.periodType} numbers={numbers} />
       </div>
     </main>

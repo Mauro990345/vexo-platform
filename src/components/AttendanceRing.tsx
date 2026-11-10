@@ -12,7 +12,8 @@ import { useId } from "react";
 export function AttendanceRing({ rate }: { rate: number | null }) {
   const gradientId = useId();
   const size = 96;
-  const stroke = 9;
+  // 11 (era 9, ~20% mais grosso — 4ª rodada, pedido explícito).
+  const stroke = 11;
   const radius = (size - stroke) / 2;
   const circumference = 2 * Math.PI * radius;
   const pct = rate !== null ? Math.round(rate * 100) : null;
@@ -51,10 +52,10 @@ export function AttendanceRing({ rate }: { rate: number | null }) {
           aria-hidden="true"
         />
       )}
-      <text x="50%" y="46%" textAnchor="middle" dominantBaseline="middle" className="fill-vexo-fg text-base font-semibold" aria-hidden="true">
+      <text x="50%" y="46%" textAnchor="middle" dominantBaseline="middle" className="fill-vexo-tabFg text-lg font-semibold" aria-hidden="true">
         {pct !== null ? `${pct}%` : "—"}
       </text>
-      <text x="50%" y="66%" textAnchor="middle" dominantBaseline="middle" className="fill-vexo-muted" style={{ fontSize: 8 }} aria-hidden="true">
+      <text x="50%" y="66%" textAnchor="middle" dominantBaseline="middle" className="fill-vexo-reportCaption" style={{ fontSize: 8 }} aria-hidden="true">
         comparecimento
       </text>
     </svg>

@@ -11,7 +11,7 @@ import {
   isClinicReportSendAllowed,
   type SendClinicReportResult,
 } from "@/lib/clinic-reports";
-import { computeReportPeriod, resolveNextSendDate, formatReportPeriodLabel, formatReportDateRange, type ReportFrequency, type MonthlyDayMode } from "@/lib/report-period";
+import { computeLastClosedPeriod, resolveNextSendDate, formatReportPeriodLabel, formatReportDateRange, type ReportFrequency, type MonthlyDayMode } from "@/lib/report-period";
 
 // Relatório de resultados (quinzenal/mensal) — ações de servidor da
 // página "Contas" (ver ClinicReportPanel.tsx). TODAS exigem sessão
@@ -219,7 +219,14 @@ export async function sendClinicReportNow(clinicId: string): Promise<SendClinicR
   const config = await prisma.clinicReportConfig.findUnique({ where: { clinicId } });
   if (!config?.whatsappNumber) return { ok: false, reason: "not_configured" };
 
-  const period = computeReportPeriod(config.frequency, new Date());
+  // MESMO período do preview ("Ver relatório"): o último período FECHADO
+  // do tipo configurado (computeLastClosedPeriod) — nunca o mês/quinzena
+  // em andamento (bug relatado: "Enviar agora" no dia 10/11 mandava
+  // 01/11-30/11 todo zerado, com "-100% vs. anterior"). O envio AGENDADO
+  // (worker, processClinicReports) continua com o período que contém o
+  // momento do envio, intocado. A entrega grava esse período, e o link
+  // (/relatorio/[token]) sempre mostra exatamente o período gravado.
+  const period = computeLastClosedPeriod(config.frequency, new Date());
   const result = await sendClinicReportDelivery({ clinicId, frequency: config.frequency, period, trigger: "MANUAL" });
 
   revalidatePath("/crm");
