@@ -12,8 +12,8 @@ import { useId } from "react";
 export function AttendanceRing({ rate }: { rate: number | null }) {
   const gradientId = useId();
   const size = 96;
-  // 11 (era 9, ~20% mais grosso — 4ª rodada, pedido explícito).
-  const stroke = 11;
+  // 5 (5ª rodada: traço fino — reverte o 11 da rodada anterior).
+  const stroke = 5;
   const radius = (size - stroke) / 2;
   const circumference = 2 * Math.PI * radius;
   const pct = rate !== null ? Math.round(rate * 100) : null;
@@ -37,7 +37,7 @@ export function AttendanceRing({ rate }: { rate: number | null }) {
           <stop offset="100%" style={{ stopColor: "rgb(var(--tab-icon-4) / 1)" }} />
         </linearGradient>
       </defs>
-      <circle cx={size / 2} cy={size / 2} r={radius} fill="none" strokeWidth={stroke} className="stroke-vexo-border" aria-hidden="true" />
+      <circle cx={size / 2} cy={size / 2} r={radius} fill="none" strokeWidth={stroke} className="stroke-vexo-reportInset" aria-hidden="true" />
       {pct !== null && pct > 0 && (
         <circle
           cx={size / 2}
@@ -52,7 +52,7 @@ export function AttendanceRing({ rate }: { rate: number | null }) {
           aria-hidden="true"
         />
       )}
-      <text x="50%" y="46%" textAnchor="middle" dominantBaseline="middle" className="fill-vexo-tabFg text-lg font-semibold" aria-hidden="true">
+      <text x="50%" y="46%" textAnchor="middle" dominantBaseline="middle" className="fill-vexo-tabFg text-lg font-normal" aria-hidden="true">
         {pct !== null ? `${pct}%` : "—"}
       </text>
       <text x="50%" y="66%" textAnchor="middle" dominantBaseline="middle" className="fill-vexo-reportCaption" style={{ fontSize: 8 }} aria-hidden="true">

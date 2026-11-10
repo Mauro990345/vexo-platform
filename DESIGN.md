@@ -156,6 +156,46 @@ Nova tela, administrada pela página "Contas" (`/crm`, só admin — ver DESIGN.
   `clinic-nav.tsx`, só alcançável pelo botão "Ver relatório" do painel, numa aba nova do
   navegador): tudo reaproveita `MetricCard` e os containers já existentes do Painel; a 4ª rodada
   criou tokens próprios SÓ desta tela (elevação, legenda, azul positivo — ver abaixo).
+  - **5ª rodada (mais fino e sutil, mesmo conteúdo) — vale sobre TUDO abaixo quando houver conflito:**
+    - **Tons em dois níveis** (o fundo da página não muda): blocos separados por linha ficam no
+      nível **base**, mais escuro (`.report-panel` — `--vexo-report-base-top` #161c26 →
+      `--vexo-report-base-bottom` #121720): Resumo (números + taxas) e Follow-up/Reativação. Blocos de
+      gráfico ficam no nível **raised**, um tom mais claro (`.report-panel-raised` —
+      `--vexo-report-raised-top` #1e2632 → `--vexo-report-raised-bottom` #1a212c): anel + semanas e
+      Evolução. Áreas internas rebaixadas (trilha do anel, fundo das barras) em `--vexo-report-inset`
+      (#0f141c, `bg-vexo-reportInset`/`stroke-vexo-reportInset`), mais escuro que o bloco que as
+      contém. Como o contraste entre blocos escuros é baixo, a separação conta com a borda 1px clara a
+      7% e a sombra escura suave (`--vexo-report-shadow`), as mesmas nos dois níveis. Os tokens
+      `--vexo-report-panel-top/bottom` da 4ª rodada foram substituídos por estes.
+    - **Traços finos e separadores**: toda borda/separador da tela tem 1px em `vexo-reportLine`
+      (`--vexo-report-edge` a 7%, opacidade fixa no `tailwind.config.ts`) — nunca `vexo-border`. A
+      linha fina é o recurso padrão de separação: entre os 4 números, entre os números e a faixa de
+      taxas (dentro do mesmo bloco) e entre Follow-up e Reativação.
+    - **Números**: `text-report-value` 24px / `sm:text-report-value-lg` 26px, semibold (antes
+      28/30). Rótulos em `vexo-reportCaption` com peso normal (`font-normal`, via `labelClassName`
+      do `MetricCard` — o padrão do componente passou a ser `font-medium text-vexo-muted`, mesmo
+      visual de antes no Painel). Frase de abertura sem mudança.
+    - **Anel**: traço 5 (reverte o 11 da 4ª rodada), trilha `vexo-reportInset` quase invisível,
+      mesmo degradê ciano → verde, percentual central em peso normal.
+    - **Barras** (semanas e Evolução): estreitas (`w-3` semanas, `w-2.5` cada barra da Evolução),
+      bem menores que o espaço da coluna, centradas, com mais espaço entre colunas (`gap-3`/`gap-2`),
+      topo arredondado (`rounded-t-sm`), apoiadas numa linha-base fina (`border-b
+      border-vexo-reportLine`) sobre a área rebaixada. Âmbar só na semana de pico. Valor acima da
+      barra SÓ quando > 0 — barra zero não tem rótulo nem barra.
+    - **Faixa de taxas**: sai do bloco próprio e fica DENTRO do Resumo, abaixo dos números, depois
+      de uma linha fina. Só as taxas válidas (`computeConversionRates` devolve a lista já filtrada;
+      nunca uma célula "—"); "Agendaram → Compareceram" saiu (comparecimento fica só no anel, com a
+      base). Uma linha por taxa no celular ("48%  Em conversa → Agendaram", sem quebra), lado a lado
+      a partir de `sm`; nenhuma válida → a faixa some.
+    - **Evolução**: começa no primeiro período com dados (`trimEvolution` — zeros iniciais somem, o
+      título diz quantos períodos sobraram, ex. "últimos 4 meses"); oculta com < 3 períodos com
+      dados; altura menor (`h-16`); legenda pequena com bolinhas nas mesmas cores.
+    - **Layout**: celular empilhado em largura total (comprimento igual ao da 4ª rodada). Container
+      `max-w-md` → `sm:max-w-xl` → `lg:max-w-4xl`; no `lg` o bloco anel + semanas e o de Evolução
+      ficam lado a lado (quando a Evolução existe); Resumo e Follow-up/Reativação sempre em largura
+      total.
+    - Contraste testado (`report-tokens.test.ts`): legenda, azul positivo e off-white ≥ 4.5:1 sobre
+      os dois níveis, o inset e o fundo.
   - **4ª rodada — vale sobre o que as rodadas anteriores dizem abaixo quando houver conflito:**
     - **Ordem**: cabeçalho (brilho + filete) → frase de abertura → Resumo (4 boxes) → **faixa de
       taxas de conversão** → anel + barras por semana → **evolução dos últimos 6 períodos** →

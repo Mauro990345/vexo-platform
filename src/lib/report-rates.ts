@@ -20,27 +20,25 @@ export function formatRatePct(rate: number | null): string {
   return rate === null ? "—" : `${Math.round(rate * 100)}%`;
 }
 
-export type ConversionRates = {
-  contactedToConversation: number | null; // Abordados → Em conversa
-  conversationToScheduled: number | null; // Em conversa → Agendaram
-  scheduledToAttended: number | null; // Agendaram → Compareceram
-};
+export type ConversionRate = { from: string; to: string; rate: number };
 
-// Faixa de conversão entre etapas (pedido explícito, item 6a) — denominador
-// = box anterior. `contactedIsIndependent` = "Abordados" veio de registro
-// manual de abordagem (ApproachLog) e não do fallback de getClinicMetrics
-// (Math.max com o nº de conversas — ver metrics.ts). Sem registro manual,
-// "Abordados" É o próprio nº de conversas, e a 1ª taxa seria um 100%
-// artificial que não diz nada sobre resposta de verdade — vira "—".
+// Faixa de conversão dentro do Resumo (5ª rodada) — denominador = box
+// anterior, SÓ as taxas válidas (nunca uma célula "—"). "Agendaram →
+// Compareceram" saiu de propósito: o comparecimento fica só no anel, que
+// já explica a base ("X de Y atendimentos com data no período").
+// `contactedIsIndependent` = "Abordados" veio de registro manual de
+// abordagem (ApproachLog) e não do fallback de getClinicMetrics (Math.max
+// com o nº de conversas — ver metrics.ts). Sem registro manual, "Abordados"
+// É o próprio nº de conversas, e a 1ª taxa seria um 100% artificial.
 export function computeConversionRates(
-  funnel: { contacted: number; inConversation: number; scheduled: number; attended: number },
+  funnel: { contacted: number; inConversation: number; scheduled: number },
   contactedIsIndependent: boolean
-): ConversionRates {
-  return {
-    contactedToConversation: contactedIsIndependent ? safeRate(funnel.inConversation, funnel.contacted) : null,
-    conversationToScheduled: safeRate(funnel.scheduled, funnel.inConversation),
-    scheduledToAttended: safeRate(funnel.attended, funnel.scheduled),
-  };
+): ConversionRate[] {
+  const candidates: Array<{ from: string; to: string; rate: number | null }> = [
+    { from: "Abordados", to: "Em conversa", rate: contactedIsIndependent ? safeRate(funnel.inConversation, funnel.contacted) : null },
+    { from: "Em conversa", to: "Agendaram", rate: safeRate(funnel.scheduled, funnel.inConversation) },
+  ];
+  return candidates.filter((c): c is ConversionRate => c.rate !== null);
 }
 
 // Comparação "vs. anterior" (pedido explícito, item 1): só existe quando o
@@ -57,6 +55,13 @@ export type EvolutionPoint = { start: Date; end: Date; scheduled: number; attend
 // gráfico de evolução aparecer (pedido explícito, item 6c) — abaixo disso
 // a "evolução" seria 1-2 pontos soltos, mais ruído do que informação.
 export const EVOLUTION_MIN_PERIODS_WITH_DATA = 3;
+
+// Evolução começa no PRIMEIRO período com dados (5ª rodada): períodos
+// zerados antes dele são cortados (zeros no meio continuam — são dado).
+export function trimEvolution(points: EvolutionPoint[]): EvolutionPoint[] {
+  const first = points.findIndex((p) => p.scheduled > 0 || p.attended > 0);
+  return first === -1 ? [] : points.slice(first);
+}
 
 export function shouldShowEvolution(points: EvolutionPoint[]): boolean {
   return points.filter((p) => p.scheduled > 0 || p.attended > 0).length >= EVOLUTION_MIN_PERIODS_WITH_DATA;

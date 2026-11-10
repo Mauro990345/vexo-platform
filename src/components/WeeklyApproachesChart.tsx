@@ -1,15 +1,16 @@
 import type { WeeklyApproached } from "@/lib/report-metrics";
 import { brazilDateParts } from "@/lib/report-period";
 
-// Barras de "Abordagens por semana" (pedido explícito, item 5) — puro
-// HTML/CSS (sem SVG/biblioteca: cada barra é só um retângulo com
-// degradê), reaproveitando os mesmos números já calculados por
-// computeWeeklyApproached/buildSimulatedWeeklyApproached (report-metrics.ts,
-// mesma definição de "abordados" do Painel). Barras normais em degradê
-// azul (--vexo-accent, #2b87bd) -> ciano (--tab-icon-1, #28a4c2); a semana
-// com MAIS abordagens (só uma, mesmo em caso de empate — a primeira) em
-// âmbar sólido (--tab-icon-2, #dbb148) — nenhuma cor nova, mesmos tokens
-// já usados nos ícones das abas.
+// Barras de "Abordagens por semana" — puro HTML/CSS, reaproveitando os
+// números de computeWeeklyApproached/buildSimulatedWeeklyApproached
+// (report-metrics.ts, mesma definição de "abordados" do Painel).
+//
+// 5ª rodada (ver DESIGN.md, "Relatório"): barra ESTREITA (w-3, bem menor
+// que o espaço da semana) centrada na coluna, topo arredondado, apoiada
+// numa linha-base fina (border-vexo-reportLine) sobre a área rebaixada do
+// gráfico (bg-vexo-reportInset). Degradê azul → ciano (.report-bar-fill);
+// a semana com MAIS abordagens (só uma, a primeira em empate) em âmbar
+// sólido (--tab-icon-2, #dbb148). Valor acima da barra só quando > 0.
 function formatWeekLabel(week: WeeklyApproached): string {
   const { day, month0 } = brazilDateParts(week.start);
   return `${String(day).padStart(2, "0")}/${String(month0 + 1).padStart(2, "0")}`;
@@ -22,7 +23,7 @@ export function WeeklyApproachesChart({ weeks }: { weeks: WeeklyApproached[] }) 
 
   if (allZero) {
     return (
-      <div className="flex items-center justify-center rounded-control border border-dashed border-vexo-border/60 py-3">
+      <div className="flex items-center justify-center rounded-control bg-vexo-reportInset py-3">
         <p className="text-card leading-none text-vexo-reportCaption">Sem abordagens registradas no período</p>
       </div>
     );
@@ -31,26 +32,38 @@ export function WeeklyApproachesChart({ weeks }: { weeks: WeeklyApproached[] }) 
   const summary = weeks.map((w) => `${formatWeekLabel(w)}: ${w.count}`).join(", ");
 
   return (
-    <div className="flex items-end gap-1.5" style={{ height: 96 }} role="img" aria-label={`Abordagens por semana — ${summary}`}>
-      {weeks.map((week, i) => {
-        const isMax = i === maxIndex;
-        const heightPct = max > 0 ? Math.round((week.count / max) * 10000) / 100 : 0;
-        return (
-          <div key={i} className="flex flex-1 flex-col items-center gap-1">
-            <span className="text-card font-medium leading-none text-vexo-tabFg">{week.count}</span>
-            {/* Cantos superiores arredondados (4ª rodada) — base reta,
-                apoiada no eixo. Degradê/âmbar pelos tokens de sempre
-                (.report-bar-fill em globals.css, bg-vexo-tabIcon2). */}
-            <div className="flex h-16 w-full items-end overflow-hidden rounded-t-md bg-vexo-bg/25" aria-hidden="true">
-              <div
-                className={`w-full rounded-t-md ${isMax ? "bg-vexo-tabIcon2" : "report-bar-fill"}`}
-                style={{ height: `${Math.max(heightPct, week.count > 0 ? 4 : 0)}%` }}
-              />
+    <div role="img" aria-label={`Abordagens por semana — ${summary}`}>
+      <div className="flex h-20 items-stretch gap-3 rounded-t-control border-b border-vexo-reportLine bg-vexo-reportInset px-2 pt-4" aria-hidden="true">
+        {weeks.map((week, i) => {
+          const isMax = i === maxIndex;
+          const heightPct = max > 0 ? Math.round((week.count / max) * 10000) / 100 : 0;
+          return (
+            <div key={i} className="relative min-w-0 flex-1">
+              {week.count > 0 && (
+                <>
+                  <span
+                    className="absolute left-1/2 -translate-x-1/2 text-caption leading-none text-vexo-tabFg"
+                    style={{ bottom: `calc(${Math.max(heightPct, 6)}% + 3px)` }}
+                  >
+                    {week.count}
+                  </span>
+                  <div
+                    className={`absolute bottom-0 left-1/2 w-3 -translate-x-1/2 rounded-t-sm ${isMax ? "bg-vexo-tabIcon2" : "report-bar-fill"}`}
+                    style={{ height: `${Math.max(heightPct, 6)}%` }}
+                  />
+                </>
+              )}
             </div>
-            <span className="text-caption leading-none text-vexo-reportCaption">{formatWeekLabel(week)}</span>
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
+      <div className="mt-1 flex gap-3 px-2" aria-hidden="true">
+        {weeks.map((week, i) => (
+          <span key={i} className="min-w-0 flex-1 text-center text-caption leading-none text-vexo-reportCaption">
+            {formatWeekLabel(week)}
+          </span>
+        ))}
+      </div>
     </div>
   );
 }

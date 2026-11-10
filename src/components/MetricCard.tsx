@@ -13,7 +13,7 @@ export function MetricCard({
   highlight = false,
   bare = false,
   className = "",
-  labelClassName = "text-vexo-muted",
+  labelClassName = "font-medium text-vexo-muted",
   valueClassName = "text-xl",
 }: {
   label: string;
@@ -36,7 +36,7 @@ export function MetricCard({
 }) {
   return (
     <div className={`${bare ? "" : "rounded-control border border-vexo-border bg-vexo-surface2 p-2.5"} ${className}`}>
-      <p className={`truncate text-card font-medium ${labelClassName}`}>{label}</p>
+      <p className={`truncate text-card ${labelClassName}`}>{label}</p>
       <p className={`mt-1 font-semibold leading-none tracking-tight ${valueClassName} ${highlight ? "text-vexo-panelHighlight" : ""}`}>{value}</p>
       {hint && <p className="mt-1 text-card text-vexo-muted">{hint}</p>}
     </div>

@@ -60,7 +60,6 @@ const EXPECTED_LABELS = [
   "Evolução · últimos 6 meses",
   "Abordados → Em conversa",
   "Em conversa → Agendaram",
-  "Agendaram → Compareceram",
   "36 de 47 atendimentos com data no período",
 ];
 
@@ -157,9 +156,26 @@ describe("ClinicReportContent — layout real, sem rolagem horizontal nem rótul
     const page = await browser.newPage({ viewport: { width: 360, height: 1600 } });
     await page.setContent(html);
     await page.waitForTimeout(30);
-    const widths = await page.evaluate(() => Array.from(document.querySelectorAll("main .report-panel")).map((el) => Math.round(el.getBoundingClientRect().width)));
-    expect(widths.length).toBeGreaterThanOrEqual(5);
+    const widths = await page.evaluate(() => Array.from(document.querySelectorAll("main .report-panel, main .report-panel-raised")).map((el) => Math.round(el.getBoundingClientRect().width)));
+    expect(widths.length).toBe(4);
     for (const w of widths) expect(w).toBe(360 - 32);
+    await page.close();
+  });
+
+  it("1366px: anel/semanas e Evolução lado a lado; Resumo e Follow-up/Reativação em largura total", async () => {
+    const page = await browser.newPage({ viewport: { width: 1366, height: 1600 } });
+    await page.setContent(html.replace('<main class="px-4 py-6">', '<main class="px-4 py-6"><div class="mx-auto w-full max-w-md sm:max-w-xl lg:max-w-4xl">').replace("</main>", "</div></main>"));
+    await page.waitForTimeout(30);
+    const boxes = await page.evaluate(() =>
+      Array.from(document.querySelectorAll("main .report-panel, main .report-panel-raised")).map((el) => {
+        const r = el.getBoundingClientRect();
+        return { cls: el.className.split(" ")[0], top: Math.round(r.top), width: Math.round(r.width) };
+      })
+    );
+    const [resumo, chart, evolution, followUp] = boxes;
+    expect(chart!.top).toBe(evolution!.top);
+    expect(chart!.width).toBeLessThan(resumo!.width);
+    expect(followUp!.width).toBe(resumo!.width);
     await page.close();
   });
 
