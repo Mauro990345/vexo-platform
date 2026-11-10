@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { getClinicMetrics, getAttendanceMetrics } from "@/lib/metrics";
 import { getReactivationReturnStats, RETURN_ATTRIBUTION_DAYS } from "@/lib/reactivation";
 import { DEMO_CLINIC_ID } from "@/lib/demo-clinic";
-import { resolvePreviousPeriod, periodLengthDays, type ReportFrequency, type ReportPeriod } from "@/lib/report-period";
+import { resolvePreviousPeriod, periodLengthDays, splitIntoWeeks, type ReportFrequency, type ReportPeriod, type ReportWeek } from "@/lib/report-period";
 
 // Números do Relatório de resultados (quinzenal/mensal) — ver DESIGN.md e
 // ClinicReportDelivery no schema. REUTILIZA as mesmas queries/definições
@@ -51,6 +51,8 @@ export type ReportNumbers = {
   isSimulated: boolean;
 };
 
+export type WeeklyApproached = { start: Date; end: Date; count: number };
+
 export type ReportNumbersWithComparison = ReportNumbers & {
   // Comparação discreta com o período anterior do MESMO tipo — nos 4
   // boxes do Resumo (Abordados/Em conversa/Agendaram/Compareceram, ver
@@ -63,6 +65,11 @@ export type ReportNumbersWithComparison = ReportNumbers & {
     scheduledPct: number | null;
     attendedPct: number | null;
   };
+  // Abordagens por semana dentro do período ATUAL (gráfico de barras,
+  // pedido explícito, item 5) — só do período atual, nunca do anterior
+  // (que só entra na comparação discreta acima, não tem gráfico próprio).
+  // Ver computeWeeklyApproached/buildSimulatedWeeklyApproached abaixo.
+  weeklyApproached: WeeklyApproached[];
 };
 
 // Delta percentual simples (current vs previous) — null quando previous=0
@@ -105,6 +112,72 @@ async function fetchRealReportNumbers(clinicId: string, period: ReportPeriod, no
     followUpRecovered,
     reactivation: { sent: reactivationStat?.sent ?? 0, returned: reactivationStat?.returned ?? 0 },
   };
+}
+
+// Distribui `total` (inteiro) entre os `weights` proporcionalmente,
+// SEMPRE somando exatamente `total` no final (método dos restos maiores/
+// maior resto, mesmo princípio usado em apuração proporcional de votos) —
+// é o que garante a soma das barras do gráfico semanal bater exatamente
+// com o número já mostrado no box "Abordados" (pedido explícito, item 5),
+// mesmo a métrica "abordados" por semana (ver computeWeeklyApproached)
+// não sendo necessariamente aditiva pela própria fórmula de
+// getClinicMetrics (que usa Math.max de 3 contadores — ver metrics.ts).
+// O FORMATO/proporção de cada semana vem do dado real (os pesos); só o
+// AJUSTE FINAL de arredondamento é novo aqui, nunca uma métrica nova.
+export function allocateToTotal(weights: number[], total: number): number[] {
+  if (total <= 0 || weights.length === 0) return weights.map(() => 0);
+
+  const weightSum = weights.reduce((a, b) => a + b, 0);
+  if (weightSum === 0) {
+    // Nenhum peso real (não deveria acontecer com total>0, já que os
+    // mesmos contadores alimentam o total — guarda defensiva): distribui
+    // igualmente, sobra pras primeiras semanas.
+    const base = Math.floor(total / weights.length);
+    const remainder = total - base * weights.length;
+    return weights.map((_, i) => base + (i < remainder ? 1 : 0));
+  }
+
+  const scaled = weights.map((w) => (w / weightSum) * total);
+  const floors = scaled.map(Math.floor);
+  const used = floors.reduce((a, b) => a + b, 0);
+  const remaining = total - used;
+
+  const order = scaled.map((v, i) => ({ i, frac: v - Math.floor(v) })).sort((a, b) => b.frac - a.frac);
+  const result = [...floors];
+  for (let k = 0; k < remaining; k++) {
+    result[order[k]!.i]! += 1;
+  }
+  return result;
+}
+
+// Abordagens por semana dentro do período, pra o gráfico de barras
+// (pedido explícito, item 5) — REUTILIZA getClinicMetrics (a mesma
+// definição de "abordados" do Painel e do Resumo), só chamada uma vez por
+// semana (ver splitIntoWeeks, report-period.ts) em vez de uma vez pro
+// período inteiro. Nenhuma métrica nova: cada "peso" semanal É o
+// `.approached` de getClinicMetrics pra aquela semana; o único passo novo
+// é o ajuste final (allocateToTotal) pra a soma bater com o total já
+// mostrado no Resumo (ver comentário de allocateToTotal sobre por que a
+// soma dos pesos crus pode não bater sozinha).
+async function computeWeeklyApproached(clinicId: string, period: ReportPeriod, totalApproached: number): Promise<WeeklyApproached[]> {
+  const weeks = splitIntoWeeks(period);
+  const weeklyMetrics = await Promise.all(weeks.map((w: ReportWeek) => getClinicMetrics(clinicId, w.start, w.end)));
+  const weights = weeklyMetrics.map((m) => m.approached);
+  const counts = allocateToTotal(weights, totalApproached);
+  return weeks.map((w, i) => ({ start: w.start, end: w.end, count: counts[i]! }));
+}
+
+// Versão simulada (só Clínica Demo, ver isEmptyFunnel) da série semanal —
+// mesmo princípio de buildSimulatedReportNumbers: um "peso" plausível por
+// semana (determinístico, PRNG seedado), ajustado pra somar exatamente
+// `totalApproached` (o mesmo número simulado do box "Abordados"), nunca
+// um total independente.
+function buildSimulatedWeeklyApproached(period: ReportPeriod, totalApproached: number): WeeklyApproached[] {
+  const weeks = splitIntoWeeks(period);
+  const rand = seededRandom(period.start.getTime() / 1000 + 17);
+  const weights = weeks.map(() => 0.6 + rand() * 0.8);
+  const counts = allocateToTotal(weights, totalApproached);
+  return weeks.map((w, i) => ({ start: w.start, end: w.end, count: counts[i]! }));
 }
 
 // PRNG determinístico (mulberry32) só pra gerar os números simulados da
@@ -215,6 +288,14 @@ export async function getReportNumbersWithComparison(
         { ...(await fetchRealReportNumbers(clinicId, previousPeriod, now)), isSimulated: false },
       ];
 
+  // Série semanal (gráfico de barras, item 5) — SÓ do período atual (a
+  // comparação com o anterior já é só a discreta acima, sem gráfico
+  // próprio pro anterior). Mesma decisão simular-ou-não já tomada acima,
+  // nunca uma segunda decisão independente.
+  const weeklyApproached = shouldSimulate
+    ? buildSimulatedWeeklyApproached(period, current.funnel.contacted)
+    : await computeWeeklyApproached(clinicId, period, current.funnel.contacted);
+
   return {
     ...current,
     previousComparison: {
@@ -223,6 +304,7 @@ export async function getReportNumbersWithComparison(
       scheduledPct: computePercentDelta(current.funnel.scheduled, previous.funnel.scheduled),
       attendedPct: computePercentDelta(current.funnel.attended, previous.funnel.attended),
     },
+    weeklyApproached,
   };
 }
 

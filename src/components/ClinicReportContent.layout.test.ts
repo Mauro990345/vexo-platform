@@ -13,28 +13,46 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { createElement } from "react";
 import { chromium, type Browser } from "playwright";
 import { ClinicReportContent } from "./ClinicReportContent";
-import { computeMonthlyPeriod } from "@/lib/report-period";
-import type { ReportNumbersWithComparison } from "@/lib/report-metrics";
+import { computeMonthlyPeriod, splitIntoWeeks } from "@/lib/report-period";
+import { allocateToTotal, type ReportNumbersWithComparison } from "@/lib/report-metrics";
 
 const PROJECT_ROOT = path.resolve(__dirname, "../..");
 
 // Pior caso de texto: todos os rótulos mais longos presentes ao mesmo
 // tempo, com taxa de comparecimento E comparação positiva nos 4 boxes do
-// Resumo (as 2 linhas extras que o pedido original cortava).
+// Resumo (as 2 linhas extras que o pedido original cortava). Mês de
+// novembro/2026 começa num domingo — pior caso TAMBÉM pro gráfico
+// semanal, que fica com 6 barras (o máximo possível num mês civil) em vez
+// das 4-5 típicas.
+const PERIOD = computeMonthlyPeriod(new Date("2026-11-15T12:00:00.000Z"));
+const WEEKS = splitIntoWeeks(PERIOD);
+const WEEKLY_COUNTS = allocateToTotal(WEEKS.map((_, i) => i + 3), 128);
+
 const NUMBERS: ReportNumbersWithComparison = {
-  period: computeMonthlyPeriod(new Date("2026-11-15T12:00:00.000Z")),
+  period: PERIOD,
   funnel: { contacted: 128, inConversation: 94, scheduled: 47, attended: 36, noShow: 8 },
   attendanceRate: 0.766,
   followUpRecovered: 12,
   reactivation: { sent: 23, returned: 9 },
   isSimulated: false,
   previousComparison: { contactedPct: 14, inConversationPct: 9, scheduledPct: 22, attendedPct: 18 },
+  weeklyApproached: WEEKS.map((w, i) => ({ ...w, count: WEEKLY_COUNTS[i]! })),
 };
 
 const MOBILE_WIDTHS = [360, 390, 414];
 const DESKTOP_WIDTH = 1366;
 
-const EXPECTED_LABELS = ["Abordados", "Em conversa", "Agendaram", "Compareceram", "Não compareceram", "Leads retomados", "Enviadas", "Voltaram"];
+const EXPECTED_LABELS = [
+  "Abordados",
+  "Em conversa",
+  "Agendaram",
+  "Compareceram",
+  "Leads retomados",
+  "Enviadas",
+  "Voltaram",
+  "Comparecimento",
+  "Abordagens por semana",
+];
 
 describe("ClinicReportContent — layout real, sem rolagem horizontal nem rótulo cortado", () => {
   let browser: Browser;
@@ -94,7 +112,7 @@ describe("ClinicReportContent — layout real, sem rolagem horizontal nem rótul
     await page.waitForTimeout(30);
 
     const bodyText = await page.textContent("body");
-    expect(bodyText).toContain("dos agendados");
+    expect(bodyText).toContain("de comparecimento");
     expect(bodyText).toContain("vs. anterior");
 
     await page.close();

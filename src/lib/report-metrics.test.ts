@@ -19,8 +19,8 @@ vi.mock("@/lib/prisma", () => ({
   prisma: { followUpLog: { findMany: followUpLogFindManyMock } },
 }));
 
-const { getReportNumbers, getReportNumbersWithComparison, computePercentDelta, RETURN_ATTRIBUTION_DAYS } = await import("./report-metrics");
-const { computeMonthlyPeriod } = await import("./report-period");
+const { getReportNumbers, getReportNumbersWithComparison, computePercentDelta, allocateToTotal, RETURN_ATTRIBUTION_DAYS } = await import("./report-metrics");
+const { computeMonthlyPeriod, computeBiweeklyPeriod, splitIntoWeeks } = await import("./report-period");
 
 const PERIOD = computeMonthlyPeriod(new Date("2026-11-15T12:00:00.000Z")); // novembro/2026 (30 dias)
 const NOW = new Date("2026-11-30T20:00:00.000Z");
@@ -167,6 +167,11 @@ describe("getReportNumbersWithComparison", () => {
   });
 
   it("compara contra o mês civil ANTERIOR (outubro), não uma janela rolante de 30 dias", async () => {
+    // Default pras chamadas EXTRAS a getClinicMetrics que vêm depois
+    // (uma por semana, pro gráfico de barras — ver computeWeeklyApproached)
+    // — as duas primeiras (atual/anterior) continuam fixadas pelos
+    // mockResolvedValueOnce abaixo, só a cauda cai no default.
+    getClinicMetricsMock.mockResolvedValue({ approached: 3, responded: 2, responseRate: 0.6, scheduled: 1, completed: 0, noShow: 0 });
     getClinicMetricsMock
       .mockResolvedValueOnce({ approached: 22, responded: 14, responseRate: 0.6, scheduled: 10, completed: 0, noShow: 1 }) // novembro (atual)
       .mockResolvedValueOnce({ approached: 20, responded: 12, responseRate: 0.6, scheduled: 8, completed: 0, noShow: 1 }); // outubro (anterior)
@@ -186,6 +191,7 @@ describe("getReportNumbersWithComparison", () => {
   });
 
   it("período anterior zerado: a comparação some (null), nunca mostra '-100%' nem qualquer percentual", async () => {
+    getClinicMetricsMock.mockResolvedValue({ approached: 3, responded: 2, responseRate: 0.6, scheduled: 1, completed: 0, noShow: 0 });
     getClinicMetricsMock
       .mockResolvedValueOnce({ approached: 22, responded: 14, responseRate: 0.6, scheduled: 10, completed: 0, noShow: 1 }) // atual, com dados
       .mockResolvedValueOnce(emptyClinicMetrics()); // anterior, zerado (ex.: clínica nova, sem histórico)
@@ -221,6 +227,7 @@ describe("getReportNumbersWithComparison", () => {
   });
 
   it("Clínica Demo com período atual REAL (não vazio) mas anterior vazio: compara contra o anterior REAL zerado (nunca simula só um lado)", async () => {
+    getClinicMetricsMock.mockResolvedValue({ approached: 2, responded: 1, responseRate: 0.5, scheduled: 1, completed: 0, noShow: 0 });
     getClinicMetricsMock
       .mockResolvedValueOnce({ approached: 12, responded: 8, responseRate: 0.6, scheduled: 5, completed: 0, noShow: 1 }) // atual, com dados reais
       .mockResolvedValueOnce(emptyClinicMetrics()); // anterior, vazio de verdade
@@ -271,5 +278,103 @@ describe("buildSimulatedReportNumbers (via getReportNumbers) — coerência inte
   it("Reativação simulada: 'voltaram' nunca passa de 'enviadas'", async () => {
     const numbers = await getReportNumbers(DEMO_CLINIC_ID, PERIOD, NOW);
     expect(numbers.reactivation.returned).toBeLessThanOrEqual(numbers.reactivation.sent);
+  });
+});
+
+describe("allocateToTotal — distribui pesos proporcionalmente SEMPRE somando exatamente o total", () => {
+  it("pesos exatamente proporcionais: nenhum arredondamento necessário", () => {
+    expect(allocateToTotal([1, 1, 1, 1], 8)).toEqual([2, 2, 2, 2]);
+  });
+
+  it("pesos desproporcionais (restos maiores): soma sempre bate com o total", () => {
+    const result = allocateToTotal([1, 2, 3], 10);
+    expect(result.reduce((a, b) => a + b, 0)).toBe(10);
+    // Preserva a ordem de grandeza dos pesos (semana com peso maior nunca
+    // recebe uma contagem menor que uma de peso menor).
+    expect(result[0]!).toBeLessThanOrEqual(result[1]!);
+    expect(result[1]!).toBeLessThanOrEqual(result[2]!);
+  });
+
+  it("total = 0: todos os pesos saem zero", () => {
+    expect(allocateToTotal([5, 3, 2], 0)).toEqual([0, 0, 0]);
+  });
+
+  it("todos os pesos zero mas total > 0 (guarda defensiva): distribui igualmente, sobra pras primeiras", () => {
+    const result = allocateToTotal([0, 0, 0], 10);
+    expect(result.reduce((a, b) => a + b, 0)).toBe(10);
+  });
+
+  it("muitos pesos pequenos (6 semanas, caso real de novembro/2026): soma exata, sem depender de sorte no arredondamento", () => {
+    const result = allocateToTotal([3, 7, 1, 9, 4, 6], 128);
+    expect(result.reduce((a, b) => a + b, 0)).toBe(128);
+  });
+});
+
+describe("getReportNumbersWithComparison — série semanal (gráfico 'Abordagens por semana', item 5)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    getAttendanceMetricsMock.mockResolvedValue({ attended: 7, pastDue: 8 });
+    getReactivationReturnStatsMock.mockResolvedValue([{ days: 30, label: "período", sent: 5, returned: 2 }]);
+    followUpLogFindManyMock.mockResolvedValue([]);
+  });
+
+  it("clínica real: uma semana por getClinicMetrics (reaproveitada, não uma métrica nova) e a SOMA das semanas bate exatamente com 'Abordados' (funnel.contacted)", async () => {
+    const weeks = splitIntoWeeks(PERIOD); // novembro/2026 — 6 semanas (pior caso)
+    getClinicMetricsMock.mockResolvedValueOnce({ approached: 22, responded: 14, responseRate: 0.6, scheduled: 10, completed: 0, noShow: 1 }); // atual (total)
+    getClinicMetricsMock.mockResolvedValueOnce({ approached: 20, responded: 12, responseRate: 0.6, scheduled: 8, completed: 0, noShow: 1 }); // anterior (total)
+    // Pesos variados por semana, só pra não bater com o total sem o
+    // reajuste do allocateToTotal (prova real do ajuste, não coincidência).
+    for (let i = 0; i < weeks.length; i++) {
+      getClinicMetricsMock.mockResolvedValueOnce({ approached: i + 1, responded: 0, responseRate: null, scheduled: 0, completed: 0, noShow: 0 });
+    }
+
+    const result = await getReportNumbersWithComparison(REAL_CLINIC_ID, "MONTHLY", PERIOD, NOW);
+
+    expect(result.weeklyApproached).toHaveLength(weeks.length);
+    const sum = result.weeklyApproached.reduce((a, w) => a + w.count, 0);
+    expect(sum).toBe(result.funnel.contacted); // 22
+    // Cobertura exata do período, mesma convenção de splitIntoWeeks.
+    expect(result.weeklyApproached[0]!.start.getTime()).toBe(PERIOD.start.getTime());
+    expect(result.weeklyApproached[result.weeklyApproached.length - 1]!.end.getTime()).toBe(PERIOD.end.getTime());
+  });
+
+  it("quinzena real (2-3 semanas): soma também bate exatamente", async () => {
+    const biweekly = computeBiweeklyPeriod(new Date("2026-11-05T12:00:00.000Z"));
+    const weeks = splitIntoWeeks(biweekly);
+    getClinicMetricsMock.mockResolvedValueOnce({ approached: 15, responded: 10, responseRate: 0.6, scheduled: 7, completed: 0, noShow: 1 });
+    getClinicMetricsMock.mockResolvedValueOnce(emptyClinicMetrics());
+    for (let i = 0; i < weeks.length; i++) {
+      getClinicMetricsMock.mockResolvedValueOnce({ approached: 2 + i, responded: 0, responseRate: null, scheduled: 0, completed: 0, noShow: 0 });
+    }
+
+    const result = await getReportNumbersWithComparison(REAL_CLINIC_ID, "BIWEEKLY", biweekly, NOW);
+
+    const sum = result.weeklyApproached.reduce((a, w) => a + w.count, 0);
+    expect(sum).toBe(15);
+  });
+
+  it("Clínica Demo simulada: série semanal também simulada, coerente (soma = Abordados simulado, sem chamar getClinicMetrics de novo)", async () => {
+    getClinicMetricsMock.mockResolvedValue(emptyClinicMetrics());
+    getAttendanceMetricsMock.mockResolvedValue({ attended: 0, pastDue: 0 });
+    getReactivationReturnStatsMock.mockResolvedValue([{ days: 30, label: "período", sent: 0, returned: 0 }]);
+
+    const result = await getReportNumbersWithComparison(DEMO_CLINIC_ID, "MONTHLY", PERIOD, NOW);
+
+    expect(result.isSimulated).toBe(true);
+    const sum = result.weeklyApproached.reduce((a, w) => a + w.count, 0);
+    expect(sum).toBe(result.funnel.contacted);
+    // Só a chamada do período ATUAL (pra decidir simular) — nenhuma
+    // chamada extra por semana quando a série já é simulada.
+    expect(getClinicMetricsMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("Clínica Demo simulada: mesmo período -> mesma série semanal (determinístico)", async () => {
+    getClinicMetricsMock.mockResolvedValue(emptyClinicMetrics());
+    getAttendanceMetricsMock.mockResolvedValue({ attended: 0, pastDue: 0 });
+    getReactivationReturnStatsMock.mockResolvedValue([{ days: 30, label: "período", sent: 0, returned: 0 }]);
+
+    const first = await getReportNumbersWithComparison(DEMO_CLINIC_ID, "MONTHLY", PERIOD, NOW);
+    const second = await getReportNumbersWithComparison(DEMO_CLINIC_ID, "MONTHLY", PERIOD, NOW);
+    expect(first.weeklyApproached.map((w) => w.count)).toEqual(second.weeklyApproached.map((w) => w.count));
   });
 });
