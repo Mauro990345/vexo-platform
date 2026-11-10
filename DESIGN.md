@@ -154,11 +154,49 @@ Nova tela, administrada pela página "Contas" (`/crm`, só admin — ver DESIGN.
 - **Página do relatório** (`/relatorio/[token]`, pública, sem login, e o preview admin em
   `/crm/clinicas/[id]/relatorio-preview`, que NÃO é uma aba da clínica — não entra em
   `clinic-nav.tsx`, só alcançável pelo botão "Ver relatório" do painel, numa aba nova do
-  navegador): mesma faixa de métricas `MetricCard`/`bare`/`highlight` e a mesma grade
-  `rounded-block border bg-vexo-surface2 divide-x` já usadas em `PanelOverview.tsx` — zero
-  componente/token novo pra exibir número. "Dados de exemplo" (fallback simulado, só Clínica Demo)
-  é um selo pequeno, mesmo padrão da etiqueta de tipo de "Para fazer hoje" (`bg-vexo-surface2`,
-  texto `vexo-muted`, caixa alta pequena) — nunca uma cor de alerta.
+  navegador): zero componente/token novo pra exibir número — tudo reaproveita `MetricCard` e os
+  containers já existentes do Painel.
+  - **Resumo (início do funil)**: 4 boxes — Abordados/Em conversa/Agendaram/Compareceram (mesmos
+    nomes do Painel, nunca "Contatados") — na MESMA faixa `rounded-block border bg-vexo-surface2
+    divide-x`/`MetricCard bare` de `PanelOverview.tsx`, literalmente o mesmo container, não uma
+    cópia parecida. A taxa de comparecimento não é mais um box: é uma linha (`hint`) dentro do
+    próprio box "Compareceram" (ex.: "78% dos agendados"). Não existe mais a seção "Funil"
+    separada — duplicava os mesmos 4 números do Resumo.
+  - **"Não compareceram"**: box próprio, no mesmo estilo, logo abaixo do Resumo.
+  - **Follow-up**: um box, "Leads retomados" (mesma contagem de sempre). **Reativação**: dois
+    boxes, "Enviadas" e "Voltaram". Sem nenhum envio no período, a seção aparece com os dois boxes
+    em 0 (discreto) em vez de ser escondida.
+  - **Cor — uma regra só, igual ao Painel**: só o valor de "Agendaram" usa o destaque
+    `text-vexo-panelHighlight` (`#caa85c`) — exatamente como `PanelOverview.tsx` já faz hoje (lá
+    também só "Agendaram" é `highlight`; nenhum box novo ganhou cor própria, isto NÃO é uma
+    inconsistência do relatório, é o próprio comportamento do Painel reaproduzido à risca — regra
+    gente: "em caso de dúvida entre inovar e ficar igual ao Painel, fique igual ao Painel"). A
+    comparação com o período anterior usa o azul da marca (`text-vexo-accent`) só quando a
+    variação é positiva; negativa, zero ou sem base fica em `text-vexo-muted` (cinza) — nunca
+    vermelho/rosa em lugar nenhum da tela. Esse azul-só-no-positivo é o único toque de identidade
+    novo desta tela; fora dele, qualquer dúvida de cor segue o Painel, não o contrário.
+  - **Comparação com o período anterior**: aparece discreta só nos 4 boxes do Resumo (ex.: "+12%
+    vs. anterior"). Quando o período anterior é zero ou não existe, não mostra percentual nenhum
+    pra aquele box (nunca "-infinito%"/"-100%" artificial).
+  - **Rótulo nunca cortado**: nenhum box usa largura fixa estreita pra número/rótulo — todos vivem
+    dentro dos containers já testados do Painel (a faixa `divide-x` de 4 colunas pro Resumo, um
+    grid de 2 colunas com 1 célula usada pros boxes avulsos), garantindo espaço suficiente pro
+    rótulo em 360/390/414/1366px sem precisar tocar no `MetricCard` (que é compartilhado com o
+    Painel e mantém seu `truncate` original).
+  - "Dados de exemplo" (fallback simulado, só Clínica Demo, quando o período real está vazio) é um
+    selo pequeno, mesmo padrão da etiqueta de tipo de "Para fazer hoje" (`bg-vexo-surface2`, texto
+    `vexo-muted`, caixa alta pequena) — nunca uma cor de alerta. "Vazio" é definido como: Abordados
+    = 0 E Agendaram = 0 E Compareceram = 0 E Reativação enviada = 0, todos ao mesmo tempo (ver
+    `isEmptyFunnel`, `report-metrics.ts`) — qualquer sinal real diferente de zero já mostra dados
+    reais, nunca troca por simulado. Quando simula, o período ATUAL e o ANTERIOR saem da mesma
+    fonte simulada (decisão tomada uma única vez a partir do período atual), pra comparação
+    aparecer de forma coerente — nunca compara um lado simulado com o outro real/vazio. Clínica
+    real nunca recebe número simulado, nunca.
+  - **Preview admin (`/crm/clinicas/[id]/relatorio-preview`)**: abre sempre no último período
+    FECHADO de cada tipo (mês ou quinzena cheios, nunca o que está em andamento) — ver
+    `computeLastClosedPeriod`, `report-period.ts`. Evita o artefato de comparar um período parcial
+    contra um anterior completo (queda falsa só por o mês ainda não ter terminado). Relatório já
+    ENVIADO continua cobrindo o período que contém o momento do envio — isto não muda.
 - Números REUTILIZADOS das mesmas fontes do Painel — nenhuma segunda definição: `getClinicMetrics`/
   `getAttendanceMetrics` (`metrics.ts`) pro resumo/funil, `getReactivationReturnStats`/
   `RETURN_ATTRIBUTION_DAYS` (`reactivation.ts`, via um adapter que reproduz o período de

@@ -184,4 +184,92 @@ describe("getReportNumbersWithComparison", () => {
     expect(result.previousComparison.contactedPct).toBe(10); // (22-20)/20
     expect(result.previousComparison.scheduledPct).toBe(25); // (10-8)/8
   });
+
+  it("período anterior zerado: a comparação some (null), nunca mostra '-100%' nem qualquer percentual", async () => {
+    getClinicMetricsMock
+      .mockResolvedValueOnce({ approached: 22, responded: 14, responseRate: 0.6, scheduled: 10, completed: 0, noShow: 1 }) // atual, com dados
+      .mockResolvedValueOnce(emptyClinicMetrics()); // anterior, zerado (ex.: clínica nova, sem histórico)
+    getAttendanceMetricsMock.mockResolvedValueOnce({ attended: 7, pastDue: 8 }).mockResolvedValueOnce({ attended: 0, pastDue: 0 });
+    getReactivationReturnStatsMock
+      .mockResolvedValueOnce([{ days: 30, label: "período", sent: 5, returned: 2 }])
+      .mockResolvedValueOnce([{ days: 30, label: "período", sent: 0, returned: 0 }]);
+    followUpLogFindManyMock.mockResolvedValue([]);
+
+    const result = await getReportNumbersWithComparison(REAL_CLINIC_ID, "MONTHLY", PERIOD, NOW);
+
+    expect(result.previousComparison).toEqual({ contactedPct: null, inConversationPct: null, scheduledPct: null, attendedPct: null });
+  });
+
+  it("Clínica Demo com período ATUAL vazio: simula os DOIS períodos (atual e anterior) juntos — nunca compara simulado contra real/zerado", async () => {
+    getClinicMetricsMock.mockResolvedValue(emptyClinicMetrics()); // vazio nos dois períodos
+    getAttendanceMetricsMock.mockResolvedValue({ attended: 0, pastDue: 0 });
+    getReactivationReturnStatsMock.mockResolvedValue([{ days: 30, label: "período", sent: 0, returned: 0 }]);
+    followUpLogFindManyMock.mockResolvedValue([]);
+
+    const result = await getReportNumbersWithComparison(DEMO_CLINIC_ID, "MONTHLY", PERIOD, NOW);
+
+    expect(result.isSimulated).toBe(true);
+    // A comparação aparece de verdade (não fica null) — prova que o
+    // período ANTERIOR também foi simulado, não ficou em 0 real.
+    expect(result.previousComparison.contactedPct).not.toBeNull();
+    expect(result.previousComparison.scheduledPct).not.toBeNull();
+    expect(result.previousComparison.attendedPct).not.toBeNull();
+    // fetchRealReportNumbers do período ANTERIOR nunca chega a ser
+    // chamado de novo depois que "simular" já foi decidido — só a
+    // consulta do período ATUAL (pra decidir) é real.
+    expect(getClinicMetricsMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("Clínica Demo com período atual REAL (não vazio) mas anterior vazio: compara contra o anterior REAL zerado (nunca simula só um lado)", async () => {
+    getClinicMetricsMock
+      .mockResolvedValueOnce({ approached: 12, responded: 8, responseRate: 0.6, scheduled: 5, completed: 0, noShow: 1 }) // atual, com dados reais
+      .mockResolvedValueOnce(emptyClinicMetrics()); // anterior, vazio de verdade
+    getAttendanceMetricsMock.mockResolvedValueOnce({ attended: 4, pastDue: 5 }).mockResolvedValueOnce({ attended: 0, pastDue: 0 });
+    getReactivationReturnStatsMock
+      .mockResolvedValueOnce([{ days: 30, label: "período", sent: 2, returned: 1 }])
+      .mockResolvedValueOnce([{ days: 30, label: "período", sent: 0, returned: 0 }]);
+    followUpLogFindManyMock.mockResolvedValue([]);
+
+    const result = await getReportNumbersWithComparison(DEMO_CLINIC_ID, "MONTHLY", PERIOD, NOW);
+
+    expect(result.isSimulated).toBe(false);
+    expect(result.funnel.contacted).toBe(12);
+    // Período anterior ficou 0 de verdade — comparação some (null), não
+    // inventa um "-100%" nem simula só pra fazer a comparação aparecer.
+    expect(result.previousComparison.contactedPct).toBeNull();
+  });
+});
+
+describe("buildSimulatedReportNumbers (via getReportNumbers) — coerência interna dos dados de exemplo", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    getClinicMetricsMock.mockResolvedValue(emptyClinicMetrics());
+    getAttendanceMetricsMock.mockResolvedValue({ attended: 0, pastDue: 0 });
+    getReactivationReturnStatsMock.mockResolvedValue([{ days: 30, label: "período", sent: 0, returned: 0 }]);
+    followUpLogFindManyMock.mockResolvedValue([]);
+  });
+
+  it("funil sempre decrescente: Abordados >= Em conversa >= Agendaram >= Compareceram", async () => {
+    const numbers = await getReportNumbers(DEMO_CLINIC_ID, PERIOD, NOW);
+    expect(numbers.funnel.contacted).toBeGreaterThanOrEqual(numbers.funnel.inConversation);
+    expect(numbers.funnel.inConversation).toBeGreaterThanOrEqual(numbers.funnel.scheduled);
+    expect(numbers.funnel.scheduled).toBeGreaterThanOrEqual(numbers.funnel.attended);
+  });
+
+  it("'Não compareceram' nunca passa de Agendaram, e Compareceram + uma margem de desistência nunca passa de Agendaram", async () => {
+    const numbers = await getReportNumbers(DEMO_CLINIC_ID, PERIOD, NOW);
+    expect(numbers.funnel.noShow).toBeLessThanOrEqual(numbers.funnel.scheduled);
+    expect(numbers.funnel.attended + numbers.funnel.noShow).toBeLessThanOrEqual(numbers.funnel.scheduled);
+  });
+
+  it("taxa de comparecimento consistente com attended/scheduled", async () => {
+    const numbers = await getReportNumbers(DEMO_CLINIC_ID, PERIOD, NOW);
+    expect(numbers.attendanceRate).not.toBeNull();
+    expect(numbers.attendanceRate).toBeCloseTo(numbers.funnel.attended / numbers.funnel.scheduled);
+  });
+
+  it("Reativação simulada: 'voltaram' nunca passa de 'enviadas'", async () => {
+    const numbers = await getReportNumbers(DEMO_CLINIC_ID, PERIOD, NOW);
+    expect(numbers.reactivation.returned).toBeLessThanOrEqual(numbers.reactivation.sent);
+  });
 });

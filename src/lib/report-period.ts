@@ -71,6 +71,31 @@ export function computeReportPeriod(frequency: ReportFrequency, reference: Date)
   return frequency === "MONTHLY" ? computeMonthlyPeriod(reference) : computeBiweeklyPeriod(reference);
 }
 
+// Período civil ANTERIOR a `period` (mesma frequência) — 1ms antes do
+// início de `period` sempre cai no último dia do período anterior,
+// qualquer que seja a duração dele (mês de 28/29/30/31 dias, quinzena de
+// 13 a 16 dias). Única definição, reaproveitada tanto pela comparação
+// "vs. período anterior" do relatório (getReportNumbersWithComparison,
+// report-metrics.ts) quanto por computeLastClosedPeriod abaixo.
+export function resolvePreviousPeriod(frequency: ReportFrequency, period: ReportPeriod): ReportPeriod {
+  return computeReportPeriod(frequency, new Date(period.start.getTime() - 1));
+}
+
+// Período civil (mês/quinzena) mais recente que já TERMINOU antes de
+// `now` — nunca o período em andamento. Pedido explícito (preview admin,
+// "Ver relatório"): evita comparar um período PARCIAL (poucos dias de
+// atividade, ainda em andamento) contra um período anterior completo, o
+// que produziria uma queda artificial (ex.: "-100%") só por o mês atual
+// ainda não ter acabado — nada a ver com o desempenho real da clínica.
+// Os relatórios de verdade ENVIADOS (worker/"Enviar agora") continuam
+// usando o período que contém `now` normalmente (ver clinic-reports.ts) —
+// aquele já é sempre gerado exatamente no dia de fechamento do período,
+// nunca parcial.
+export function computeLastClosedPeriod(frequency: ReportFrequency, now: Date): ReportPeriod {
+  const current = computeReportPeriod(frequency, now);
+  return resolvePreviousPeriod(frequency, current);
+}
+
 // Quantos dias corridos tem o período — sempre um inteiro exato (start/end
 // são ambos meia-noite de Brasília), usado pelo adapter que reaproveita
 // computeReactivationReturnStats (ver report-metrics.ts).

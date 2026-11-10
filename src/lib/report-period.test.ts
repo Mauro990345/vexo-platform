@@ -11,6 +11,8 @@ import {
   resolveNextSendDate,
   formatReportPeriodLabel,
   formatReportDateRange,
+  resolvePreviousPeriod,
+  computeLastClosedPeriod,
 } from "./report-period";
 
 // Instantes em UTC escolhidos ao MEIO-DIA (não meia-noite) de propósito —
@@ -228,5 +230,46 @@ describe("formatReportDateRange", () => {
     expect(formatReportDateRange(computeMonthlyPeriod(brtNoon("2026-11-15")))).toBe("01/11 a 30/11");
     expect(formatReportDateRange(computeBiweeklyPeriod(brtNoon("2026-11-08")))).toBe("01/11 a 15/11");
     expect(formatReportDateRange(computeBiweeklyPeriod(brtNoon("2026-11-20")))).toBe("16/11 a 30/11");
+  });
+});
+
+describe("resolvePreviousPeriod", () => {
+  it("mensal: mês civil imediatamente anterior, qualquer que seja a duração dos dois (31 -> 30, virada de ano)", () => {
+    const november = computeMonthlyPeriod(brtNoon("2026-11-15"));
+    expect(resolvePreviousPeriod("MONTHLY", november)).toEqual(computeMonthlyPeriod(brtNoon("2026-10-15")));
+
+    const january = computeMonthlyPeriod(brtNoon("2027-01-10"));
+    expect(resolvePreviousPeriod("MONTHLY", january)).toEqual(computeMonthlyPeriod(brtNoon("2026-12-10")));
+  });
+
+  it("quinzenal: quinzena anterior, inclusive virando de mês (1ª quinzena -> 2ª quinzena do mês anterior)", () => {
+    const firstHalf = computeBiweeklyPeriod(brtNoon("2026-11-08"));
+    expect(resolvePreviousPeriod("BIWEEKLY", firstHalf)).toEqual(computeBiweeklyPeriod(brtNoon("2026-10-20")));
+
+    const secondHalf = computeBiweeklyPeriod(brtNoon("2026-11-20"));
+    expect(resolvePreviousPeriod("BIWEEKLY", secondHalf)).toEqual(computeBiweeklyPeriod(brtNoon("2026-11-08")));
+  });
+});
+
+describe("computeLastClosedPeriod", () => {
+  it("mensal: nunca o mês em andamento — sempre o mês anterior completo", () => {
+    const result = computeLastClosedPeriod("MONTHLY", brtNoon("2026-11-15"));
+    expect(result).toEqual(computeMonthlyPeriod(brtNoon("2026-10-15")));
+    expect(formatReportDateRange(result)).toBe("01/10 a 31/10");
+  });
+
+  it("mensal: mesmo no ÚLTIMO dia do mês (quando o mês já está tecnicamente completo), ainda considera o mês anterior o 'último fechado' — nunca o que só fecha hoje", () => {
+    const result = computeLastClosedPeriod("MONTHLY", brtNoon("2026-11-30"));
+    expect(formatReportDateRange(result)).toBe("01/10 a 31/10");
+  });
+
+  it("quinzenal: nunca a quinzena em andamento — sempre a anterior completa", () => {
+    const result = computeLastClosedPeriod("BIWEEKLY", brtNoon("2026-11-20"));
+    expect(formatReportDateRange(result)).toBe("01/11 a 15/11");
+  });
+
+  it("virada de ano: dezembro -> último fechado é novembro", () => {
+    const result = computeLastClosedPeriod("MONTHLY", brtNoon("2026-12-05"));
+    expect(formatReportDateRange(result)).toBe("01/11 a 30/11");
   });
 });

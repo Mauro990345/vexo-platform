@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { getClinicMetrics, getAttendanceMetrics } from "@/lib/metrics";
 import { getReactivationReturnStats, RETURN_ATTRIBUTION_DAYS } from "@/lib/reactivation";
 import { DEMO_CLINIC_ID } from "@/lib/demo-clinic";
-import { computeReportPeriod, periodLengthDays, type ReportFrequency, type ReportPeriod } from "@/lib/report-period";
+import { resolvePreviousPeriod, periodLengthDays, type ReportFrequency, type ReportPeriod } from "@/lib/report-period";
 
 // Números do Relatório de resultados (quinzenal/mensal) — ver DESIGN.md e
 // ClinicReportDelivery no schema. REUTILIZA as mesmas queries/definições
@@ -52,11 +52,17 @@ export type ReportNumbers = {
 };
 
 export type ReportNumbersWithComparison = ReportNumbers & {
-  // Comparação discreta com o período anterior do MESMO tipo (item e do
-  // pedido) — só nos números principais do resumo (contacted/scheduled/
-  // attended), null quando o período anterior não tem base pra comparar
-  // (anterior = 0, divisão por zero não faz sentido como "+N%").
-  previousComparison: { contactedPct: number | null; scheduledPct: number | null; attendedPct: number | null };
+  // Comparação discreta com o período anterior do MESMO tipo — nos 4
+  // boxes do Resumo (Abordados/Em conversa/Agendaram/Compareceram, ver
+  // ClinicReportContent.tsx), null quando o período anterior não tem
+  // base pra comparar (anterior = 0, divisão por zero não faz sentido
+  // como "+N%" — nunca aparece "-100%" por causa disso).
+  previousComparison: {
+    contactedPct: number | null;
+    inConversationPct: number | null;
+    scheduledPct: number | null;
+    attendedPct: number | null;
+  };
 };
 
 // Delta percentual simples (current vs previous) — null quando previous=0
@@ -118,10 +124,18 @@ function seededRandom(seed: number): () => number {
 }
 
 // Dados plausíveis de exemplo pra Clínica Demo VEXO quando os dados reais
-// do período estão vazios/insuficientes (pedido explícito, item 6) — a UI
+// do período estão vazios/insuficientes (pedido explícito, item 7) — a UI
 // mostra um aviso discreto "Dados de exemplo" (ver isSimulated). Nunca
-// chamado fora de DEMO_CLINIC_ID (ver getReportNumbers abaixo) e nunca
-// escreve nada — é só um cálculo alternativo, isolado desta função.
+// chamado fora de DEMO_CLINIC_ID e nunca escreve nada — é só um cálculo
+// alternativo, isolado desta função (ver getReportNumbers/
+// getReportNumbersWithComparison abaixo).
+//
+// Coerência interna GARANTIDA pela própria forma da conta (cada etapa é
+// uma FRAÇÃO da anterior, nunca um valor independente): Abordados >=
+// Em conversa >= Agendaram >= Compareceram sempre vale, por construção,
+// nunca por sorte. "Não compareceram" sai do mesmo `scheduled` que gera
+// "Compareceram" (uma fração dele), nunca pode superar Agendaram. Taxa de
+// comparecimento = attended/scheduled, coerente com os dois.
 function buildSimulatedReportNumbers(period: ReportPeriod): Omit<ReportNumbers, "isSimulated"> {
   const days = periodLengthDays(period);
   const rand = seededRandom(period.start.getTime() / 1000);
@@ -144,6 +158,14 @@ function buildSimulatedReportNumbers(period: ReportPeriod): Omit<ReportNumbers, 
   };
 }
 
+// Critério de "dados insuficientes" (documentado, pedido explícito, item
+// 7) — SÓ conta como insuficiente quando NENHUMA atividade de verdade
+// aconteceu no período: abordados=0 E agendaram=0 E compareceram=0 E
+// reativação enviada=0, todos ao mesmo tempo. Qualquer um desses
+// diferente de zero já é "dado real suficiente" — mostra os números
+// reais (mesmo que baixos/zerados nos outros campos), nunca troca por
+// simulado. Não depende de follow-up retomados de propósito: esse número
+// nunca é positivo sozinho sem nenhuma das quatro atividades acima.
 function isEmptyFunnel(numbers: Omit<ReportNumbers, "isSimulated">): boolean {
   return (
     numbers.funnel.contacted === 0 &&
@@ -157,7 +179,8 @@ export async function getReportNumbers(clinicId: string, period: ReportPeriod, n
   const real = await fetchRealReportNumbers(clinicId, period, now);
 
   // Clínicas reais NUNCA recebem números simulados (pedido explícito,
-  // item 6) — só a Demo, e só quando o período real está vazio.
+  // item 7) — só a Demo, e só quando o período real está vazio (ver
+  // isEmptyFunnel acima).
   if (clinicId === DEMO_CLINIC_ID && isEmptyFunnel(real)) {
     return { ...buildSimulatedReportNumbers(period), isSimulated: true };
   }
@@ -170,15 +193,33 @@ export async function getReportNumbersWithComparison(
   period: ReportPeriod,
   now: Date = new Date()
 ): Promise<ReportNumbersWithComparison> {
-  const previousReference = new Date(period.start.getTime() - 1);
-  const previousPeriod = computeReportPeriod(frequency, previousReference);
+  const previousPeriod = resolvePreviousPeriod(frequency, period);
 
-  const [current, previous] = await Promise.all([getReportNumbers(clinicId, period, now), getReportNumbers(clinicId, previousPeriod, now)]);
+  // A decisão "simula ou não" é tomada UMA VEZ, só a partir do período
+  // ATUAL — nunca independentemente pro período anterior (bug corrigido
+  // nesta rodada: antes cada período decidia por conta própria, podendo
+  // comparar um atual simulado contra um anterior real/vazio, ou vice-
+  // versa, sem nenhum sentido). Decidido simular, os DOIS períodos saem
+  // da mesma fonte simulada — item 7 explícito: "também um período
+  // anterior simulado para a comparação aparecer".
+  const realCurrent = await fetchRealReportNumbers(clinicId, period, now);
+  const shouldSimulate = clinicId === DEMO_CLINIC_ID && isEmptyFunnel(realCurrent);
+
+  const [current, previous]: [ReportNumbers, ReportNumbers] = shouldSimulate
+    ? [
+        { ...buildSimulatedReportNumbers(period), isSimulated: true },
+        { ...buildSimulatedReportNumbers(previousPeriod), isSimulated: true },
+      ]
+    : [
+        { ...realCurrent, isSimulated: false },
+        { ...(await fetchRealReportNumbers(clinicId, previousPeriod, now)), isSimulated: false },
+      ];
 
   return {
     ...current,
     previousComparison: {
       contactedPct: computePercentDelta(current.funnel.contacted, previous.funnel.contacted),
+      inConversationPct: computePercentDelta(current.funnel.inConversation, previous.funnel.inConversation),
       scheduledPct: computePercentDelta(current.funnel.scheduled, previous.funnel.scheduled),
       attendedPct: computePercentDelta(current.funnel.attended, previous.funnel.attended),
     },

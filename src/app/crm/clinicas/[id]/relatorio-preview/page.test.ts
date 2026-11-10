@@ -24,6 +24,7 @@ vi.mock("@/lib/report-metrics", () => ({
   getReportNumbersWithComparison: (...args: unknown[]) => getReportNumbersWithComparisonMock(...args),
 }));
 
+const { computeLastClosedPeriod } = await import("@/lib/report-period");
 const { default: ClinicReportPreviewPage } = await import("./page");
 
 describe("relatorio-preview (rota de configuração/preview admin) — bloqueio no servidor", () => {
@@ -38,5 +39,39 @@ describe("relatorio-preview (rota de configuração/preview admin) — bloqueio 
 
     expect(clinicFindUniqueMock).not.toHaveBeenCalled();
     expect(getReportNumbersWithComparisonMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("relatorio-preview — sempre o ÚLTIMO PERÍODO FECHADO (nunca o em andamento)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    requireInternalSessionMock.mockResolvedValue({ user: { role: "INTERNAL_ADMIN" } });
+    clinicFindUniqueMock.mockResolvedValue({ name: "Clínica Teste" });
+    getReportNumbersWithComparisonMock.mockResolvedValue({
+      period: { start: new Date(), end: new Date() },
+      funnel: { contacted: 0, inConversation: 0, scheduled: 0, attended: 0, noShow: 0 },
+      attendanceRate: null,
+      followUpRecovered: 0,
+      reactivation: { sent: 0, returned: 0 },
+      isSimulated: false,
+      previousComparison: { contactedPct: null, inConversationPct: null, scheduledPct: null, attendedPct: null },
+    });
+  });
+
+  it("chama getReportNumbersWithComparison com o período MENSAL fechado (mês anterior), não o mês em andamento", async () => {
+    await ClinicReportPreviewPage({ params: { id: "clinic-1" } });
+
+    const monthlyCall = getReportNumbersWithComparisonMock.mock.calls.find((call) => call[1] === "MONTHLY")!;
+    const expectedPeriod = computeLastClosedPeriod("MONTHLY", monthlyCall[3] as Date);
+    expect((monthlyCall[2] as { start: Date }).start.getTime()).toBe(expectedPeriod.start.getTime());
+    expect((monthlyCall[2] as { end: Date }).end.getTime()).toBe(expectedPeriod.end.getTime());
+  });
+
+  it("chama getReportNumbersWithComparison com a quinzena FECHADA, não a em andamento", async () => {
+    await ClinicReportPreviewPage({ params: { id: "clinic-1" } });
+
+    const biweeklyCall = getReportNumbersWithComparisonMock.mock.calls.find((call) => call[1] === "BIWEEKLY")!;
+    const expectedPeriod = computeLastClosedPeriod("BIWEEKLY", biweeklyCall[3] as Date);
+    expect((biweeklyCall[2] as { start: Date }).start.getTime()).toBe(expectedPeriod.start.getTime());
   });
 });
