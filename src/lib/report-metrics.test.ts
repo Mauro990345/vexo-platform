@@ -21,7 +21,9 @@ vi.mock("@/lib/metrics", async (importOriginal) => {
   return { ...actual, getClinicMetrics: getClinicMetricsMock, getAttendanceMetrics: getAttendanceMetricsMock };
 });
 
-const { getReportNumbers, getReportNumbersWithComparison, computePercentDelta, allocateToTotal, computeFollowUpReach, RETURN_ATTRIBUTION_DAYS } = await import("./report-metrics");
+const { getReportNumbers, getReportNumbersWithComparison, computePercentDelta, allocateToTotal, computeFollowUpReach, buildDemoEvolutionFallback, RETURN_ATTRIBUTION_DAYS } = await import(
+  "./report-metrics"
+);
 const { computeMonthlyPeriod, computeBiweeklyPeriod } = await import("./report-period");
 
 const PERIOD = computeMonthlyPeriod(new Date("2026-11-15T12:00:00.000Z")); // novembro/2026 (30 dias)
@@ -585,5 +587,63 @@ describe("getReportNumbersWithComparison — Evolução · últimos 3 meses (sem
     const result = await getReportNumbersWithComparison(REAL_CLINIC_ID, "MONTHLY", PERIOD, NOW, { forceSimulated: true });
     expect(result.isSimulated).toBe(false);
     expect(result.funnel.contacted).toBe(22);
+  });
+
+  it("Demo com dado REAL no período atual (não vazio) mas os 2 meses anteriores genuinamente zerados no banco: preenche o fallback (nunca esconde o bloco por isso)", async () => {
+    // appointmentFindManyMock sem override -> [] (nenhum agendamento nos 2
+    // meses anteriores, real e zerado) — só o mês atual (sempre tirado do
+    // Resumo, nunca da consulta) tem dado; sem o fallback só 1 dos 3 meses
+    // teria dado, escondendo o bloco inteiro (bug relatado: a Demo tinha só
+    // 2 meses com dado — aqui o caso ainda mais vazio, só 1).
+    const result = await getReportNumbersWithComparison(DEMO_CLINIC_ID, "MONTHLY", PERIOD, NOW);
+
+    expect(result.isSimulated).toBe(false); // mês atual tem dado real — nunca simula o relatório inteiro
+    // os 2 meses mais antigos (sintéticos, preenchidos): fração do mês
+    // atual real (scheduled=10 -> 5 e 7; ver beforeEach deste describe).
+    expect(result.evolution[0]).toMatchObject({ scheduled: 5, attended: 3 });
+    expect(result.evolution[1]).toMatchObject({ scheduled: 7, attended: 5 });
+    // mês atual: sempre o dado real do Resumo, nunca sintético.
+    expect(result.evolution[2]).toMatchObject({ scheduled: result.funnel.scheduled, attended: result.funnel.attended });
+  });
+
+  it("clínica REAL com o mesmo histórico incompleto (2 meses zerados): a regra de produção NÃO muda — meses continuam 0/0", async () => {
+    const result = await getReportNumbersWithComparison(REAL_CLINIC_ID, "MONTHLY", PERIOD, NOW);
+
+    expect(result.evolution[0]).toMatchObject({ scheduled: 0, attended: 0 });
+    expect(result.evolution[1]).toMatchObject({ scheduled: 0, attended: 0 });
+  });
+});
+
+describe("buildDemoEvolutionFallback — só preenche mês genuinamente zerado, nunca o último", () => {
+  function point(scheduled: number, attended: number) {
+    return { start: new Date("2026-01-01T00:00:00Z"), end: new Date("2026-02-01T00:00:00Z"), scheduled, attended };
+  }
+
+  it("2 meses zerados + último real (10/9): preenche os 2 com a fração esperada (5/3 e 7/5)", () => {
+    const result = buildDemoEvolutionFallback([point(0, 0), point(0, 0), point(10, 9)]);
+    expect(result).toEqual([point(5, 3), point(7, 5), point(10, 9)]);
+  });
+
+  it("só o mês mais antigo zerado, o do meio já tem dado real: não sobrescreve o do meio", () => {
+    const result = buildDemoEvolutionFallback([point(0, 0), point(4, 2), point(10, 9)]);
+    expect(result[0]).toEqual(point(5, 3));
+    expect(result[1]).toEqual(point(4, 2)); // intocado
+    expect(result[2]).toEqual(point(10, 9));
+  });
+
+  it("nenhum mês zerado: devolve exatamente os mesmos pontos (sem efeito)", () => {
+    const points = [point(3, 2), point(4, 3), point(10, 9)];
+    expect(buildDemoEvolutionFallback(points)).toEqual(points);
+  });
+
+  it("'Compareceram' sintético nunca passa de 'Agendaram' sintético no mesmo mês", () => {
+    const result = buildDemoEvolutionFallback([point(0, 0), point(0, 0), point(10, 9)]);
+    for (const p of result) expect(p.attended).toBeLessThanOrEqual(p.scheduled);
+  });
+
+  it("escala com o último mês real (não hardcoded): último em 20/18 -> proporção preservada", () => {
+    const result = buildDemoEvolutionFallback([point(0, 0), point(0, 0), point(20, 18)]);
+    expect(result[0]).toEqual(point(10, 6));
+    expect(result[1]).toEqual(point(14, 10));
   });
 });

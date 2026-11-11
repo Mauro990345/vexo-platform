@@ -156,6 +156,19 @@ Nova tela, administrada pela página "Contas" (`/crm`, só admin — ver DESIGN.
   `clinic-nav.tsx`, só alcançável pelo botão "Ver relatório" do painel, numa aba nova do
   navegador): tudo reaproveita `MetricCard` e os containers já existentes do Painel; a 4ª rodada
   criou tokens próprios SÓ desta tela (elevação, legenda, azul positivo — ver abaixo).
+  - **8ª rodada — vale sobre TUDO abaixo quando houver conflito:**
+    - **Fallback de "Evolução" SÓ PRA CLÍNICA DEMO** (`buildDemoEvolutionFallback`,
+      `report-metrics.ts`) — a regra de produção (só aparece com os 3 meses com dado, ver 7ª rodada
+      abaixo) continua INTOCADA pra clínica real: lá o bloco some exatamente como antes quando o
+      histórico de verdade não cobre 3 meses, sem excessão. Causa real do bloco sumido no preview da
+      Demo: o período atual tinha dado real (não cai no fallback simulado do relatório inteiro), mas
+      o banco de exemplo não tem agendamento algum num dos meses anteriores — um mês real e
+      legitimamente vazio, não um bug de posição/renderização. Só pra `DEMO_CLINIC_ID`, e só quando
+      a regra de produção não bateria sem isso: preenche O(S) MÊS(ES) genuinamente zerado(s) — nunca
+      o último, que é sempre o dado real do próprio período — com uma fração determinística do
+      último mês real (50%/60% e 70%/(5/7) pro mês mais antigo e do meio), nunca sobrescreve um mês
+      que já tem QUALQUER dado real. Compareceram sintético nunca passa de Agendaram sintético no
+      mesmo mês, por construção.
   - **7ª rodada — vale sobre TUDO abaixo quando houver conflito:**
     - **Gráfico de colunas único** (`ReportColumnChart.tsx`), usado pelos DOIS gráficos de série:
       duas colunas por grupo, **coladas** (zero espaço dentro do grupo e entre grupos), cantos retos

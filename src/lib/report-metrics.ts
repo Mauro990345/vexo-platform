@@ -3,7 +3,7 @@ import { getClinicMetrics, getAttendanceMetrics, computeAttendanceMetrics } from
 import { getReactivationReturnStats, RETURN_ATTRIBUTION_DAYS } from "@/lib/reactivation";
 import { DEMO_CLINIC_ID } from "@/lib/demo-clinic";
 import { resolvePreviousPeriod, periodLengthDays, lastWeeksOfPeriod, evolutionMonthsOfPeriod, computeMonthlyPeriod, type ReportFrequency, type ReportPeriod, type ReportWeek } from "@/lib/report-period";
-import { computePercentDelta, type EvolutionPoint } from "@/lib/report-rates";
+import { computePercentDelta, shouldShowEvolution, type EvolutionPoint } from "@/lib/report-rates";
 
 export { computePercentDelta };
 export type { EvolutionPoint };
@@ -356,6 +356,48 @@ function buildSimulatedEvolution(period: ReportPeriod): EvolutionPoint[] {
   });
 }
 
+// Fallback de Evolução SÓ PRA CLÍNICA DEMO (8ª rodada) — nunca pra
+// clínica real, e a regra de produção (shouldShowEvolution, >= 3 meses
+// com dado) continua INTOCADA pra qualquer clínica real: o bloco some lá
+// exatamente como antes quando o histórico de verdade não cobre 3 meses.
+//
+// Causa real do bloco sumido no preview da Demo: o período ATUAL (ex.
+// outubro) tem dado real (10 agendaram/9 compareceram, por isso
+// `isEmptyFunnel` não ativa o fallback simulado de todo o relatório), mas
+// o banco de exemplo da Demo não tem agendamento algum em agosto — um mês
+// real e legitimamente vazio, não um bug de renderização nem de posição;
+// só 2 dos 3 meses (set/out) tinham dado, e `shouldShowEvolution` (>= 3)
+// escondia o bloco inteiro, corretamente, pela própria regra.
+//
+// Preenche SÓ o(s) mês(es) que estão genuinamente zerados (nunca o
+// último, que é sempre o dado real do próprio período do relatório) com
+// uma fração DETERMINÍSTICA do último mês real — nunca um número
+// independente, nunca mexe em mês que já tem dado de verdade. Com
+// outubro em 10/9 (dado real de hoje), isso dá agosto 5/3 e setembro 7/5
+// — exatamente a sugestão pedida — e continua coerente se o dado real do
+// último mês mudar (os 2 meses de exemplo escalam com ele).
+// "Compareceram" é sempre uma FRAÇÃO do "Agendaram" sintético do mesmo
+// mês (nunca passa dele, por construção).
+const DEMO_EVOLUTION_FALLBACK_RATIOS = [
+  { scheduled: 0.5, attended: 0.6 }, // mês mais antigo (ex.: agosto) — 10*0.5=5, 5*0.6=3
+  { scheduled: 0.7, attended: 5 / 7 }, // mês do meio (ex.: setembro) — 10*0.7=7, 7*(5/7)=5
+];
+
+export function buildDemoEvolutionFallback(points: EvolutionPoint[]): EvolutionPoint[] {
+  if (points.length < 2) return points;
+  const last = points[points.length - 1]!;
+  const lastScheduled = last.scheduled > 0 ? last.scheduled : 10; // guarda defensiva, nunca deveria cair aqui com 0
+  const ratios = DEMO_EVOLUTION_FALLBACK_RATIOS.slice(DEMO_EVOLUTION_FALLBACK_RATIOS.length - (points.length - 1));
+  return points.map((p, i) => {
+    if (i === points.length - 1) return p; // último mês: sempre o dado real, nunca sintético
+    if (p.scheduled > 0 || p.attended > 0) return p; // já tem dado real neste mês — não substitui
+    const ratio = ratios[i] ?? ratios[0]!;
+    const scheduled = Math.max(1, Math.round(lastScheduled * ratio.scheduled));
+    const attended = Math.min(scheduled, Math.round(scheduled * ratio.attended));
+    return { ...p, scheduled, attended };
+  });
+}
+
 // Critério de "dados insuficientes" (documentado, pedido explícito, item
 // 7) — SÓ conta como insuficiente quando NENHUMA atividade de verdade
 // aconteceu no período: abordados=0 E agendaram=0 E compareceram=0 E
@@ -422,9 +464,16 @@ export async function getReportNumbersWithComparison(
   // comparação com o anterior já é só a discreta acima, sem gráfico
   // próprio pro anterior). Mesma decisão simular-ou-não já tomada acima,
   // nunca uma segunda decisão independente.
-  const [weekly, evolution] = shouldSimulate
+  let [weekly, evolution] = shouldSimulate
     ? [buildSimulatedWeekly(period), buildSimulatedEvolution(period)]
     : await Promise.all([computeWeekly(clinicId, period), computeRealEvolution(clinicId, period, current.funnel, now)]);
+
+  // Só pra Demo, só quando o dado REAL (não simulado) não cobre a regra
+  // de produção (>= 3 meses com dado) — ver buildDemoEvolutionFallback
+  // acima. Clínica real nunca passa por aqui.
+  if (!shouldSimulate && clinicId === DEMO_CLINIC_ID && !shouldShowEvolution(evolution)) {
+    evolution = buildDemoEvolutionFallback(evolution);
+  }
 
   return {
     ...current,
