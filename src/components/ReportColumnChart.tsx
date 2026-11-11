@@ -17,6 +17,13 @@ import { niceAxis } from "@/lib/report-chart-scale";
 //   rótulo.
 // - Fundo: o do bloco (plano). Sem seta, vinheta, sombra interna nem
 //   degradê escuro.
+// - 9ª rodada: nunca mostra grupo totalmente vazio (os dois valores = 0)
+//   — nem a coluna (já não aparecia) nem o RÓTULO dele, que antes ficava
+//   "flutuando" sem coluna em cima (bug relatado: "28/09"/"26/10" sem
+//   dado). O destaque de cor cheia passa a ser sempre o último grupo QUE
+//   TEM dado, nunca o último da lista crua. Só filtra se sobrar pelo menos
+//   1 grupo com dado — com tudo vazio, mantém a lista original (nunca um
+//   gráfico vazio é "melhor" que um com rótulos cortados por engano).
 export type ColumnGroup = { label: string; values: [number, number] };
 
 const SERIES_CLASSES: Array<{ full: string; muted: string }> = [
@@ -25,7 +32,7 @@ const SERIES_CLASSES: Array<{ full: string; muted: string }> = [
 ];
 
 export function ReportColumnChart({
-  groups,
+  groups: allGroups,
   seriesLabels,
   ariaLabel,
 }: {
@@ -33,6 +40,8 @@ export function ReportColumnChart({
   seriesLabels: [string, string];
   ariaLabel: string;
 }) {
+  const hasAnyData = allGroups.some((g) => g.values.some((v) => v > 0));
+  const groups = hasAnyData ? allGroups.filter((g) => g.values.some((v) => v > 0)) : allGroups;
   const { max, ticks } = niceAxis(Math.max(0, ...groups.flatMap((g) => g.values)));
   const pct = (v: number) => Math.round((v / max) * 10000) / 100;
   const lastIndex = groups.length - 1;
@@ -48,7 +57,7 @@ export function ReportColumnChart({
           {ticks.map((t) => (
             <span
               key={t}
-              className="absolute right-1.5 translate-y-1/2 text-card leading-none text-vexo-reportCaption"
+              className="absolute right-1.5 translate-y-1/2 text-[12px] leading-none text-vexo-reportCaption"
               style={{ bottom: `${pct(t)}%` }}
             >
               {t}
@@ -70,7 +79,7 @@ export function ReportColumnChart({
                     {v > 0 && (
                       <>
                         <span
-                          className={`absolute left-1/2 -translate-x-1/2 text-caption leading-none ${gi === lastIndex ? "text-vexo-tabFg" : "text-vexo-reportCaption"}`}
+                          className={`absolute left-1/2 -translate-x-1/2 text-[11px] leading-none ${gi === lastIndex ? "text-vexo-tabFg" : "text-vexo-reportCaption"}`}
                           style={{ bottom: `calc(${pct(v)}% + 3px)` }}
                         >
                           {v}
@@ -90,7 +99,7 @@ export function ReportColumnChart({
             {groups.map((g, gi) => (
               <span
                 key={gi}
-                className={`report-col-pair truncate text-center text-card leading-none ${gi === lastIndex ? "text-vexo-tabFg" : "text-vexo-reportCaption"}`}
+                className={`report-col-pair truncate text-center text-[12px] leading-none ${gi === lastIndex ? "text-vexo-tabFg" : "text-vexo-reportCaption"}`}
               >
                 {g.label}
               </span>
@@ -99,7 +108,7 @@ export function ReportColumnChart({
         </div>
       </div>
 
-      <div className="flex items-center justify-center gap-3 text-caption text-vexo-reportCaption" aria-hidden="true">
+      <div className="flex items-center justify-center gap-3 text-[11px] text-vexo-reportCaption" aria-hidden="true">
         <span className="flex items-center gap-1">
           <span className="inline-block h-2 w-2 rounded-sm bg-vexo-reportColA" /> {seriesLabels[0]}
         </span>
