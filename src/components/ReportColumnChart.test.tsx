@@ -1,12 +1,16 @@
 import { describe, it, expect } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-import { ReportColumnChart } from "./ReportColumnChart";
+import { ReportColumnChart, ReportColumnLegend } from "./ReportColumnChart";
 
 // Regra de semanas/grupos vazios (pedido explícito, 9ª rodada): nunca
 // mostra coluna nem rótulo de um grupo totalmente zerado (bug relatado:
 // "28/09"/"26/10" apareciam sem nenhuma coluna em cima) — e o destaque de
 // cor cheia (último grupo) sempre cai no último grupo QUE TEM dado, nunca
 // no último índice da lista crua.
+//
+// 10ª rodada: a legenda saiu pra `ReportColumnLegend` (componente
+// separado) — o chamador decide onde ela fica (ver ClinicReportContent,
+// que a fixa no rodapé do bloco, alinhada entre os blocos vizinhos).
 describe("ReportColumnChart — nunca mostra grupo vazio (sem coluna nem rótulo)", () => {
   it("grupo final vazio: rótulo e coluna somem, destaque cai no último com dado", () => {
     const markup = renderToStaticMarkup(
@@ -16,7 +20,6 @@ describe("ReportColumnChart — nunca mostra grupo vazio (sem coluna nem rótulo
           { label: "08/09", values: [7, 4] },
           { label: "15/09", values: [0, 0] },
         ]}
-        seriesLabels={["Agendaram", "Compareceram"]}
         ariaLabel="teste"
       />
     );
@@ -39,7 +42,6 @@ describe("ReportColumnChart — nunca mostra grupo vazio (sem coluna nem rótulo
           { label: "08/09", values: [0, 0] },
           { label: "15/09", values: [7, 4] },
         ]}
-        seriesLabels={["Agendaram", "Compareceram"]}
         ariaLabel="teste"
       />
     );
@@ -56,14 +58,9 @@ describe("ReportColumnChart — nunca mostra grupo vazio (sem coluna nem rótulo
           { label: "08/09", values: [7, 4] },
           { label: "15/09", values: [0, 0] },
         ]}
-        seriesLabels={["Agendaram", "Compareceram"]}
         ariaLabel="teste"
       />
     );
-    // bg-vexo-reportColA (cor cheia) só na barra do último grupo com dado;
-    // os outros usam reportColAMuted (a legenda também usa a cor cheia no
-    // quadradinho, sempre — por isso o match é só na barra, não qualquer
-    // ocorrência da classe).
     const fullBarCount = markup.split('rounded-t-sm bg-vexo-reportColA"').length - 1;
     expect(fullBarCount).toBe(1);
   });
@@ -75,7 +72,6 @@ describe("ReportColumnChart — nunca mostra grupo vazio (sem coluna nem rótulo
           { label: "01/09", values: [0, 0] },
           { label: "08/09", values: [0, 0] },
         ]}
-        seriesLabels={["Agendaram", "Compareceram"]}
         ariaLabel="teste"
       />
     );
@@ -90,11 +86,32 @@ describe("ReportColumnChart — nunca mostra grupo vazio (sem coluna nem rótulo
           { label: "01/09", values: [5, 3] },
           { label: "08/09", values: [7, 4] },
         ]}
-        seriesLabels={["Agendaram", "Compareceram"]}
         ariaLabel="teste"
       />
     );
     expect(markup).toContain("01/09");
     expect(markup).toContain("08/09");
+  });
+
+  it("não renderiza mais a legenda (saiu pra ReportColumnLegend, separada)", () => {
+    const markup = renderToStaticMarkup(
+      <ReportColumnChart
+        groups={[
+          { label: "01/09", values: [5, 3] },
+          { label: "08/09", values: [7, 4] },
+        ]}
+        ariaLabel="teste"
+      />
+    );
+    expect(markup).not.toContain("Agendaram");
+    expect(markup).not.toContain("Compareceram");
+  });
+});
+
+describe("ReportColumnLegend", () => {
+  it("mostra os dois rótulos de série recebidos", () => {
+    const markup = renderToStaticMarkup(<ReportColumnLegend seriesLabels={["Abordados", "Em conversa"]} />);
+    expect(markup).toContain("Abordados");
+    expect(markup).toContain("Em conversa");
   });
 });
