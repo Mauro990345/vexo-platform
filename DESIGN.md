@@ -156,6 +156,44 @@ Nova tela, administrada pela página "Contas" (`/crm`, só admin — ver DESIGN.
   `clinic-nav.tsx`, só alcançável pelo botão "Ver relatório" do painel, numa aba nova do
   navegador): tudo reaproveita `MetricCard` e os containers já existentes do Painel; a 4ª rodada
   criou tokens próprios SÓ desta tela (elevação, legenda, azul positivo — ver abaixo).
+  - **9ª rodada — vale sobre TUDO abaixo quando houver conflito:**
+    - **Alinhamento do bloco anel + semanas**: o anel (+ título "Comparecimento") fica num `div`
+      interno próprio com `flex-1 flex flex-col items-center justify-center`, CENTRALIZADO no
+      espaço vertical disponível da coluna — antes ficava colado no título, com sobra de espaço
+      embaixo (a coluna do anel sempre estica pra bater com a altura da coluna do gráfico ao lado,
+      que normalmente é mais alta). O texto da base ("X de Y atendimentos...") é o 2º (e único
+      outro) filho do `flex-col` externo — nunca cresce, fica sempre no rodapé da coluna, na MESMA
+      altura da legenda do gráfico "Abordados por semana" ao lado (que também é sempre o último
+      elemento da sua própria coluna) — as duas colunas, estendidas à mesma altura pelo grid, ficam
+      com o rodapé alinhado por construção, sem precisar calcular nada.
+    - **Fontes do Relatório (+1px, nunca os números grandes nem os títulos)**: todo texto de
+      apoio/rótulo pequeno (frase de leitura da Evolução, "X de Y atendimentos...", "X% responderam"/
+      "X% das enviadas", "vs. anterior", rótulos dos cards — "Abordados"/"Em conversa"/"Receberam"
+      etc., legendas dos gráficos, valores do eixo Y, rótulo do mês/semana na base, número em cima
+      da coluna) sobe 1px sobre o tamanho anterior (10→11 ou 11→12), usando `text-[11px]`/
+      `text-[12px]` direto nos componentes PRÓPRIOS do relatório (`ReportColumnChart.tsx`,
+      `ClinicReportContent.tsx` — nunca compartilhados com outra tela). No rótulo do `MetricCard`
+      (componente COMPARTILHADO com o Painel, que nunca muda de tamanho) a sobrescrita usa
+      `!text-[12px]` em `labelClassName` — o `!` (important) é necessário porque, sem ele, a ordem
+      das classes geradas pelo Tailwind não garante qual dos dois tamanhos vence.
+    - **"Abordados por semana"/"Evolução": nunca mostra grupo (semana/mês) totalmente vazio** —
+      nem a coluna (já não aparecia) nem o RÓTULO dele, que antes "flutuava" sem coluna em cima
+      (bug relatado: "28/09"/"26/10" sem dado nenhum). `ReportColumnChart.tsx` filtra qualquer grupo
+      com os dois valores zerados ANTES de desenhar (só se sobrar pelo menos 1 grupo com dado —
+      com tudo vazio, mantém a lista original em vez de um gráfico em branco); o destaque de cor
+      cheia passa a cair sempre no último grupo QUE TEM dado, nunca no último índice da lista crua.
+    - **"Em conversa" = "Abordados" só na Demo** (`fixDemoInConversationTie`, `report-metrics.ts`) —
+      acontece quando o período não tem registro manual de abordagem (ApproachLog): o piso de
+      `getClinicMetrics` (`Math.max(approachLogSum, responded, scheduled)`, ver `metrics.ts`) iguala
+      os dois números. Comportamento CORRETO pra clínica real (não é bug de contagem — o sistema já
+      tem `contactedFromApproachLogs` pra isso, usada em `computeConversionRates` pra esconder a taxa
+      de conversão correspondente) — mas, só na Demo, cosmético: sintetiza um "Em conversa" MENOR
+      (nunca maior) que "Abordados" (que fica intocado), aplicado também à série semanal pro mesmo
+      efeito nunca aparecer em "Abordados por semana". Idempotente — nunca ativa se os números já
+      são diferentes.
+    - **Reativação simulada nunca mostra "0 (0%)"** — "voltaram" garante pelo menos 1 sempre que
+      "enviadas" > 0 (a fórmula antiga podia arredondar pra 0 em períodos curtos). Só a Demo passa
+      por essa fórmula; clínica real nunca é simulada.
   - **8ª rodada — vale sobre TUDO abaixo quando houver conflito:**
     - **Fallback de "Evolução" SÓ PRA CLÍNICA DEMO** (`buildDemoEvolutionFallback`,
       `report-metrics.ts`) — a regra de produção (só aparece com os 3 meses com dado, ver 7ª rodada

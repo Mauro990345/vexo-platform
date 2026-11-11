@@ -42,8 +42,15 @@ function comparisonColorClass(pct: number | null): string {
 // Tipografia do Relatório (5ª rodada) — número 24px no celular, 26px a
 // partir de sm, semibold; legenda em cinza #8b909a (vexo-reportCaption) com
 // peso normal (mais leve que o font-medium padrão do MetricCard).
+// 9ª rodada — leitura pra dono de negócio com mais de 50 anos: todo texto
+// de apoio/rótulo pequeno sobe +1px (nunca os números grandes nem os
+// títulos). `!text-[12px]` força a sobrescrita do `text-card` (11px) que
+// o MetricCard já aplica por padrão ao rótulo — sem o `!` a ordem das
+// classes geradas pelo Tailwind não garante qual tamanho vence; só
+// precisa disso porque é um componente COMPARTILHADO com o Painel
+// (nunca mudar o tamanho padrão dele).
 const VALUE_CLASS = "text-report-value sm:text-report-value-lg text-vexo-tabFg";
-const LABEL_CLASS = "font-normal text-vexo-reportCaption";
+const LABEL_CLASS = "font-normal text-vexo-reportCaption !text-[12px]";
 
 // Caixa do Resumo (`bare`, dentro da faixa dividida) — valor + (opcional)
 // comparação. Uma função só pros 4 boxes: todos seguem EXATAMENTE a mesma
@@ -53,7 +60,7 @@ function SummaryBox({ label, value, comparisonPct }: { label: string; value: num
   return (
     <div className="px-3 py-2.5">
       <MetricCard label={label} value={String(value)} bare labelClassName={LABEL_CLASS} valueClassName={VALUE_CLASS} />
-      {comparisonLabel && <p className={`mt-1 text-card ${comparisonColorClass(comparisonPct)}`}>{comparisonLabel}</p>}
+      {comparisonLabel && <p className={`mt-1 text-[12px] ${comparisonColorClass(comparisonPct)}`}>{comparisonLabel}</p>}
     </div>
   );
 }
@@ -158,14 +165,22 @@ export function ClinicReportContent({
 
       {/* Blocos de gráfico — nível RAISED (um tom mais claro). Celular:
           empilhados em largura total. Desktop largo (lg): anel + semanas e
-          Evolução lado a lado. Sob o anel, a BASE exata da taxa. */}
+          Evolução lado a lado. Sob o anel, a BASE exata da taxa.
+          9ª rodada: o anel (+ título) fica centralizado na vertical no
+          espaço disponível da coluna (grid estica as duas colunas pra
+          mesma altura — o conteúdo da direita, gráfico+legenda, é
+          normalmente o mais alto); o texto da base fica como 2º filho do
+          flex-col externo, por isso sempre no rodapé — na MESMA altura da
+          legenda do gráfico ao lado, que também é o último elemento ali. */}
       <div className={`grid gap-3.5 ${showEvolution ? "lg:grid-cols-[3fr_2fr]" : ""}`}>
         <section className="report-panel-raised grid gap-4 rounded-report p-block sm:grid-cols-[auto_1fr]">
-          <div className="flex flex-col items-center gap-1.5 sm:w-32">
-            <SectionTitle>Comparecimento</SectionTitle>
-            <AttendanceRing rate={attendanceRate} />
+          <div className="flex flex-col items-center sm:w-32">
+            <div className="flex flex-1 flex-col items-center justify-center gap-1.5">
+              <SectionTitle>Comparecimento</SectionTitle>
+              <AttendanceRing rate={attendanceRate} />
+            </div>
             {attendanceBase > 0 && (
-              <p className="text-center text-caption leading-tight text-vexo-reportCaption">
+              <p className="text-center text-[11px] leading-tight text-vexo-reportCaption">
                 {funnel.attended} de {attendanceBase} {attendanceBase === 1 ? "atendimento" : "atendimentos"} com data no período
               </p>
             )}
@@ -186,7 +201,7 @@ export function ClinicReportContent({
             {/* Frase de leitura (só com base de comparação) — texto pequeno
                 e leve; o % segue a mesma regra de cor da comparação. */}
             {evolutionReading && (
-              <p className="text-card text-vexo-reportCaption">
+              <p className="text-[12px] text-vexo-reportCaption">
                 {evolutionReading.lead}
                 <span className={deltaColorClass(evolutionReading.pct)}>{formatDeltaPct(evolutionReading.pct)}</span>
                 {evolutionReading.tail}
@@ -213,7 +228,7 @@ export function ClinicReportContent({
             <MetricCard label="Receberam" value={String(followUp.received)} bare labelClassName={LABEL_CLASS} valueClassName={VALUE_CLASS} />
             <div>
               <MetricCard label="Responderam" value={String(followUp.responded)} bare labelClassName={LABEL_CLASS} valueClassName={VALUE_CLASS} />
-              {followUpRate !== null && <p className="mt-1 text-card text-vexo-reportCaption">{formatRatePct(followUpRate)} responderam</p>}
+              {followUpRate !== null && <p className="mt-1 text-[12px] text-vexo-reportCaption">{formatRatePct(followUpRate)} responderam</p>}
             </div>
           </div>
         </div>
@@ -224,7 +239,7 @@ export function ClinicReportContent({
             <div>
               <MetricCard label="Voltaram" value={String(reactivation.returned)} bare labelClassName={LABEL_CLASS} valueClassName={VALUE_CLASS} />
               {reactivationReturnRate !== null && (
-                <p className="mt-1 text-card text-vexo-reportCaption">{formatRatePct(reactivationReturnRate)} das enviadas</p>
+                <p className="mt-1 text-[12px] text-vexo-reportCaption">{formatRatePct(reactivationReturnRate)} das enviadas</p>
               )}
             </div>
           </div>

@@ -21,9 +21,16 @@ vi.mock("@/lib/metrics", async (importOriginal) => {
   return { ...actual, getClinicMetrics: getClinicMetricsMock, getAttendanceMetrics: getAttendanceMetricsMock };
 });
 
-const { getReportNumbers, getReportNumbersWithComparison, computePercentDelta, allocateToTotal, computeFollowUpReach, buildDemoEvolutionFallback, RETURN_ATTRIBUTION_DAYS } = await import(
-  "./report-metrics"
-);
+const {
+  getReportNumbers,
+  getReportNumbersWithComparison,
+  computePercentDelta,
+  allocateToTotal,
+  computeFollowUpReach,
+  buildDemoEvolutionFallback,
+  fixDemoInConversationTie,
+  RETURN_ATTRIBUTION_DAYS,
+} = await import("./report-metrics");
 const { computeMonthlyPeriod, computeBiweeklyPeriod } = await import("./report-period");
 
 const PERIOD = computeMonthlyPeriod(new Date("2026-11-15T12:00:00.000Z")); // novembro/2026 (30 dias)
@@ -383,6 +390,15 @@ describe("buildSimulatedReportNumbers (via getReportNumbers) — coerência inte
     const numbers = await getReportNumbers(DEMO_CLINIC_ID, PERIOD, NOW);
     expect(numbers.reactivation.returned).toBeLessThanOrEqual(numbers.reactivation.sent);
   });
+
+  it("Reativação simulada: nunca mostra '0 (0%)' — pelo menos 1 retorno sempre que algo foi enviado (9ª rodada)", async () => {
+    // Período curto de propósito (quinzena) — é onde a fórmula antiga
+    // (`Math.round(sent * fração)`) mais arredondava "voltaram" pra 0.
+    const shortPeriod = (await import("./report-period")).computeBiweeklyPeriod(new Date("2026-11-20T12:00:00.000Z"));
+    const numbers = await getReportNumbers(DEMO_CLINIC_ID, shortPeriod, NOW);
+    expect(numbers.reactivation.sent).toBeGreaterThan(0);
+    expect(numbers.reactivation.returned).toBeGreaterThanOrEqual(1);
+  });
 });
 
 describe("allocateToTotal — distribui pesos proporcionalmente SEMPRE somando exatamente o total", () => {
@@ -645,5 +661,70 @@ describe("buildDemoEvolutionFallback — só preenche mês genuinamente zerado, 
     const result = buildDemoEvolutionFallback([point(0, 0), point(0, 0), point(20, 18)]);
     expect(result[0]).toEqual(point(10, 6));
     expect(result[1]).toEqual(point(14, 10));
+  });
+});
+
+describe("fixDemoInConversationTie — 'Em conversa' nunca igual (ou maior) que 'Abordados', só na Demo", () => {
+  it("já diferente (inConversation < contacted): devolve o mesmo valor, sem efeito (idempotente)", () => {
+    expect(fixDemoInConversationTie(21, 15, new Date("2026-10-01T00:00:00Z"))).toBe(15);
+  });
+
+  it("empatados (21/21, o bug relatado): sintetiza um valor MENOR, nunca igual", () => {
+    const result = fixDemoInConversationTie(21, 21, new Date("2026-10-01T00:00:00Z"));
+    expect(result).toBeLessThan(21);
+    expect(result).toBeGreaterThan(0);
+  });
+
+  it("determinístico: mesma data (seed) -> mesmo resultado sempre", () => {
+    const seed = new Date("2026-10-01T00:00:00Z");
+    expect(fixDemoInConversationTie(21, 21, seed)).toBe(fixDemoInConversationTie(21, 21, seed));
+  });
+
+  it("contacted = 0: nunca produz um valor negativo nem maior que 0", () => {
+    expect(fixDemoInConversationTie(0, 0, new Date("2026-10-01T00:00:00Z"))).toBe(0);
+  });
+
+  it("escala com 'Abordados': contacted maior -> inConversation sintético maior, mas sempre menor que contacted", () => {
+    const seed = new Date("2026-10-01T00:00:00Z");
+    const small = fixDemoInConversationTie(10, 10, seed);
+    const big = fixDemoInConversationTie(100, 100, seed);
+    expect(small).toBeLessThan(10);
+    expect(big).toBeLessThan(100);
+    expect(big).toBeGreaterThan(small);
+  });
+});
+
+describe("getReportNumbersWithComparison — 'Em conversa' = 'Abordados' só pra Demo (9ª rodada)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // Sem ApproachLog (approachLogged ausente/0) e responded = scheduled
+    // o bastante pra o piso de getClinicMetrics igualar approached a
+    // responded — mesmo cenário relatado (21 abordados = 21 em conversa).
+    getClinicMetricsMock.mockResolvedValue({ approached: 21, approachLogged: 0, responded: 21, responseRate: 1, scheduled: 10, completed: 0, noShow: 1 });
+    getAttendanceMetricsMock.mockResolvedValue({ attended: 9, pastDue: 10 });
+    getReactivationReturnStatsMock.mockResolvedValue([{ days: 30, label: "período", sent: 5, returned: 2 }]);
+    followUpLogFindManyMock.mockResolvedValue([]);
+  });
+
+  it("Demo: 'Em conversa' sai MENOR que 'Abordados' (nunca igual), 'Abordados' real intocado", async () => {
+    const result = await getReportNumbersWithComparison(DEMO_CLINIC_ID, "MONTHLY", PERIOD, NOW);
+
+    expect(result.funnel.contacted).toBe(21); // Abordados real, nunca mexido
+    expect(result.funnel.inConversation).toBeLessThan(result.funnel.contacted);
+  });
+
+  it("Demo: a série semanal também não tem semana com os dois números empatados", async () => {
+    const result = await getReportNumbersWithComparison(DEMO_CLINIC_ID, "MONTHLY", PERIOD, NOW);
+
+    for (const w of result.weekly) {
+      if (w.contacted > 0) expect(w.inConversation).toBeLessThan(w.contacted);
+    }
+  });
+
+  it("clínica REAL com o MESMO cenário (sem ApproachLog): comportamento de produção intocado — 'Em conversa' continua igual a 'Abordados'", async () => {
+    const result = await getReportNumbersWithComparison(REAL_CLINIC_ID, "MONTHLY", PERIOD, NOW);
+
+    expect(result.funnel.contacted).toBe(21);
+    expect(result.funnel.inConversation).toBe(21); // comportamento real/correto do piso, não tocado
   });
 });

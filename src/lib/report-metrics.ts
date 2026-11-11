@@ -291,7 +291,12 @@ function buildSimulatedReportNumbers(period: ReportPeriod): Omit<ReportNumbers, 
   const noShow = Math.round(scheduled * (0.1 + rand() * 0.05));
   const attended = Math.max(0, scheduled - noShow - Math.round(scheduled * 0.05));
   const sent = Math.max(1, Math.round(scheduled * 0.2));
-  const returned = Math.round(sent * (0.25 + rand() * 0.15));
+  // Pelo menos 1 retorno sempre que algo foi enviado (pedido explícito, 9ª
+  // rodada) — a fórmula antiga podia arredondar pra 0 em períodos curtos
+  // (quinzena com `sent` pequeno), mostrando "0 (0%)" na Reativação
+  // simulada, o que não parece plausível num exemplo. Só a Demo passa por
+  // esta função; nunca afeta clínica real.
+  const returned = Math.max(sent > 0 ? 1 : 0, Math.round(sent * (0.25 + rand() * 0.15)));
   // Base da taxa = atendimentos com data no período já realizados
   // (compareceram + faltaram) — mesma DEFINIÇÃO da conta real
   // (attended/pastDue). Os ~5% restantes de "Agendaram" ficam de fora de
@@ -398,6 +403,31 @@ export function buildDemoEvolutionFallback(points: EvolutionPoint[]): EvolutionP
   });
 }
 
+// "Em conversa" nunca deveria aparecer IGUAL a "Abordados" (visual
+// deselegante, pedido explícito, 9ª rodada) — acontece na Demo quando o
+// período não tem registro manual de abordagem (ApproachLog): o piso de
+// getClinicMetrics (ver metrics.ts, `Math.max(approachLogSum, responded,
+// scheduled)`) iguala os dois números. Comportamento CORRETO pra clínica
+// real, não um erro de contagem (o sistema já tem uma flag pra isso,
+// `contactedFromApproachLogs`, usada em computeConversionRates pra
+// esconder a taxa de conversão correspondente) — mas só na Demo, cosmético,
+// sintetiza um "Em conversa" plausivelmente MENOR (nunca maior) que
+// "Abordados", sem tocar no "Abordados" real. Idempotente: nunca ativa se
+// os números já são diferentes (então nunca piora um dado já correto).
+const DEMO_IN_CONVERSATION_RATIO_BASE = 0.65;
+const DEMO_IN_CONVERSATION_RATIO_JITTER = 0.1;
+
+function demoInConversationRatio(seed: Date): number {
+  const rand = seededRandom(seed.getTime() / 1000 + 31);
+  return DEMO_IN_CONVERSATION_RATIO_BASE + rand() * DEMO_IN_CONVERSATION_RATIO_JITTER;
+}
+
+export function fixDemoInConversationTie(contacted: number, inConversation: number, seed: Date): number {
+  if (inConversation < contacted) return inConversation;
+  const ratio = demoInConversationRatio(seed);
+  return Math.max(0, Math.min(contacted, Math.round(contacted * ratio)));
+}
+
 // Critério de "dados insuficientes" (documentado, pedido explícito, item
 // 7) — SÓ conta como insuficiente quando NENHUMA atividade de verdade
 // aconteceu no período: abordados=0 E agendaram=0 E compareceram=0 E
@@ -450,7 +480,7 @@ export async function getReportNumbersWithComparison(
   const realCurrent = await fetchRealReportNumbers(clinicId, period, now);
   const shouldSimulate = clinicId === DEMO_CLINIC_ID && (options.forceSimulated === true || isEmptyFunnel(realCurrent));
 
-  const [current, previous]: [ReportNumbers, ReportNumbers] = shouldSimulate
+  let [current, previous]: [ReportNumbers, ReportNumbers] = shouldSimulate
     ? [
         { ...buildSimulatedReportNumbers(period), isSimulated: true },
         { ...buildSimulatedReportNumbers(previousPeriod), isSimulated: true },
@@ -473,6 +503,19 @@ export async function getReportNumbersWithComparison(
   // acima. Clínica real nunca passa por aqui.
   if (!shouldSimulate && clinicId === DEMO_CLINIC_ID && !shouldShowEvolution(evolution)) {
     evolution = buildDemoEvolutionFallback(evolution);
+  }
+
+  // Só pra Demo (ver fixDemoInConversationTie acima) — nunca ativa se os
+  // números já são diferentes, então é seguro chamar sempre, simulado ou
+  // não (no caminho simulado o "Em conversa" já sai menor por construção
+  // e a função não faz nada).
+  if (clinicId === DEMO_CLINIC_ID) {
+    current = { ...current, funnel: { ...current.funnel, inConversation: fixDemoInConversationTie(current.funnel.contacted, current.funnel.inConversation, period.start) } };
+    previous = {
+      ...previous,
+      funnel: { ...previous.funnel, inConversation: fixDemoInConversationTie(previous.funnel.contacted, previous.funnel.inConversation, previousPeriod.start) },
+    };
+    weekly = weekly.map((w) => ({ ...w, inConversation: fixDemoInConversationTie(w.contacted, w.inConversation, w.start) }));
   }
 
   return {
