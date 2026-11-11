@@ -28,6 +28,13 @@ const config: Config = {
           reportCaption: "rgb(var(--vexo-report-caption) / <alpha-value>)",
           reportDeltaUp: "rgb(var(--vexo-report-delta-up) / <alpha-value>)",
           reportDeltaDown: "rgb(var(--vexo-report-delta-down) / <alpha-value>)",
+          reportColA: "rgb(var(--vexo-report-col-a) / <alpha-value>)",
+          reportColAMuted: "rgb(var(--vexo-report-col-a-muted) / <alpha-value>)",
+          reportColB: "rgb(var(--vexo-report-col-b) / <alpha-value>)",
+          reportColBMuted: "rgb(var(--vexo-report-col-b-muted) / <alpha-value>)",
+          // Linhas de grade (8%) e linha de base (16%, um pouco mais clara).
+          reportGrid: "rgb(var(--vexo-report-edge) / 0.08)",
+          reportBaseline: "rgb(var(--vexo-report-edge) / 0.16)",
           reportInset: "rgb(var(--vexo-report-inset) / <alpha-value>)",
           // Bordas/separadores finos do Relatório: branco a 7%, opacidade fixa.
           reportLine: "rgb(var(--vexo-report-edge) / 0.07)",

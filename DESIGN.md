@@ -156,6 +156,41 @@ Nova tela, administrada pela página "Contas" (`/crm`, só admin — ver DESIGN.
   `clinic-nav.tsx`, só alcançável pelo botão "Ver relatório" do painel, numa aba nova do
   navegador): tudo reaproveita `MetricCard` e os containers já existentes do Painel; a 4ª rodada
   criou tokens próprios SÓ desta tela (elevação, legenda, azul positivo — ver abaixo).
+  - **7ª rodada — vale sobre TUDO abaixo quando houver conflito:**
+    - **Gráfico de colunas único** (`ReportColumnChart.tsx`), usado pelos DOIS gráficos de série:
+      duas colunas por grupo, **coladas** (zero espaço dentro do grupo e entre grupos), cantos retos
+      com no máximo 2px no topo (`rounded-t-sm`), **largura fixa** pelo token `--vexo-report-col-w`
+      (22px no celular, 32px a partir de `sm`, 26px no `lg`, onde o bloco divide espaço com o anel;
+      classes `.report-col`/`.report-col-pair`: encolhe só se não couber, nunca estica), grupo
+      centralizado. Cores (tons de azul): último grupo em cor cheia — série 1 `--vexo-report-col-a`
+      #2b87bd, série 2 `--vexo-report-col-b` #7cc4e8; grupos anteriores em azul-acinzentado suave —
+      `--vexo-report-col-a-muted` #3b617d, `--vexo-report-col-b-muted` #587f99. Linhas de grade 1px
+      `reportGrid` (branco 8%) atrás das colunas, eixo Y à esquerda (0 até o máximo em 3–4 marcas
+      redondas — `niceAxis`, `report-chart-scale.ts` —, 11px `vexo-reportCaption`), linha de base 1px
+      `reportBaseline` (branco 16%, um pouco mais clara), rótulo do grupo na base (último em
+      off-white `vexo-tabFg`, demais em cinza), número em cima de cada coluna (10px); valor 0 não tem
+      coluna nem rótulo. Legenda pequena abaixo. Fundo = o do bloco de gráfico (plano, nível raised).
+      PROIBIDO: seta, vinheta/escurecimento nas bordas, sombra interna, degradê preto.
+    - **"Evolução · últimos 3 meses"** (substitui o gráfico de linhas): Agendaram/Compareceram,
+      SEMPRE em meses-calendário — também no quinzenal (`evolutionMonthsOfPeriod`): os 3 últimos
+      meses COMPLETOS até o fim do período (mensal e 2ª quinzena: termina no mês do relatório; 1ª
+      quinzena: o mês ainda não fechou, termina no mês anterior). Só aparece com os 3 meses com dados;
+      senão o bloco some. Frase de leitura abaixo do título mantida (mesma regra de cor da
+      comparação). Rótulo do mês curto ("set", "out").
+    - **"Abordados por semana"** (substitui "Abordagens por semana"): Abordados e Em conversa das
+      últimas 6 semanas civis (segunda a domingo) terminando na semana do último dia do período
+      (`lastWeeksOfPeriod`; a última recortada no fim do período), mesmas definições do Resumo
+      (`getClinicMetrics` por semana, em paralelo). Rótulo = início da semana ("12/10"). Última semana
+      em cor cheia, anteriores em azul-acinzentado — o destaque âmbar da semana de pico saiu.
+    - **Anel**: só o azul mudou — o início do degradê passa de ciano #28a4c2 para o azul da marca
+      #2b87bd (`--vexo-accent`), mais forte; o verde (`--tab-icon-4`), o traço (5) e o resto ficam
+      iguais.
+    - Bloco anel + semanas: anel numa coluna estreita (`sm:w-32`, a legenda quebra) e o gráfico
+      ocupa o resto; no `lg`, lado a lado com a Evolução em `3fr`/`2fr`.
+    - **Preview admin com dados de exemplo**: na Clínica Demo, o link "Ver com dados de exemplo"
+      (`?exemplo=1`) força o fallback simulado mesmo com dados reais (selo "Dados de exemplo"
+      visível); ignorado pra qualquer outra clínica. Semanas simuladas são fatias do mês simulado
+      (somam ~ o "Abordados" do mês).
   - **6ª rodada — vale sobre TUDO abaixo quando houver conflito:**
     - **Cores da comparação "vs. anterior" (regra nova)**: ALTA em **verde** (`--vexo-report-delta-up`
       #3fd083, `text-vexo-reportDeltaUp`), QUEDA em **azul** (`--vexo-report-delta-down` #4ea8ee,

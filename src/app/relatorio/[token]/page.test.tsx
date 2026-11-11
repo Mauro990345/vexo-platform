@@ -33,7 +33,7 @@ describe("/relatorio/[token] — mostra exatamente o período enviado", () => {
       reactivation: { sent: 5, returned: 2 },
       isSimulated: false,
       previousComparison: { contactedPct: null, inConversationPct: null, scheduledPct: null, attendedPct: null },
-      weeklyApproached: [],
+      weekly: [],
       evolution: [],
     }));
   });

@@ -4,7 +4,8 @@ import { useId } from "react";
 // relatório (pedido explícito, item 4). Mesma definição de taxa do box
 // "Compareceram" do Resumo (ver attendanceRate, report-metrics.ts), nunca
 // uma segunda conta: este componente só DESENHA o número, não calcula
-// nada. Traço em degradê ciano (--tab-icon-1, #28a4c2) -> verde
+// nada. Traço em degradê azul da marca (--vexo-accent, #2b87bd — 7ª rodada:
+// azul mais forte no lugar do ciano #28a4c2) -> verde
 // (--tab-icon-4, #49b76c) — mesmos tokens já usados nos ícones das abas,
 // nenhuma cor nova. `useId` evita colidir o id do gradiente quando as DUAS
 // frequências (mensal/quinzenal) do preview admin ficam montadas ao mesmo
@@ -33,7 +34,7 @@ export function AttendanceRing({ rate }: { rate: number | null }) {
     >
       <defs>
         <linearGradient id={gradientId} x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" style={{ stopColor: "rgb(var(--tab-icon-1) / 1)" }} />
+          <stop offset="0%" style={{ stopColor: "rgb(var(--vexo-accent) / 1)" }} />
           <stop offset="100%" style={{ stopColor: "rgb(var(--tab-icon-4) / 1)" }} />
         </linearGradient>
       </defs>

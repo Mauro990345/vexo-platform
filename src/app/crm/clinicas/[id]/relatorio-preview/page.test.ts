@@ -75,3 +75,23 @@ describe("relatorio-preview — sempre o ÚLTIMO PERÍODO FECHADO (nunca o em an
     expect((biweeklyCall[2] as { start: Date }).start.getTime()).toBe(expectedPeriod.start.getTime());
   });
 });
+
+describe("relatorio-preview — '?exemplo=1' força dados de exemplo SÓ na Clínica Demo", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    requireInternalSessionMock.mockResolvedValue({ user: { role: "INTERNAL_ADMIN" } });
+    clinicFindUniqueMock.mockResolvedValue({ name: "Clínica" });
+    getReportNumbersWithComparisonMock.mockResolvedValue({});
+  });
+
+  it("Demo com ?exemplo=1: pede forceSimulated nas duas frequências", async () => {
+    const { DEMO_CLINIC_ID } = await import("@/lib/demo-clinic");
+    await ClinicReportPreviewPage({ params: { id: DEMO_CLINIC_ID }, searchParams: { exemplo: "1" } });
+    for (const call of getReportNumbersWithComparisonMock.mock.calls) expect(call[4]).toEqual({ forceSimulated: true });
+  });
+
+  it("clínica real com ?exemplo=1: parâmetro ignorado (nunca número simulado)", async () => {
+    await ClinicReportPreviewPage({ params: { id: "clinic-real" }, searchParams: { exemplo: "1" } });
+    for (const call of getReportNumbersWithComparisonMock.mock.calls) expect(call[4]).toEqual({ forceSimulated: false });
+  });
+});

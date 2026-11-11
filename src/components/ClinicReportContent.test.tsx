@@ -2,11 +2,22 @@ import { describe, it, expect } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { ClinicReportContent } from "./ClinicReportContent";
 import { computeMonthlyPeriod } from "@/lib/report-period";
-import type { ReportNumbersWithComparison, WeeklyApproached } from "@/lib/report-metrics";
+import type { ReportNumbersWithComparison, WeeklyPoint } from "@/lib/report-metrics";
 
-function weeks(counts: number[]): WeeklyApproached[] {
-  const base = new Date("2026-11-02T03:00:00.000Z");
-  return counts.map((count, i) => ({ start: new Date(base.getTime() + i * 7 * 86400000), end: new Date(base.getTime() + (i + 1) * 7 * 86400000), count }));
+// Semanas a partir de 26/10/2026 (segunda) — [Abordados, Em conversa].
+function weeks(pairs: Array<[number, number]>): WeeklyPoint[] {
+  const base = new Date("2026-10-26T03:00:00.000Z");
+  return pairs.map(([contacted, inConversation], i) => ({
+    start: new Date(base.getTime() + i * 7 * 86400000),
+    end: new Date(base.getTime() + (i + 1) * 7 * 86400000),
+    contacted,
+    inConversation,
+  }));
+}
+
+// Valores escritos EM CIMA das colunas (não as marcas do eixo Y, que têm o 0).
+function columnValueLabels(markup: string): string[] {
+  return [...markup.matchAll(/<span class="absolute left-1\/2[^"]*"[^>]*>(\d+)<\/span>/g)].map((m) => m[1]!);
 }
 
 // Privacidade (pedido explícito): o relatório mostra SÓ agregados — nunca
@@ -27,7 +38,7 @@ function numbers(overrides: Partial<ReportNumbersWithComparison> = {}): ReportNu
     reactivation: { sent: 5, returned: 2 },
     isSimulated: false,
     previousComparison: { contactedPct: 10, inConversationPct: 16, scheduledPct: 25, attendedPct: null },
-    weeklyApproached: weeks([5, 6, 4, 7]),
+    weekly: weeks([[5, 3], [6, 4], [4, 2], [7, 5], [8, 5], [9, 6]]),
     evolution: [],
     ...overrides,
   };
@@ -77,11 +88,11 @@ describe("ClinicReportContent — ordem da página (item 1)", () => {
     expect(resumoIndex).toBeGreaterThan(fraseIndex);
   });
 
-  it("gráficos (Comparecimento/Abordagens por semana) vêm depois do Resumo e antes de Follow-up/Reativação", () => {
+  it("gráficos (Comparecimento/Abordados por semana) vêm depois do Resumo e antes de Follow-up/Reativação", () => {
     const markup = renderToStaticMarkup(<ClinicReportContent clinicName="Clínica Teste" frequency="MONTHLY" numbers={numbers()} />);
     const resumoIndex = markup.indexOf("Resumo");
     const comparecimentoIndex = markup.indexOf("Comparecimento");
-    const semanaIndex = markup.indexOf("Abordagens por semana");
+    const semanaIndex = markup.indexOf("Abordados por semana");
     const followUpIndex = markup.indexOf("Follow-up");
     expect(comparecimentoIndex).toBeGreaterThan(resumoIndex);
     expect(semanaIndex).toBeGreaterThan(comparecimentoIndex);
@@ -277,10 +288,12 @@ describe("ClinicReportContent — gráficos (itens 4 e 5)", () => {
     expect(markup).toContain("Taxa de comparecimento indisponível");
   });
 
-  it("barras de abordagens por semana aparecem com os valores recebidos", () => {
-    const markup = renderToStaticMarkup(<ClinicReportContent clinicName="Clínica Teste" frequency="MONTHLY" numbers={numbers({ weeklyApproached: weeks([3, 9, 5]) })} />);
-    expect(markup).toContain("Abordagens por semana");
-    expect(markup).toContain(">9<");
+  it("'Abordados por semana': duas colunas por semana (Abordados e Em conversa), valores em cima", () => {
+    const markup = renderToStaticMarkup(<ClinicReportContent clinicName="Clínica Teste" frequency="MONTHLY" numbers={numbers({ weekly: weeks([[3, 2], [9, 4], [5, 3], [4, 1], [6, 2], [7, 5]]) })} />);
+    expect(markup).toContain("Abordados por semana");
+    expect(columnValueLabels(markup)).toEqual(["3", "2", "9", "4", "5", "3", "4", "1", "6", "2", "7", "5"]);
+    expect(markup).toContain(">26/10<");
+    expect(markup).toContain("Em conversa</span>");
   });
 });
 
@@ -296,14 +309,15 @@ describe("ClinicReportContent — Dados de exemplo (Demo)", () => {
   });
 });
 
+// Meses terminando em novembro/2026 (3 pares = set, out, nov).
 function evo(pairs: Array<[number, number]>) {
-  const base = new Date("2026-06-01T03:00:00.000Z").getTime();
+  const first = 11 - pairs.length; // índice do mês (0-based) do primeiro par
   return pairs.map(([scheduled, attended], i) => ({
-    start: new Date(Date.UTC(2026, 5 + i, 1, 3)),
-    end: new Date(Date.UTC(2026, 6 + i, 1, 3)),
+    start: new Date(Date.UTC(2026, first + i, 1, 3)),
+    end: new Date(Date.UTC(2026, first + i + 1, 1, 3)),
     scheduled,
     attended,
-  })).map((p) => (base ? p : p));
+  }));
 }
 
 describe("ClinicReportContent — faixa de taxas dentro do Resumo (só válidas)", () => {
@@ -342,42 +356,6 @@ describe("ClinicReportContent — faixa de taxas dentro do Resumo (só válidas)
   });
 });
 
-describe("ClinicReportContent — evolução dos últimos 6 períodos (item 6c)", () => {
-  it("6 meses com dados: mostra o gráfico com rótulos curtos ('jun'...'nov'), depois dos gráficos e antes de Follow-up", () => {
-    const markup = renderToStaticMarkup(
-      <ClinicReportContent clinicName="Clínica Teste" frequency="MONTHLY" numbers={numbers({ evolution: evo([[4, 3], [6, 5], [5, 4], [8, 7], [9, 8], [10, 7]]) })} />
-    );
-    expect(markup).toContain("Evolução · últimos 6 meses");
-    for (const m of ["jun", "jul", "ago", "set", "out", "nov"]) expect(markup).toContain(`>${m}<`);
-    const evolutionIdx = markup.indexOf("Evolução");
-    expect(evolutionIdx).toBeGreaterThan(markup.indexOf("Abordagens por semana"));
-    expect(markup.indexOf("Follow-up")).toBeGreaterThan(evolutionIdx);
-    expect(markup).toContain('role="img" aria-label="Evolução dos últimos 6 períodos');
-  });
-
-  it("menos de 3 períodos com dados: o gráfico some", () => {
-    const markup = renderToStaticMarkup(
-      <ClinicReportContent clinicName="Clínica Teste" frequency="MONTHLY" numbers={numbers({ evolution: evo([[0, 0], [0, 0], [0, 0], [0, 0], [3, 2], [10, 7]]) })} />
-    );
-    expect(markup).not.toContain("Evolução");
-  });
-
-  it("quinzenal: rótulos '1ª out'/'2ª out' e título em quinzenas", () => {
-    const points = [
-      ["2026-08-16", "2026-09-01"],
-      ["2026-09-01", "2026-09-16"],
-      ["2026-09-16", "2026-10-01"],
-      ["2026-10-01", "2026-10-16"],
-      ["2026-10-16", "2026-11-01"],
-      ["2026-11-01", "2026-11-16"],
-    ].map(([a, b], i) => ({ start: new Date(`${a}T03:00:00.000Z`), end: new Date(`${b}T03:00:00.000Z`), scheduled: 3 + i, attended: 2 + i }));
-    const markup = renderToStaticMarkup(<ClinicReportContent clinicName="Clínica Teste" frequency="BIWEEKLY" numbers={numbers({ evolution: points })} />);
-    expect(markup).toContain("Evolução · últimas 6 quinzenas");
-    expect(markup).toContain(">1ª out<");
-    expect(markup).toContain(">2ª out<");
-  });
-});
-
 describe("ClinicReportContent — Follow-up e Reativação (item 6d)", () => {
   it("'Voltaram' mostra a taxa sobre 'Enviadas'", () => {
     const markup = renderToStaticMarkup(<ClinicReportContent clinicName="Clínica Teste" frequency="MONTHLY" numbers={numbers({ reactivation: { sent: 8, returned: 2 } })} />);
@@ -398,7 +376,7 @@ describe("ClinicReportContent — Follow-up e Reativação (item 6d)", () => {
 describe("ClinicReportContent — topo e tons em dois níveis", () => {
   it("cabeçalho com brilho e filete; Resumo e Follow-up/Reativação no nível base, gráficos no raised", () => {
     const markup = renderToStaticMarkup(
-      <ClinicReportContent clinicName="Clínica Teste" frequency="MONTHLY" numbers={numbers({ evolution: evo([[4, 3], [6, 5], [5, 4], [8, 7], [9, 8], [10, 7]]) })} />
+      <ClinicReportContent clinicName="Clínica Teste" frequency="MONTHLY" numbers={numbers({ evolution: evo([[8, 7], [7, 6], [10, 7]]) })} />
     );
     expect(markup).toContain("report-header-glow");
     expect(markup).toContain("report-title-rule");
@@ -414,104 +392,72 @@ describe("ClinicReportContent — topo e tons em dois níveis", () => {
   });
 });
 
-describe("ClinicReportContent — barras sem rótulo '0'", () => {
-  it("semana com 0: sem rótulo nem barra; as outras mostram o valor", () => {
-    const markup = renderToStaticMarkup(<ClinicReportContent clinicName="Clínica Teste" frequency="MONTHLY" numbers={numbers({ weeklyApproached: weeks([3, 0, 5]) })} />);
-    expect(markup).toMatch(/>3<\/span>/);
-    expect(markup).not.toMatch(/>0<\/span>/);
-  });
-
-  it("evolução: período com 0 compareceram não ganha rótulo '0'", () => {
-    const markup = renderToStaticMarkup(
-      <ClinicReportContent clinicName="Clínica Teste" frequency="MONTHLY" numbers={numbers({ evolution: evo([[4, 3], [6, 0], [5, 4], [8, 7], [9, 8], [10, 7]]) })} />
-    );
-    expect(markup).not.toMatch(/>0<\/text>/);
-  });
-
-  it("evolução começa no primeiro período com dados (jun/jul zerados somem)", () => {
-    const markup = renderToStaticMarkup(
-      <ClinicReportContent clinicName="Clínica Teste" frequency="MONTHLY" numbers={numbers({ evolution: evo([[0, 0], [0, 0], [5, 4], [8, 7], [9, 8], [10, 7]]) })} />
-    );
-    expect(markup).toContain("Evolução · últimos 4 meses");
-    expect(markup).not.toContain(">jun<");
-    expect(markup).not.toContain(">jul<");
-    expect(markup).toContain(">ago<");
-  });
-
-});
-
-describe("ClinicReportContent — Evolução em linhas", () => {
-  it("é um gráfico de linhas (2 séries + área suave sob Agendaram), um ponto por período por série", () => {
-    const markup = renderToStaticMarkup(
-      <ClinicReportContent clinicName="Clínica Teste" frequency="MONTHLY" numbers={numbers({ evolution: evo([[4, 3], [6, 5], [5, 4], [8, 7], [7, 6], [10, 7]]) })} />
-    );
-    const svg = markup.slice(markup.indexOf('aria-label="Evolução dos últimos'));
-    expect(svg.match(/<path /g)?.length).toBe(3); // área + 2 linhas
-    expect(svg.match(/<circle /g)?.length).toBe(12);
-    expect(svg).toContain("stroke-vexo-tabIcon4");
-    expect(svg).toContain("Agendaram");
-  });
-
-  it("período zerado no meio: ponto na linha de base, sem rótulo '0'", () => {
-    const markup = renderToStaticMarkup(
-      <ClinicReportContent clinicName="Clínica Teste" frequency="MONTHLY" numbers={numbers({ evolution: evo([[4, 3], [0, 0], [5, 4], [8, 7], [7, 6], [10, 7]]) })} />
-    );
-    expect(markup).toContain("Evolução · últimos 6 meses");
-    expect(markup).not.toMatch(/>0<\/text>/);
-    // os dois pontos do período zerado ficam exatamente na linha de base
-    const baseY = markup.match(/<line [^>]*y1="([\d.]+)"/)![1];
-    const circles = [...markup.matchAll(/<circle cx="([\d.]+)" cy="([\d.]+)"/g)].filter((m) => m[2] === baseY);
-    expect(circles.length).toBe(2);
-  });
-
-  it("frase de leitura: 'Agendamentos: 10 em novembro, +43% sobre outubro', % em verde", () => {
-    const markup = renderToStaticMarkup(
-      <ClinicReportContent clinicName="Clínica Teste" frequency="MONTHLY" numbers={numbers({ evolution: evo([[4, 3], [6, 5], [5, 4], [8, 7], [7, 6], [10, 7]]) })} />
-    );
-    expect(markup).toContain('Agendamentos: 10 em novembro, <span class="text-vexo-reportDeltaUp">+43%</span> sobre outubro');
-  });
-
-  it("frase de leitura com queda: % em azul", () => {
-    const markup = renderToStaticMarkup(
-      <ClinicReportContent clinicName="Clínica Teste" frequency="MONTHLY" numbers={numbers({ evolution: evo([[4, 3], [6, 5], [5, 4], [8, 7], [8, 6], [6, 5]]) })} />
-    );
-    expect(markup).toContain('<span class="text-vexo-reportDeltaDown">-25%</span> sobre outubro');
-  });
-
-  it("frase oculta quando o anterior é zero (sem base)", () => {
-    const markup = renderToStaticMarkup(
-      <ClinicReportContent clinicName="Clínica Teste" frequency="MONTHLY" numbers={numbers({ evolution: evo([[4, 3], [6, 5], [5, 4], [8, 7], [0, 0], [6, 5]]) })} />
-    );
-    expect(markup).toContain("Evolução");
-    expect(markup).not.toContain("Agendamentos:");
-  });
-
-  it("quinzenal: frase 'na 1ª quinzena de novembro … sobre a 2ª quinzena de outubro'", () => {
-    const points = [
-      ["2026-09-16", "2026-10-01", 3, 2],
-      ["2026-10-01", "2026-10-16", 4, 3],
-      ["2026-10-16", "2026-11-01", 5, 4],
-      ["2026-11-01", "2026-11-16", 6, 5],
-    ].map(([a, b, sch, att]) => ({ start: new Date(`${a}T03:00:00.000Z`), end: new Date(`${b}T03:00:00.000Z`), scheduled: sch as number, attended: att as number }));
-    const markup = renderToStaticMarkup(<ClinicReportContent clinicName="Clínica Teste" frequency="BIWEEKLY" numbers={numbers({ evolution: points })} />);
-    expect(markup).toContain('Agendamentos: 6 na 1ª quinzena de novembro, <span class="text-vexo-reportDeltaUp">+20%</span> sobre a 2ª quinzena de outubro');
-    expect(markup).toContain(">2ª out<");
-  });
-
-  it("menos de 3 períodos com dados: sem gráfico e sem frase", () => {
-    const markup = renderToStaticMarkup(
-      <ClinicReportContent clinicName="Clínica Teste" frequency="MONTHLY" numbers={numbers({ evolution: evo([[0, 0], [0, 0], [0, 0], [0, 0], [3, 2], [10, 7]]) })} />
-    );
-    expect(markup).not.toContain("Evolução");
-    expect(markup).not.toContain("Agendamentos:");
-  });
-});
-
 describe("ClinicReportContent — nada de vermelho/rosa/coral", () => {
   it("nem com todas as quedas", () => {
     const markup = renderToStaticMarkup(
       <ClinicReportContent clinicName="Clínica Teste" frequency="MONTHLY" numbers={numbers({ previousComparison: { contactedPct: -40, inConversationPct: -30, scheduledPct: -20, attendedPct: -10 } })} />
     );
     expect(markup).not.toMatch(/red|pink|rose|coral|vexo-error/);
+  });
+});
+
+describe("ClinicReportContent — Evolução · últimos 3 meses (colunas)", () => {
+  it("3 meses com dados: título fixo, rótulos de mês, 6 colunas (Agendaram e Compareceram por mês)", () => {
+    const markup = renderToStaticMarkup(<ClinicReportContent clinicName="Clínica Teste" frequency="MONTHLY" numbers={numbers({ evolution: evo([[8, 7], [7, 6], [10, 7]]) })} />);
+    expect(markup).toContain("Evolução · últimos 3 meses");
+    for (const m of ["set", "out", "nov"]) expect(markup).toContain(`>${m}<`);
+    expect(columnValueLabels(markup).slice(-6)).toEqual(["8", "7", "7", "6", "10", "7"]);
+    expect(markup).toContain('aria-label="Evolução dos últimos 3 meses — setembro: 8 agendaram, 7 compareceram; outubro: 7 agendaram, 6 compareceram; novembro: 10 agendaram, 7 compareceram"');
+  });
+
+  it("título SEMPRE em meses, também no quinzenal", () => {
+    const markup = renderToStaticMarkup(<ClinicReportContent clinicName="Clínica Teste" frequency="BIWEEKLY" numbers={numbers({ evolution: evo([[8, 7], [7, 6], [10, 7]]) })} />);
+    expect(markup).toContain("Evolução · últimos 3 meses");
+    expect(markup).not.toContain("quinzenas");
+    expect(markup).toContain("Agendamentos: 10 em novembro");
+  });
+
+  it("um mês sem dados: o bloco inteiro some (só com 3 meses com dados)", () => {
+    const markup = renderToStaticMarkup(<ClinicReportContent clinicName="Clínica Teste" frequency="MONTHLY" numbers={numbers({ evolution: evo([[0, 0], [7, 6], [10, 7]]) })} />);
+    expect(markup).not.toContain("Evolução");
+    expect(markup).not.toContain("Agendamentos:");
+  });
+
+  it("valor 0 não ganha coluna nem rótulo (Compareceram 0 em outubro)", () => {
+    const markup = renderToStaticMarkup(<ClinicReportContent clinicName="Clínica Teste" frequency="MONTHLY" numbers={numbers({ evolution: evo([[8, 7], [7, 0], [10, 7]]) })} />);
+    expect(columnValueLabels(markup)).not.toContain("0");
+    expect(columnValueLabels(markup).slice(-5)).toEqual(["8", "7", "7", "10", "7"]);
+  });
+
+  it("frase de leitura com a regra de comparação (alta verde, queda azul, oculta sem base)", () => {
+    const up = renderToStaticMarkup(<ClinicReportContent clinicName="Clínica Teste" frequency="MONTHLY" numbers={numbers({ evolution: evo([[5, 4], [7, 6], [10, 7]]) })} />);
+    expect(up).toContain('Agendamentos: 10 em novembro, <span class="text-vexo-reportDeltaUp">+43%</span> sobre outubro');
+    const down = renderToStaticMarkup(<ClinicReportContent clinicName="Clínica Teste" frequency="MONTHLY" numbers={numbers({ evolution: evo([[5, 4], [8, 6], [6, 5]]) })} />);
+    expect(down).toContain('<span class="text-vexo-reportDeltaDown">-25%</span> sobre outubro');
+  });
+
+  it("último mês em cor cheia, anteriores em azul-acinzentado; nada de seta/vinheta/sombra interna", () => {
+    const markup = renderToStaticMarkup(<ClinicReportContent clinicName="Clínica Teste" frequency="MONTHLY" numbers={numbers({ evolution: evo([[8, 7], [7, 6], [10, 7]]) })} />);
+    const evoPart = markup.slice(markup.indexOf("Evolução · últimos 3 meses"));
+    expect(evoPart.match(/bg-vexo-reportColAMuted"/g)?.length).toBe(2);
+    expect(evoPart.match(/bg-vexo-reportColBMuted"/g)?.length).toBe(2);
+    expect(evoPart.match(/rounded-t-sm bg-vexo-reportColA"/g)?.length).toBe(1);
+    expect(evoPart.match(/rounded-t-sm bg-vexo-reportColB"/g)?.length).toBe(1);
+    expect(markup).not.toMatch(/shadow-inner|vignette|arrow/i);
+  });
+});
+
+describe("ClinicReportContent — 'Abordados por semana' (colunas)", () => {
+  it("valor 0 não ganha coluna nem rótulo", () => {
+    const markup = renderToStaticMarkup(<ClinicReportContent clinicName="Clínica Teste" frequency="MONTHLY" numbers={numbers({ weekly: weeks([[3, 0], [0, 0], [5, 2], [4, 1], [6, 2], [7, 5]]) })} />);
+    expect(columnValueLabels(markup)).not.toContain("0");
+  });
+
+  it("última semana em cor cheia, as 5 anteriores em azul-acinzentado (sem âmbar)", () => {
+    const markup = renderToStaticMarkup(<ClinicReportContent clinicName="Clínica Teste" frequency="MONTHLY" numbers={numbers()} />);
+    const weekPart = markup.slice(markup.indexOf("Abordados por semana"), markup.indexOf("Follow-up"));
+    expect(weekPart.match(/bg-vexo-reportColAMuted"/g)?.length).toBe(5);
+    expect(weekPart.match(/rounded-t-sm bg-vexo-reportColA"/g)?.length).toBe(1);
+    expect(markup).not.toContain("tabIcon2");
   });
 });
