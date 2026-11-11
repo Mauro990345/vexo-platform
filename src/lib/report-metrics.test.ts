@@ -12,15 +12,16 @@ vi.mock("@/lib/reactivation", async (importOriginal) => {
 
 const followUpLogFindManyMock = vi.fn();
 const appointmentFindManyMock = vi.fn().mockResolvedValue([]);
+const messageFindManyMock = vi.fn().mockResolvedValue([]);
 vi.mock("@/lib/prisma", () => ({
-  prisma: { followUpLog: { findMany: followUpLogFindManyMock }, appointment: { findMany: appointmentFindManyMock } },
+  prisma: { followUpLog: { findMany: followUpLogFindManyMock }, appointment: { findMany: appointmentFindManyMock }, message: { findMany: messageFindManyMock } },
 }));
 vi.mock("@/lib/metrics", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/metrics")>();
   return { ...actual, getClinicMetrics: getClinicMetricsMock, getAttendanceMetrics: getAttendanceMetricsMock };
 });
 
-const { getReportNumbers, getReportNumbersWithComparison, computePercentDelta, allocateToTotal, RETURN_ATTRIBUTION_DAYS } = await import("./report-metrics");
+const { getReportNumbers, getReportNumbersWithComparison, computePercentDelta, allocateToTotal, computeFollowUpReach, RETURN_ATTRIBUTION_DAYS } = await import("./report-metrics");
 const { computeMonthlyPeriod, computeBiweeklyPeriod, splitIntoWeeks } = await import("./report-period");
 
 const PERIOD = computeMonthlyPeriod(new Date("2026-11-15T12:00:00.000Z")); // novembro/2026 (30 dias)
@@ -37,7 +38,15 @@ describe("report-metrics — reaproveita as queries/definições existentes, nã
     getClinicMetricsMock.mockResolvedValue({ approached: 20, responded: 12, responseRate: 0.6, scheduled: 8, completed: 0, noShow: 1 });
     getAttendanceMetricsMock.mockResolvedValue({ attended: 7, pastDue: 8 });
     getReactivationReturnStatsMock.mockResolvedValue([{ days: 30, label: "período", sent: 5, returned: 2 }]);
-    followUpLogFindManyMock.mockResolvedValue([{ conversationId: "c1" }, { conversationId: "c2" }]);
+    // c1: recebeu passo em 05/11 e respondeu em 07/11; c2: recebeu e não respondeu.
+    followUpLogFindManyMock.mockResolvedValue([
+      { conversationId: "c1", triggeredAt: new Date("2026-11-03T12:00:00Z"), respondedAt: new Date("2026-11-07T12:00:00Z"), lastStepIndex: 0 },
+      { conversationId: "c2", triggeredAt: new Date("2026-11-03T12:00:00Z"), respondedAt: null, lastStepIndex: 1 },
+    ]);
+    messageFindManyMock.mockResolvedValue([
+      { conversationId: "c1", sentAt: new Date("2026-11-05T12:00:00Z") },
+      { conversationId: "c2", sentAt: new Date("2026-11-05T12:00:00Z") },
+    ]);
   });
 
   it("chama getClinicMetrics/getAttendanceMetrics EXATAMENTE com os limites do período (mesma fonte do Painel)", async () => {
@@ -74,19 +83,94 @@ describe("report-metrics — reaproveita as queries/definições existentes, nã
     expect(RETURN_ATTRIBUTION_DAYS).toBe(35);
   });
 
-  it("Follow-up retomados: filtra FollowUpLog por respondedAt no período e clínica via a relação com Conversation, distinto por conversationId", async () => {
+  it("Follow-up: duas consultas (logs com passo processado + mensagens AI ENVIADAS no período), sem laço por lead", async () => {
     await getReportNumbers(REAL_CLINIC_ID, PERIOD, NOW);
 
     expect(followUpLogFindManyMock).toHaveBeenCalledWith({
-      where: { respondedAt: { gte: PERIOD.start, lt: PERIOD.end }, conversation: { clinicId: REAL_CLINIC_ID } },
-      select: { conversationId: true },
-      distinct: ["conversationId"],
+      where: {
+        conversation: { clinicId: REAL_CLINIC_ID },
+        lastStepIndex: { not: null },
+        triggeredAt: { lt: PERIOD.end },
+        OR: [{ respondedAt: null }, { respondedAt: { gte: PERIOD.start } }],
+      },
+      select: { conversationId: true, triggeredAt: true, respondedAt: true, lastStepIndex: true },
+    });
+    expect(messageFindManyMock).toHaveBeenCalledWith({
+      where: {
+        conversationId: { in: ["c1", "c2"] },
+        direction: "OUTBOUND",
+        sender: "AI",
+        status: "SENT",
+        sentAt: { gte: PERIOD.start, lt: PERIOD.end },
+      },
+      select: { conversationId: true, sentAt: true },
     });
   });
 
-  it("Follow-up retomados: conta os leads distintos devolvidos pela query (2 no mock)", async () => {
+  it("Follow-up: Receberam = 2, Responderam = 1", async () => {
     const numbers = await getReportNumbers(REAL_CLINIC_ID, PERIOD, NOW);
-    expect(numbers.followUpRecovered).toBe(2);
+    expect(numbers.followUp).toEqual({ received: 2, responded: 1 });
+  });
+});
+
+describe("computeFollowUpReach — regra de Receberam/Responderam", () => {
+  const d = (iso: string) => new Date(iso);
+  const log = (o: Partial<{ conversationId: string; triggeredAt: Date; respondedAt: Date | null; lastStepIndex: number | null }>) => ({
+    conversationId: "c1",
+    triggeredAt: d("2026-11-02T12:00:00Z"),
+    respondedAt: null,
+    lastStepIndex: 0,
+    ...o,
+  });
+
+  it("mensagem AI enviada dentro da janela (após o gatilho, antes da resposta) e no período = recebeu", () => {
+    expect(computeFollowUpReach([log({})], [{ conversationId: "c1", sentAt: d("2026-11-04T12:00:00Z") }], PERIOD)).toEqual({ received: 1, responded: 0 });
+  });
+
+  it("mensagem ANTES do gatilho (conversa normal) não conta como follow-up", () => {
+    expect(computeFollowUpReach([log({})], [{ conversationId: "c1", sentAt: d("2026-11-01T12:00:00Z") }], PERIOD)).toEqual({ received: 0, responded: 0 });
+  });
+
+  it("mensagem DEPOIS da resposta do lead (a IA voltando a conversar) não conta", () => {
+    const l = log({ respondedAt: d("2026-11-05T12:00:00Z") });
+    expect(computeFollowUpReach([l], [{ conversationId: "c1", sentAt: d("2026-11-06T12:00:00Z") }], PERIOD)).toEqual({ received: 0, responded: 0 });
+  });
+
+  it("log sem nenhum passo processado (lastStepIndex null) não conta, mesmo com resposta", () => {
+    const l = log({ lastStepIndex: null, respondedAt: d("2026-11-05T12:00:00Z") });
+    expect(computeFollowUpReach([l], [{ conversationId: "c1", sentAt: d("2026-11-04T12:00:00Z") }], PERIOD)).toEqual({ received: 0, responded: 0 });
+  });
+
+  it("recebeu no período e respondeu depois, no período = respondeu", () => {
+    const l = log({ respondedAt: d("2026-11-06T12:00:00Z") });
+    expect(computeFollowUpReach([l], [{ conversationId: "c1", sentAt: d("2026-11-04T12:00:00Z") }], PERIOD)).toEqual({ received: 1, responded: 1 });
+  });
+
+  it("respondeu só depois do fim do período: recebeu, mas não conta como respondeu neste período", () => {
+    const l = log({ respondedAt: d("2026-12-03T12:00:00Z") });
+    expect(computeFollowUpReach([l], [{ conversationId: "c1", sentAt: d("2026-11-28T12:00:00Z") }], PERIOD)).toEqual({ received: 1, responded: 0 });
+  });
+
+  it("mesmo lead com 2 logs (SILENCE e NO_SHOW) e várias mensagens conta UMA vez", () => {
+    const logs = [log({ respondedAt: d("2026-11-06T12:00:00Z") }), log({ triggeredAt: d("2026-11-10T12:00:00Z"), lastStepIndex: 2 })];
+    const msgs = [
+      { conversationId: "c1", sentAt: d("2026-11-04T12:00:00Z") },
+      { conversationId: "c1", sentAt: d("2026-11-12T12:00:00Z") },
+      { conversationId: "c1", sentAt: d("2026-11-14T12:00:00Z") },
+    ];
+    expect(computeFollowUpReach(logs, msgs, PERIOD)).toEqual({ received: 1, responded: 1 });
+  });
+
+  it("Responderam nunca passa de Receberam (respondeu sem ter recebido no período não entra)", () => {
+    const logs = [log({ conversationId: "a", respondedAt: d("2026-11-06T12:00:00Z") }), log({ conversationId: "b", respondedAt: d("2026-11-06T12:00:00Z") })];
+    const msgs = [{ conversationId: "a", sentAt: d("2026-11-04T12:00:00Z") }]; // b nunca recebeu
+    const r = computeFollowUpReach(logs, msgs, PERIOD);
+    expect(r).toEqual({ received: 1, responded: 1 });
+    expect(r.responded).toBeLessThanOrEqual(r.received);
+  });
+
+  it("nada recebido: zeros", () => {
+    expect(computeFollowUpReach([], [], PERIOD)).toEqual({ received: 0, responded: 0 });
   });
 });
 
@@ -284,6 +368,13 @@ describe("buildSimulatedReportNumbers (via getReportNumbers) — coerência inte
     expect(numbers.attendanceBase).toBe(numbers.funnel.attended + numbers.funnel.noShow);
     expect(numbers.attendanceBase).toBeLessThanOrEqual(numbers.funnel.scheduled);
     expect(numbers.attendanceRate).toBeCloseTo(numbers.funnel.attended / numbers.attendanceBase);
+  });
+
+  it("Follow-up simulado: Receberam > 0 e Responderam <= Receberam", async () => {
+    const numbers = await getReportNumbers(DEMO_CLINIC_ID, PERIOD, NOW);
+    expect(numbers.followUp.received).toBeGreaterThan(0);
+    expect(numbers.followUp.responded).toBeLessThanOrEqual(numbers.followUp.received);
+    expect(numbers.followUp.received).toBeLessThanOrEqual(numbers.funnel.inConversation);
   });
 
   it("Reativação simulada: 'voltaram' nunca passa de 'enviadas'", async () => {

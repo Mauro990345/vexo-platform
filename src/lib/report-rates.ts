@@ -66,3 +66,39 @@ export function trimEvolution(points: EvolutionPoint[]): EvolutionPoint[] {
 export function shouldShowEvolution(points: EvolutionPoint[]): boolean {
   return points.filter((p) => p.scheduled > 0 || p.attended > 0).length >= EVOLUTION_MIN_PERIODS_WITH_DATA;
 }
+
+// Frase de leitura acima do gráfico de Evolução (6ª rodada) — calculada só
+// com os DOIS ÚLTIMOS pontos da própria série (período do relatório e o
+// anterior), nunca um dado novo. Ex.: "Agendamentos: 10 em outubro, +43%
+// sobre setembro". null (frase oculta) quando não há base de comparação —
+// mesma regra de computePercentDelta (atual e anterior > 0).
+export function buildEvolutionReading(
+  points: EvolutionPoint[],
+  periodName: (p: EvolutionPoint) => string,
+  frequency: "MONTHLY" | "BIWEEKLY"
+): { lead: string; pct: number; tail: string } | null {
+  if (points.length < 2) return null;
+  const current = points[points.length - 1]!;
+  const previous = points[points.length - 2]!;
+  const pct = computePercentDelta(current.scheduled, previous.scheduled);
+  if (pct === null) return null;
+  const inWord = frequency === "MONTHLY" ? "em" : "na";
+  const overWord = frequency === "MONTHLY" ? "sobre" : "sobre a";
+  return {
+    lead: `Agendamentos: ${current.scheduled} ${inWord} ${periodName(current)}, `,
+    pct,
+    tail: ` ${overWord} ${periodName(previous)}`,
+  };
+}
+
+// Regra de cor da comparação no Relatório (6ª rodada): alta = verde vivo,
+// queda = azul vivo, 0% = cinza. Nunca vermelho/rosa/coral.
+export function deltaColorClass(pct: number): string {
+  if (pct > 0) return "text-vexo-reportDeltaUp";
+  if (pct < 0) return "text-vexo-reportDeltaDown";
+  return "text-vexo-reportCaption";
+}
+
+export function formatDeltaPct(pct: number): string {
+  return `${pct > 0 ? "+" : ""}${pct}%`;
+}

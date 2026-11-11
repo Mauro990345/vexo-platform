@@ -156,6 +156,37 @@ Nova tela, administrada pela página "Contas" (`/crm`, só admin — ver DESIGN.
   `clinic-nav.tsx`, só alcançável pelo botão "Ver relatório" do painel, numa aba nova do
   navegador): tudo reaproveita `MetricCard` e os containers já existentes do Painel; a 4ª rodada
   criou tokens próprios SÓ desta tela (elevação, legenda, azul positivo — ver abaixo).
+  - **6ª rodada — vale sobre TUDO abaixo quando houver conflito:**
+    - **Cores da comparação "vs. anterior" (regra nova)**: ALTA em **verde** (`--vexo-report-delta-up`
+      #3fd083, `text-vexo-reportDeltaUp`), QUEDA em **azul** (`--vexo-report-delta-down` #4ea8ee,
+      `text-vexo-reportDeltaDown`), 0% em cinza (`vexo-reportCaption`), sem base (atual ou anterior =
+      0) nenhum texto. Os dois tons são mais vivos (mais saturados) que as cores normais do sistema —
+      SÓ nesta tela e SÓ na comparação (e no % da frase de leitura da Evolução, mesma regra; função
+      única `deltaColorClass`, `report-rates.ts`). Contraste: verde >= 7.6:1 e azul >= 5.9:1 sobre os
+      dois níveis de bloco. Substituem `--vexo-report-positive`/`vexo-reportPositive` (removidos).
+      Nunca vermelho, rosa nem coral. Painel e outras telas não mudam. Não existe outro texto
+      pequeno em azul no relatório (o rodapé do anel é todo cinza), então nada mais usa o azul vivo.
+    - **Evolução em LINHAS** (`PeriodEvolutionChart.tsx`, SVG simples): duas séries — Agendaram
+      (traço em degradê `--vexo-accent` → `--tab-icon-1`, com área MUITO suave sob a linha, ciano a
+      16% → 0) e Compareceram (`--tab-icon-4`, verde). Traço 1.5 (fino como o anel), ponto em cada
+      período, valor só quando > 0 (série maior acima do ponto, menor abaixo — não colidem), período
+      zerado no meio vira ponto na linha de base (linha-base fina `stroke-vexo-reportLine`), eixo com
+      rótulo curto ("jul", "1ª out"). viewBox 300×132 (um pouco mais alto que as barras antigas),
+      escala com o bloco; no `lg` limitado a `max-h-36` pra não esticar o bloco. Acima, a **frase de
+      leitura** (texto pequeno cinza, % na cor da regra acima): "Agendamentos: 10 em outubro, +43% sobre
+      setembro" / "… na 1ª quinzena de novembro, +20% sobre a 2ª quinzena de outubro" — só com os
+      dois últimos pontos da própria série; oculta sem base (`buildEvolutionReading`). Continuam:
+      começa no 1º período com dados, oculta com < 3, mesmas métricas por período (1 consulta
+      agregada), legenda pequena (traço curto em cada cor), `aria-label` com todos os valores.
+    - **Follow-up** no mesmo formato da Reativação: "Receberam" e "Responderam" lado a lado + linha
+      "X% responderam" (oculta quando Receberam = 0). Regra (`computeFollowUpReach`,
+      `report-metrics.ts`): **Receberam** = leads distintos com pelo menos uma mensagem automática
+      (sender AI, OUTBOUND) ENVIADA (status SENT, `sentAt` no período) dentro de uma janela de
+      follow-up aberta — depois de `FollowUpLog.triggeredAt`, antes de `respondedAt`, num log com
+      passo processado (`lastStepIndex` não nulo). **Responderam** = desses, os que têm `respondedAt`
+      no período e depois do primeiro passo recebido — subconjunto de Receberam, nunca maior. Sem
+      atribuição de "agendou depois do follow-up". O antigo box solto "Leads retomados" saiu.
+      Bloco Follow-up/Reativação agora em 2 colunas iguais a partir de `sm`.
   - **5ª rodada (mais fino e sutil, mesmo conteúdo) — vale sobre TUDO abaixo quando houver conflito:**
     - **Tons em dois níveis** (o fundo da página não muda): blocos separados por linha ficam no
       nível **base**, mais escuro (`.report-panel` — `--vexo-report-base-top` #161c26 →

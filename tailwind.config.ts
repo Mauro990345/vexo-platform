@@ -26,7 +26,8 @@ const config: Config = {
           // comentário grande em globals.css.
           tabIcon1: "rgb(var(--tab-icon-1) / <alpha-value>)",
           reportCaption: "rgb(var(--vexo-report-caption) / <alpha-value>)",
-          reportPositive: "rgb(var(--vexo-report-positive) / <alpha-value>)",
+          reportDeltaUp: "rgb(var(--vexo-report-delta-up) / <alpha-value>)",
+          reportDeltaDown: "rgb(var(--vexo-report-delta-down) / <alpha-value>)",
           reportInset: "rgb(var(--vexo-report-inset) / <alpha-value>)",
           // Bordas/separadores finos do Relatório: branco a 7%, opacidade fixa.
           reportLine: "rgb(var(--vexo-report-edge) / 0.07)",

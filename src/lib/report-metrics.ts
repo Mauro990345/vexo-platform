@@ -15,27 +15,83 @@ export type { EvolutionPoint };
 // RETURN_ATTRIBUTION_DAYS, reactivation.ts) — nenhuma segunda definição
 // pro mesmo número, nenhuma regra nova de atribuição.
 
-export const REPORT_FOLLOW_UP_RETOMADOS_HELP =
-  "Leads que pararam de responder ou faltaram, entraram na sequência automática de follow-up, e voltaram a responder " +
-  "ou remarcaram dentro do período (FollowUpLog.respondedAt já usado pelo sistema — não é uma regra nova).";
+// Follow-up do relatório (6ª rodada): "Receberam" e "Responderam".
+//
+// Não existe uma marca "esta mensagem é um passo de follow-up" na tabela
+// Message, e FollowUpLog só guarda o ÚLTIMO passo (lastStepSentAt, que
+// avança inclusive em passo descartado sem envio). Por isso a regra usa só
+// dado que já existe e é confiável, sem inventar campo:
+//
+// - RECEBERAM = leads (conversas) distintos com pelo menos uma mensagem
+//   automática (sender AI, OUTBOUND) EFETIVAMENTE ENVIADA (status SENT,
+//   sentAt dentro do período) DENTRO de uma janela de follow-up aberta: a
+//   partir do gatilho (FollowUpLog.triggeredAt) e antes do lead responder
+//   (FollowUpLog.respondedAt, ou ainda aberta), num log com pelo menos um
+//   passo processado (lastStepIndex não nulo). Dentro dessa janela a IA não
+//   responde nada ao lead (qualquer resposta dele fecha a janela antes —
+//   cancelPendingFollowUp), então a mensagem AI enviada ali é o próprio
+//   passo de follow-up.
+// - RESPONDERAM = desses, os que voltaram a responder/remarcar
+//   (FollowUpLog.respondedAt, o mesmo campo dos antigos "retomados") DENTRO
+//   do período e DEPOIS de terem recebido o passo. Subconjunto de
+//   "Receberam" por construção — nunca maior.
+export type FollowUpLogRow = { conversationId: string; triggeredAt: Date; respondedAt: Date | null; lastStepIndex: number | null };
+export type FollowUpMessageRow = { conversationId: string; sentAt: Date | null };
 
-// "Retomados" (item c do pedido) — quantos LEADS DISTINTOS voltaram a
-// responder/remarcar (FollowUpLog.respondedAt, já gravado hoje por
-// cancelPendingFollowUp — ver conversation-pipeline.ts/appointments.ts/
-// follow-up.ts, sempre que o lead responde de verdade ou remarca durante
-// um follow-up em andamento) DENTRO do período. Conta por conversationId
-// distinto (não por linha de log) — uma mesma conversa pode ter logs de
-// SILENCE e NO_SHOW separados, mas representa o MESMO lead retomado.
-async function countFollowUpRecovered(clinicId: string, from: Date, to: Date): Promise<number> {
-  const rows = await prisma.followUpLog.findMany({
+export function computeFollowUpReach(
+  logs: FollowUpLogRow[],
+  messages: FollowUpMessageRow[],
+  period: ReportPeriod
+): { received: number; responded: number } {
+  const received = new Set<string>();
+  const responded = new Set<string>();
+  for (const log of logs) {
+    if (log.lastStepIndex === null) continue;
+    const firstSent = messages
+      .filter(
+        (m) =>
+          m.conversationId === log.conversationId &&
+          m.sentAt !== null &&
+          m.sentAt >= period.start &&
+          m.sentAt < period.end &&
+          m.sentAt >= log.triggeredAt &&
+          (log.respondedAt === null || m.sentAt < log.respondedAt)
+      )
+      .reduce<Date | null>((min, m) => (min === null || m.sentAt! < min ? m.sentAt! : min), null);
+    if (firstSent === null) continue;
+    received.add(log.conversationId);
+    if (log.respondedAt && log.respondedAt >= period.start && log.respondedAt < period.end && log.respondedAt > firstSent) {
+      responded.add(log.conversationId);
+    }
+  }
+  return { received: received.size, responded: responded.size };
+}
+
+// Duas consultas, sem laço por lead: os logs da clínica que podem ter
+// janela aberta dentro do período, e as mensagens AI enviadas no período
+// dessas conversas.
+async function fetchFollowUpReach(clinicId: string, period: ReportPeriod): Promise<{ received: number; responded: number }> {
+  const logs = await prisma.followUpLog.findMany({
     where: {
-      respondedAt: { gte: from, lt: to },
       conversation: { clinicId },
+      lastStepIndex: { not: null },
+      triggeredAt: { lt: period.end },
+      OR: [{ respondedAt: null }, { respondedAt: { gte: period.start } }],
     },
-    select: { conversationId: true },
-    distinct: ["conversationId"],
+    select: { conversationId: true, triggeredAt: true, respondedAt: true, lastStepIndex: true },
   });
-  return rows.length;
+  if (logs.length === 0) return { received: 0, responded: 0 };
+  const messages = await prisma.message.findMany({
+    where: {
+      conversationId: { in: Array.from(new Set(logs.map((l) => l.conversationId))) },
+      direction: "OUTBOUND",
+      sender: "AI",
+      status: "SENT",
+      sentAt: { gte: period.start, lt: period.end },
+    },
+    select: { conversationId: true, sentAt: true },
+  });
+  return computeFollowUpReach(logs, messages, period);
 }
 
 export type ReportFunnel = {
@@ -61,7 +117,7 @@ export type ReportNumbers = {
   // sem registro manual faz "Abordados" = nº de conversas ("Em conversa").
   // Ver computeConversionRates (report-rates.ts).
   contactedFromApproachLogs: boolean;
-  followUpRecovered: number;
+  followUp: { received: number; responded: number }; // ver computeFollowUpReach
   reactivation: { sent: number; returned: number };
   isSimulated: boolean;
 };
@@ -112,7 +168,7 @@ async function fetchRealReportNumbers(clinicId: string, period: ReportPeriod, no
   const referenceNow = new Date(period.end.getTime() - 1);
   const [reactivationStat] = await getReactivationReturnStats(clinicId, [{ days, label: "período" }], referenceNow);
 
-  const followUpRecovered = await countFollowUpRecovered(clinicId, period.start, period.end);
+  const followUp = await fetchFollowUpReach(clinicId, period);
 
   return {
     period,
@@ -126,7 +182,7 @@ async function fetchRealReportNumbers(clinicId: string, period: ReportPeriod, no
     attendanceRate: attendance.pastDue > 0 ? attendance.attended / attendance.pastDue : null,
     attendanceBase: attendance.pastDue,
     contactedFromApproachLogs: clinicMetrics.approachLogged > 0 && clinicMetrics.approachLogged >= clinicMetrics.responded,
-    followUpRecovered,
+    followUp,
     reactivation: { sent: reactivationStat?.sent ?? 0, returned: reactivationStat?.returned ?? 0 },
   };
 }
@@ -244,6 +300,10 @@ function buildSimulatedReportNumbers(period: ReportPeriod): Omit<ReportNumbers, 
   // propósito (agendamentos pra depois do período/cancelados), como
   // acontece com dado real.
   const attendanceBase = attended + noShow;
+  // Follow-up simulado: uma fração das conversas recebe follow-up, e uma
+  // fração DESSES responde — Responderam <= Receberam por construção.
+  const followUpReceived = Math.max(1, Math.round(inConversation * (0.3 + rand() * 0.1)));
+  const simulatedFollowUp = { received: followUpReceived, responded: Math.round(followUpReceived * (0.25 + rand() * 0.15)) };
 
   return {
     period,
@@ -251,7 +311,7 @@ function buildSimulatedReportNumbers(period: ReportPeriod): Omit<ReportNumbers, 
     attendanceRate: attendanceBase > 0 ? attended / attendanceBase : null,
     attendanceBase,
     contactedFromApproachLogs: true,
-    followUpRecovered: Math.max(0, Math.round(inConversation * 0.08)),
+    followUp: simulatedFollowUp,
     reactivation: { sent, returned },
   };
 }
