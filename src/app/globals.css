@@ -144,11 +144,14 @@
   /* Legendas pequenas do relatório (pedido explícito: #8b909a) — 4.7:1
      sobre o topo do painel, 6:1 sobre o fundo da página (AA). */
   --vexo-report-caption: 139 144 154; /* #8b909a */
-  /* Comparação positiva ("+12% vs. anterior"): tom mais claro do azul da
-     marca. O #2b87bd puro dá só ~3.8:1 sobre o painel (reprova AA em
-     texto de 11-12px); este dá ~5.7:1. Mesmo valor de
-     --vexo-card-type-reativacao-text, token próprio pra não acoplar. */
-  --vexo-report-positive: 90 168 214; /* #5aa8d6 */
+  /* Comparação "vs. anterior" do Relatório (6ª rodada): ALTA em verde,
+     QUEDA em azul — um pouco mais vivos que as cores normais do sistema
+     (pedido explícito: as antigas ficavam pálidas). Só nesta tela, só na
+     comparação (e na frase de leitura da Evolução, mesma regra). Contraste
+     AA testado sobre os dois níveis de bloco: verde >= 7.6:1, azul >= 5.9:1.
+     Nunca vermelho/rosa/coral. Substituem --vexo-report-positive. */
+  --vexo-report-delta-up: 63 208 131; /* #3fd083 */
+  --vexo-report-delta-down: 78 168 238; /* #4ea8ee */
 }
 
 /* Superfícies do Relatório — classes (e não utilitários soltos) porque

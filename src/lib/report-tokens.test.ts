@@ -24,7 +24,7 @@ function contrast(a: [number, number, number], b: [number, number, number]): num
 
 describe("tokens do Relatório — contraste AA (4.5:1) sobre o painel e o fundo", () => {
   const backgrounds = ["vexo-report-base-top", "vexo-report-base-bottom", "vexo-report-raised-top", "vexo-report-raised-bottom", "vexo-report-inset", "vexo-bg"];
-  const texts = ["vexo-report-caption", "vexo-report-positive", "vexo-tab-fg"];
+  const texts = ["vexo-report-caption", "vexo-report-delta-up", "vexo-report-delta-down", "vexo-tab-fg"];
   for (const bg of backgrounds) {
     for (const fg of texts) {
       it(`${fg} sobre ${bg}`, () => {
@@ -43,5 +43,25 @@ describe("tokens do Relatório — contraste AA (4.5:1) sobre o painel e o fundo
 
   it("área rebaixada (inset) é mais escura que o bloco de gráfico que a contém", () => {
     expect(luminance(token("vexo-report-inset"))).toBeLessThan(luminance(token("vexo-report-raised-bottom")));
+  });
+});
+
+describe("cores da comparação — vivas, nunca vermelho/rosa/coral", () => {
+  it("alta é verde (G domina), queda é azul (B domina)", () => {
+    const [ur, ug, ub] = token("vexo-report-delta-up");
+    const [dr, dg, db] = token("vexo-report-delta-down");
+    expect(ug).toBeGreaterThan(ur);
+    expect(ug).toBeGreaterThan(ub);
+    expect(db).toBeGreaterThan(dr);
+    expect(db).toBeGreaterThan(dg);
+  });
+
+  it("mais saturadas que as cores normais equivalentes do sistema (verde #49b76c / azul claro antigo #5aa8d6)", () => {
+    const sat = ([r, g, b]: [number, number, number]) => {
+      const mx = Math.max(r, g, b) / 255, mn = Math.min(r, g, b) / 255, l = (mx + mn) / 2;
+      return mx === mn ? 0 : (mx - mn) / (1 - Math.abs(2 * l - 1));
+    };
+    expect(sat(token("vexo-report-delta-up"))).toBeGreaterThan(sat(token("tab-icon-4")));
+    expect(sat(token("vexo-report-delta-down"))).toBeGreaterThan(sat([90, 168, 214]));
   });
 });

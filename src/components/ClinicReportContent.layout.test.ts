@@ -34,7 +34,7 @@ const NUMBERS: ReportNumbersWithComparison = {
   attendanceRate: 0.766,
   attendanceBase: 47,
   contactedFromApproachLogs: true,
-  followUpRecovered: 12,
+  followUp: { received: 41, responded: 12 },
   reactivation: { sent: 23, returned: 9 },
   isSimulated: false,
   previousComparison: { contactedPct: 14, inConversationPct: 9, scheduledPct: 22, attendedPct: 18 },
@@ -52,7 +52,9 @@ const EXPECTED_LABELS = [
   "Em conversa",
   "Agendaram",
   "Compareceram",
-  "Leads retomados",
+  "Receberam",
+  "Responderam",
+  "29% responderam",
   "Enviadas",
   "Voltaram",
   "Comparecimento",
@@ -145,6 +147,31 @@ describe("ClinicReportContent — layout real, sem rolagem horizontal nem rótul
           if (el.scrollWidth > el.clientWidth + 1 && getComputedStyle(el).display !== "inline") out.push(`transborda: "${text}"`);
           if (r.right > root.right + 1 || r.left < root.left - 1) out.push(`fora do container: "${text}"`);
         }
+        return out;
+      });
+      expect(problems).toEqual([]);
+      await page.close();
+    });
+  }
+
+  for (const width of [...MOBILE_WIDTHS, DESKTOP_WIDTH]) {
+    it(`${width}px: rótulos do gráfico de Evolução dentro do gráfico e sem se sobrepor`, async () => {
+      const page = await browser.newPage({ viewport: { width, height: 1600 } });
+      await page.setContent(html);
+      await page.waitForTimeout(30);
+      const problems = await page.evaluate(() => {
+        const svg = document.querySelector('svg[aria-label^="Evolução"]')!;
+        const box = svg.getBoundingClientRect();
+        const rects = Array.from(svg.querySelectorAll("text")).map((t) => ({ t: t.textContent, r: t.getBoundingClientRect() }));
+        const out: string[] = [];
+        for (const { t, r } of rects) {
+          if (r.left < box.left - 0.5 || r.right > box.right + 0.5 || r.top < box.top - 0.5 || r.bottom > box.bottom + 0.5) out.push(`fora: ${t}`);
+        }
+        for (let i = 0; i < rects.length; i++)
+          for (let j = i + 1; j < rects.length; j++) {
+            const a = rects[i]!.r, b = rects[j]!.r;
+            if (a.left < b.right - 0.5 && b.left < a.right - 0.5 && a.top < b.bottom - 0.5 && b.top < a.bottom - 0.5) out.push(`sobrepõe: ${rects[i]!.t} / ${rects[j]!.t}`);
+          }
         return out;
       });
       expect(problems).toEqual([]);

@@ -277,3 +277,12 @@ export function formatReportPeriodShortLabel(frequency: ReportFrequency, period:
   if (frequency === "MONTHLY") return short;
   return day === 1 ? `1ª ${short}` : `2ª ${short}`;
 }
+
+// Nome do período sem o ano, pra frase de leitura da Evolução (6ª rodada):
+// "outubro" (mensal) / "2ª quinzena de outubro" (quinzenal).
+export function formatReportPeriodName(frequency: ReportFrequency, period: ReportPeriod): string {
+  const { month0, day } = brazilDateParts(period.start);
+  const monthName = MONTH_NAMES_PT[month0]!;
+  if (frequency === "MONTHLY") return monthName;
+  return day === 1 ? `1ª quinzena de ${monthName}` : `2ª quinzena de ${monthName}`;
+}

@@ -3,9 +3,19 @@ import { AttendanceRing } from "@/components/AttendanceRing";
 import { WeeklyApproachesChart } from "@/components/WeeklyApproachesChart";
 import { PeriodEvolutionChart } from "@/components/PeriodEvolutionChart";
 import type { ReportNumbersWithComparison } from "@/lib/report-metrics";
-import { formatReportPeriodLabel, formatReportDateRange, type ReportFrequency } from "@/lib/report-period";
+import { formatReportPeriodLabel, formatReportDateRange, formatReportPeriodName, type ReportFrequency } from "@/lib/report-period";
 import { buildOpeningSentence } from "@/lib/report-opening-sentence";
-import { computeConversionRates, formatRatePct, safeRate, shouldShowEvolution, trimEvolution, type ConversionRate } from "@/lib/report-rates";
+import {
+  buildEvolutionReading,
+  computeConversionRates,
+  deltaColorClass,
+  formatDeltaPct,
+  formatRatePct,
+  safeRate,
+  shouldShowEvolution,
+  trimEvolution,
+  type ConversionRate,
+} from "@/lib/report-rates";
 
 // Conteúdo do Relatório de resultados (quinzenal/mensal) — componente
 // presentacional PURO (sem Prisma, sem sessão), reaproveitado pelas DUAS
@@ -18,17 +28,17 @@ import { computeConversionRates, formatRatePct, safeRate, shouldShowEvolution, t
 // números maiores, cabeçalho com brilho/filete, faixa de conversão entre
 // etapas, evolução dos últimos 6 períodos e taxa de retorno da Reativação.
 // Cor única nos 4 boxes do Resumo (nenhum `highlight` — o Painel continua
-// com o dele, intocado). Comparação positiva em azul claro
-// (vexo-reportPositive); negativa/zero/sem base em cinza — nunca
-// vermelho/rosa.
+// com o dele, intocado). Comparação "vs. anterior" (6ª rodada): ALTA em
+// verde vivo (vexo-reportDeltaUp), QUEDA em azul vivo
+// (vexo-reportDeltaDown), 0% em cinza, sem base nenhum texto — nunca
+// vermelho/rosa/coral (ver deltaColorClass, report-rates.ts).
 function formatComparisonLabel(pct: number | null): string | null {
   if (pct === null) return null;
-  const sign = pct > 0 ? "+" : "";
-  return `${sign}${pct}% vs. anterior`;
+  return `${formatDeltaPct(pct)} vs. anterior`;
 }
 
 function comparisonColorClass(pct: number | null): string {
-  return pct !== null && pct > 0 ? "text-vexo-reportPositive" : "text-vexo-reportCaption";
+  return pct === null ? "text-vexo-reportCaption" : deltaColorClass(pct);
 }
 
 // Tipografia do Relatório (5ª rodada) — número 24px no celular, 26px a
@@ -92,7 +102,7 @@ export function ClinicReportContent({
     attendanceRate,
     attendanceBase,
     contactedFromApproachLogs,
-    followUpRecovered,
+    followUp,
     reactivation,
     previousComparison,
     isSimulated,
@@ -104,6 +114,8 @@ export function ClinicReportContent({
   const reactivationReturnRate = safeRate(reactivation.returned, reactivation.sent);
   const evolutionShown = trimEvolution(evolution);
   const showEvolution = shouldShowEvolution(evolutionShown);
+  const evolutionReading = showEvolution ? buildEvolutionReading(evolutionShown, (p) => formatReportPeriodName(frequency, p), frequency) : null;
+  const followUpRate = safeRate(followUp.responded, followUp.received);
 
   return (
     <div className="space-y-3.5">
@@ -164,20 +176,35 @@ export function ClinicReportContent({
         {showEvolution && (
           <section className="report-panel-raised space-y-2 rounded-report p-block">
             <SectionTitle>{frequency === "MONTHLY" ? `Evolução · últimos ${evolutionShown.length} meses` : `Evolução · últimas ${evolutionShown.length} quinzenas`}</SectionTitle>
+            {/* Frase de leitura (só com base de comparação) — texto pequeno
+                e leve; o % segue a mesma regra de cor da comparação. */}
+            {evolutionReading && (
+              <p className="text-card text-vexo-reportCaption">
+                {evolutionReading.lead}
+                <span className={deltaColorClass(evolutionReading.pct)}>{formatDeltaPct(evolutionReading.pct)}</span>
+                {evolutionReading.tail}
+              </p>
+            )}
             <PeriodEvolutionChart frequency={frequency} points={evolutionShown} />
           </section>
         )}
       </div>
 
-      {/* Follow-up + Reativação numa faixa só. "Voltaram" ganha a taxa
-          sobre "Enviadas" (oculta sem envio). "Leads retomados" fica SEM
-          taxa: não existe hoje um total confiável de follow-ups ENVIADOS
-          por período (FollowUpLog só guarda o último passo, e ele avança
-          também em passo descartado sem envio) — não inventamos um. */}
-      <section className="report-panel grid gap-3 rounded-report p-block sm:grid-cols-[1fr_2fr] sm:divide-x sm:divide-vexo-reportLine">
+      {/* Follow-up + Reativação numa faixa só, no MESMO formato (6ª rodada):
+          dois números lado a lado + uma linha de taxa. Follow-up:
+          "Receberam"/"Responderam" (ver computeFollowUpReach,
+          report-metrics.ts — Responderam é subconjunto de Receberam) e
+          "X% responderam" (oculta sem ninguém que recebeu). */}
+      <section className="report-panel grid gap-3 rounded-report p-block sm:grid-cols-2 sm:divide-x sm:divide-vexo-reportLine">
         <div className="space-y-1.5 sm:pr-3">
           <SectionTitle>Follow-up</SectionTitle>
-          <MetricCard label="Leads retomados" value={String(followUpRecovered)} bare labelClassName={LABEL_CLASS} valueClassName={VALUE_CLASS} />
+          <div className="grid grid-cols-2 gap-1.5">
+            <MetricCard label="Receberam" value={String(followUp.received)} bare labelClassName={LABEL_CLASS} valueClassName={VALUE_CLASS} />
+            <div>
+              <MetricCard label="Responderam" value={String(followUp.responded)} bare labelClassName={LABEL_CLASS} valueClassName={VALUE_CLASS} />
+              {followUpRate !== null && <p className="mt-1 text-card text-vexo-reportCaption">{formatRatePct(followUpRate)} responderam</p>}
+            </div>
+          </div>
         </div>
         <div className="space-y-1.5 border-t border-vexo-reportLine pt-3 sm:border-t-0 sm:pl-3 sm:pt-0">
           <SectionTitle>Reativação</SectionTitle>

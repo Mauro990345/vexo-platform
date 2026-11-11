@@ -29,7 +29,7 @@ describe("/relatorio/[token] — mostra exatamente o período enviado", () => {
       attendanceRate: 1,
       attendanceBase: 9,
       contactedFromApproachLogs: false,
-      followUpRecovered: 2,
+      followUp: { received: 6, responded: 2 },
       reactivation: { sent: 5, returned: 2 },
       isSimulated: false,
       previousComparison: { contactedPct: null, inConversationPct: null, scheduledPct: null, attendedPct: null },
