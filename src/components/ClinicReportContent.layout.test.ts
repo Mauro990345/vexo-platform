@@ -13,8 +13,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { createElement } from "react";
 import { chromium, type Browser } from "playwright";
 import { ClinicReportContent } from "./ClinicReportContent";
-import { computeMonthlyPeriod, splitIntoWeeks } from "@/lib/report-period";
-import { allocateToTotal, evolutionPeriods, type ReportNumbersWithComparison } from "@/lib/report-metrics";
+import { computeMonthlyPeriod, lastWeeksOfPeriod, evolutionMonthsOfPeriod } from "@/lib/report-period";
+import { type ReportNumbersWithComparison } from "@/lib/report-metrics";
 
 const PROJECT_ROOT = path.resolve(__dirname, "../..");
 
@@ -25,8 +25,7 @@ const PROJECT_ROOT = path.resolve(__dirname, "../..");
 // semanal, que fica com 6 barras (o máximo possível num mês civil) em vez
 // das 4-5 típicas.
 const PERIOD = computeMonthlyPeriod(new Date("2026-11-15T12:00:00.000Z"));
-const WEEKS = splitIntoWeeks(PERIOD);
-const WEEKLY_COUNTS = allocateToTotal(WEEKS.map((_, i) => i + 3), 128);
+
 
 const NUMBERS: ReportNumbersWithComparison = {
   period: PERIOD,
@@ -38,10 +37,10 @@ const NUMBERS: ReportNumbersWithComparison = {
   reactivation: { sent: 23, returned: 9 },
   isSimulated: false,
   previousComparison: { contactedPct: 14, inConversationPct: 9, scheduledPct: 22, attendedPct: 18 },
-  weeklyApproached: WEEKS.map((w, i) => ({ ...w, count: WEEKLY_COUNTS[i]! })),
-  // 6 períodos com valores de 3 dígitos — pior caso de largura do gráfico
-  // de evolução em 360px.
-  evolution: evolutionPeriods("MONTHLY", PERIOD).map((p, i) => ({ ...p, scheduled: 120 + i * 9, attended: 100 + i * 7 })),
+  // Valores de 3 dígitos, com as duas séries quase iguais — pior caso de
+  // largura/sobreposição dos rótulos em cima das colunas em 360px.
+  weekly: lastWeeksOfPeriod(PERIOD).map((w, i) => ({ ...w, contacted: 120 + i * 9, inConversation: 118 + i * 9 })),
+  evolution: evolutionMonthsOfPeriod(PERIOD).map((p, i) => ({ ...p, scheduled: 480 + i * 30, attended: 476 + i * 30 })),
 };
 
 const MOBILE_WIDTHS = [360, 390, 414];
@@ -58,8 +57,8 @@ const EXPECTED_LABELS = [
   "Enviadas",
   "Voltaram",
   "Comparecimento",
-  "Abordagens por semana",
-  "Evolução · últimos 6 meses",
+  "Abordados por semana",
+  "Evolução · últimos 3 meses",
   "Abordados → Em conversa",
   "Em conversa → Agendaram",
   "36 de 47 atendimentos com data no período",
@@ -154,27 +153,41 @@ describe("ClinicReportContent — layout real, sem rolagem horizontal nem rótul
     });
   }
 
+  const CONTAINER_HTML = () =>
+    html.replace('<main class="px-4 py-6">', '<main class="px-4 py-6"><div class="mx-auto w-full max-w-md sm:max-w-xl lg:max-w-4xl">').replace("</main>", "</div></main>");
+
   for (const width of [...MOBILE_WIDTHS, DESKTOP_WIDTH]) {
-    it(`${width}px: rótulos do gráfico de Evolução dentro do gráfico e sem se sobrepor`, async () => {
+    it(`${width}px: gráficos de colunas — rótulos dentro do gráfico, sem se sobrepor, colunas coladas e com a MESMA largura nos dois gráficos`, async () => {
       const page = await browser.newPage({ viewport: { width, height: 1600 } });
-      await page.setContent(html);
+      await page.setContent(CONTAINER_HTML());
       await page.waitForTimeout(30);
-      const problems = await page.evaluate(() => {
-        const svg = document.querySelector('svg[aria-label^="Evolução"]')!;
-        const box = svg.getBoundingClientRect();
-        const rects = Array.from(svg.querySelectorAll("text")).map((t) => ({ t: t.textContent, r: t.getBoundingClientRect() }));
+      const result = await page.evaluate(() => {
         const out: string[] = [];
-        for (const { t, r } of rects) {
-          if (r.left < box.left - 0.5 || r.right > box.right + 0.5 || r.top < box.top - 0.5 || r.bottom > box.bottom + 0.5) out.push(`fora: ${t}`);
-        }
-        for (let i = 0; i < rects.length; i++)
-          for (let j = i + 1; j < rects.length; j++) {
-            const a = rects[i]!.r, b = rects[j]!.r;
-            if (a.left < b.right - 0.5 && b.left < a.right - 0.5 && a.top < b.bottom - 0.5 && b.top < a.bottom - 0.5) out.push(`sobrepõe: ${rects[i]!.t} / ${rects[j]!.t}`);
+        const colWidths: number[][] = [];
+        for (const chart of Array.from(document.querySelectorAll('[role="img"][aria-label^="Abordados por semana"], [role="img"][aria-label^="Evolução"]'))) {
+          const box = chart.getBoundingClientRect();
+          const texts = Array.from(chart.querySelectorAll("span")).filter((e) => e.children.length === 0 && (e.textContent || "").trim());
+          const rects = texts.map((t) => ({ t: t.textContent, r: t.getBoundingClientRect() }));
+          for (const { t, r } of rects) {
+            if (r.left < box.left - 0.5 || r.right > box.right + 0.5 || r.top < box.top - 0.5 || r.bottom > box.bottom + 0.5) out.push(`fora: ${t}`);
           }
-        return out;
+          for (let i = 0; i < rects.length; i++)
+            for (let j = i + 1; j < rects.length; j++) {
+              const a = rects[i]!.r, b = rects[j]!.r;
+              if (a.left < b.right - 0.5 && b.left < a.right - 0.5 && a.top < b.bottom - 0.5 && b.top < a.bottom - 0.5) out.push(`sobrepõe: ${rects[i]!.t} / ${rects[j]!.t}`);
+            }
+          const cols = Array.from(chart.querySelectorAll(".report-col")).map((c) => c.getBoundingClientRect());
+          for (let i = 1; i < cols.length; i++) if (Math.abs(cols[i]!.left - cols[i - 1]!.right) > 0.5) out.push(`coluna não colada (${i})`);
+          colWidths.push(cols.map((c) => Math.round(c.width * 10) / 10));
+        }
+        return { out, colWidths };
       });
-      expect(problems).toEqual([]);
+      expect(result.out).toEqual([]);
+      expect(result.colWidths).toHaveLength(2);
+      const all = result.colWidths.flat();
+      expect(Math.max(...all) - Math.min(...all)).toBeLessThanOrEqual(1);
+      // largura fixa: 22px no celular, 26px no desktop largo (nunca estica)
+      expect(Math.max(...all)).toBeLessThanOrEqual(width >= 1024 ? 26 : 22);
       await page.close();
     });
   }
@@ -184,6 +197,7 @@ describe("ClinicReportContent — layout real, sem rolagem horizontal nem rótul
     await page.setContent(html);
     await page.waitForTimeout(30);
     const widths = await page.evaluate(() => Array.from(document.querySelectorAll("main .report-panel, main .report-panel-raised")).map((el) => Math.round(el.getBoundingClientRect().width)));
+    // Resumo, anel+semanas, Evolução e Follow-up/Reativação
     expect(widths.length).toBe(4);
     for (const w of widths) expect(w).toBe(360 - 32);
     await page.close();
@@ -191,7 +205,7 @@ describe("ClinicReportContent — layout real, sem rolagem horizontal nem rótul
 
   it("1366px: anel/semanas e Evolução lado a lado; Resumo e Follow-up/Reativação em largura total", async () => {
     const page = await browser.newPage({ viewport: { width: 1366, height: 1600 } });
-    await page.setContent(html.replace('<main class="px-4 py-6">', '<main class="px-4 py-6"><div class="mx-auto w-full max-w-md sm:max-w-xl lg:max-w-4xl">').replace("</main>", "</div></main>"));
+    await page.setContent(CONTAINER_HTML());
     await page.waitForTimeout(30);
     const boxes = await page.evaluate(() =>
       Array.from(document.querySelectorAll("main .report-panel, main .report-panel-raised")).map((el) => {
@@ -211,8 +225,8 @@ describe("ClinicReportContent — layout real, sem rolagem horizontal nem rótul
     await page.setContent(html);
     const labels = await page.evaluate(() => Array.from(document.querySelectorAll('[role="img"]')).map((el) => el.getAttribute("aria-label") || ""));
     expect(labels.some((l) => l.startsWith("Taxa de comparecimento: 77%"))).toBe(true);
-    expect(labels.some((l) => l.startsWith("Abordagens por semana —"))).toBe(true);
-    expect(labels.some((l) => l.startsWith("Evolução dos últimos 6 períodos —") && l.includes("nov: 165 agendaram, 135 compareceram"))).toBe(true);
+    expect(labels.some((l) => l.startsWith("Abordados por semana, últimas 6 semanas —") && l.includes("semana de 30/11: 165 abordados, 163 em conversa"))).toBe(true);
+    expect(labels.some((l) => l.startsWith("Evolução dos últimos 3 meses —") && l.includes("novembro: 540 agendaram, 536 compareceram"))).toBe(true);
     await page.close();
   });
 });

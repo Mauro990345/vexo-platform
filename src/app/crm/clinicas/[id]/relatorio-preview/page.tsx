@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { DEMO_CLINIC_ID } from "@/lib/demo-clinic";
 import { prisma } from "@/lib/prisma";
 import { requireInternalSession } from "@/lib/session";
 import { getReportNumbersWithComparison } from "@/lib/report-metrics";
@@ -25,7 +26,13 @@ export const dynamic = "force-dynamic";
 // ENVIADOS (worker/"Enviar agora") continuam cobrindo o período que
 // contém o momento do envio, sempre já no dia de fechamento — ver
 // clinic-reports.ts, não mexido nesta rodada.
-export default async function ClinicReportPreviewPage({ params }: { params: { id: string } }) {
+export default async function ClinicReportPreviewPage({
+  params,
+  searchParams,
+}: {
+  params: { id: string };
+  searchParams?: { exemplo?: string };
+}) {
   await requireInternalSession();
 
   const clinic = await prisma.clinic.findUnique({ where: { id: params.id }, select: { name: true } });
@@ -35,14 +42,30 @@ export default async function ClinicReportPreviewPage({ params }: { params: { id
   const monthlyPeriod = computeLastClosedPeriod("MONTHLY", now);
   const biweeklyPeriod = computeLastClosedPeriod("BIWEEKLY", now);
 
+  // "?exemplo=1" (só Clínica Demo, só neste preview admin): força os dados
+  // de exemplo coerentes pra validar o visual. Para qualquer outra clínica
+  // o parâmetro é ignorado — getReportNumbersWithComparison só simula a Demo.
+  const isDemo = params.id === DEMO_CLINIC_ID;
+  const forceSimulated = isDemo && searchParams?.exemplo === "1";
+
   const [monthlyNumbers, biweeklyNumbers] = await Promise.all([
-    getReportNumbersWithComparison(params.id, "MONTHLY", monthlyPeriod, now),
-    getReportNumbersWithComparison(params.id, "BIWEEKLY", biweeklyPeriod, now),
+    getReportNumbersWithComparison(params.id, "MONTHLY", monthlyPeriod, now, { forceSimulated }),
+    getReportNumbersWithComparison(params.id, "BIWEEKLY", biweeklyPeriod, now, { forceSimulated }),
   ]);
 
   return (
     <main className="min-h-screen bg-vexo-bg px-4 py-6 text-vexo-fg">
       <div className="mx-auto w-full max-w-md sm:max-w-xl lg:max-w-4xl">
+        {isDemo && (
+          <p className="mb-2 text-right text-xs">
+            <a
+              href={forceSimulated ? `/crm/clinicas/${params.id}/relatorio-preview` : `/crm/clinicas/${params.id}/relatorio-preview?exemplo=1`}
+              className="text-vexo-muted underline-offset-2 hover:text-vexo-fg hover:underline"
+            >
+              {forceSimulated ? "Ver com dados reais" : "Ver com dados de exemplo"}
+            </a>
+          </p>
+        )}
         <ClinicReportPeriodToggle
           monthly={<ClinicReportContent clinicName={clinic.name} frequency="MONTHLY" numbers={monthlyNumbers} />}
           biweekly={<ClinicReportContent clinicName={clinic.name} frequency="BIWEEKLY" numbers={biweeklyNumbers} />}

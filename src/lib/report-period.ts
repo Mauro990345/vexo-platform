@@ -286,3 +286,43 @@ export function formatReportPeriodName(frequency: ReportFrequency, period: Repor
   if (frequency === "MONTHLY") return monthName;
   return day === 1 ? `1ª quinzena de ${monthName}` : `2ª quinzena de ${monthName}`;
 }
+
+// Últimas `count` semanas civis (segunda a domingo, em Brasília) terminando
+// na semana que contém o ÚLTIMO dia do período — gráfico "Abordados por
+// semana" (7ª rodada). A última semana é recortada em period.end (nunca
+// olha dados depois do período do relatório); as anteriores podem começar
+// antes de period.start (são as semanas anteriores, de propósito).
+export function lastWeeksOfPeriod(period: ReportPeriod, count: number = 6): ReportWeek[] {
+  const lastInstant = new Date(period.end.getTime() - 1);
+  const { year, month0, day } = brazilDateParts(lastInstant);
+  const shifted = new Date(lastInstant.getTime() - SAO_PAULO_UTC_OFFSET_HOURS * 60 * 60 * 1000);
+  const isoDow = shifted.getUTCDay() === 0 ? 7 : shifted.getUTCDay();
+  const lastMondayDay = day - (isoDow - 1);
+  const weeks: ReportWeek[] = [];
+  for (let i = count - 1; i >= 0; i--) {
+    const start = brazilDayStart(year, month0, lastMondayDay - 7 * i);
+    const nextMonday = brazilDayStart(year, month0, lastMondayDay - 7 * i + 7);
+    weeks.push({ start, end: nextMonday.getTime() > period.end.getTime() ? period.end : nextMonday });
+  }
+  return weeks;
+}
+
+// Meses-calendário da "Evolução · últimos 3 meses" (7ª rodada) — SEMPRE
+// meses, também no relatório quinzenal, e sempre meses COMPLETOS até o fim
+// do período: o último é o mês que termina exatamente em period.end
+// (mensal; ou 2ª quinzena, que fecha o mês); na 1ª quinzena o mês corrente
+// ainda não fechou, então o último é o mês anterior. Nunca compara um mês
+// parcial contra um cheio.
+export function evolutionMonthsOfPeriod(period: ReportPeriod, count: number = 3): ReportPeriod[] {
+  let last = computeMonthlyPeriod(new Date(period.end.getTime() - 1));
+  if (last.end.getTime() !== period.end.getTime()) last = resolvePreviousPeriod("MONTHLY", last);
+  const months: ReportPeriod[] = [last];
+  while (months.length < count) months.unshift(resolvePreviousPeriod("MONTHLY", months[0]!));
+  return months;
+}
+
+// "12/10" — data inicial da semana, rótulo do eixo do gráfico semanal.
+export function formatShortDate(d: Date): string {
+  const { day, month0 } = brazilDateParts(d);
+  return `${String(day).padStart(2, "0")}/${String(month0 + 1).padStart(2, "0")}`;
+}

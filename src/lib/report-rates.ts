@@ -51,9 +51,9 @@ export function computePercentDelta(current: number, previous: number): number |
 
 export type EvolutionPoint = { start: Date; end: Date; scheduled: number; attended: number };
 
-// Mínimo de períodos COM DADOS (agendaram ou compareceram > 0) pra o
-// gráfico de evolução aparecer (pedido explícito, item 6c) — abaixo disso
-// a "evolução" seria 1-2 pontos soltos, mais ruído do que informação.
+// "Evolução · últimos 3 meses" (7ª rodada) só aparece com os 3 meses COM
+// DADOS (agendaram ou compareceram > 0) — qualquer mês zerado esconde o
+// bloco inteiro.
 export const EVOLUTION_MIN_PERIODS_WITH_DATA = 3;
 
 // Evolução começa no PRIMEIRO período com dados (5ª rodada): períodos

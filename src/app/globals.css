@@ -152,11 +152,35 @@
      Nunca vermelho/rosa/coral. Substituem --vexo-report-positive. */
   --vexo-report-delta-up: 63 208 131; /* #3fd083 */
   --vexo-report-delta-down: 78 168 238; /* #4ea8ee */
+
+  /* Gráficos de colunas do Relatório (7ª rodada — "Evolução · últimos 3
+     meses" e "Abordados por semana", mesmo componente ReportColumnChart).
+     Duas séries em tons de azul; o ÚLTIMO grupo (mês/semana mais recente)
+     em cor cheia, os anteriores em azul-acinzentado suave. */
+  --vexo-report-col-a: 43 135 189; /* #2b87bd — série 1 (Agendaram/Abordados), cor cheia */
+  --vexo-report-col-a-muted: 59 97 125; /* #3b617d — série 1, grupos anteriores */
+  --vexo-report-col-b: 124 196 232; /* #7cc4e8 — série 2 (Compareceram/Em conversa), cor cheia */
+  --vexo-report-col-b-muted: 88 127 153; /* #587f99 — série 2, grupos anteriores */
+  /* Largura FIXA de cada coluna (grossa, colunas coladas): 22px no celular,
+     32px a partir de sm, 26px no lg (bloco dividido com o anel). Só encolhe
+     se não couber — nunca estica. */
+  --vexo-report-col-w: 22px;
 }
 
 /* Superfícies do Relatório — classes (e não utilitários soltos) porque
    degradê + borda translúcida + sombra composta não cabem numa classe
    Tailwind só; todos os valores vêm dos tokens acima. */
+@media (min-width: 640px) {
+  :root {
+    --vexo-report-col-w: 32px;
+  }
+}
+@media (min-width: 1024px) {
+  :root {
+    --vexo-report-col-w: 26px;
+  }
+}
+
 @layer components {
   .report-panel,
   .report-panel-raised {
@@ -170,6 +194,16 @@
   /* Nível raised (um tom mais claro) — blocos de gráfico. */
   .report-panel-raised {
     background-image: linear-gradient(to bottom, rgb(var(--vexo-report-raised-top) / 1), rgb(var(--vexo-report-raised-bottom) / 1));
+  }
+  /* Coluna do gráfico do Relatório: largura fixa pelo token, encolhe só se
+     faltar espaço, nunca estica. O par (2 colunas coladas) usa o dobro. */
+  .report-col {
+    flex: 0 1 var(--vexo-report-col-w);
+    min-width: 0;
+  }
+  .report-col-pair {
+    flex: 0 1 calc(var(--vexo-report-col-w) * 2);
+    min-width: 0;
   }
   /* Brilho azul bem suave atrás do cabeçalho (~13% do azul da marca).
      closest-side: o brilho chega a zero exatamente nas bordas da caixa,

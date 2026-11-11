@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { getClinicMetrics, getAttendanceMetrics, computeAttendanceMetrics } from "@/lib/metrics";
 import { getReactivationReturnStats, RETURN_ATTRIBUTION_DAYS } from "@/lib/reactivation";
 import { DEMO_CLINIC_ID } from "@/lib/demo-clinic";
-import { resolvePreviousPeriod, periodLengthDays, splitIntoWeeks, type ReportFrequency, type ReportPeriod, type ReportWeek } from "@/lib/report-period";
+import { resolvePreviousPeriod, periodLengthDays, lastWeeksOfPeriod, evolutionMonthsOfPeriod, computeMonthlyPeriod, type ReportFrequency, type ReportPeriod, type ReportWeek } from "@/lib/report-period";
 import { computePercentDelta, type EvolutionPoint } from "@/lib/report-rates";
 
 export { computePercentDelta };
@@ -122,7 +122,10 @@ export type ReportNumbers = {
   isSimulated: boolean;
 };
 
-export type WeeklyApproached = { start: Date; end: Date; count: number };
+// Uma semana do gráfico "Abordados por semana" (7ª rodada): Abordados e
+// Em conversa, as MESMAS definições do Resumo (getClinicMetrics.approached/
+// .responded) aplicadas à semana.
+export type WeeklyPoint = { start: Date; end: Date; contacted: number; inConversation: number };
 
 export type ReportNumbersWithComparison = ReportNumbers & {
   // Comparação discreta com o período anterior do MESMO tipo — nos 4
@@ -136,19 +139,18 @@ export type ReportNumbersWithComparison = ReportNumbers & {
     scheduledPct: number | null;
     attendedPct: number | null;
   };
-  // Abordagens por semana dentro do período ATUAL (gráfico de barras,
-  // pedido explícito, item 5) — só do período atual, nunca do anterior
-  // (que só entra na comparação discreta acima, não tem gráfico próprio).
-  // Ver computeWeeklyApproached/buildSimulatedWeeklyApproached abaixo.
-  weeklyApproached: WeeklyApproached[];
-  // Agendaram/Compareceram dos últimos EVOLUTION_PERIODS períodos do mesmo
-  // tipo, terminando no período do relatório (o último ponto é SEMPRE o
-  // próprio período atual, com os mesmos números do Resumo). A tela só
-  // mostra o gráfico com >= 3 períodos com dados (shouldShowEvolution).
+  // Últimas 6 semanas civis terminando na semana do último dia do período
+  // (lastWeeksOfPeriod, report-period.ts) — Abordados e Em conversa.
+  weekly: WeeklyPoint[];
+  // Agendaram/Compareceram dos últimos 3 MESES-CALENDÁRIO completos até o
+  // fim do período (evolutionMonthsOfPeriod) — sempre meses, também no
+  // quinzenal. A tela só mostra o gráfico com os 3 meses com dados
+  // (shouldShowEvolution).
   evolution: EvolutionPoint[];
 };
 
-export const EVOLUTION_PERIODS = 6;
+export const EVOLUTION_MONTHS = 3;
+export const WEEKLY_WEEKS = 6;
 
 async function fetchRealReportNumbers(clinicId: string, period: ReportPeriod, now: Date): Promise<Omit<ReportNumbers, "isSimulated">> {
   const [clinicMetrics, attendance] = await Promise.all([
@@ -223,34 +225,30 @@ export function allocateToTotal(weights: number[], total: number): number[] {
   return result;
 }
 
-// Abordagens por semana dentro do período, pra o gráfico de barras
-// (pedido explícito, item 5) — REUTILIZA getClinicMetrics (a mesma
-// definição de "abordados" do Painel e do Resumo), só chamada uma vez por
-// semana (ver splitIntoWeeks, report-period.ts) em vez de uma vez pro
-// período inteiro. Nenhuma métrica nova: cada "peso" semanal É o
-// `.approached` de getClinicMetrics pra aquela semana; o único passo novo
-// é o ajuste final (allocateToTotal) pra a soma bater com o total já
-// mostrado no Resumo (ver comentário de allocateToTotal sobre por que a
-// soma dos pesos crus pode não bater sozinha).
-async function computeWeeklyApproached(clinicId: string, period: ReportPeriod, totalApproached: number): Promise<WeeklyApproached[]> {
-  const weeks = splitIntoWeeks(period);
-  const weeklyMetrics = await Promise.all(weeks.map((w: ReportWeek) => getClinicMetrics(clinicId, w.start, w.end)));
-  const weights = weeklyMetrics.map((m) => m.approached);
-  const counts = allocateToTotal(weights, totalApproached);
-  return weeks.map((w, i) => ({ start: w.start, end: w.end, count: counts[i]! }));
+// "Abordados por semana" (7ª rodada) — REUTILIZA getClinicMetrics (mesma
+// definição de "Abordados"/"Em conversa" do Painel e do Resumo), uma vez
+// por semana, em paralelo (6 chamadas simultâneas, nunca em série).
+async function computeWeekly(clinicId: string, period: ReportPeriod): Promise<WeeklyPoint[]> {
+  const weeks = lastWeeksOfPeriod(period, WEEKLY_WEEKS);
+  const metrics = await Promise.all(weeks.map((w: ReportWeek) => getClinicMetrics(clinicId, w.start, w.end)));
+  return weeks.map((w, i) => ({ start: w.start, end: w.end, contacted: metrics[i]!.approached, inConversation: metrics[i]!.responded }));
 }
 
-// Versão simulada (só Clínica Demo, ver isEmptyFunnel) da série semanal —
-// mesmo princípio de buildSimulatedReportNumbers: um "peso" plausível por
-// semana (determinístico, PRNG seedado), ajustado pra somar exatamente
-// `totalApproached` (o mesmo número simulado do box "Abordados"), nunca
-// um total independente.
-function buildSimulatedWeeklyApproached(period: ReportPeriod, totalApproached: number): WeeklyApproached[] {
-  const weeks = splitIntoWeeks(period);
+// Versão simulada (só Demo): cada semana é uma fatia do MÊS simulado que a
+// contém (mesma buildSimulatedReportNumbers do Resumo/Evolução),
+// proporcional aos dias da semana (a última pode ser parcial), com uma
+// variação determinística de ±15% — as semanas de um mês somam ~ o
+// "Abordados" daquele mês. Em conversa <= Abordados por construção.
+function buildSimulatedWeekly(period: ReportPeriod): WeeklyPoint[] {
   const rand = seededRandom(period.start.getTime() / 1000 + 17);
-  const weights = weeks.map(() => 0.6 + rand() * 0.8);
-  const counts = allocateToTotal(weights, totalApproached);
-  return weeks.map((w, i) => ({ start: w.start, end: w.end, count: counts[i]! }));
+  return lastWeeksOfPeriod(period, WEEKLY_WEEKS).map((w) => {
+    const month = computeMonthlyPeriod(w.start);
+    const sim = buildSimulatedReportNumbers(month);
+    const share = (periodLengthDays(w) / periodLengthDays(month)) * (0.85 + rand() * 0.3);
+    const contacted = Math.max(1, Math.round(sim.funnel.contacted * share));
+    const inConversation = Math.min(contacted, Math.round(contacted * (sim.funnel.inConversation / sim.funnel.contacted)));
+    return { start: w.start, end: w.end, contacted, inConversation };
+  });
 }
 
 // PRNG determinístico (mulberry32) só pra gerar os números simulados da
@@ -316,32 +314,18 @@ function buildSimulatedReportNumbers(period: ReportPeriod): Omit<ReportNumbers, 
   };
 }
 
-// Evolução dos últimos N períodos (pedido explícito, item 6c) — UMA
-// consulta só pros N-1 períodos anteriores juntos (agendamentos com
-// createdAt OU scheduledAt dentro da janela inteira), agregada em memória
-// pelas MESMAS definições do Resumo: "Agendaram" = agendamentos CRIADOS no
-// período (mesmo filtro de getClinicMetrics.scheduled, metrics.ts) e
-// "Compareceram" = computeAttendanceMetrics (a MESMA função pura usada por
-// getAttendanceMetrics/Painel). O último ponto (período do relatório) não
-// é recalculado: usa os números já mostrados no Resumo — garante que o
+// Evolução dos últimos 3 meses (7ª rodada) — UMA consulta agregada pros 3
+// meses juntos (agendamentos com createdAt OU scheduledAt dentro da
+// janela), agregada em memória pelas MESMAS definições do Resumo:
+// "Agendaram" = agendamentos CRIADOS no mês (mesmo filtro de
+// getClinicMetrics.scheduled) e "Compareceram" = computeAttendanceMetrics
+// (a mesma função pura de getAttendanceMetrics/Painel). Se o último mês É
+// o próprio período do relatório (mensal), usa os números do Resumo — o
 // gráfico termina exatamente no que o box diz.
-export function evolutionPeriods(frequency: ReportFrequency, period: ReportPeriod, count: number = EVOLUTION_PERIODS): ReportPeriod[] {
-  const periods: ReportPeriod[] = [period];
-  while (periods.length < count) periods.unshift(resolvePreviousPeriod(frequency, periods[0]!));
-  return periods;
-}
-
-async function computeRealEvolution(
-  clinicId: string,
-  frequency: ReportFrequency,
-  period: ReportPeriod,
-  currentFunnel: ReportFunnel,
-  now: Date
-): Promise<EvolutionPoint[]> {
-  const periods = evolutionPeriods(frequency, period);
-  const earlier = periods.slice(0, -1);
-  const windowStart = earlier[0]!.start;
-  const windowEnd = period.start;
+async function computeRealEvolution(clinicId: string, period: ReportPeriod, currentFunnel: ReportFunnel, now: Date): Promise<EvolutionPoint[]> {
+  const months = evolutionMonthsOfPeriod(period, EVOLUTION_MONTHS);
+  const windowStart = months[0]!.start;
+  const windowEnd = months[months.length - 1]!.end;
   const appointments = await prisma.appointment.findMany({
     where: {
       clinicId,
@@ -349,23 +333,26 @@ async function computeRealEvolution(
     },
     select: { createdAt: true, scheduledAt: true, conversationId: true, status: true },
   });
-  const points = earlier.map((p) => ({
-    start: p.start,
-    end: p.end,
-    scheduled: appointments.filter((a) => a.createdAt >= p.start && a.createdAt < p.end).length,
-    attended: computeAttendanceMetrics(appointments, p.start, p.end, now).attended,
-  }));
-  return [...points, { start: period.start, end: period.end, scheduled: currentFunnel.scheduled, attended: currentFunnel.attended }];
+  return months.map((m) => {
+    if (m.start.getTime() === period.start.getTime() && m.end.getTime() === period.end.getTime()) {
+      return { start: m.start, end: m.end, scheduled: currentFunnel.scheduled, attended: currentFunnel.attended };
+    }
+    return {
+      start: m.start,
+      end: m.end,
+      scheduled: appointments.filter((a) => a.createdAt >= m.start && a.createdAt < m.end).length,
+      attended: computeAttendanceMetrics(appointments, m.start, m.end, now).attended,
+    };
+  });
 }
 
-// Versão simulada (só Demo, mesma decisão simular-ou-não do período atual)
-// — cada ponto é o MESMO buildSimulatedReportNumbers daquele período, então
-// o último ponto bate com o Resumo simulado e cada ponto respeita
+// Versão simulada (só Demo): cada mês é o MESMO buildSimulatedReportNumbers
+// daquele mês — no mensal o último bate com o Resumo simulado; sempre
 // Agendaram >= Compareceram por construção.
-function buildSimulatedEvolution(frequency: ReportFrequency, period: ReportPeriod): EvolutionPoint[] {
-  return evolutionPeriods(frequency, period).map((p) => {
-    const sim = buildSimulatedReportNumbers(p);
-    return { start: p.start, end: p.end, scheduled: sim.funnel.scheduled, attended: sim.funnel.attended };
+function buildSimulatedEvolution(period: ReportPeriod): EvolutionPoint[] {
+  return evolutionMonthsOfPeriod(period, EVOLUTION_MONTHS).map((m) => {
+    const sim = buildSimulatedReportNumbers(m);
+    return { start: m.start, end: m.end, scheduled: sim.funnel.scheduled, attended: sim.funnel.attended };
   });
 }
 
@@ -402,7 +389,12 @@ export async function getReportNumbersWithComparison(
   clinicId: string,
   frequency: ReportFrequency,
   period: ReportPeriod,
-  now: Date = new Date()
+  now: Date = new Date(),
+  // Só pro preview ADMIN da Clínica Demo ("Ver com dados de exemplo"):
+  // força o fallback simulado mesmo com dados reais, pra validar o visual
+  // com números coerentes. Ignorado pra qualquer outra clínica — clínica
+  // real NUNCA recebe número simulado.
+  options: { forceSimulated?: boolean } = {}
 ): Promise<ReportNumbersWithComparison> {
   const previousPeriod = resolvePreviousPeriod(frequency, period);
 
@@ -414,7 +406,7 @@ export async function getReportNumbersWithComparison(
   // da mesma fonte simulada — item 7 explícito: "também um período
   // anterior simulado para a comparação aparecer".
   const realCurrent = await fetchRealReportNumbers(clinicId, period, now);
-  const shouldSimulate = clinicId === DEMO_CLINIC_ID && isEmptyFunnel(realCurrent);
+  const shouldSimulate = clinicId === DEMO_CLINIC_ID && (options.forceSimulated === true || isEmptyFunnel(realCurrent));
 
   const [current, previous]: [ReportNumbers, ReportNumbers] = shouldSimulate
     ? [
@@ -430,12 +422,9 @@ export async function getReportNumbersWithComparison(
   // comparação com o anterior já é só a discreta acima, sem gráfico
   // próprio pro anterior). Mesma decisão simular-ou-não já tomada acima,
   // nunca uma segunda decisão independente.
-  const [weeklyApproached, evolution] = shouldSimulate
-    ? [buildSimulatedWeeklyApproached(period, current.funnel.contacted), buildSimulatedEvolution(frequency, period)]
-    : await Promise.all([
-        computeWeeklyApproached(clinicId, period, current.funnel.contacted),
-        computeRealEvolution(clinicId, frequency, period, current.funnel, now),
-      ]);
+  const [weekly, evolution] = shouldSimulate
+    ? [buildSimulatedWeekly(period), buildSimulatedEvolution(period)]
+    : await Promise.all([computeWeekly(clinicId, period), computeRealEvolution(clinicId, period, current.funnel, now)]);
 
   return {
     ...current,
@@ -445,7 +434,7 @@ export async function getReportNumbersWithComparison(
       scheduledPct: computePercentDelta(current.funnel.scheduled, previous.funnel.scheduled),
       attendedPct: computePercentDelta(current.funnel.attended, previous.funnel.attended),
     },
-    weeklyApproached,
+    weekly,
     evolution,
   };
 }

@@ -1,9 +1,8 @@
 import { MetricCard } from "@/components/MetricCard";
 import { AttendanceRing } from "@/components/AttendanceRing";
-import { WeeklyApproachesChart } from "@/components/WeeklyApproachesChart";
-import { PeriodEvolutionChart } from "@/components/PeriodEvolutionChart";
+import { ReportColumnChart } from "@/components/ReportColumnChart";
 import type { ReportNumbersWithComparison } from "@/lib/report-metrics";
-import { formatReportPeriodLabel, formatReportDateRange, formatReportPeriodName, type ReportFrequency } from "@/lib/report-period";
+import { formatReportPeriodLabel, formatReportDateRange, formatReportPeriodName, formatReportPeriodShortLabel, formatShortDate, type ReportFrequency } from "@/lib/report-period";
 import { buildOpeningSentence } from "@/lib/report-opening-sentence";
 import {
   buildEvolutionReading,
@@ -13,7 +12,6 @@ import {
   formatRatePct,
   safeRate,
   shouldShowEvolution,
-  trimEvolution,
   type ConversionRate,
 } from "@/lib/report-rates";
 
@@ -106,15 +104,20 @@ export function ClinicReportContent({
     reactivation,
     previousComparison,
     isSimulated,
-    weeklyApproached,
+    weekly,
     evolution,
   } = numbers;
   const openingSentence = buildOpeningSentence(frequency, numbers.period, funnel);
   const conversion = computeConversionRates(funnel, contactedFromApproachLogs);
   const reactivationReturnRate = safeRate(reactivation.returned, reactivation.sent);
-  const evolutionShown = trimEvolution(evolution);
-  const showEvolution = shouldShowEvolution(evolutionShown);
-  const evolutionReading = showEvolution ? buildEvolutionReading(evolutionShown, (p) => formatReportPeriodName(frequency, p), frequency) : null;
+  // Evolução: SEMPRE em meses (também no quinzenal — ver
+  // evolutionMonthsOfPeriod), só com os 3 meses com dados.
+  const showEvolution = shouldShowEvolution(evolution);
+  const evolutionReading = showEvolution ? buildEvolutionReading(evolution, (p) => formatReportPeriodName("MONTHLY", p), "MONTHLY") : null;
+  const weeklySummary = weekly.map((w) => `semana de ${formatShortDate(w.start)}: ${w.contacted} abordados, ${w.inConversation} em conversa`).join("; ");
+  const evolutionSummary = evolution
+    .map((p) => `${formatReportPeriodName("MONTHLY", p)}: ${p.scheduled} agendaram, ${p.attended} compareceram`)
+    .join("; ");
   const followUpRate = safeRate(followUp.responded, followUp.received);
 
   return (
@@ -156,9 +159,9 @@ export function ClinicReportContent({
       {/* Blocos de gráfico — nível RAISED (um tom mais claro). Celular:
           empilhados em largura total. Desktop largo (lg): anel + semanas e
           Evolução lado a lado. Sob o anel, a BASE exata da taxa. */}
-      <div className={`grid gap-3.5 ${showEvolution ? "lg:grid-cols-2" : ""}`}>
-        <section className="report-panel-raised grid gap-4 rounded-report p-block sm:grid-cols-2">
-          <div className="flex flex-col items-center gap-1.5">
+      <div className={`grid gap-3.5 ${showEvolution ? "lg:grid-cols-[3fr_2fr]" : ""}`}>
+        <section className="report-panel-raised grid gap-4 rounded-report p-block sm:grid-cols-[auto_1fr]">
+          <div className="flex flex-col items-center gap-1.5 sm:w-32">
             <SectionTitle>Comparecimento</SectionTitle>
             <AttendanceRing rate={attendanceRate} />
             {attendanceBase > 0 && (
@@ -168,14 +171,18 @@ export function ClinicReportContent({
             )}
           </div>
           <div className="min-w-0 space-y-1.5">
-            <SectionTitle>Abordagens por semana</SectionTitle>
-            <WeeklyApproachesChart weeks={weeklyApproached} />
+            <SectionTitle>Abordados por semana</SectionTitle>
+            <ReportColumnChart
+              groups={weekly.map((w) => ({ label: formatShortDate(w.start), values: [w.contacted, w.inConversation] }))}
+              seriesLabels={["Abordados", "Em conversa"]}
+              ariaLabel={`Abordados por semana, últimas ${weekly.length} semanas — ${weeklySummary}`}
+            />
           </div>
         </section>
 
         {showEvolution && (
           <section className="report-panel-raised space-y-2 rounded-report p-block">
-            <SectionTitle>{frequency === "MONTHLY" ? `Evolução · últimos ${evolutionShown.length} meses` : `Evolução · últimas ${evolutionShown.length} quinzenas`}</SectionTitle>
+            <SectionTitle>Evolução · últimos 3 meses</SectionTitle>
             {/* Frase de leitura (só com base de comparação) — texto pequeno
                 e leve; o % segue a mesma regra de cor da comparação. */}
             {evolutionReading && (
@@ -185,7 +192,11 @@ export function ClinicReportContent({
                 {evolutionReading.tail}
               </p>
             )}
-            <PeriodEvolutionChart frequency={frequency} points={evolutionShown} />
+            <ReportColumnChart
+              groups={evolution.map((p) => ({ label: formatReportPeriodShortLabel("MONTHLY", p), values: [p.scheduled, p.attended] }))}
+              seriesLabels={["Agendaram", "Compareceram"]}
+              ariaLabel={`Evolução dos últimos 3 meses — ${evolutionSummary}`}
+            />
           </section>
         )}
       </div>

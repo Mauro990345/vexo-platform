@@ -22,7 +22,7 @@ vi.mock("@/lib/metrics", async (importOriginal) => {
 });
 
 const { getReportNumbers, getReportNumbersWithComparison, computePercentDelta, allocateToTotal, computeFollowUpReach, RETURN_ATTRIBUTION_DAYS } = await import("./report-metrics");
-const { computeMonthlyPeriod, computeBiweeklyPeriod, splitIntoWeeks } = await import("./report-period");
+const { computeMonthlyPeriod, computeBiweeklyPeriod } = await import("./report-period");
 
 const PERIOD = computeMonthlyPeriod(new Date("2026-11-15T12:00:00.000Z")); // novembro/2026 (30 dias)
 const NOW = new Date("2026-11-30T20:00:00.000Z");
@@ -412,7 +412,7 @@ describe("allocateToTotal — distribui pesos proporcionalmente SEMPRE somando e
   });
 });
 
-describe("getReportNumbersWithComparison — série semanal (gráfico 'Abordagens por semana', item 5)", () => {
+describe("getReportNumbersWithComparison — 'Abordados por semana' (últimas 6 semanas)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     getAttendanceMetricsMock.mockResolvedValue({ attended: 7, pastDue: 8 });
@@ -420,42 +420,30 @@ describe("getReportNumbersWithComparison — série semanal (gráfico 'Abordagen
     followUpLogFindManyMock.mockResolvedValue([]);
   });
 
-  it("clínica real: uma semana por getClinicMetrics (reaproveitada, não uma métrica nova) e a SOMA das semanas bate exatamente com 'Abordados' (funnel.contacted)", async () => {
-    const weeks = splitIntoWeeks(PERIOD); // novembro/2026 — 6 semanas (pior caso)
-    getClinicMetricsMock.mockResolvedValueOnce({ approached: 22, responded: 14, responseRate: 0.6, scheduled: 10, completed: 0, noShow: 1 }); // atual (total)
-    getClinicMetricsMock.mockResolvedValueOnce({ approached: 20, responded: 12, responseRate: 0.6, scheduled: 8, completed: 0, noShow: 1 }); // anterior (total)
-    // Pesos variados por semana, só pra não bater com o total sem o
-    // reajuste do allocateToTotal (prova real do ajuste, não coincidência).
-    for (let i = 0; i < weeks.length; i++) {
-      getClinicMetricsMock.mockResolvedValueOnce({ approached: i + 1, responded: 0, responseRate: null, scheduled: 0, completed: 0, noShow: 0 });
+  it("clínica real: 6 semanas civis (segunda a domingo) terminando na semana do último dia, cada uma via getClinicMetrics (Abordados = approached, Em conversa = responded)", async () => {
+    getClinicMetricsMock.mockResolvedValueOnce({ approached: 22, approachLogged: 22, responded: 14, responseRate: 0.6, scheduled: 10, completed: 0, noShow: 1 });
+    getClinicMetricsMock.mockResolvedValueOnce({ approached: 20, approachLogged: 20, responded: 12, responseRate: 0.6, scheduled: 8, completed: 0, noShow: 1 });
+    for (let i = 0; i < 6; i++) {
+      getClinicMetricsMock.mockResolvedValueOnce({ approached: 10 + i, approachLogged: 10 + i, responded: 5 + i, responseRate: null, scheduled: 0, completed: 0, noShow: 0 });
     }
 
     const result = await getReportNumbersWithComparison(REAL_CLINIC_ID, "MONTHLY", PERIOD, NOW);
 
-    expect(result.weeklyApproached).toHaveLength(weeks.length);
-    const sum = result.weeklyApproached.reduce((a, w) => a + w.count, 0);
-    expect(sum).toBe(result.funnel.contacted); // 22
-    // Cobertura exata do período, mesma convenção de splitIntoWeeks.
-    expect(result.weeklyApproached[0]!.start.getTime()).toBe(PERIOD.start.getTime());
-    expect(result.weeklyApproached[result.weeklyApproached.length - 1]!.end.getTime()).toBe(PERIOD.end.getTime());
+    expect(result.weekly).toHaveLength(6);
+    expect(result.weekly.map((w) => [w.contacted, w.inConversation])).toEqual([
+      [10, 5], [11, 6], [12, 7], [13, 8], [14, 9], [15, 10],
+    ]);
+    // novembro/2026: último dia 30/11 (segunda) → última semana = só 30/11;
+    // a primeira começa 6 segundas antes (26/10).
+    expect(result.weekly[0]!.start.toISOString()).toBe("2026-10-26T03:00:00.000Z");
+    expect(result.weekly[5]!.start.toISOString()).toBe("2026-11-30T03:00:00.000Z");
+    expect(result.weekly[5]!.end.getTime()).toBe(PERIOD.end.getTime());
+    const weekCalls = getClinicMetricsMock.mock.calls.slice(2);
+    expect(weekCalls).toHaveLength(6);
+    for (let i = 0; i < 6; i++) expect((weekCalls[i]![1] as Date).getTime()).toBe(result.weekly[i]!.start.getTime());
   });
 
-  it("quinzena real (2-3 semanas): soma também bate exatamente", async () => {
-    const biweekly = computeBiweeklyPeriod(new Date("2026-11-05T12:00:00.000Z"));
-    const weeks = splitIntoWeeks(biweekly);
-    getClinicMetricsMock.mockResolvedValueOnce({ approached: 15, responded: 10, responseRate: 0.6, scheduled: 7, completed: 0, noShow: 1 });
-    getClinicMetricsMock.mockResolvedValueOnce(emptyClinicMetrics());
-    for (let i = 0; i < weeks.length; i++) {
-      getClinicMetricsMock.mockResolvedValueOnce({ approached: 2 + i, responded: 0, responseRate: null, scheduled: 0, completed: 0, noShow: 0 });
-    }
-
-    const result = await getReportNumbersWithComparison(REAL_CLINIC_ID, "BIWEEKLY", biweekly, NOW);
-
-    const sum = result.weeklyApproached.reduce((a, w) => a + w.count, 0);
-    expect(sum).toBe(15);
-  });
-
-  it("Clínica Demo simulada: série semanal também simulada, coerente (soma = Abordados simulado, sem chamar getClinicMetrics de novo)", async () => {
+  it("Demo simulada: 6 semanas, Em conversa <= Abordados, sem chamadas extras ao banco", async () => {
     getClinicMetricsMock.mockResolvedValue(emptyClinicMetrics());
     getAttendanceMetricsMock.mockResolvedValue({ attended: 0, pastDue: 0 });
     getReactivationReturnStatsMock.mockResolvedValue([{ days: 30, label: "período", sent: 0, returned: 0 }]);
@@ -463,21 +451,12 @@ describe("getReportNumbersWithComparison — série semanal (gráfico 'Abordagen
     const result = await getReportNumbersWithComparison(DEMO_CLINIC_ID, "MONTHLY", PERIOD, NOW);
 
     expect(result.isSimulated).toBe(true);
-    const sum = result.weeklyApproached.reduce((a, w) => a + w.count, 0);
-    expect(sum).toBe(result.funnel.contacted);
-    // Só a chamada do período ATUAL (pra decidir simular) — nenhuma
-    // chamada extra por semana quando a série já é simulada.
+    expect(result.weekly).toHaveLength(6);
+    for (const w of result.weekly) {
+      expect(w.contacted).toBeGreaterThan(0);
+      expect(w.inConversation).toBeLessThanOrEqual(w.contacted);
+    }
     expect(getClinicMetricsMock).toHaveBeenCalledTimes(1);
-  });
-
-  it("Clínica Demo simulada: mesmo período -> mesma série semanal (determinístico)", async () => {
-    getClinicMetricsMock.mockResolvedValue(emptyClinicMetrics());
-    getAttendanceMetricsMock.mockResolvedValue({ attended: 0, pastDue: 0 });
-    getReactivationReturnStatsMock.mockResolvedValue([{ days: 30, label: "período", sent: 0, returned: 0 }]);
-
-    const first = await getReportNumbersWithComparison(DEMO_CLINIC_ID, "MONTHLY", PERIOD, NOW);
-    const second = await getReportNumbersWithComparison(DEMO_CLINIC_ID, "MONTHLY", PERIOD, NOW);
-    expect(first.weeklyApproached.map((w) => w.count)).toEqual(second.weeklyApproached.map((w) => w.count));
   });
 });
 
@@ -510,7 +489,7 @@ describe("report-metrics — 'Abordados' veio de registro manual? (contactedFrom
   });
 });
 
-describe("getReportNumbersWithComparison — evolução dos últimos 6 períodos", () => {
+describe("getReportNumbersWithComparison — Evolução · últimos 3 meses (sempre meses)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     getClinicMetricsMock.mockResolvedValue({ approached: 22, approachLogged: 22, responded: 14, responseRate: 0.6, scheduled: 10, completed: 0, noShow: 1 });
@@ -519,64 +498,63 @@ describe("getReportNumbersWithComparison — evolução dos últimos 6 períodos
     followUpLogFindManyMock.mockResolvedValue([]);
   });
 
-  it("mensal: 6 meses terminando no período do relatório, UMA consulta agregada, último ponto = números do Resumo", async () => {
-    const at = (iso: string) => new Date(iso);
+  const at = (iso: string) => new Date(iso);
+
+  it("mensal: 3 meses terminando no mês do relatório, UMA consulta agregada, último mês = números do Resumo", async () => {
     appointmentFindManyMock.mockResolvedValueOnce([
-      // junho: criado e realizado em junho (compareceu)
-      { createdAt: at("2026-06-05T15:00:00Z"), scheduledAt: at("2026-06-10T15:00:00Z"), conversationId: "c1", status: "CONFIRMED" },
-      // setembro: criado em setembro, realizado em outubro (faltou)
+      { createdAt: at("2026-09-05T15:00:00Z"), scheduledAt: at("2026-09-10T15:00:00Z"), conversationId: "c1", status: "CONFIRMED" },
       { createdAt: at("2026-09-28T15:00:00Z"), scheduledAt: at("2026-10-02T15:00:00Z"), conversationId: "c2", status: "NO_SHOW" },
-      // outubro: realizado (compareceu); cancelado não conta como compareceu
       { createdAt: at("2026-10-01T15:00:00Z"), scheduledAt: at("2026-10-05T15:00:00Z"), conversationId: "c3", status: "SCHEDULED" },
       { createdAt: at("2026-10-02T15:00:00Z"), scheduledAt: at("2026-10-06T15:00:00Z"), conversationId: "c4", status: "CANCELLED" },
-      // importado do Google (sem conversationId): conta em Agendaram, nunca em Compareceram
       { createdAt: at("2026-10-03T15:00:00Z"), scheduledAt: at("2026-10-07T15:00:00Z"), conversationId: null, status: "SCHEDULED" },
     ]);
 
     const result = await getReportNumbersWithComparison(REAL_CLINIC_ID, "MONTHLY", PERIOD, NOW);
 
     expect(appointmentFindManyMock).toHaveBeenCalledTimes(1);
-    const where = appointmentFindManyMock.mock.calls[0]![0].where;
-    expect(where.OR[0].createdAt.gte.toISOString()).toBe("2026-06-01T03:00:00.000Z");
-    expect(where.OR[0].createdAt.lt.toISOString()).toBe(PERIOD.start.toISOString());
-
-    expect(result.evolution).toHaveLength(6);
     expect(result.evolution.map((p) => p.start.toISOString())).toEqual([
-      "2026-06-01T03:00:00.000Z",
-      "2026-07-01T03:00:00.000Z",
-      "2026-08-01T03:00:00.000Z",
       "2026-09-01T03:00:00.000Z",
       "2026-10-01T03:00:00.000Z",
       "2026-11-01T03:00:00.000Z",
     ]);
     expect(result.evolution.map((p) => [p.scheduled, p.attended])).toEqual([
-      [1, 1], // jun
-      [0, 0],
-      [0, 0],
-      [1, 0], // set: criado em setembro, realizado em outubro
-      [3, 1], // out: 3 criados; 1 compareceu (faltou/cancelado/sem conversa não contam)
+      [2, 1], // set: 2 criados; 1 compareceu (o outro é de outubro)
+      [3, 1], // out: 3 criados; só c3 compareceu (faltou/cancelado/sem conversa não contam)
       [10, 7], // nov = Resumo
     ]);
-    const last = result.evolution[5]!;
-    expect(last.scheduled).toBe(result.funnel.scheduled);
-    expect(last.attended).toBe(result.funnel.attended);
   });
 
-  it("quinzenal: 6 quinzenas consecutivas terminando na quinzena do relatório", async () => {
-    const biweekly = computeBiweeklyPeriod(new Date("2026-11-05T12:00:00.000Z"));
-    const result = await getReportNumbersWithComparison(REAL_CLINIC_ID, "BIWEEKLY", biweekly, NOW);
+  it("quinzenal, 2ª quinzena: agrupa por MÊS-CALENDÁRIO e o último é o mês que a quinzena fecha", async () => {
+    const secondHalf = computeBiweeklyPeriod(new Date("2026-11-20T12:00:00.000Z")); // 16–30/11
+    appointmentFindManyMock.mockResolvedValueOnce([
+      // duas quinzenas de novembro somam no MESMO mês
+      { createdAt: at("2026-11-03T15:00:00Z"), scheduledAt: at("2026-11-04T15:00:00Z"), conversationId: "a", status: "SCHEDULED" },
+      { createdAt: at("2026-11-20T15:00:00Z"), scheduledAt: at("2026-11-21T15:00:00Z"), conversationId: "b", status: "SCHEDULED" },
+    ]);
+    const result = await getReportNumbersWithComparison(REAL_CLINIC_ID, "BIWEEKLY", secondHalf, NOW);
     expect(result.evolution.map((p) => p.start.toISOString())).toEqual([
-      "2026-08-16T03:00:00.000Z",
       "2026-09-01T03:00:00.000Z",
-      "2026-09-16T03:00:00.000Z",
       "2026-10-01T03:00:00.000Z",
-      "2026-10-16T03:00:00.000Z",
       "2026-11-01T03:00:00.000Z",
     ]);
-    expect(result.evolution[5]!.end.getTime()).toBe(biweekly.end.getTime());
+    expect(result.evolution[2]!.end.toISOString()).toBe("2026-12-01T03:00:00.000Z");
+    expect(result.evolution[2]!.scheduled).toBe(2); // mês inteiro, não só a quinzena
+    expect(result.evolution[2]!.attended).toBe(2);
   });
 
-  it("Demo simulada: série de 6 coerente (Agendaram >= Compareceram em todo ponto, último = Resumo simulado), sem consulta ao banco", async () => {
+  it("quinzenal, 1ª quinzena: o mês corrente ainda não fechou → últimos 3 meses COMPLETOS (ago, set, out)", async () => {
+    const firstHalf = computeBiweeklyPeriod(new Date("2026-11-05T12:00:00.000Z")); // 01–15/11
+    const result = await getReportNumbersWithComparison(REAL_CLINIC_ID, "BIWEEKLY", firstHalf, NOW);
+    expect(result.evolution.map((p) => p.start.toISOString())).toEqual([
+      "2026-08-01T03:00:00.000Z",
+      "2026-09-01T03:00:00.000Z",
+      "2026-10-01T03:00:00.000Z",
+    ]);
+    const where = appointmentFindManyMock.mock.calls[0]![0].where;
+    expect(where.OR[0].createdAt.lt.toISOString()).toBe("2026-11-01T03:00:00.000Z");
+  });
+
+  it("Demo simulada: 3 meses com dados, Agendaram >= Compareceram, último = Resumo simulado (mensal), sem consulta", async () => {
     getClinicMetricsMock.mockResolvedValue(emptyClinicMetrics());
     getAttendanceMetricsMock.mockResolvedValue({ attended: 0, pastDue: 0 });
     getReactivationReturnStatsMock.mockResolvedValue([{ days: 30, label: "período", sent: 0, returned: 0 }]);
@@ -585,19 +563,27 @@ describe("getReportNumbersWithComparison — evolução dos últimos 6 períodos
 
     expect(result.isSimulated).toBe(true);
     expect(appointmentFindManyMock).not.toHaveBeenCalled();
-    expect(result.evolution).toHaveLength(6);
+    expect(result.evolution).toHaveLength(3);
     for (const p of result.evolution) {
       expect(p.scheduled).toBeGreaterThan(0);
       expect(p.scheduled).toBeGreaterThanOrEqual(p.attended);
     }
-    expect(result.evolution[5]!.scheduled).toBe(result.funnel.scheduled);
-    expect(result.evolution[5]!.attended).toBe(result.funnel.attended);
-    // Funil simulado + taxas coerentes com os números exibidos
+    expect(result.evolution[2]!.scheduled).toBe(result.funnel.scheduled);
+    expect(result.evolution[2]!.attended).toBe(result.funnel.attended);
     const f = result.funnel;
     expect(f.contacted).toBeGreaterThanOrEqual(f.inConversation);
     expect(f.inConversation).toBeGreaterThanOrEqual(f.scheduled);
     expect(f.scheduled).toBeGreaterThanOrEqual(f.attended);
-    expect(result.weeklyApproached.reduce((a, w) => a + w.count, 0)).toBe(f.contacted);
-    expect(result.contactedFromApproachLogs).toBe(true);
+  });
+
+  it("forceSimulated (preview '?exemplo=1'): Demo com dados REAIS passa a simular", async () => {
+    const result = await getReportNumbersWithComparison(DEMO_CLINIC_ID, "MONTHLY", PERIOD, NOW, { forceSimulated: true });
+    expect(result.isSimulated).toBe(true);
+  });
+
+  it("forceSimulated em clínica REAL é ignorado — nunca número simulado", async () => {
+    const result = await getReportNumbersWithComparison(REAL_CLINIC_ID, "MONTHLY", PERIOD, NOW, { forceSimulated: true });
+    expect(result.isSimulated).toBe(false);
+    expect(result.funnel.contacted).toBe(22);
   });
 });
