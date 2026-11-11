@@ -123,21 +123,22 @@
   --vexo-whatsapp-action-border: 31 122 77; /* #1f7a4d */
 
   /* Relatório de resultados (página /relatorio/[token] + preview admin) —
-     SÓ desta tela (ver DESIGN.md, "Relatório", 5ª rodada). Superfícies em
-     DOIS NÍVEIS, todas acima do --vexo-bg da página (que não muda):
-     - "base" (mais escuro): blocos separados por linha fina — Resumo
-       (números + taxas) e Follow-up/Reativação;
-     - "raised" (um tom mais claro): blocos de gráfico — anel + semanas,
-       Evolução;
+     SÓ desta tela (ver DESIGN.md, "Relatório", 5ª rodada). Superfícies:
+     - "base" (mais escuro): TODOS os blocos principais — Resumo,
+       Comparecimento+Abordados por semana, Evolução, Follow-up/Reativação
+       (10ª rodada: o nível "raised", mais claro, que os 2 blocos de
+       gráfico usavam, saiu — pedido explícito "mesmo fundo em todos os
+       blocos principais". Contraste de texto/linhas conferido: como são
+       cores FIXAS (não um degradê proporcional), um fundo mais escuro só
+       aumenta o contraste contra elas, nunca reduz — nenhum valor de
+       opacidade precisou mudar.);
      - "inset" (rebaixado): área interna dos gráficos (trilha do anel,
        fundo das barras), mais escura que o bloco que a contém.
-     Cada nível é um degradê vertical sutil (topo um pouco mais claro). Como
-     o contraste entre blocos escuros é baixo, a separação conta com a borda
-     de 1px clara a ~7% e a sombra escura suave. */
+     Degradê vertical sutil (topo um pouco mais claro). Como o contraste
+     entre blocos escuros é baixo, a separação conta com a borda de 1px
+     clara a ~7% e a sombra escura suave. */
   --vexo-report-base-top: 22 28 38; /* #161c26 */
   --vexo-report-base-bottom: 18 23 32; /* #121720 */
-  --vexo-report-raised-top: 30 38 50; /* #1e2632 */
-  --vexo-report-raised-bottom: 26 33 44; /* #1a212c */
   --vexo-report-inset: 15 20 28; /* #0f141c */
   --vexo-report-edge: 255 255 255; /* bordas e separadores, sempre a ~7% */
   --vexo-report-shadow: 0 1px 2px rgb(0 0 0 / 0.35), 0 10px 24px -14px rgb(0 0 0 / 0.7);
@@ -161,10 +162,16 @@
   --vexo-report-col-a-muted: 59 97 125; /* #3b617d — série 1, grupos anteriores */
   --vexo-report-col-b: 124 196 232; /* #7cc4e8 — série 2 (Compareceram/Em conversa), cor cheia */
   --vexo-report-col-b-muted: 88 127 153; /* #587f99 — série 2, grupos anteriores */
-  /* Largura FIXA de cada coluna (grossa, colunas coladas): 22px no celular,
-     32px a partir de sm, 26px no lg (bloco dividido com o anel). Só encolhe
+  /* Largura FIXA de cada coluna (grossa, colunas coladas): 36px no celular
+     (10ª rodada: era 22px — com poucos grupos, ex. os 3 meses da Evolução
+     ou uma quinzena de 2-3 semanas, o conjunto de colunas ocupava menos da
+     metade do bloco, com vazio nas laterais; o `flex-shrink` do .report-col
+     abaixo continua encolhendo sozinho quando faltar espaço — o caso de 6
+     semanas no mesmo mês, o pior, não muda de largura efetiva), 32px a
+     partir de sm, 26px no lg (bloco dividido com o anel, mantido como
+     estava — pedido explícito "no desktop, manter como está"). Só encolhe
      se não couber — nunca estica. */
-  --vexo-report-col-w: 22px;
+  --vexo-report-col-w: 36px;
 }
 
 /* Superfícies do Relatório — classes (e não utilitários soltos) porque
@@ -182,18 +189,12 @@
 }
 
 @layer components {
-  .report-panel,
-  .report-panel-raised {
+  /* Único nível de bloco pra toda a tela (10ª rodada) — Resumo,
+     Comparecimento+Abordados por semana, Evolução, Follow-up/Reativação. */
+  .report-panel {
     border: 1px solid rgb(var(--vexo-report-edge) / 0.07);
     box-shadow: var(--vexo-report-shadow);
-  }
-  /* Nível base (mais escuro) — Resumo e Follow-up/Reativação. */
-  .report-panel {
     background-image: linear-gradient(to bottom, rgb(var(--vexo-report-base-top) / 1), rgb(var(--vexo-report-base-bottom) / 1));
-  }
-  /* Nível raised (um tom mais claro) — blocos de gráfico. */
-  .report-panel-raised {
-    background-image: linear-gradient(to bottom, rgb(var(--vexo-report-raised-top) / 1), rgb(var(--vexo-report-raised-bottom) / 1));
   }
   /* Coluna do gráfico do Relatório: largura fixa pelo token, encolhe só se
      faltar espaço, nunca estica. O par (2 colunas coladas) usa o dobro. */

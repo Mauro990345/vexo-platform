@@ -1,6 +1,6 @@
 import { MetricCard } from "@/components/MetricCard";
 import { AttendanceRing } from "@/components/AttendanceRing";
-import { ReportColumnChart } from "@/components/ReportColumnChart";
+import { ReportColumnChart, ReportColumnLegend } from "@/components/ReportColumnChart";
 import type { ReportNumbersWithComparison } from "@/lib/report-metrics";
 import { formatReportPeriodLabel, formatReportDateRange, formatReportPeriodName, formatReportPeriodShortLabel, formatShortDate, type ReportFrequency } from "@/lib/report-period";
 import { buildOpeningSentence } from "@/lib/report-opening-sentence";
@@ -127,6 +127,60 @@ export function ClinicReportContent({
     .join("; ");
   const followUpRate = safeRate(followUp.responded, followUp.received);
 
+  // Anel de comparecimento + título — 10ª rodada: reaproveitado nos DOIS
+  // layouts (celular, bloco próprio; a partir de `sm`, coluna dentro do
+  // bloco único com "Abordados por semana" — mesmo ponto onde eles já se
+  // juntavam antes). Título SEMPRE no topo (nunca dentro do grupo que
+  // centraliza o anel, senão ele desce junto — bug relatado, "COMPARECIMENTO
+  // mais baixo que os outros"); o anel centraliza no espaço ENTRE o título e
+  // o rodapé (`flex-1`); rodapé = linha fina + texto, sempre o último filho
+  // (por isso sempre na base do bloco, alinhado com o rodapé do gráfico ao
+  // lado). No celular, texto sempre em 2 linhas; na coluna estreita (`sm:w-32`
+  // em diante) uma linha só, versão curta — a frase completa raramente cabe
+  // em ~112px úteis.
+  const ringBlockContent = (
+    <div className="flex flex-col items-center sm:w-32">
+      <SectionTitle>Comparecimento</SectionTitle>
+      <div className="flex flex-1 items-center justify-center py-3.5 sm:py-0">
+        <AttendanceRing rate={attendanceRate} />
+      </div>
+      {attendanceBase > 0 && (
+        <div className="mt-1.5 w-full border-t border-white/[0.06] pt-1.5 text-center">
+          <p className="text-[11px] leading-tight text-vexo-reportCaption sm:hidden">
+            <span>
+              {funnel.attended} de {attendanceBase} {attendanceBase === 1 ? "atendimento" : "atendimentos"}
+            </span>
+            <br />
+            <span>com data no período</span>
+          </p>
+          <p className="hidden text-[11px] leading-tight text-vexo-reportCaption sm:block">
+            {funnel.attended} de {attendanceBase} {attendanceBase === 1 ? "atendimento" : "atendimentos"}
+          </p>
+        </div>
+      )}
+    </div>
+  );
+
+  // "Abordados por semana" — mesma ideia: título no topo, gráfico no meio
+  // (`flex-1`, sem centralizar — só ocupa o espaço disponível), legenda
+  // (ReportColumnLegend, separada do gráfico) sempre como rodapé, atrás da
+  // mesma linha fina do anel — é isso que alinha as 2 legendas e o texto do
+  // anel na mesma altura, qualquer que seja a altura real do bloco.
+  const weeklyBlockContent = (
+    <div className="flex min-w-0 flex-col">
+      <SectionTitle>Abordados por semana</SectionTitle>
+      <div className="flex-1">
+        <ReportColumnChart
+          groups={weekly.map((w) => ({ label: formatShortDate(w.start), values: [w.contacted, w.inConversation] }))}
+          ariaLabel={`Abordados por semana, últimas ${weekly.length} semanas — ${weeklySummary}`}
+        />
+      </div>
+      <div className="mt-1.5 border-t border-white/[0.06] pt-1.5">
+        <ReportColumnLegend seriesLabels={["Abordados", "Em conversa"]} />
+      </div>
+    </div>
+  );
+
   return (
     <div className="space-y-3.5">
       {/* Cabeçalho com identidade: brilho azul bem suave ao fundo
@@ -147,9 +201,10 @@ export function ClinicReportContent({
         <p className="mt-2.5 text-report-lead text-vexo-tabFg">{openingSentence}</p>
       </header>
 
-      {/* Resumo — bloco de nível BASE (mais escuro), 4 números divididos
-          por linha fina (2x2 no celular, 4 em linha a partir de sm) e, logo
-          abaixo, separada por outra linha fina, a faixa de taxas válidas. */}
+      {/* Resumo — mesmo nível de bloco (10ª rodada: um só, ver abaixo), 4
+          números divididos por linha fina (2x2 no celular, 4 em linha a
+          partir de sm) e, logo abaixo, separada por outra linha fina, a
+          faixa de taxas válidas. */}
       <section className="space-y-1.5">
         <SectionTitle>Resumo</SectionTitle>
         <div className="report-panel overflow-hidden rounded-report">
@@ -163,55 +218,50 @@ export function ClinicReportContent({
         </div>
       </section>
 
-      {/* Blocos de gráfico — nível RAISED (um tom mais claro). Celular:
-          empilhados em largura total. Desktop largo (lg): anel + semanas e
-          Evolução lado a lado. Sob o anel, a BASE exata da taxa.
-          9ª rodada: o anel (+ título) fica centralizado na vertical no
-          espaço disponível da coluna (grid estica as duas colunas pra
-          mesma altura — o conteúdo da direita, gráfico+legenda, é
-          normalmente o mais alto); o texto da base fica como 2º filho do
-          flex-col externo, por isso sempre no rodapé — na MESMA altura da
-          legenda do gráfico ao lado, que também é o último elemento ali. */}
+      {/* Blocos de gráfico — 10ª rodada: MESMO nível de bloco que os
+          outros (".report-panel", nível "raised" removido). No celular
+          (<640px) o anel e "Abordados por semana" são DOIS blocos
+          próprios, empilhados (cada um com o título no topo, como o da
+          Evolução) — a partir de `sm` (mesmo ponto onde já se juntavam)
+          formam UM bloco só, lado a lado, com altura mínima maior
+          (`sm:min-h-[260px]`) pra dar respiro. Desktop largo (`lg`):
+          Evolução ao lado, mesma altura (grid estica os 2 <section>
+          irmãos). Os três rodapés (texto do anel, as duas legendas)
+          sempre como ÚLTIMO filho de um flex-col — é isso que os alinha
+          na mesma linha horizontal, qualquer que seja a altura real do
+          conteúdo acima (ver ringBlockContent/weeklyBlockContent). */}
       <div className={`grid gap-3.5 ${showEvolution ? "lg:grid-cols-[3fr_2fr]" : ""}`}>
-        <section className="report-panel-raised grid gap-4 rounded-report p-block sm:grid-cols-[auto_1fr]">
-          <div className="flex flex-col items-center sm:w-32">
-            <div className="flex flex-1 flex-col items-center justify-center gap-1.5">
-              <SectionTitle>Comparecimento</SectionTitle>
-              <AttendanceRing rate={attendanceRate} />
-            </div>
-            {attendanceBase > 0 && (
-              <p className="text-center text-[11px] leading-tight text-vexo-reportCaption">
-                {funnel.attended} de {attendanceBase} {attendanceBase === 1 ? "atendimento" : "atendimentos"} com data no período
-              </p>
-            )}
-          </div>
-          <div className="min-w-0 space-y-1.5">
-            <SectionTitle>Abordados por semana</SectionTitle>
-            <ReportColumnChart
-              groups={weekly.map((w) => ({ label: formatShortDate(w.start), values: [w.contacted, w.inConversation] }))}
-              seriesLabels={["Abordados", "Em conversa"]}
-              ariaLabel={`Abordados por semana, últimas ${weekly.length} semanas — ${weeklySummary}`}
-            />
-          </div>
+        <div className="grid gap-3.5 sm:hidden">
+          <section className="report-panel rounded-report p-block">{ringBlockContent}</section>
+          <section className="report-panel rounded-report p-block">{weeklyBlockContent}</section>
+        </div>
+        <section className="report-panel hidden gap-4 rounded-report p-block sm:grid sm:min-h-[260px] sm:grid-cols-[auto_1fr]">
+          {ringBlockContent}
+          {weeklyBlockContent}
         </section>
 
         {showEvolution && (
-          <section className="report-panel-raised space-y-2 rounded-report p-block">
+          <section className="report-panel flex flex-col rounded-report p-block sm:min-h-[260px]">
             <SectionTitle>Evolução · últimos 3 meses</SectionTitle>
-            {/* Frase de leitura (só com base de comparação) — texto pequeno
-                e leve; o % segue a mesma regra de cor da comparação. */}
-            {evolutionReading && (
-              <p className="text-[12px] text-vexo-reportCaption">
-                {evolutionReading.lead}
-                <span className={deltaColorClass(evolutionReading.pct)}>{formatDeltaPct(evolutionReading.pct)}</span>
-                {evolutionReading.tail}
-              </p>
-            )}
-            <ReportColumnChart
-              groups={evolution.map((p) => ({ label: formatReportPeriodShortLabel("MONTHLY", p), values: [p.scheduled, p.attended] }))}
-              seriesLabels={["Agendaram", "Compareceram"]}
-              ariaLabel={`Evolução dos últimos 3 meses — ${evolutionSummary}`}
-            />
+            <div className="flex-1 space-y-2">
+              {/* Frase de leitura (só com base de comparação) — texto
+                  pequeno e leve; o % segue a mesma regra de cor da
+                  comparação. */}
+              {evolutionReading && (
+                <p className="text-[12px] text-vexo-reportCaption">
+                  {evolutionReading.lead}
+                  <span className={deltaColorClass(evolutionReading.pct)}>{formatDeltaPct(evolutionReading.pct)}</span>
+                  {evolutionReading.tail}
+                </p>
+              )}
+              <ReportColumnChart
+                groups={evolution.map((p) => ({ label: formatReportPeriodShortLabel("MONTHLY", p), values: [p.scheduled, p.attended] }))}
+                ariaLabel={`Evolução dos últimos 3 meses — ${evolutionSummary}`}
+              />
+            </div>
+            <div className="mt-1.5 border-t border-white/[0.06] pt-1.5">
+              <ReportColumnLegend seriesLabels={["Agendaram", "Compareceram"]} />
+            </div>
           </section>
         )}
       </div>

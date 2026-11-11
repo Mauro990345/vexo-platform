@@ -61,7 +61,13 @@ const EXPECTED_LABELS = [
   "Evolução · últimos 3 meses",
   "Abordados → Em conversa",
   "Em conversa → Agendaram",
-  "36 de 47 atendimentos com data no período",
+  // 10ª rodada: 2 linhas no celular ("36 de 47 atendimentos" / "com data
+  // no período"), 1 linha curta a partir de `sm` (sem a 2ª parte) — nunca
+  // mais uma frase só; a cópia escondida (CSS, não removida do DOM, ver
+  // ringBlockContent/weeklyBlockContent em ClinicReportContent.tsx) não
+  // conta como "cortada" (scrollWidth/clientWidth ambos 0).
+  "36 de 47 atendimentos",
+  "com data no período",
 ];
 
 describe("ClinicReportContent — layout real, sem rolagem horizontal nem rótulo cortado", () => {
@@ -124,7 +130,8 @@ describe("ClinicReportContent — layout real, sem rolagem horizontal nem rótul
     await page.waitForTimeout(30);
 
     const bodyText = await page.textContent("body");
-    expect(bodyText).toContain("atendimentos com data no período");
+    expect(bodyText).toContain("36 de 47 atendimentos");
+    expect(bodyText).toContain("com data no período");
     expect(bodyText).toContain("vs. anterior");
 
     await page.close();
@@ -157,14 +164,24 @@ describe("ClinicReportContent — layout real, sem rolagem horizontal nem rótul
     html.replace('<main class="px-4 py-6">', '<main class="px-4 py-6"><div class="mx-auto w-full max-w-md sm:max-w-xl lg:max-w-4xl">').replace("</main>", "</div></main>");
 
   for (const width of [...MOBILE_WIDTHS, DESKTOP_WIDTH]) {
-    it(`${width}px: gráficos de colunas — rótulos dentro do gráfico, sem se sobrepor, colunas coladas e com a MESMA largura nos dois gráficos`, async () => {
+    it(`${width}px: gráficos de colunas — rótulos dentro do gráfico, sem se sobrepor, colunas coladas e sem estourar a largura máxima`, async () => {
       const page = await browser.newPage({ viewport: { width, height: 1600 } });
       await page.setContent(CONTAINER_HTML());
       await page.waitForTimeout(30);
       const result = await page.evaluate(() => {
         const out: string[] = [];
         const colWidths: number[][] = [];
-        for (const chart of Array.from(document.querySelectorAll('[role="img"][aria-label^="Abordados por semana"], [role="img"][aria-label^="Evolução"]'))) {
+        // 10ª rodada: o anel+semanas tem 2 cópias no DOM (bloco próprio no
+        // celular, coluna do bloco único a partir de `sm` — uma delas
+        // sempre escondida por CSS num ANCESTRAL (`display:none`), não
+        // removida). `getClientRects().length === 0` é verdade tanto
+        // quando o próprio elemento quanto um ancestral está
+        // `display:none` — só a cópia VISÍVEL na largura atual entra na
+        // medição.
+        const isVisible = (el: Element) => el.getClientRects().length > 0;
+        for (const chart of Array.from(
+          document.querySelectorAll('[role="img"][aria-label^="Abordados por semana"], [role="img"][aria-label^="Evolução"]')
+        ).filter(isVisible)) {
           const box = chart.getBoundingClientRect();
           const texts = Array.from(chart.querySelectorAll("span")).filter((e) => e.children.length === 0 && (e.textContent || "").trim());
           const rects = texts.map((t) => ({ t: t.textContent, r: t.getBoundingClientRect() }));
@@ -184,39 +201,97 @@ describe("ClinicReportContent — layout real, sem rolagem horizontal nem rótul
       });
       expect(result.out).toEqual([]);
       expect(result.colWidths).toHaveLength(2);
+      // 10ª rodada: a largura BASE (--vexo-report-col-w) subiu pra ocupar
+      // melhor o bloco com poucos grupos (ex.: Evolução, sempre 3 meses) —
+      // os dois gráficos já não ficam mais NECESSARIAMENTE com a mesma
+      // largura efetiva: cada um encolhe (`flex-shrink`) só o quanto
+      // precisa pra caber no espaço disponível, e "Abordados por semana"
+      // deste teste (pior caso, 6 semanas = 12 colunas) precisa encolher
+      // mais que "Evolução" (sempre 3 meses = 6 colunas). Cada gráfico
+      // continua uniforme DENTRO de si mesmo, e nenhum excede o máximo.
+      for (const widths of result.colWidths) {
+        expect(Math.max(...widths) - Math.min(...widths)).toBeLessThanOrEqual(0.5);
+      }
       const all = result.colWidths.flat();
-      expect(Math.max(...all) - Math.min(...all)).toBeLessThanOrEqual(1);
-      // largura fixa: 22px no celular, 26px no desktop largo (nunca estica)
-      expect(Math.max(...all)).toBeLessThanOrEqual(width >= 1024 ? 26 : 22);
+      expect(Math.max(...all)).toBeLessThanOrEqual(width >= 1024 ? 26 : width >= 640 ? 32 : 36);
       await page.close();
     });
   }
 
-  it("tela estreita (360px): blocos ocupam a largura toda (sem espaço vazio lateral)", async () => {
+  it("tela estreita (360px): blocos ocupam a largura toda (sem espaço vazio lateral) — anel e semanas são 2 blocos próprios (10ª rodada)", async () => {
     const page = await browser.newPage({ viewport: { width: 360, height: 1600 } });
     await page.setContent(html);
     await page.waitForTimeout(30);
-    const widths = await page.evaluate(() => Array.from(document.querySelectorAll("main .report-panel, main .report-panel-raised")).map((el) => Math.round(el.getBoundingClientRect().width)));
-    // Resumo, anel+semanas, Evolução e Follow-up/Reativação
-    expect(widths.length).toBe(4);
+    const widths = await page.evaluate(() =>
+      Array.from(document.querySelectorAll("main .report-panel"))
+        .filter((el) => el.getClientRects().length > 0)
+        .map((el) => Math.round(el.getBoundingClientRect().width))
+    );
+    // Resumo, Comparecimento, Abordados por semana, Evolução, Follow-up/Reativação
+    expect(widths.length).toBe(5);
     for (const w of widths) expect(w).toBe(360 - 32);
     await page.close();
   });
 
-  it("1366px: anel/semanas e Evolução lado a lado; Resumo e Follow-up/Reativação em largura total", async () => {
+  it("1366px: anel/semanas (bloco único) e Evolução lado a lado, MESMA altura; Resumo e Follow-up/Reativação em largura total", async () => {
     const page = await browser.newPage({ viewport: { width: 1366, height: 1600 } });
     await page.setContent(CONTAINER_HTML());
     await page.waitForTimeout(30);
     const boxes = await page.evaluate(() =>
-      Array.from(document.querySelectorAll("main .report-panel, main .report-panel-raised")).map((el) => {
-        const r = el.getBoundingClientRect();
-        return { cls: el.className.split(" ")[0], top: Math.round(r.top), width: Math.round(r.width) };
-      })
+      Array.from(document.querySelectorAll("main .report-panel"))
+        .filter((el) => el.getClientRects().length > 0)
+        .map((el) => {
+          const r = el.getBoundingClientRect();
+          return { top: Math.round(r.top), width: Math.round(r.width), height: Math.round(r.height) };
+        })
     );
     const [resumo, chart, evolution, followUp] = boxes;
+    expect(boxes.length).toBe(4);
     expect(chart!.top).toBe(evolution!.top);
+    expect(chart!.height).toBe(evolution!.height);
+    expect(chart!.height).toBeGreaterThanOrEqual(260);
     expect(chart!.width).toBeLessThan(resumo!.width);
     expect(followUp!.width).toBe(resumo!.width);
+    await page.close();
+  });
+
+  it("1366px: os 3 títulos (Comparecimento, Abordados por semana, Evolução) ficam na MESMA linha", async () => {
+    const page = await browser.newPage({ viewport: { width: 1366, height: 1600 } });
+    await page.setContent(CONTAINER_HTML());
+    await page.waitForTimeout(30);
+    const tops = await page.evaluate(() => {
+      const titleTop = (text: string) => {
+        const el = Array.from(document.querySelectorAll("main p")).find((p) => p.textContent === text && p.getClientRects().length > 0);
+        return el ? Math.round(el.getBoundingClientRect().top) : null;
+      };
+      return { comparecimento: titleTop("Comparecimento"), semana: titleTop("Abordados por semana"), evolucao: titleTop("Evolução · últimos 3 meses") };
+    });
+    expect(tops.comparecimento).not.toBeNull();
+    expect(tops.comparecimento).toBe(tops.semana);
+    expect(tops.comparecimento).toBe(tops.evolucao);
+    await page.close();
+  });
+
+  it("1366px: os 3 rodapés (texto do anel, legenda semanal, legenda da Evolução) ficam na MESMA linha", async () => {
+    const page = await browser.newPage({ viewport: { width: 1366, height: 1600 } });
+    await page.setContent(CONTAINER_HTML());
+    await page.waitForTimeout(30);
+    const tops = await page.evaluate(() => {
+      const top = (el: Element | undefined) => (el ? Math.round(el.getBoundingClientRect().top) : null);
+      const ringCaption = Array.from(document.querySelectorAll("main p")).find((p) => p.textContent === "36 de 47 atendimentos" && p.getClientRects().length > 0);
+      const legends = Array.from(document.querySelectorAll("main .report-panel div[aria-hidden='true']")).filter(
+        (el) => el.textContent?.includes("Abordados") && el.textContent?.includes("Em conversa") && el.getClientRects().length > 0
+      );
+      const evoLegends = Array.from(document.querySelectorAll("main .report-panel div[aria-hidden='true']")).filter(
+        (el) => el.textContent?.includes("Agendaram") && el.textContent?.includes("Compareceram") && el.getClientRects().length > 0
+      );
+      return { ring: top(ringCaption), weekly: top(legends[0]), evolution: top(evoLegends[0]) };
+    });
+    expect(tops.ring).not.toBeNull();
+    expect(tops.weekly).not.toBeNull();
+    expect(tops.evolution).not.toBeNull();
+    expect(tops.ring).toBe(tops.weekly);
+    expect(tops.ring).toBe(tops.evolution);
     await page.close();
   });
 

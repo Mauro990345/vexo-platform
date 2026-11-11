@@ -22,8 +22,13 @@ function contrast(a: [number, number, number], b: [number, number, number]): num
   return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
 }
 
+// 10ª rodada: um nível de bloco só (".report-panel") pra toda a tela — o
+// nível "raised" (mais claro, só dos 2 blocos de gráfico) saiu. Textos
+// fixos (não um degradê proporcional ao fundo) só GANHAM contraste contra
+// um fundo mais escuro, nunca perdem — por isso nenhum destes testes de
+// contraste precisou de um valor novo, só perderam as linhas de "raised".
 describe("tokens do Relatório — contraste AA (4.5:1) sobre o painel e o fundo", () => {
-  const backgrounds = ["vexo-report-base-top", "vexo-report-base-bottom", "vexo-report-raised-top", "vexo-report-raised-bottom", "vexo-report-inset", "vexo-bg"];
+  const backgrounds = ["vexo-report-base-top", "vexo-report-base-bottom", "vexo-report-inset", "vexo-bg"];
   const texts = ["vexo-report-caption", "vexo-report-delta-up", "vexo-report-delta-down", "vexo-tab-fg"];
   for (const bg of backgrounds) {
     for (const fg of texts) {
@@ -33,16 +38,14 @@ describe("tokens do Relatório — contraste AA (4.5:1) sobre o painel e o fundo
     }
   }
 
-  it("dois níveis de bloco, todos acima do fundo: base (escuro) < raised (claro); topo de cada um mais claro que a base", () => {
+  it("bloco (base) acima do fundo da página; topo um pouco mais claro que a base do mesmo bloco", () => {
     const L = (n: string) => luminance(token(n));
     expect(L("vexo-report-base-top")).toBeGreaterThan(L("vexo-report-base-bottom"));
-    expect(L("vexo-report-raised-top")).toBeGreaterThan(L("vexo-report-raised-bottom"));
     expect(L("vexo-report-base-bottom")).toBeGreaterThan(L("vexo-bg"));
-    expect(L("vexo-report-raised-bottom")).toBeGreaterThan(L("vexo-report-base-top"));
   });
 
-  it("área rebaixada (inset) é mais escura que o bloco de gráfico que a contém", () => {
-    expect(luminance(token("vexo-report-inset"))).toBeLessThan(luminance(token("vexo-report-raised-bottom")));
+  it("área rebaixada (inset) é mais escura que o bloco que a contém", () => {
+    expect(luminance(token("vexo-report-inset"))).toBeLessThan(luminance(token("vexo-report-base-bottom")));
   });
 });
 

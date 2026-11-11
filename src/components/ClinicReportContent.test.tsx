@@ -20,6 +20,19 @@ function columnValueLabels(markup: string): string[] {
   return [...markup.matchAll(/<span class="absolute left-1\/2[^"]*"[^>]*>(\d+)<\/span>/g)].map((m) => m[1]!);
 }
 
+// O bloco "Comparecimento + Abordados por semana" (10ª rodada) é
+// renderizado 2x no HTML — uma vez como bloco próprio (celular, `sm:hidden`)
+// e uma vez como coluna do bloco único (a partir de `sm`, `hidden sm:grid`)
+// — escondido por CSS, não removido do markup, pra manter título/rodapé
+// alinhados nos dois formatos sem duplicar a árvore de componentes.
+// Isola só a 1ª ocorrência de um marcador (ex.: "Abordados por semana")
+// pra testar o conteúdo semântico sem contar a cópia escondida 2x.
+function firstOccurrence(markup: string, marker: string): string {
+  const first = markup.indexOf(marker);
+  const second = markup.indexOf(marker, first + 1);
+  return second === -1 ? markup.slice(first) : markup.slice(first, second);
+}
+
 // Privacidade (pedido explícito): o relatório mostra SÓ agregados — nunca
 // nome, @ do Instagram ou telefone de paciente nenhum. A garantia de
 // verdade é no TIPO (ReportNumbers/ReportFunnel só têm números, nenhum
@@ -125,7 +138,12 @@ describe("ClinicReportContent — Resumo (4 boxes) com o início do funil", () =
     );
     expect(markup).not.toMatch(/\d+% de comparecimento</);
     expect(markup).not.toContain("dos agendados");
-    expect(markup).toContain("9 de 9 atendimentos com data no período");
+    // Celular: 2 linhas ("9 de 9 atendimentos" / "com data no período");
+    // a partir de `sm` (coluna estreita): 1 linha curta, sem "com data no
+    // período" (que raramente cabe em ~112px úteis) — nunca a frase
+    // completa numa linha só.
+    expect(markup).toContain("9 de 9 atendimentos");
+    expect(markup).toContain("com data no período");
     expect(markup).not.toContain("Agendaram → Compareceram");
     // "Em conversa" = "Abordados" (sem registro manual de abordagem): a 1ª
     // taxa SOME (nunca um 100% artificial, nunca uma célula "—").
@@ -291,7 +309,7 @@ describe("ClinicReportContent — gráficos (itens 4 e 5)", () => {
   it("'Abordados por semana': duas colunas por semana (Abordados e Em conversa), valores em cima", () => {
     const markup = renderToStaticMarkup(<ClinicReportContent clinicName="Clínica Teste" frequency="MONTHLY" numbers={numbers({ weekly: weeks([[3, 2], [9, 4], [5, 3], [4, 1], [6, 2], [7, 5]]) })} />);
     expect(markup).toContain("Abordados por semana");
-    expect(columnValueLabels(markup)).toEqual(["3", "2", "9", "4", "5", "3", "4", "1", "6", "2", "7", "5"]);
+    expect(columnValueLabels(firstOccurrence(markup, 'aria-label="Abordados por semana'))).toEqual(["3", "2", "9", "4", "5", "3", "4", "1", "6", "2", "7", "5"]);
     expect(markup).toContain(">26/10<");
     expect(markup).toContain("Em conversa</span>");
   });
@@ -374,14 +392,17 @@ describe("ClinicReportContent — Follow-up e Reativação (item 6d)", () => {
 });
 
 describe("ClinicReportContent — topo e tons em dois níveis", () => {
-  it("cabeçalho com brilho e filete; Resumo e Follow-up/Reativação no nível base, gráficos no raised", () => {
+  it("cabeçalho com brilho e filete; TODOS os blocos principais no mesmo nível (10ª rodada: nível 'raised' removido)", () => {
     const markup = renderToStaticMarkup(
       <ClinicReportContent clinicName="Clínica Teste" frequency="MONTHLY" numbers={numbers({ evolution: evo([[8, 7], [7, 6], [10, 7]]) })} />
     );
     expect(markup).toContain("report-header-glow");
     expect(markup).toContain("report-title-rule");
-    expect(markup.match(/class="report-panel /g)?.length).toBe(2);
-    expect(markup.match(/class="report-panel-raised /g)?.length).toBe(2);
+    // Resumo(1) + celular: anel(1) + semanas(1) + a partir de sm: bloco
+    // único anel+semanas(1) + Evolução(1) + Follow-up/Reativação(1) = 6 —
+    // nenhum deles usa mais a classe "raised" (removida).
+    expect(markup.match(/class="report-panel( |")/g)?.length).toBe(6);
+    expect(markup).not.toContain("report-panel-raised");
     expect(markup).not.toMatch(/#[0-9a-fA-F]{6}\b/);
   });
 
@@ -455,7 +476,7 @@ describe("ClinicReportContent — 'Abordados por semana' (colunas)", () => {
 
   it("última semana em cor cheia, as 5 anteriores em azul-acinzentado (sem âmbar)", () => {
     const markup = renderToStaticMarkup(<ClinicReportContent clinicName="Clínica Teste" frequency="MONTHLY" numbers={numbers()} />);
-    const weekPart = markup.slice(markup.indexOf("Abordados por semana"), markup.indexOf("Follow-up"));
+    const weekPart = firstOccurrence(markup, 'aria-label="Abordados por semana');
     expect(weekPart.match(/bg-vexo-reportColAMuted"/g)?.length).toBe(5);
     expect(weekPart.match(/rounded-t-sm bg-vexo-reportColA"/g)?.length).toBe(1);
     expect(markup).not.toContain("tabIcon2");

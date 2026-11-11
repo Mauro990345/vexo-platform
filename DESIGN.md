@@ -156,6 +156,46 @@ Nova tela, administrada pela página "Contas" (`/crm`, só admin — ver DESIGN.
   `clinic-nav.tsx`, só alcançável pelo botão "Ver relatório" do painel, numa aba nova do
   navegador): tudo reaproveita `MetricCard` e os containers já existentes do Painel; a 4ª rodada
   criou tokens próprios SÓ desta tela (elevação, legenda, azul positivo — ver abaixo).
+  - **10ª rodada — vale sobre TUDO abaixo quando houver conflito:**
+    - **Nível único de bloco**: o nível "raised" (mais claro, só nos 2 blocos de gráfico) saiu —
+      "Comparecimento"+"Abordados por semana" e "Evolução" agora usam a MESMA classe `.report-panel`
+      (mesmo degradê escuro) que Resumo e Follow-up/Reativação já usavam. Nenhum valor de opacidade
+      de linha/texto precisou mudar: são cores FIXAS (não um degradê proporcional ao fundo), então
+      um fundo mais escuro só aumenta o contraste contra elas, nunca reduz.
+    - **Celular (<640px, "empilhado"): "Comparecimento" e "Abordados por semana" são DOIS blocos
+      próprios** (como "Evolução" já era), cada um com seu título no topo — antes ficavam dentro de
+      um bloco só, empilhados sem título próprio de cada lado. A partir de `sm` (mesmo ponto onde já
+      se juntavam) voltam a formar UM bloco só, lado a lado — e ganham altura mínima maior
+      (`sm:min-h-[260px]`) pra dar respiro. Implementação: o MESMO JSX de cada coluna
+      (`ringBlockContent`/`weeklyBlockContent`, em `ClinicReportContent.tsx`) é usado 2x — uma vez
+      dentro de 2 `<section>` separados (`sm:hidden`), uma vez dentro de 1 `<section>` só
+      (`hidden sm:grid`) — uma cópia sempre escondida por CSS (`display:none`), nunca duas árvores de
+      componente diferentes pra manter.
+    - **Título SEMPRE no topo do bloco, nunca dentro do grupo que centraliza o anel** (bug da 9ª
+      rodada corrigido: "COMPARECIMENTO" ficava mais baixo que os outros 2 títulos porque descia
+      junto com o anel). Agora o título é o 1º filho do `flex-col`, o anel centraliza num `div`
+      PRÓPRIO (`flex-1 items-center justify-center`) logo abaixo, e o rodapé é o último filho —
+      título/rodapé sempre nas mesmas posições (topo/base), anel flutuando no meio.
+    - **A legenda sai do `ReportColumnChart`** e vira `ReportColumnLegend`, componente separado
+      (`ReportColumnChart.tsx`) — é o que permite ao chamador fixar a legenda no RODAPÉ do bloco
+      (último filho do `flex-col`, atrás da mesma linha fina `border-white/[0.06]` usada no rodapé
+      do anel), alinhada com os outros 2 rodapés, independente da altura real do gráfico ou de uma
+      frase de leitura extra (Evolução). Mesmo `leading-tight` nos 3 rodapés, pra não haver nenhuma
+      diferença de pixel entre eles por causa da altura de linha.
+    - **Texto do anel**: no celular, sempre 2 linhas ("X de Y atendimentos" / "com data no
+      período", 12px+ de distância do anel via padding). A partir de `sm` (coluna estreita,
+      `sm:w-32`): 1 linha só, versão curta (sem "com data no período", que raramente cabe em ~112px
+      úteis) — nunca a frase completa numa coluna estreita.
+    - **Colunas dos gráficos mais largas no celular**: `--vexo-report-col-w` base subiu de 22px pra
+      36px — com poucos grupos (Evolução, sempre 3 meses; ou uma quinzena, 2-3 semanas) o conjunto
+      de colunas ocupava menos da metade do bloco, com vazio nas laterais. O `flex-shrink` de
+      `.report-col` continua encolhendo sozinho quando faltar espaço (o pior caso, 6 semanas no
+      mesmo mês, não estica além do que cabe) — por isso os dois gráficos JÁ NÃO têm necessariamente
+      a mesma largura efetiva de coluna (cada um encolhe só o que precisa). `sm`(32px)/`lg`(26px)
+      ficam como estavam — pedido explícito "no desktop, manter como está".
+    - **Grupo (semana/mês) nunca mostra rótulo sem coluna** — nenhuma mudança nesta rodada, já
+      corrigido na 9ª (ver abaixo); só reafirmado porque a legenda, agora separada, poderia
+      confundir com "rótulo do grupo" — são coisas diferentes.
   - **9ª rodada — vale sobre TUDO abaixo quando houver conflito:**
     - **Alinhamento do bloco anel + semanas**: o anel (+ título "Comparecimento") fica num `div`
       interno próprio com `flex-1 flex flex-col items-center justify-center`, CENTRALIZADO no
