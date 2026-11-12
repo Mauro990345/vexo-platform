@@ -28,6 +28,17 @@ const config: Config = {
           reportCaption: "rgb(var(--vexo-report-caption) / <alpha-value>)",
           reportDeltaUp: "rgb(var(--vexo-report-delta-up) / <alpha-value>)",
           reportDeltaDown: "rgb(var(--vexo-report-delta-down) / <alpha-value>)",
+          // Página pública (ver DESIGN.md, "Página pública").
+          pubBg: "rgb(var(--pub-bg) / <alpha-value>)",
+          pubFg: "rgb(var(--pub-fg) / <alpha-value>)",
+          pubFg2: "rgb(var(--pub-fg-2) / <alpha-value>)",
+          pubMuted: "rgb(var(--pub-muted) / <alpha-value>)",
+          pubAccent: "rgb(var(--pub-accent) / <alpha-value>)",
+          pubBrand: "rgb(var(--pub-brand) / <alpha-value>)",
+          pubButton: "rgb(var(--pub-button) / <alpha-value>)",
+          pubGreen: "rgb(var(--pub-green) / <alpha-value>)",
+          pubEdge: "rgb(var(--pub-edge) / <alpha-value>)",
+          pubHeader: "rgb(var(--pub-header-bg) / <alpha-value>)",
           reportColA: "rgb(var(--vexo-report-col-a) / <alpha-value>)",
           reportColAMuted: "rgb(var(--vexo-report-col-a-muted) / <alpha-value>)",
           reportColB: "rgb(var(--vexo-report-col-b) / <alpha-value>)",
@@ -96,6 +107,12 @@ const config: Config = {
         "sidebar-item": "13px",
         card: "11px",
         caption: "10px",
+        // Página pública: título do hero (38px celular / 68px desktop) e
+        // títulos de seção (28px / 40px), com o letter-spacing pedido.
+        "pub-hero": ["2.375rem", { lineHeight: "1.06", letterSpacing: "-0.038em", fontWeight: "600" }],
+        "pub-hero-lg": ["4.25rem", { lineHeight: "1.02", letterSpacing: "-0.038em", fontWeight: "600" }],
+        "pub-h2": ["1.75rem", { lineHeight: "1.12", letterSpacing: "-0.03em", fontWeight: "600" }],
+        "pub-h2-lg": ["2.5rem", { lineHeight: "1.08", letterSpacing: "-0.034em", fontWeight: "600" }],
         // Relatório (ver DESIGN.md): número dos boxes e frase de abertura.
         "report-value": ["1.5rem", { lineHeight: "1" }], // 24px
         "report-value-lg": ["1.625rem", { lineHeight: "1" }], // 26px (a partir de sm)
@@ -114,6 +131,10 @@ const config: Config = {
         control: "0.5rem", // = rounded-lg (botões, campos, chips pequenos)
         block: "0.75rem", // = rounded-xl (cards/blocos de conteúdo)
         report: "0.875rem", // 14px = block + 2px, só nos painéis do Relatório
+        // Página pública: blocos bem arredondados (32–44px).
+        "pub-sm": "2rem", // 32px
+        pub: "2.25rem", // 36px
+        "pub-lg": "2.75rem", // 44px
       },
       // Espaçamento nomeado pros componentes base da Etapa 2 — mesmos
       // valores dos paddings mais usados hoje em botões/campos (px-2.5/

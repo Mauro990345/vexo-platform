@@ -487,3 +487,39 @@ Nova tela, administrada pela página "Contas" (`/crm`, só admin — ver DESIGN.
   arquivo) pra Reativação. "Retomados" (Follow-up) é a única contagem nova, mas reaproveita um
   campo que já existia e já era escrito hoje (`FollowUpLog.respondedAt`), só uma agregação nova em
   cima dele — ver `report-metrics.ts`.
+
+## Página pública (vexoia.com.br) — landing e páginas legais
+Rotas públicas, sem login: `/` (landing), `/privacidade`, `/termos` (e `/termos-de-uso`, mesmo
+conteúdo, rota antiga mantida) e `/exclusao-de-dados`. O login fica em `/entrar` (mesmo formulário de
+antes, `LoginForm.tsx`); `/login` só redireciona pra `/entrar`. Paleta PRÓPRIA destas telas, em tokens
+`--pub-*` (`globals.css`) / cores `vexo-pub*` (`tailwind.config.ts`) — independentes das cores do app
+que a tela Configurações sobrescreve. Nunca "M8 Growth" nessas páginas.
+- **Tokens**: fundo `--pub-bg` #070a11 com dois brilhos nos cantos superiores (`.pub-backdrop`:
+  esquerdo `--pub-glow-left` #547aca a 30%, direito `--pub-brand` #2b87bd a 28%, radial que some em
+  ~70%); texto `--pub-fg` #e6e8ec, secundário `--pub-fg-2` #a3a8b2, apoio `--pub-muted` #8b909a;
+  destaque `--pub-accent` #5db4e6; botão primário `--pub-button` #2478a8 com texto branco (4.9:1),
+  hover `--pub-brand`; verde `--pub-green` #49b76c SÓ em checks e variações positivas; cabeçalho
+  `--pub-header-bg` #0e131c a 72%.
+- **Blocos** (`.pub-block`): fundo branco 3%, borda 1px branco 8%, cantos `rounded-pub-sm` (32px),
+  `rounded-pub` (36px) ou `rounded-pub-lg` (44px) — larguras variadas de propósito (grades 1fr/1.2fr,
+  1.25fr/1fr alternando), nada "quadradão". Brilhos: `.pub-glow-top` (azul no topo — DEPOIS,
+  Contato), `.pub-glow-corner` (canto, cor via `--pub-corner` = um dos `--tab-icon-*` — cards de
+  "Como funciona"). Botões e etiquetas sempre em pílula (`rounded-full`).
+- **Tipografia**: Inter. Hero `text-pub-hero` 38px / `md:text-pub-hero-lg` 68px, 600, -0.038em;
+  títulos de seção `text-pub-h2` 28px / `md:text-pub-h2-lg` 40px; sobretítulos 11px caixa alta em
+  `pubAccent`.
+- **Logo** (`VexoLogo.tsx`): "X" fino de dois traços curvos (SVG 26×26, stroke 2.4 arredondado,
+  um em #5db4e6 e outro em #e6e8ec a 75%) + "vexo" (minúsculas, 500, 24px, -0.02em) + " ia"
+  (#8b909a, 400). Nunca em caixa alta. Favicon: `src/app/icon.svg`.
+- **Estrutura da landing**: cabeçalho flutuante em pílula (máx. 1040px, links somem no celular) →
+  hero → órbita (`OrbitDiagram.tsx`, um SVG 760×400 que escala inteiro; ícones genéricos lucide em
+  traço fino, nunca logos da Meta; `.orbit-label` maior em unidades do SVG no celular) → Por que o
+  VEXO (ANTES com pílulas inclinadas / DEPOIS com 4 passos) → Como funciona (4 cards) → Resultados
+  (gráfico de colunas do Relatório, `ReportColumnChart`, com dados ESTÁTICOS e selo "Exemplo
+  ilustrativo") → Segurança (bloco único 2×2 com linhas finas) → Contato (mailto) → rodapé.
+- **Rodapé**: logo, colunas Produto/Legal/Contato, linha de marcas da Meta. Razão social e CNPJ vêm de
+  `src/lib/legal-info.ts` e só aparecem quando os DOIS estiverem preenchidos (hoje vazios).
+- **Páginas legais**: mesmo cabeçalho/rodapé, coluna de leitura de no máximo 720px (`LegalPage.tsx`),
+  textos escritos a partir do que o código faz.
+- Acessibilidade: header/nav/main/section/footer, "Pular para o conteúdo", ícones decorativos com
+  `aria-hidden`, transições só com `motion-safe:` (respeita prefers-reduced-motion).

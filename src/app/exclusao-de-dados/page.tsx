@@ -1,80 +1,91 @@
-import Link from "next/link";
 import type { Metadata } from "next";
+import Link from "next/link";
+import { LegalPage, LegalSection, LegalList, MailLink, LEGAL_LINK_CLASS } from "@/components/public/LegalPage";
+import { LEGAL_INFO } from "@/lib/legal-info";
 
 export const metadata: Metadata = {
-  title: "Exclusão de Dados | VEXO",
+  title: "Exclusão de dados | VEXO IA",
+  description: "Como pedir a exclusão dos seus dados no VEXO IA.",
+  alternates: { canonical: "/exclusao-de-dados" },
 };
 
+// Instruções de exclusão de dados (URL de instruções informada à Meta). O app
+// NÃO tem endpoint de callback de exclusão da Meta: o pedido é feito por
+// e-mail e atendido manualmente — esta página descreve exatamente isso.
 export default function DataDeletionPage() {
+  const privacy = LEGAL_INFO.emails.privacy;
   return (
-    <main className="min-h-screen px-4 py-12">
-      <div className="mx-auto max-w-2xl">
-        <div className="mb-8 text-center">
-          <div className="mx-auto mb-3 h-10 w-10 rounded-xl bg-vexo-accent" />
-          <h1 className="text-2xl font-semibold tracking-tight">Exclusão de Dados</h1>
-          <p className="mt-1 text-sm text-vexo-muted">VEXO — M8 Growth</p>
-        </div>
-
-        <div className="space-y-6 rounded-2xl border border-vexo-border bg-vexo-surface p-6 text-sm leading-relaxed text-vexo-fg shadow-xl sm:p-8">
-          <section>
-            <h2 className="mb-2 text-base font-semibold">Quem pode solicitar</h2>
-            <ul className="list-disc space-y-1 pl-5 text-vexo-muted">
-              <li>Qualquer pessoa que já trocou mensagens com uma clínica que usa o VEXO no Instagram;</li>
-              <li>Qualquer usuário com login na plataforma (equipe interna ou de uma clínica cliente).</li>
-            </ul>
-          </section>
-
-          <section>
-            <h2 className="mb-2 text-base font-semibold">Como solicitar</h2>
-            <p className="mb-3">
-              Envie um e-mail para{" "}
-              <a href="mailto:laurafonseca121@gmail.com" className="text-vexo-accent hover:underline">
-                laurafonseca121@gmail.com
-              </a>{" "}
-              com o assunto "Exclusão de dados", informando:
-            </p>
-            <ul className="list-disc space-y-1 pl-5 text-vexo-muted">
-              <li>
-                Se você é um lead: seu nome de usuário do Instagram e o nome da clínica com quem
-                conversou;
-              </li>
-              <li>Se você tem login na plataforma: o e-mail cadastrado.</li>
-            </ul>
-          </section>
-
-          <section>
-            <h2 className="mb-2 text-base font-semibold">O que é excluído</h2>
-            <p>
-              Mensagens trocadas, dados de contato (nome, usuário do Instagram, telefone quando
-              informado) e, no caso de login na plataforma, os dados da conta. Registros que a
-              clínica precise manter por obrigação legal ou contratual (ex: histórico financeiro)
-              podem ser retidos apenas pelo tempo exigido por lei.
-            </p>
-          </section>
-
-          <section>
-            <h2 className="mb-2 text-base font-semibold">Prazo</h2>
-            <p>A solicitação é processada em até 15 dias úteis, com confirmação por e-mail.</p>
-          </section>
-
-          <section>
-            <h2 className="mb-2 text-base font-semibold">Mais informações</h2>
-            <p>
-              Veja também a{" "}
-              <Link href="/privacidade" className="text-vexo-accent hover:underline">
-                Política de Privacidade
-              </Link>{" "}
-              completa.
-            </p>
-          </section>
-        </div>
-
-        <p className="mt-6 text-center">
-          <Link href="/login" className="text-xs text-vexo-muted hover:text-vexo-fg">
-            ← Voltar
-          </Link>
+    <LegalPage
+      title="Exclusão de dados"
+      intro={
+        <p>
+          Qualquer pessoa que conversou com uma clínica que usa o VEXO IA, e qualquer clínica ou pessoa com login na plataforma,
+          pode pedir a exclusão dos seus dados a qualquer momento.
         </p>
-      </div>
-    </main>
+      }
+    >
+      <LegalSection title="Como pedir, passo a passo">
+        <ol className="list-decimal space-y-2 pl-5 marker:text-vexo-pubMuted">
+          <li>
+            Envie um e-mail para <MailLink email={privacy} subject="Exclusão de dados" /> com o assunto{" "}
+            <strong className="font-medium text-vexo-pubFg">“Exclusão de dados”</strong>.
+          </li>
+          <li>
+            Informe como identificar os seus dados:
+            <LegalList
+              items={[
+                "Se você conversou com uma clínica: o seu nome de usuário do Instagram (ou o telefone usado no WhatsApp) e o nome da clínica.",
+                "Se você tem login na plataforma: o e-mail cadastrado.",
+                "Se você é a clínica e quer excluir a conta inteira: o nome da clínica e o e-mail do responsável.",
+              ]}
+            />
+          </li>
+          <li>Podemos pedir uma confirmação simples de identidade antes de apagar, para proteger os seus dados.</li>
+          <li>Você recebe a confirmação por e-mail quando a exclusão for concluída.</li>
+        </ol>
+      </LegalSection>
+
+      <LegalSection title="Prazo">
+        <p>Respondemos em até 15 dias a partir do recebimento do pedido.</p>
+      </LegalSection>
+
+      <LegalSection title="O que é apagado">
+        <LegalList
+          items={[
+            "Se você conversou com uma clínica: o seu contato (nome, usuário, foto de perfil, telefone), as mensagens e a transcrição de áudios, e os seus agendamentos registrados no VEXO.",
+            "Se você tem login: os dados da sua conta.",
+            "Se a clínica encerra a conta: os registros vinculados a ela na plataforma (conversas, contatos, agendamentos, configurações e autorizações de acesso).",
+          ]}
+        />
+        <p>
+          Eventos já criados na agenda da clínica (Google Agenda) e mensagens que ficaram no próprio Instagram ou WhatsApp são
+          controlados por essas plataformas e pela clínica; podemos orientar como removê-los.
+        </p>
+      </LegalSection>
+
+      <LegalSection title="O que pode ficar retido">
+        <p>
+          Apenas o que precisarmos guardar para cumprir obrigação legal ou regulatória, ou para exercer direitos em processos, e só
+          pelo prazo exigido. Nesse caso, avisamos na resposta ao seu pedido.
+        </p>
+      </LegalSection>
+
+      <LegalSection title="Revogar o acesso do VEXO">
+        <p>
+          A clínica pode, a qualquer momento, remover o acesso do VEXO ao Instagram nas configurações de integrações da Meta e
+          desconectar o WhatsApp em “Aparelhos conectados”, no próprio aplicativo.
+        </p>
+      </LegalSection>
+
+      <LegalSection title="Mais informações">
+        <p>
+          Veja também a{" "}
+          <Link href="/privacidade" className={LEGAL_LINK_CLASS}>
+            Política de privacidade
+          </Link>
+          .
+        </p>
+      </LegalSection>
+    </LegalPage>
   );
 }

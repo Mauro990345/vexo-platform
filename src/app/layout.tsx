@@ -3,6 +3,7 @@ import { Providers } from "./providers";
 import { getThemeColors, buildThemeCssVars } from "@/lib/theme";
 import { getPageStyleOverrides, buildPageStyleCssVars } from "@/lib/page-style-overrides";
 import "./globals.css";
+import { LEGAL_INFO } from "@/lib/legal-info";
 // Inter self-hospedada (pacote @fontsource-variable, não next/font/google) —
 // pedido explícito: o build do Railway baixava a fonte de fonts.googleapis.com
 // durante "next build" e falhava sempre que essa rede estava instável (ver
@@ -26,8 +27,10 @@ import "@fontsource/figtree/500.css";
 import "@fontsource/figtree/600.css";
 
 export const metadata: Metadata = {
-  title: "VEXO | M8 Growth",
-  description: "Social selling automatizado para clínicas de saúde.",
+  metadataBase: new URL(LEGAL_INFO.siteUrl),
+  title: "VEXO IA",
+  description: "Social selling para clínicas de saúde: da captação ao agendamento, em um só fluxo.",
+  robots: { index: true, follow: true },
 };
 
 // As cores do sistema (ver getThemeColors abaixo) vêm do banco e podem

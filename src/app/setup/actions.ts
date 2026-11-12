@@ -42,5 +42,5 @@ export async function createFirstAdmin(formData: FormData) {
     data: { name, email, passwordHash, role: "INTERNAL_ADMIN" },
   });
 
-  redirect("/login?setup=ok");
+  redirect("/entrar");
 }

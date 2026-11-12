@@ -6,7 +6,7 @@ import { signOut } from "next-auth/react";
 export function SignOutButton() {
   return (
     <button
-      onClick={() => signOut({ callbackUrl: "/login" })}
+      onClick={() => signOut({ callbackUrl: "/entrar" })}
       title="Sair"
       className="flex shrink-0 items-center gap-1.5 rounded-md p-1.5 text-vexo-muted transition hover:bg-vexo-surface hover:text-vexo-fg"
     >

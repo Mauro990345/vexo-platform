@@ -26,7 +26,7 @@ export default async function SetupPage() {
             {existingAdmin ? (
               <>
                 <p>Já existe um administrador cadastrado nesta instância.</p>
-                <Link href="/login" className="mt-3 inline-block text-vexo-accent hover:underline">
+                <Link href="/entrar" className="mt-3 inline-block text-vexo-accent hover:underline">
                   Ir para o login
                 </Link>
               </>
