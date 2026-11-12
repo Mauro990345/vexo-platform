@@ -14,7 +14,7 @@ export const authOptions: NextAuthOptions = {
     maxAge: 60 * 60 * 24 * 365, // 1 ano — renovado a cada login; revogação é manual (desativar usuário)
   },
   pages: {
-    signIn: "/login",
+    signIn: "/entrar",
   },
   providers: [
     CredentialsProvider({

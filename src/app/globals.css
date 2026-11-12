@@ -158,6 +158,21 @@
      meses" e "Abordados por semana", mesmo componente ReportColumnChart).
      Duas séries em tons de azul; o ÚLTIMO grupo (mês/semana mais recente)
      em cor cheia, os anteriores em azul-acinzentado suave. */
+  /* Página pública (vexoia.com.br — landing + páginas legais). Paleta
+     PRÓPRIA dessas telas (ver DESIGN.md, "Página pública"), independente
+     das cores do app que a tela Configurações pode sobrescrever. */
+  --pub-bg: 7 10 17; /* #070a11 — fundo */
+  --pub-fg: 230 232 236; /* #e6e8ec — texto principal */
+  --pub-fg-2: 163 168 178; /* #a3a8b2 — texto secundário */
+  --pub-muted: 139 144 154; /* #8b909a — apoio */
+  --pub-accent: 93 180 230; /* #5db4e6 — destaque */
+  --pub-brand: 43 135 189; /* #2b87bd — azul de marca (hover do botão primário) */
+  --pub-button: 36 120 168; /* #2478a8 — botão primário (texto branco, 4.9:1) */
+  --pub-green: 73 183 108; /* #49b76c — só checks e variações positivas */
+  --pub-glow-left: 84 122 202; /* #547aca — brilho do canto superior esquerdo */
+  --pub-edge: 255 255 255; /* borda dos blocos (8%) e fundo (3%) */
+  --pub-header-bg: 14 19 28; /* #0e131c — cabeçalho flutuante (72%) */
+
   --vexo-report-col-a: 43 135 189; /* #2b87bd — série 1 (Agendaram/Abordados), cor cheia */
   --vexo-report-col-a-muted: 59 97 125; /* #3b617d — série 1, grupos anteriores */
   --vexo-report-col-b: 124 196 232; /* #7cc4e8 — série 2 (Compareceram/Em conversa), cor cheia */
@@ -206,6 +221,41 @@
     flex: 0 1 calc(var(--vexo-report-col-w) * 2);
     min-width: 0;
   }
+  /* Página pública: fundo com dois brilhos suaves nos cantos superiores
+     (esquerdo azul-violeta, direito azul de marca), radial que some em ~70%. */
+  .pub-backdrop {
+    background-color: rgb(var(--pub-bg));
+    background-image:
+      radial-gradient(60% 50% at 0% 0%, rgb(var(--pub-glow-left) / 0.3), transparent 70%),
+      radial-gradient(60% 50% at 100% 0%, rgb(var(--pub-brand) / 0.28), transparent 70%);
+    background-repeat: no-repeat;
+    background-size: 100% 1100px;
+  }
+  /* Bloco padrão da página pública. */
+  .pub-block {
+    background-color: rgb(var(--pub-edge) / 0.03);
+    border: 1px solid rgb(var(--pub-edge) / 0.08);
+  }
+  /* Rótulos da órbita (unidades do SVG 760x400): 13 no desktop; no celular,
+     maior em unidades pra continuar legível (~11px) depois da escala. */
+  .orbit-label {
+    font-size: 13px;
+  }
+  @media (max-width: 639px) {
+    .orbit-label {
+      font-size: 22px;
+    }
+  }
+  /* Brilho azul no topo de um bloco (DEPOIS, Contato). */
+  .pub-glow-top {
+    background-image: radial-gradient(70% 60% at 50% 0%, rgb(var(--pub-brand) / 0.22), transparent 70%);
+  }
+  /* Brilho colorido num canto (cards de "Como funciona"); a cor vem de
+     --pub-corner (um dos tokens --tab-icon-*). */
+  .pub-glow-corner {
+    background-image: radial-gradient(55% 55% at 100% 0%, rgb(var(--pub-corner) / 0.16), transparent 70%);
+  }
+
   /* Brilho azul bem suave atrás do cabeçalho (~13% do azul da marca).
      closest-side: o brilho chega a zero exatamente nas bordas da caixa,
      então nunca aparece um "retângulo" com quina dura. */
