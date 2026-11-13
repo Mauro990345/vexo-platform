@@ -162,18 +162,26 @@ describe("SEO", () => {
 describe("página inicial — ajustes de design e conteúdo (2ª rodada)", () => {
   const html = () => renderToStaticMarkup(<HomePage />);
 
-  it("FAQ (#duvidas): 10 perguntas em <details> nativos, a primeira aberta, na ordem pedida", () => {
+  it("FAQ (#duvidas): 8 perguntas em <details> nativos, a primeira aberta, na ordem pedida", () => {
     const h = html();
     expect(h).toContain('id="duvidas"');
     const faq = h.slice(h.indexOf('id="duvidas"'));
     const details = [...faq.matchAll(/<details([^>]*)>/g)];
-    expect(details).toHaveLength(10);
+    expect(details).toHaveLength(8);
     expect(details[0]![1]).toContain("open");
     for (const d of details.slice(1)) expect(d[1]).not.toContain("open");
     const questions = [...faq.matchAll(/<summary[^>]*>([^<]+)</g)].map((m) => m[1]!.trim());
     expect(questions[0]).toBe("O que o VEXO IA faz, na prática?");
-    expect(questions[3]).toBe("A IA conversa também pelo WhatsApp?");
-    expect(questions[9]).toBe("Quanto custa e como começo?");
+    expect(questions).toEqual([
+      "O que o VEXO IA faz, na prática?",
+      "O VEXO substitui gestor de tráfego, campanha paga, CRC e SDR?",
+      "Quem faz o contato com os pacientes?",
+      "Preciso trocar meu número ou meu Instagram?",
+      "Os dados da clínica e dos pacientes estão seguros?",
+      "Como a clínica acompanha os resultados?",
+      "Posso cancelar ou revogar o acesso quando quiser?",
+      "Quanto custa e como começo?",
+    ]);
   });
 
   it("cabeçalho tem o link 'Dúvidas' pra âncora #duvidas", () => {
@@ -190,31 +198,56 @@ describe("página inicial — ajustes de design e conteúdo (2ª rodada)", () =>
     expect(logo).toContain('d="M20 6L6 20"');
   });
 
-  it("canal certo: a conversa é no Instagram; nenhum texto diz que a IA conversa no WhatsApp", () => {
+  it("diz O QUE o VEXO faz, nunca COMO: sem canal por função, sem quem faz a primeira mensagem, sem regra de reativação", () => {
     const h = html();
-    expect(h).toContain("Ele conversa com o paciente no Instagram, agenda, confirma e lembra pelo WhatsApp");
-    expect(h).not.toMatch(/conversa no Instagram e no WhatsApp/);
-    expect(String(metadataDescription())).not.toMatch(/conversa no Instagram e no WhatsApp/);
+    expect(h).toContain("Ele atende o paciente, agenda, confirma e traz de volta quem sumiu. Sua equipe só atende.");
+    for (const forbidden of [
+      /pelo WhatsApp/i,
+      /no Instagram e no WhatsApp/i,
+      /conversa (com o paciente )?no Instagram/i,
+      /primeira mensagem (é|e) enviada/i,
+      /só a primeira/i,
+      /IA assume/i,
+      /prazo de retorno/i,
+      /único contato/i,
+      /A IA conversa também pelo WhatsApp/i,
+      /Como funciona a reativação/i,
+    ]) {
+      expect(h).not.toMatch(forbidden);
+    }
+    expect(String(metadataDescription())).not.toMatch(/WhatsApp|Instagram/);
   });
 
   it("selos de segurança: só os verdadeiros, nunca certificações que não temos", () => {
     const h = html();
     const seals = h.slice(h.indexOf('aria-label="Medidas de segurança"'));
-    for (const s of ["HTTPS", "Chaves cifradas · AES-256", "Senhas em hash", "Login obrigatório", "Exclusão sob pedido"]) expect(seals).toContain(s);
+    for (const s of ["HTTPS", "Chaves cifradas", "Senhas em hash", "Login obrigatório"]) expect(seals).toContain(s);
     expect(h).not.toMatch(/SOC ?2|ISO ?27001|GDPR|HIPAA/i);
   });
 
-  it("funil em pontos: 21 pontos, acessível, e marcado como exemplo", () => {
+  it("funil em pontos: 60 pontos pequenos (12 colunas), acessível, e marcado como exemplo", () => {
     const h = html();
-    expect(h).toContain('aria-label="Exemplo ilustrativo com 21 pessoas abordadas: 9 compareceram à consulta, 1 agendou e não compareceu, 5 conversaram sem agendar e 6 não responderam."');
-    const grid = h.slice(h.indexOf("Exemplo ilustrativo com 21 pessoas"));
-    expect(grid.slice(0, grid.indexOf("</div>")).match(/h-6 w-6 rounded-full/g)).toHaveLength(21);
+    expect(h).toContain('aria-label="Exemplo ilustrativo com 60 pessoas abordadas: 26 compareceram, 3 agendaram e não compareceram, 14 conversaram sem agendar e 17 não responderam."');
+    const grid = h.slice(h.indexOf("Exemplo ilustrativo com 60 pessoas"));
+    const dots = grid.slice(0, grid.indexOf("</div>"));
+    expect(dots.match(/h-2\.5 w-2\.5 rounded-full/g)).toHaveLength(60);
+    expect(h).toContain("grid-cols-12 gap-[9px]");
+  });
+
+  it("ícones de Como funciona/Segurança/agendamento só em traço (sem círculo colorido); Depois sem verde/dourado/roxo", () => {
+    const h = html();
+    const depois = h.slice(h.indexOf("Um fluxo só, do primeiro contato à consulta."), h.indexOf('id="como-funciona"'));
+    expect(depois).not.toMatch(/pub-green|pubGreen|tab-icon-2|pub-violet|pubViolet/);
+    expect(depois).toContain("Confirmada");
+    // fora da órbita do hero (que continua colorida), nenhum ícone em círculo colorido
+    const afterOrbit = h.slice(h.indexOf("UM SISTEMA, TODO O CAMINHO"));
+    expect(afterOrbit).not.toMatch(/rgb\(var\(--(tab-icon-\d|pub-violet|pub-green|pub-accent)\) \/ 0\.12\)/);
   });
 
   it("faixas claras em 'Como funciona' e 'Perguntas frequentes'; abordagem por social sellers", () => {
     const h = html();
     expect(h.match(/pub-light-band/g)).toHaveLength(2);
-    expect(h).toContain("A primeira mensagem é enviada por uma equipe de social sellers, de forma humana, para quem já segue a clínica no Instagram.");
+    expect(h).toContain("O contato com quem já se interessa pela clínica é feito por social sellers em conjunto com a IA.");
   });
 });
 

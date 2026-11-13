@@ -7,7 +7,6 @@ import { VexoLogo } from "@/components/public/VexoLogo";
 // No celular os links somem; ficam só o logo e "Entrar".
 export const PUBLIC_NAV_LINKS = [
   { href: "/#como-funciona", label: "Como funciona" },
-  { href: "/#antes-depois", label: "Por que o VEXO" },
   { href: "/#resultados", label: "Resultados" },
   { href: "/#seguranca", label: "Segurança" },
   { href: "/#duvidas", label: "Dúvidas" },
