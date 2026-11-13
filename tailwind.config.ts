@@ -121,8 +121,8 @@ const config: Config = {
         caption: "10px",
         // Página pública: título do hero (38px celular / 68px desktop) e
         // títulos de seção (28px / 40px), com o letter-spacing pedido.
-        "pub-hero": ["2.125rem", { lineHeight: "1.08", letterSpacing: "-0.036em", fontWeight: "600" }], // 34px
-        "pub-hero-lg": ["3.625rem", { lineHeight: "1.04", letterSpacing: "-0.036em", fontWeight: "600" }], // 58px
+        "pub-hero": ["2.375rem", { lineHeight: "1.06", letterSpacing: "-0.036em", fontWeight: "600" }], // 38px
+        "pub-hero-lg": ["4.25rem", { lineHeight: "1.02", letterSpacing: "-0.036em", fontWeight: "600" }], // 68px
         "pub-h2": ["1.75rem", { lineHeight: "1.12", letterSpacing: "-0.03em", fontWeight: "600" }],
         "pub-h2-lg": ["2.5rem", { lineHeight: "1.08", letterSpacing: "-0.034em", fontWeight: "600" }],
         // Relatório (ver DESIGN.md): número dos boxes e frase de abertura.

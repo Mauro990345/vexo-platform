@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import type { CSSProperties, ReactNode } from "react";
+import type { ReactNode } from "react";
 import {
   ArrowRight,
   CalendarCheck,
@@ -28,13 +28,13 @@ import { FAQ_ITEMS } from "@/components/public/faq-items";
 // do relatório, conversa) são EXEMPLOS estáticos com selo "Exemplo
 // ilustrativo". Ver DESIGN.md, "Página pública".
 //
-// Canal: a CONVERSA com o paciente é no Instagram; o WhatsApp só é usado pra
-// confirmação, lembretes, follow-up, reativação e relatório (é envio, o VEXO
-// não lê respostas no WhatsApp) — nenhum texto aqui pode dizer o contrário.
+// Princípio (rodada final): a página diz O QUE o VEXO faz, nunca COMO — sem
+// canal por função, sem quem faz a primeira mensagem, sem regra de
+// reativação nem fluxo interno. Esses detalhes ficam só nas páginas legais.
 export const metadata: Metadata = {
   title: "VEXO IA — Social selling para clínicas de saúde",
   description:
-    "O VEXO IA conversa com o paciente no Instagram, agenda, confirma e lembra pelo WhatsApp e traz de volta quem sumiu. Da captação ao agendamento, em um só fluxo.",
+    "O VEXO IA atende o paciente, agenda, confirma e traz de volta quem sumiu. Da captação ao agendamento, em um só fluxo, para clínicas de saúde.",
   alternates: { canonical: "/" },
 };
 
@@ -54,14 +54,12 @@ function Eyebrow({ children, light = false }: { children: string; light?: boolea
   );
 }
 
-// Ícone num círculo colorido: fundo da cor a 12%, borda a 35%.
-function ColorBadge({ color, children, size = "h-9 w-9" }: { color: string; children: ReactNode; size?: string }) {
+// Ícone só em traço fino (stroke 1.5, ~30px), sem círculo nem fundo, em cor
+// única: #5db4e6 nas seções escuras, #2478a8 nas faixas claras. (Os ícones
+// coloridos ficam só na órbita do hero.)
+function LineIcon({ children, light = false }: { children: ReactNode; light?: boolean }) {
   return (
-    <span
-      className={`inline-flex ${size} shrink-0 items-center justify-center rounded-full border`}
-      style={{ backgroundColor: `rgb(var(${color}) / 0.12)`, borderColor: `rgb(var(${color}) / 0.35)`, color: `rgb(var(${color}))` }}
-      aria-hidden="true"
-    >
+    <span className={`inline-flex shrink-0 ${light ? "text-vexo-pubButton" : "text-vexo-pubAccent"}`} aria-hidden="true">
       {children}
     </span>
   );
@@ -89,34 +87,30 @@ const BEFORE_PILLS: Array<{ label: string; rotate: string }> = [
   { label: "Leads esquecidos", rotate: "-rotate-3" },
 ];
 
-const HOW_STEPS: Array<{ n: string; title: string; text: string; icon: ReactNode; color: string }> = [
+const HOW_STEPS: Array<{ n: string; title: string; text: string; icon: ReactNode }> = [
   {
     n: "01",
     title: "Abordagem",
-    text: "A primeira mensagem é enviada por uma equipe de social sellers, de forma humana, para quem já segue a clínica no Instagram.",
-    icon: <Send size={16} strokeWidth={1.8} />,
-    color: "--tab-icon-1",
+    text: "O contato com quem já se interessa pela clínica é feito por social sellers em conjunto com a IA.",
+    icon: <Send size={30} strokeWidth={1.5} />,
   },
   {
     n: "02",
     title: "Condução",
-    text: "Quando o paciente responde, a IA assume, tira dúvidas e conduz até a decisão de agendar.",
-    icon: <MessagesSquare size={16} strokeWidth={1.8} />,
-    color: "--tab-icon-3",
+    text: "As dúvidas são respondidas na hora e a conversa é conduzida até a decisão de agendar.",
+    icon: <MessagesSquare size={30} strokeWidth={1.5} />,
   },
   {
     n: "03",
     title: "Agendamento",
-    text: "O horário é marcado na agenda da clínica e o paciente recebe a confirmação pelo WhatsApp.",
-    icon: <CalendarCheck size={16} strokeWidth={1.8} />,
-    color: "--tab-icon-2",
+    text: "O horário é marcado na agenda da clínica e o paciente recebe a confirmação.",
+    icon: <CalendarCheck size={30} strokeWidth={1.5} />,
   },
   {
     n: "04",
     title: "Follow-up e reativação",
-    text: "Lembretes antes da consulta e um contato no momento certo para o paciente voltar, no prazo que a clínica definir.",
-    icon: <RotateCcw size={16} strokeWidth={1.8} />,
-    color: "--tab-icon-4",
+    text: "Lembretes antes da consulta e um contato no momento certo para o paciente voltar.",
+    icon: <RotateCcw size={30} strokeWidth={1.5} />,
   },
 ];
 
@@ -124,24 +118,21 @@ const HOW_STEPS: Array<{ n: string; title: string; text: string; icon: ReactNode
 // Meta; WhatsApp pelo número da clínica pareado como aparelho vinculado
 // (Evolution API, NÃO a API oficial); tokens cifrados AES-256-GCM; senhas em
 // hash (bcrypt); plataforma só com login; exclusão sob pedido por e-mail.
-const SECURITY_ITEMS: Array<{ title: string; text: ReactNode; icon: ReactNode; color: string }> = [
+const SECURITY_ITEMS: Array<{ title: string; text: ReactNode; icon: ReactNode }> = [
   {
     title: "Integrações autorizadas",
     text: "O Instagram é conectado pela API oficial da Meta, com a autorização da própria clínica. O WhatsApp é conectado pelo celular da clínica, como aparelho vinculado.",
-    icon: <Link2 size={16} strokeWidth={1.8} />,
-    color: "--pub-accent",
+    icon: <Link2 size={30} strokeWidth={1.5} />,
   },
   {
     title: "Dados mínimos e protegidos",
     text: "Usamos só as informações necessárias para a conversa e o agendamento. A conexão é criptografada (HTTPS), as chaves de acesso às integrações ficam cifradas e a plataforma só abre com login.",
-    icon: <ShieldCheck size={16} strokeWidth={1.8} />,
-    color: "--pub-green",
+    icon: <ShieldCheck size={30} strokeWidth={1.5} />,
   },
   {
     title: "Acesso revogável",
     text: "A clínica pode revogar o acesso do VEXO a qualquer momento: no Instagram, pelas configurações da Meta; no WhatsApp, desconectando o aparelho vinculado.",
-    icon: <KeyRound size={16} strokeWidth={1.8} />,
-    color: "--tab-icon-2",
+    icon: <KeyRound size={30} strokeWidth={1.5} />,
   },
   {
     title: "Exclusão de dados",
@@ -154,13 +145,12 @@ const SECURITY_ITEMS: Array<{ title: string; text: ReactNode; icon: ReactNode; c
         .
       </>
     ),
-    icon: <Trash2 size={16} strokeWidth={1.8} />,
-    color: "--pub-violet",
+    icon: <Trash2 size={30} strokeWidth={1.5} />,
   },
 ];
 
 // Só selos VERDADEIROS segundo o código; nunca certificações que não temos.
-const SECURITY_SEALS = ["HTTPS", "Chaves cifradas · AES-256", "Senhas em hash", "Login obrigatório", "Exclusão sob pedido"];
+const SECURITY_SEALS = ["HTTPS", "Chaves cifradas", "Senhas em hash", "Login obrigatório"];
 
 // Exemplo ILUSTRATIVO e estático (nunca dado de cliente).
 const EXAMPLE_MONTHS: Array<{ label: string; values: [number, number] }> = [
@@ -169,12 +159,12 @@ const EXAMPLE_MONTHS: Array<{ label: string; values: [number, number] }> = [
   { label: "out", values: [10, 8] },
 ];
 
-// Funil em pontos: 21 pessoas de exemplo, pintadas em ordem.
-const DOT_GROUPS: Array<{ count: number; className: string; style?: CSSProperties; label: string }> = [
-  { count: 9, className: "bg-vexo-pubGreen", label: "compareceram à consulta" },
-  { count: 1, className: "bg-vexo-pubBrand", label: "agendou e não compareceu" },
-  { count: 5, className: "bg-vexo-reportColB", label: "conversaram, sem agendar" },
-  { count: 6, className: "bg-vexo-pubEdge/[0.16]", label: "abordados, sem resposta" },
+// Funil em pontos: 60 pessoas de EXEMPLO (rotulado), pintadas em ordem.
+const DOT_GROUPS: Array<{ count: number; className: string; label: string }> = [
+  { count: 26, className: "bg-vexo-pubGreen", label: "compareceram" },
+  { count: 3, className: "bg-vexo-pubBrand", label: "agendaram e não compareceram" },
+  { count: 14, className: "bg-vexo-reportColB", label: "conversaram, sem agendar" },
+  { count: 17, className: "bg-vexo-pubEdge/[0.16]", label: "abordados, sem resposta" },
 ];
 
 const PEEK_METRICS: Array<[string, number]> = [
@@ -202,12 +192,12 @@ export default function HomePage() {
           <span className="h-1.5 w-1.5 rounded-full bg-vexo-pubGreen" aria-hidden="true" />
           Social selling para clínicas de saúde
         </span>
-        <h1 className="mx-auto mt-5 max-w-[780px] text-pub-hero text-vexo-pubFg md:text-pub-hero-lg">
+        <h1 className="mx-auto mt-5 max-w-[900px] text-pub-hero text-vexo-pubFg md:text-pub-hero-lg">
           Da captação ao agendamento, <span className="text-vexo-pubAccent">a gente faz tudo por você.</span>
         </h1>
-        <p className="mx-auto mt-5 max-w-[640px] text-lg leading-relaxed text-vexo-pubFg2">
-          O VEXO IA substitui gestor de tráfego, campanhas, CRC e SDR em um só fluxo. Ele conversa com o paciente no Instagram,
-          agenda, confirma e lembra pelo WhatsApp e traz de volta quem sumiu. Sua equipe só atende.
+        <p className="mx-auto mt-5 max-w-[560px] text-[15px] leading-relaxed text-vexo-pubFg2">
+          O VEXO IA substitui gestor de tráfego, campanhas, CRC e SDR em um só fluxo. Ele atende o paciente, agenda, confirma e
+          traz de volta quem sumiu. Sua equipe só atende.
         </p>
         <div className="mt-7 flex flex-col items-center justify-center gap-3 sm:flex-row">
           <Link
@@ -255,7 +245,7 @@ export default function HomePage() {
             </ul>
           </div>
 
-          {/* DEPOIS: conversa de exemplo (Instagram) → agendamento confirmado */}
+          {/* DEPOIS: conversa de exemplo → agendamento confirmado (tons de azul/neutro) */}
           <div className="pub-glow-top rounded-pub-lg border p-5 sm:p-7" style={{ borderColor: "rgb(var(--pub-accent) / 0.34)" }}>
             <div className="flex items-start justify-between gap-3">
               <div>
@@ -267,7 +257,7 @@ export default function HomePage() {
               <VexoLogo className="hidden shrink-0 opacity-90 sm:inline-flex" markSize={16} />
             </div>
 
-            <div className="mt-5 space-y-2.5 text-sm" role="group" aria-label="Exemplo ilustrativo de conversa no Instagram">
+            <div className="mt-5 space-y-2.5 text-sm" role="group" aria-label="Exemplo ilustrativo de conversa com um paciente">
               <p className="mr-auto max-w-[82%] rounded-[18px] rounded-bl-[6px] bg-vexo-pubEdge/[0.08] px-3.5 py-2 text-vexo-pubFg">
                 Oi! Queria saber como funciona a avaliação.
               </p>
@@ -281,30 +271,29 @@ export default function HomePage() {
                 className="flex items-center gap-3 rounded-[20px] border p-3"
                 style={{
                   backgroundColor: "rgb(var(--pub-bg) / 0.65)",
-                  borderColor: "rgb(var(--pub-green) / 0.45)",
-                  boxShadow: "0 0 28px rgb(var(--pub-green) / 0.12)",
+                  borderColor: "rgb(var(--pub-accent) / 0.45)",
+                  boxShadow: "0 0 28px rgb(var(--pub-accent) / 0.10)",
                 }}
               >
-                <ColorBadge color="--tab-icon-2">
-                  <CalendarDays size={16} strokeWidth={1.8} />
-                </ColorBadge>
+                <LineIcon>
+                  <CalendarDays size={30} strokeWidth={1.5} />
+                </LineIcon>
                 <div className="min-w-0 flex-1">
                   <p className="font-medium text-vexo-pubFg">Avaliação agendada</p>
-                  <p className="text-xs text-vexo-pubFg2">Quinta, 14h · confirmação enviada pelo WhatsApp</p>
+                  <p className="text-xs text-vexo-pubFg2">Quinta, 14h · confirmação enviada</p>
                 </div>
-                <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-vexo-pubGreen/15 px-2.5 py-1 text-xs font-medium text-vexo-pubGreen">
+                <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-vexo-pubAccent/15 px-2.5 py-1 text-xs font-medium text-vexo-pubAccent">
                   <Check size={13} strokeWidth={2.2} aria-hidden="true" /> Confirmada
                 </span>
               </div>
             </div>
 
             <div className="mt-4 flex flex-wrap items-center gap-2">
-              <span className="rounded-full border px-3 py-1 text-xs" style={{ borderColor: "rgb(var(--tab-icon-2) / 0.35)", color: "rgb(var(--tab-icon-2))", backgroundColor: "rgb(var(--tab-icon-2) / 0.08)" }}>
-                Lembrete no dia anterior
-              </span>
-              <span className="rounded-full border px-3 py-1 text-xs" style={{ borderColor: "rgb(var(--pub-violet) / 0.35)", color: "rgb(var(--pub-violet))", backgroundColor: "rgb(var(--pub-violet) / 0.08)" }}>
-                Reativação programada
-              </span>
+              {["Lembrete no dia anterior", "Reativação programada"].map((tag) => (
+                <span key={tag} className="rounded-full border border-vexo-pubEdge/[0.12] bg-vexo-pubEdge/[0.04] px-3 py-1 text-xs text-vexo-pubFg2">
+                  {tag}
+                </span>
+              ))}
               <span className="ml-auto text-[11px] text-vexo-pubMuted">Exemplo ilustrativo</span>
             </div>
           </div>
@@ -322,7 +311,7 @@ export default function HomePage() {
             {HOW_STEPS.map((s, i) => (
               <article key={s.n} className={`pub-light-card rounded-pub-sm p-6 ${i % 2 === 1 ? "md:translate-y-7" : ""}`}>
                 <div className="flex items-center justify-between">
-                  <ColorBadge color={s.color}>{s.icon}</ColorBadge>
+                  <LineIcon light>{s.icon}</LineIcon>
                   <span className="font-pub-serif text-[40px] italic leading-none text-vexo-pubButton" aria-hidden="true">
                     {s.n}
                   </span>
@@ -347,8 +336,8 @@ export default function HomePage() {
               Tudo o que a clínica precisa ver, <Serif>em um só lugar.</Serif>
             </h2>
             <p className="mt-3 text-vexo-pubFg2">
-              Um painel claro e um relatório automático pelo WhatsApp mostram quantas pessoas foram abordadas, quantas agendaram e
-              quantas compareceram.
+              Um painel claro e um relatório automático mostram quantas pessoas foram abordadas, quantas agendaram e quantas
+              compareceram.
             </p>
             <ul className="mt-5 space-y-2.5">
               {["Relatório quinzenal ou mensal, sem precisar pedir", "Comparação com o período anterior", "Números de follow-up e reativação"].map(
@@ -382,12 +371,12 @@ export default function HomePage() {
         {/* Funil em pontos — cada ponto é uma pessoa (exemplo fixo) */}
         <div className="pub-block grid items-center gap-8 rounded-pub-lg p-6 sm:p-9 md:grid-cols-[auto_1fr]">
           <div
-            className="mx-auto grid w-max grid-cols-7 gap-3.5"
+            className="mx-auto grid w-max grid-cols-12 gap-[9px]"
             role="img"
-            aria-label="Exemplo ilustrativo com 21 pessoas abordadas: 9 compareceram à consulta, 1 agendou e não compareceu, 5 conversaram sem agendar e 6 não responderam."
+            aria-label="Exemplo ilustrativo com 60 pessoas abordadas: 26 compareceram, 3 agendaram e não compareceram, 14 conversaram sem agendar e 17 não responderam."
           >
             {dots.map((g, i) => (
-              <span key={i} className={`h-6 w-6 rounded-full ${g.className}`} aria-hidden="true" />
+              <span key={i} className={`h-2.5 w-2.5 rounded-full ${g.className}`} aria-hidden="true" />
             ))}
           </div>
           <div>
@@ -427,7 +416,7 @@ export default function HomePage() {
               key={item.title}
               className={`p-6 sm:p-7 ${i > 0 ? "border-t border-vexo-pubEdge/[0.08]" : ""} ${i === 1 ? "md:border-t-0" : ""} ${i % 2 === 1 ? "md:border-l md:border-vexo-pubEdge/[0.08]" : ""}`}
             >
-              <ColorBadge color={item.color}>{item.icon}</ColorBadge>
+              <LineIcon>{item.icon}</LineIcon>
               <h3 className="mt-3 font-semibold tracking-tight">{item.title}</h3>
               <p className="mt-1.5 text-sm leading-relaxed text-vexo-pubFg2">{item.text}</p>
             </div>

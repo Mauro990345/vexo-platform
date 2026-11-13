@@ -561,3 +561,19 @@ que a tela Configurações sobrescreve. Nunca "M8 Growth" nessas páginas.
   - **Contato**: faixa em degradê `.pub-cta-band` (`--pub-cta-1/2/3`), `rounded-pub-cta` (48px),
     72px em cima e nada embaixo, botão branco, e o cartão do relatório (`--pub-peek-bg` #0b1018)
     "espiando", cortado pela borda inferior (210px visíveis).
+- **Rodada final (vale sobre o que está acima quando houver conflito):**
+  - **Princípio de conteúdo**: a página pública diz O QUE o VEXO faz, nunca COMO — nenhum canal por
+    função ("pelo WhatsApp", "no Instagram"), nada sobre quem faz a primeira mensagem, nenhuma regra
+    de reativação nem fluxo interno. Esses detalhes ficam só nas páginas legais (exigência da Meta).
+    Testado em `public-pages.test.tsx`.
+  - **Hero**: título ~68px (`text-pub-hero-lg`, 38px no celular); subtítulo menor, 15px, máx. 560px.
+  - **Cabeçalho**: links Como funciona, Resultados, Segurança, Dúvidas.
+  - **Ícones fora da órbita** (Como funciona, Segurança, cartão "Avaliação agendada"): só o traço
+    (stroke 1.5, 30px), sem círculo/fundo/borda, cor única — `pubAccent` #5db4e6 no escuro,
+    `pubButton` #2478a8 nas faixas claras (`LineIcon`). A órbita do hero continua colorida.
+  - **DEPOIS**: final só em azul/neutro — cartão com borda azul clara, selo "Confirmada" azul, tags em
+    cinza neutro. Sem verde, dourado ou roxo ali.
+  - **Funil em pontos**: 60 pontos de 10px, 12 colunas, espaço 9px — 26 verdes, 3 `pubBrand`, 14
+    `reportColB`, 17 cinza; rotulado "Exemplo ilustrativo".
+  - **Selos**: HTTPS, chaves cifradas, senhas em hash, login obrigatório.
+  - **FAQ**: 8 perguntas (removidas as de canal do WhatsApp e regra de reativação).

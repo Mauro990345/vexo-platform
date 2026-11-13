@@ -1,29 +1,23 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 
-// Perguntas frequentes da página pública (#duvidas). Cada resposta foi
-// conferida no código (ver PR). Ajustes de verdade em relação ao texto
-// pedido: a 8 (reativação — por padrão a clínica tem 2 prazos, 30 e 60 dias,
-// e cada prazo gera UM contato; não é "uma única data" por paciente) e a 9
-// (link pra página de exclusão).
+// Perguntas frequentes da página pública (#duvidas) — 8 perguntas. Dizem O
+// QUE o VEXO faz, nunca COMO (sem canal por função, sem regra de
+// reativação, sem quem faz a primeira mensagem).
 const LINK = "text-vexo-pubButton underline underline-offset-2";
 
 export const FAQ_ITEMS: Array<{ q: string; a: ReactNode }> = [
   {
     q: "O que o VEXO IA faz, na prática?",
-    a: "Ele cuida do caminho entre o seguidor e a consulta: a abordagem inicial, a conversa no Instagram, o agendamento, os lembretes pelo WhatsApp e a reativação de quem sumiu. A equipe da clínica só atende o paciente.",
+    a: "Ele cuida do caminho entre o seguidor e a consulta: a abordagem, a conversa, o agendamento, os lembretes e a reativação de quem sumiu. A equipe da clínica só atende o paciente.",
   },
   {
     q: "O VEXO substitui gestor de tráfego, campanha paga, CRC e SDR?",
-    a: "Sim, nas funções que importam para a clínica. O VEXO capta pelo Instagram sem depender de anúncios, o que dispensa a campanha paga e o gestor de tráfego. Ele conduz a conversa como um SDR e organiza agendamentos, lembretes e retornos como um CRC. A equipe da clínica só atende o paciente.",
+    a: "Sim, nas funções que importam para a clínica. O VEXO capta sem depender de anúncios, conduz a conversa como um SDR e organiza agendamentos, lembretes e retornos como um CRC. A equipe da clínica só atende o paciente.",
   },
   {
-    q: "A primeira mensagem é enviada por um robô?",
-    a: "Não. A primeira mensagem é enviada por uma equipe de social sellers, de forma humana. A IA entra quando o paciente responde.",
-  },
-  {
-    q: "A IA conversa também pelo WhatsApp?",
-    a: "A conversa com o paciente acontece no Instagram. O WhatsApp é usado para confirmar o agendamento, enviar lembretes, fazer o follow-up, reativar pacientes e entregar o relatório.",
+    q: "Quem faz o contato com os pacientes?",
+    a: "Um trabalho conjunto de social sellers e inteligência artificial, com abordagem humana e resposta rápida.",
   },
   {
     q: "Preciso trocar meu número ou meu Instagram?",
@@ -44,11 +38,7 @@ export const FAQ_ITEMS: Array<{ q: string; a: ReactNode }> = [
   },
   {
     q: "Como a clínica acompanha os resultados?",
-    a: "Por um painel com os números de abordagens, conversas, agendamentos e comparecimentos, e por um relatório automático, quinzenal ou mensal, enviado pelo WhatsApp.",
-  },
-  {
-    q: "Como funciona a reativação de pacientes?",
-    a: "Depois do prazo de retorno definido pela clínica (um padrão da clínica ou o escolhido para cada paciente), o VEXO faz um contato para o paciente voltar, pelo WhatsApp ou pelo Instagram. Cada prazo gera um único contato, sem insistência.",
+    a: "Por um painel com os números de abordagens, conversas, agendamentos e comparecimentos, e por um relatório automático enviado periodicamente.",
   },
   {
     q: "Posso cancelar ou revogar o acesso quando quiser?",
