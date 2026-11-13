@@ -261,3 +261,23 @@ function metadataDescription() {
 beforeEach(async () => {
   cachedMeta = await importMeta();
 });
+
+describe("página inicial — CTA e Antes/Depois (ajuste fino)", () => {
+  it("cartão do relatório no CTA não tem altura fixa nem corte: os 4 números aparecem, em 2x2 no celular", () => {
+    const h = renderToStaticMarkup(<HomePage />);
+    const cta = h.slice(h.indexOf('id="contato"'));
+    expect(cta).not.toContain("h-[210px]");
+    expect(cta).not.toMatch(/max-w-\[720px\][^"]*overflow-hidden/);
+    for (const label of ["Abordados", "Em conversa", "Agendaram", "Compareceram"]) expect(cta).toContain(`>${label}<`);
+    expect(cta).toContain("grid grid-cols-2 gap-2 sm:grid-cols-4");
+    expect(cta.match(/min-w-0 rounded-2xl/g)).toHaveLength(4);
+  });
+
+  it("bloco Depois usa as classes que só compactam a partir de 900px", () => {
+    const h = renderToStaticMarkup(<HomePage />);
+    expect(h).toContain("pub-after ");
+    expect(h).toContain("pub-after-chat");
+    expect(h.match(/pub-after-bubble/g)).toHaveLength(3);
+    expect(h).toContain("pub-after-card");
+  });
+});

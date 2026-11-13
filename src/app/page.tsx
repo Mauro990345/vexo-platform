@@ -246,7 +246,7 @@ export default function HomePage() {
           </div>
 
           {/* DEPOIS: conversa de exemplo → agendamento confirmado (tons de azul/neutro) */}
-          <div className="pub-glow-top rounded-pub-lg border p-5 sm:p-7" style={{ borderColor: "rgb(var(--pub-accent) / 0.34)" }}>
+          <div className="pub-after pub-glow-top rounded-pub-lg border p-5 sm:p-7" style={{ borderColor: "rgb(var(--pub-accent) / 0.34)" }}>
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-[0.14em] text-vexo-pubAccent">
@@ -257,18 +257,18 @@ export default function HomePage() {
               <VexoLogo className="hidden shrink-0 opacity-90 sm:inline-flex" markSize={16} />
             </div>
 
-            <div className="mt-5 space-y-2.5 text-sm" role="group" aria-label="Exemplo ilustrativo de conversa com um paciente">
-              <p className="mr-auto max-w-[82%] rounded-[18px] rounded-bl-[6px] bg-vexo-pubEdge/[0.08] px-3.5 py-2 text-vexo-pubFg">
+            <div className="pub-after-chat mt-5 flex flex-col gap-2.5 text-sm" role="group" aria-label="Exemplo ilustrativo de conversa com um paciente">
+              <p className="mr-auto max-w-[82%] pub-after-bubble rounded-[18px] rounded-bl-[6px] bg-vexo-pubEdge/[0.08] px-3.5 py-2 text-vexo-pubFg">
                 Oi! Queria saber como funciona a avaliação.
               </p>
-              <p className="pub-bubble-ai ml-auto max-w-[82%] rounded-[18px] rounded-br-[6px] px-3.5 py-2 text-white">
+              <p className="pub-after-bubble pub-bubble-ai ml-auto max-w-[82%] rounded-[18px] rounded-br-[6px] px-3.5 py-2 text-white">
                 Claro! Posso agendar uma avaliação para você. Prefere quinta às 14h ou sexta às 10h?
               </p>
-              <p className="mr-auto max-w-[82%] rounded-[18px] rounded-bl-[6px] bg-vexo-pubEdge/[0.08] px-3.5 py-2 text-vexo-pubFg">
+              <p className="mr-auto max-w-[82%] pub-after-bubble rounded-[18px] rounded-bl-[6px] bg-vexo-pubEdge/[0.08] px-3.5 py-2 text-vexo-pubFg">
                 Quinta às 14h.
               </p>
               <div
-                className="flex items-center gap-3 rounded-[20px] border p-3"
+                className="pub-after-card flex items-center gap-3 rounded-[20px] border p-3"
                 style={{
                   backgroundColor: "rgb(var(--pub-bg) / 0.65)",
                   borderColor: "rgb(var(--pub-accent) / 0.45)",
@@ -481,8 +481,8 @@ export default function HomePage() {
             {LEGAL_INFO.emails.contact}
           </a>
 
-          <div className="relative mx-auto mt-10 h-[210px] max-w-[720px] overflow-hidden" aria-hidden="true">
-            <div className="min-h-[280px] rounded-t-[28px] border border-b-0 border-vexo-pubEdge/10 bg-vexo-pubPeek p-5 text-left sm:p-6">
+          <div className="mx-auto mt-10 max-w-[720px]" aria-hidden="true">
+            <div className="rounded-t-[28px] border border-b-0 border-vexo-pubEdge/10 bg-vexo-pubPeek p-5 text-left sm:p-6">
               <div className="flex items-center justify-between gap-3">
                 <p className="text-xs text-vexo-pubMuted">Relatório VEXO IA · Outubro de 2026</p>
                 <ExampleTag />
@@ -490,7 +490,7 @@ export default function HomePage() {
               <p className="mt-2 text-[15px] text-vexo-pubFg">Em outubro, o VEXO IA abordou 21 pessoas, 10 agendaram e 9 compareceram.</p>
               <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
                 {PEEK_METRICS.map(([label, value]) => (
-                  <div key={label} className="rounded-2xl border border-vexo-pubEdge/[0.08] bg-vexo-pubEdge/[0.03] p-3">
+                  <div key={label} className="min-w-0 rounded-2xl border border-vexo-pubEdge/[0.08] bg-vexo-pubEdge/[0.03] p-3">
                     <p className="text-[11px] text-vexo-pubMuted">{label}</p>
                     <p className="mt-1 text-2xl font-semibold leading-none text-vexo-pubFg">{value}</p>
                   </div>
