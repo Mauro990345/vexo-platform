@@ -114,6 +114,7 @@ A mudança prática começa numa pergunta. Em vez de perguntar “qual procedime
     blocks: [
       {
         id: "p2-b1",
+        media: bonusAudio("passo-2.mp3"),
         items: parseBlock(`
 Neste passo vamos falar da cabeça, porque é ela que trava a venda na hora de falar o preço. Não adianta ter o melhor roteiro se você fica com medo de cobrar.
 
