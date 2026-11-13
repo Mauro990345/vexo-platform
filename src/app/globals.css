@@ -342,3 +342,27 @@ body {
 ::selection {
   @apply bg-vexo-accent/40;
 }
+
+/* Página pública — bloco "Depois" (Antes/Depois) mais baixo SÓ no desktop
+   (>= 900px), reduzindo de forma uniforme (~25-33%) padding do bloco,
+   espaço antes do chat, distância entre balões e padding vertical dos
+   balões e do card. Fora das @layer de propósito: precisa vencer os
+   utilitários (p-5/sm:p-7, mt-5, gap-2.5, py-2, p-3) do mesmo elemento.
+   Abaixo de 900px nada muda. */
+@media (min-width: 900px) {
+  .pub-after {
+    padding: 22px 26px;
+  }
+  .pub-after-chat {
+    margin-top: 14px;
+    gap: 7px;
+  }
+  .pub-after-bubble {
+    padding-top: 6px;
+    padding-bottom: 6px;
+  }
+  .pub-after-card {
+    padding-top: 9px;
+    padding-bottom: 9px;
+  }
+}

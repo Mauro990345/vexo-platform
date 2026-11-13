@@ -577,3 +577,8 @@ que a tela Configurações sobrescreve. Nunca "M8 Growth" nessas páginas.
     `reportColB`, 17 cinza; rotulado "Exemplo ilustrativo".
   - **Selos**: HTTPS, chaves cifradas, senhas em hash, login obrigatório.
   - **FAQ**: 8 perguntas (removidas as de canal do WhatsApp e regra de reativação).
+  - **Ajuste fino**: o cartão do relatório no CTA não tem mais altura fixa nem corte — aparece
+    inteiro, colado na base da faixa (cantos só no topo), com os 4 números em 2×2 no celular
+    (`min-w-0`). O bloco "Depois" fica mais baixo só a partir de 900px (`.pub-after*` em
+    `globals.css`: padding 22/26px, chat 14px abaixo do título, 7px entre balões, balões com 6px e
+    card com 9px de padding vertical); abaixo de 900px nada muda.
