@@ -39,6 +39,15 @@ const config: Config = {
           pubGreen: "rgb(var(--pub-green) / <alpha-value>)",
           pubEdge: "rgb(var(--pub-edge) / <alpha-value>)",
           pubHeader: "rgb(var(--pub-header-bg) / <alpha-value>)",
+          pubLight: "rgb(var(--pub-light-bg) / <alpha-value>)",
+          pubLightTitle: "rgb(var(--pub-light-title) / <alpha-value>)",
+          pubLightText: "rgb(var(--pub-light-text) / <alpha-value>)",
+          pubLightEyebrow: "rgb(var(--pub-light-eyebrow) / <alpha-value>)",
+          pubWhatsapp: "rgb(var(--pub-whatsapp) / <alpha-value>)",
+          pubAgenda: "rgb(var(--pub-agenda) / <alpha-value>)",
+          pubIgPink: "rgb(var(--pub-ig-pink) / <alpha-value>)",
+          pubViolet: "rgb(var(--pub-violet) / <alpha-value>)",
+          pubPeek: "rgb(var(--pub-peek-bg) / <alpha-value>)",
           reportColA: "rgb(var(--vexo-report-col-a) / <alpha-value>)",
           reportColAMuted: "rgb(var(--vexo-report-col-a-muted) / <alpha-value>)",
           reportColB: "rgb(var(--vexo-report-col-b) / <alpha-value>)",
@@ -99,6 +108,9 @@ const config: Config = {
       },
       fontFamily: {
         sans: ["var(--font-inter)", "ui-sans-serif", "system-ui", "-apple-system", "sans-serif"],
+        // Serifa de destaque da página pública (uma palavra por título),
+        // self-hospedada via @fontsource (ver import em PublicShell.tsx).
+        "pub-serif": ['"Instrument Serif"', "ui-serif", "Georgia", "serif"],
       },
       // Tamanhos de fonte fora da escala padrão do Tailwind, nomeados por
       // onde são usados (em vez de text-[11px] solto nos componentes).
@@ -109,8 +121,8 @@ const config: Config = {
         caption: "10px",
         // Página pública: título do hero (38px celular / 68px desktop) e
         // títulos de seção (28px / 40px), com o letter-spacing pedido.
-        "pub-hero": ["2.375rem", { lineHeight: "1.06", letterSpacing: "-0.038em", fontWeight: "600" }],
-        "pub-hero-lg": ["4.25rem", { lineHeight: "1.02", letterSpacing: "-0.038em", fontWeight: "600" }],
+        "pub-hero": ["2.125rem", { lineHeight: "1.08", letterSpacing: "-0.036em", fontWeight: "600" }], // 34px
+        "pub-hero-lg": ["3.625rem", { lineHeight: "1.04", letterSpacing: "-0.036em", fontWeight: "600" }], // 58px
         "pub-h2": ["1.75rem", { lineHeight: "1.12", letterSpacing: "-0.03em", fontWeight: "600" }],
         "pub-h2-lg": ["2.5rem", { lineHeight: "1.08", letterSpacing: "-0.034em", fontWeight: "600" }],
         // Relatório (ver DESIGN.md): número dos boxes e frase de abertura.
@@ -135,6 +147,8 @@ const config: Config = {
         "pub-sm": "2rem", // 32px
         pub: "2.25rem", // 36px
         "pub-lg": "2.75rem", // 44px
+        "pub-band": "3.5rem", // 56px — faixas claras
+        "pub-cta": "3rem", // 48px — faixa de contato
       },
       // Espaçamento nomeado pros componentes base da Etapa 2 — mesmos
       // valores dos paddings mais usados hoje em botões/campos (px-2.5/

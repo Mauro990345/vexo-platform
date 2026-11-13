@@ -523,3 +523,41 @@ que a tela Configurações sobrescreve. Nunca "M8 Growth" nessas páginas.
   textos escritos a partir do que o código faz.
 - Acessibilidade: header/nav/main/section/footer, "Pular para o conteúdo", ícones decorativos com
   `aria-hidden`, transições só com `motion-safe:` (respeita prefers-reduced-motion).
+- **2ª rodada (vale sobre o que está acima quando houver conflito):**
+  - **Logo**: "X" simétrico de dois traços retos (`M6 6l14 14` em #5db4e6, `M20 6L6 20` em #e6e8ec a
+    80%), 20px no cabeçalho/rodapé, 34px no centro da órbita, 16px na etiqueta "Depois"; texto "vexo"
+    21px/500/-0.02em + " ia" #8b909a/400, com `normal-case` explícito (nunca caixa alta).
+  - **Hero**: título 34px (celular) / 58px (desktop), 600, -0.036em; subtítulo 18px; botões 15px.
+    Canal: a conversa é no Instagram; o WhatsApp só confirma, lembra, faz follow-up, reativação e
+    relatório — nenhum texto pode dizer que a IA conversa no WhatsApp.
+  - **Cabeçalho**: links e "Entrar" em 13px, padding enxuto, link "Dúvidas" (#duvidas).
+  - **Órbita colorida**: cada nó com fundo da própria cor a 12%, borda a 40% e brilho radial a ~20%
+    (WhatsApp `--pub-whatsapp` #25d366, Agenda `--pub-agenda` #5b8def, Instagram com o traço do ícone
+    em degradê `--pub-ig-orange`→`--pub-ig-pink`→`--pub-ig-purple` e brilho rosa, Follow-up
+    `--tab-icon-2`, Relatório `--pub-accent`, Condução `--tab-icon-1`, Reativação `--pub-violet`
+    #a78bfa). Ícones genéricos em traço (lucide), nunca logos oficiais.
+  - **Faixas claras** (`.pub-light-band`): "Como funciona" e "Perguntas frequentes" — margem lateral
+    16px, máx. 1280px, `rounded-pub-band` (56px), fundo `--pub-light-bg` #eef3f8 com degradê azul a
+    20% nos primeiros 260px; títulos `--pub-light-title` #0b0f17, parágrafos `--pub-light-text`
+    #4a5565 (6.8:1), sobretítulos `--pub-light-eyebrow` #1d6c9c (5.1:1). Cards brancos
+    (`.pub-light-card`: borda 6%, sombra 0 16px 40px a 6%), numeral em serifa itálica #2478a8, ícone
+    em círculo na cor do passo; cards 2 e 4 deslocados 28px pra baixo no desktop.
+  - **Serifa de destaque**: Instrument Serif itálico (`font-pub-serif`, self-hospedada via
+    `@fontsource/instrument-serif`, importada só na casca pública — sem `next/font/google`, mesmo
+    motivo do Inter: nenhuma rede no build). Uma palavra/expressão por título, na cor de destaque da
+    seção (#5db4e6 no escuro, #2478a8 no claro). O título do hero continua em Inter.
+  - **DEPOIS** = conversa de exemplo (balão do paciente à esquerda, balão da IA à direita em degradê
+    `.pub-bubble-ai` #2478a8→#3a5fb0), cartão "Avaliação agendada" com borda verde e selo
+    "Confirmada", etiquetas "Lembrete no dia anterior" (amarela) e "Reativação programada" (violeta),
+    "Exemplo ilustrativo".
+  - **Funil em pontos** (Resultados): 21 círculos de 24px (7×3, espaço 14px) — 9 verdes, 1 azul, 5
+    azul-claros, 6 cinza — com `role="img"` e legenda; exemplo fixo.
+  - **Segurança**: ícones com cor própria (azul, verde, amarelo, violeta; fundo 12%, borda 35%) e uma
+    linha de selos em pílula (mono 12px, caixa alta, 0.08em, cinza, check verde) — só o que é
+    verdade no código: HTTPS, chaves cifradas AES-256, senhas em hash, login obrigatório, exclusão
+    sob pedido. Nunca selos de certificação que não temos.
+  - **FAQ** (#duvidas): `<details>/<summary>` nativos (sem JS), cartões brancos 24px, "+" que gira 45°
+    ao abrir, a primeira aberta; respostas em `faq-items.tsx`, conferidas no código.
+  - **Contato**: faixa em degradê `.pub-cta-band` (`--pub-cta-1/2/3`), `rounded-pub-cta` (48px),
+    72px em cima e nada embaixo, botão branco, e o cartão do relatório (`--pub-peek-bg` #0b1018)
+    "espiando", cortado pela borda inferior (210px visíveis).

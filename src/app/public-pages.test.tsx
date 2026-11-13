@@ -158,3 +158,73 @@ describe("SEO", () => {
     expect(rule.disallow).toEqual(expect.arrayContaining(["/crm", "/dashboard", "/api"]));
   });
 });
+
+describe("página inicial — ajustes de design e conteúdo (2ª rodada)", () => {
+  const html = () => renderToStaticMarkup(<HomePage />);
+
+  it("FAQ (#duvidas): 10 perguntas em <details> nativos, a primeira aberta, na ordem pedida", () => {
+    const h = html();
+    expect(h).toContain('id="duvidas"');
+    const faq = h.slice(h.indexOf('id="duvidas"'));
+    const details = [...faq.matchAll(/<details([^>]*)>/g)];
+    expect(details).toHaveLength(10);
+    expect(details[0]![1]).toContain("open");
+    for (const d of details.slice(1)) expect(d[1]).not.toContain("open");
+    const questions = [...faq.matchAll(/<summary[^>]*>([^<]+)</g)].map((m) => m[1]!.trim());
+    expect(questions[0]).toBe("O que o VEXO IA faz, na prática?");
+    expect(questions[3]).toBe("A IA conversa também pelo WhatsApp?");
+    expect(questions[9]).toBe("Quanto custa e como começo?");
+  });
+
+  it("cabeçalho tem o link 'Dúvidas' pra âncora #duvidas", () => {
+    expect(html()).toMatch(/<a href="\/#duvidas"[^>]*>Dúvidas<\/a>/);
+  });
+
+  it("logo: 'vexo' em minúsculas, sem uppercase, com o X simétrico", async () => {
+    const { VexoLogo } = await import("@/components/public/VexoLogo");
+    const logo = renderToStaticMarkup(<VexoLogo />);
+    expect(logo).not.toMatch(/\buppercase\b/);
+    expect(logo).toContain("normal-case");
+    expect(logo).toMatch(/>vexo<span[^>]*> ia<\/span>/);
+    expect(logo).toContain('d="M6 6l14 14"');
+    expect(logo).toContain('d="M20 6L6 20"');
+  });
+
+  it("canal certo: a conversa é no Instagram; nenhum texto diz que a IA conversa no WhatsApp", () => {
+    const h = html();
+    expect(h).toContain("Ele conversa com o paciente no Instagram, agenda, confirma e lembra pelo WhatsApp");
+    expect(h).not.toMatch(/conversa no Instagram e no WhatsApp/);
+    expect(String(metadataDescription())).not.toMatch(/conversa no Instagram e no WhatsApp/);
+  });
+
+  it("selos de segurança: só os verdadeiros, nunca certificações que não temos", () => {
+    const h = html();
+    const seals = h.slice(h.indexOf('aria-label="Medidas de segurança"'));
+    for (const s of ["HTTPS", "Chaves cifradas · AES-256", "Senhas em hash", "Login obrigatório", "Exclusão sob pedido"]) expect(seals).toContain(s);
+    expect(h).not.toMatch(/SOC ?2|ISO ?27001|GDPR|HIPAA/i);
+  });
+
+  it("funil em pontos: 21 pontos, acessível, e marcado como exemplo", () => {
+    const h = html();
+    expect(h).toContain('aria-label="Exemplo ilustrativo com 21 pessoas abordadas: 9 compareceram à consulta, 1 agendou e não compareceu, 5 conversaram sem agendar e 6 não responderam."');
+    const grid = h.slice(h.indexOf("Exemplo ilustrativo com 21 pessoas"));
+    expect(grid.slice(0, grid.indexOf("</div>")).match(/h-6 w-6 rounded-full/g)).toHaveLength(21);
+  });
+
+  it("faixas claras em 'Como funciona' e 'Perguntas frequentes'; abordagem por social sellers", () => {
+    const h = html();
+    expect(h.match(/pub-light-band/g)).toHaveLength(2);
+    expect(h).toContain("A primeira mensagem é enviada por uma equipe de social sellers, de forma humana, para quem já segue a clínica no Instagram.");
+  });
+});
+
+async function importMeta() {
+  return (await import("./page")).metadata;
+}
+let cachedMeta: Awaited<ReturnType<typeof importMeta>> | null = null;
+function metadataDescription() {
+  return cachedMeta?.description ?? "";
+}
+beforeEach(async () => {
+  cachedMeta = await importMeta();
+});

@@ -1,4 +1,7 @@
 import type { ReactNode } from "react";
+// Serifa de destaque (só itálico 400) — self-hospedada via @fontsource, como
+// Inter (ver layout.tsx): nenhuma chamada a fonts.googleapis.com no build.
+import "@fontsource/instrument-serif/400-italic.css";
 import { PublicHeader } from "@/components/public/PublicHeader";
 import { PublicFooter } from "@/components/public/PublicFooter";
 

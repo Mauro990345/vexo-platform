@@ -172,6 +172,23 @@
   --pub-glow-left: 84 122 202; /* #547aca — brilho do canto superior esquerdo */
   --pub-edge: 255 255 255; /* borda dos blocos (8%) e fundo (3%) */
   --pub-header-bg: 14 19 28; /* #0e131c — cabeçalho flutuante (72%) */
+  /* Faixas claras ("Como funciona" e "Perguntas frequentes"). */
+  --pub-light-bg: 238 243 248; /* #eef3f8 — fundo da faixa */
+  --pub-light-title: 11 15 23; /* #0b0f17 — títulos na faixa clara */
+  --pub-light-text: 74 85 101; /* #4a5565 — parágrafos (6.9:1 sobre #eef3f8) */
+  --pub-light-eyebrow: 29 108 156; /* #1d6c9c — sobretítulos (5.3:1) */
+  /* Cores dos nós da órbita e dos ícones (só decorativas, nunca texto). */
+  --pub-whatsapp: 37 211 102; /* #25d366 */
+  --pub-agenda: 91 141 239; /* #5b8def */
+  --pub-ig-orange: 253 196 104; /* #fdc468 */
+  --pub-ig-pink: 225 48 108; /* #e1306c */
+  --pub-ig-purple: 131 58 180; /* #833ab4 */
+  --pub-violet: 167 139 250; /* #a78bfa */
+  /* Faixa final de contato (degradê) e cartão do relatório "espiando". */
+  --pub-cta-1: 29 95 138; /* #1d5f8a */
+  --pub-cta-2: 58 95 176; /* #3a5fb0 */
+  --pub-cta-3: 31 122 150; /* #1f7a96 */
+  --pub-peek-bg: 11 16 24; /* #0b1018 */
 
   --vexo-report-col-a: 43 135 189; /* #2b87bd — série 1 (Agendaram/Abordados), cor cheia */
   --vexo-report-col-a-muted: 59 97 125; /* #3b617d — série 1, grupos anteriores */
@@ -236,6 +253,33 @@
     background-color: rgb(var(--pub-edge) / 0.03);
     border: 1px solid rgb(var(--pub-edge) / 0.08);
   }
+  /* Faixa clara: fundo #eef3f8 com degradê azul suave no topo (260px). */
+  .pub-light-band {
+    background-color: rgb(var(--pub-light-bg));
+    background-image: linear-gradient(to bottom, rgb(var(--pub-accent) / 0.2), transparent 260px);
+  }
+  /* Card branco da faixa clara. */
+  .pub-light-card {
+    background-color: rgb(var(--pub-edge));
+    border: 1px solid rgb(var(--pub-light-title) / 0.06);
+    box-shadow: 0 16px 40px rgb(var(--pub-light-title) / 0.06);
+  }
+  /* Balão da IA na conversa de exemplo (DEPOIS). */
+  .pub-bubble-ai {
+    background-image: linear-gradient(135deg, rgb(var(--pub-button)), rgb(var(--pub-cta-2)));
+  }
+  /* Faixa final de contato. */
+  .pub-cta-band {
+    background-image: linear-gradient(135deg, rgb(var(--pub-cta-1)) 0%, rgb(var(--pub-cta-2)) 55%, rgb(var(--pub-cta-3)) 100%);
+  }
+  /* Ícone "+" do FAQ gira 45° quando a pergunta está aberta. */
+  .pub-faq[open] .pub-faq-plus {
+    transform: rotate(45deg);
+  }
+  .pub-faq summary::-webkit-details-marker {
+    display: none;
+  }
+
   /* Rótulos da órbita (unidades do SVG 760x400): 13 no desktop; no celular,
      maior em unidades pra continuar legível (~11px) depois da escala. */
   .orbit-label {
