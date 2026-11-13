@@ -158,6 +158,7 @@ Cada pessoa trava em uma dessas três. Descubra a sua e treine.
     blocks: [
       {
         id: "p3-b1",
+        media: bonusAudio("passo-3.mp3"),
         items: parseBlock(`
 A venda de alto valor não começa quando a paciente senta na sua frente. Começa antes, no agendamento.
 
