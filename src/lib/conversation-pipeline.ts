@@ -92,6 +92,27 @@ export function resolveClinicWhatsappLink(clientWhatsappNumber: string | null | 
   return validation.valid ? validation.e164 : null;
 }
 
+// Janela de "conversa parada" que faz o backfill de histórico (ver bloco
+// logo abaixo de conversation.findFirst, em handleInboundInstagramMessage)
+// rodar de novo numa conversa que já existia — não só na primeira conversa
+// do lead. Pedido explícito: um card colado ou lembrete mandado enquanto a
+// conversa está parada (ex.: lead já agendado/em follow-up) só é visto pela
+// Meta Conversations API quando o lead responde; sem essa janela, ficaria
+// invisível pra IA pra sempre nesse caso. Constante nomeada de propósito,
+// fácil de ajustar.
+export const HISTORY_BACKFILL_STALE_HOURS = 3;
+
+// Peça pura da decisão de disparar o backfill (ver uso em
+// handleInboundInstagramMessage, não testável direto) — OU é a primeira
+// conversa de verdade deste lead, OU a conversa já existia mas estava
+// parada há mais de HISTORY_BACKFILL_STALE_HOURS (sem lastMessageAt ainda
+// registrado conta como "não parada" — não há base pra medir o gap).
+export function shouldBackfillHistory(isNewConversation: boolean, lastMessageAt: Date | null, now: Date): boolean {
+  if (isNewConversation) return true;
+  if (!lastMessageAt) return false;
+  return now.getTime() - lastMessageAt.getTime() > HISTORY_BACKFILL_STALE_HOURS * 60 * 60 * 1000;
+}
+
 // Peça pura do backfill de histórico (ver bloco isNewConversation em
 // handleInboundInstagramMessage, não testável direto) — recebe o que
 // getInstagramConversationHistory devolveu e monta as linhas de Message
@@ -858,23 +879,33 @@ export async function handleInboundInstagramMessage(
   }
 
   // Backfill do histórico ANTERIOR da conversa no Instagram (pedido
-  // explícito) — SÓ na primeira conversa de verdade deste lead (nunca de
-  // novo numa conversa que já existia, pra não rechamar a Meta em toda
-  // mensagem). Cobre o que a própria clínica mandou ANTES da primeira
-  // resposta do lead chegar ao VEXO (abordagem manual por outro app, card
-  // colado no Direct pela secretária, lembrete automático) e qualquer
-  // resposta antiga do lead que porventura falte — sem disparar a IA pra
-  // nenhuma delas: só grava Message (ver toChatHistory/chat-history.ts,
-  // que já inclui qualquer linha aqui no histórico passado pra IA), nunca
-  // chama classifyConversation/generateLeadReply pra este lote.
+  // explícito). Cobre o que a própria clínica mandou ANTES desta resposta
+  // do lead chegar ao VEXO (abordagem manual por outro app, card colado no
+  // Direct pela secretária, lembrete automático) e qualquer resposta antiga
+  // do lead que porventura falte — sem disparar a IA pra nenhuma delas: só
+  // grava Message (ver toChatHistory/chat-history.ts, que já inclui
+  // qualquer linha aqui no histórico passado pra IA), nunca chama
+  // classifyConversation/generateLeadReply pra este lote.
+  //
+  // Dispara em dois casos (OU): (1) primeira conversa de verdade deste lead
+  // (isNewConversation), ou (2) a conversa já existia mas estava parada há
+  // mais de HISTORY_BACKFILL_STALE_HOURS — é exatamente a janela em que um
+  // card/lembrete/abordagem pode ter sido mandado sem o lead ter respondido
+  // ainda. `conversation.lastMessageAt` aqui é o valor ANTES desta resposta
+  // atualizar a conversa (a mesma leitura de `conversation.findFirst` acima,
+  // update só acontece mais abaixo) — mesmo padrão já usado por `wentSilent`
+  // nesta função. Conversa "quente" (respondida há menos de
+  // HISTORY_BACKFILL_STALE_HOURS) não rechama a Meta a cada mensagem.
   //
   // getInstagramConversationHistory é BEST EFFORT por design (nunca lança
   // — ver comentário grande dela, instagram.ts): se a Meta não devolver
   // nada, a conversa segue exatamente como hoje, sem o backfill. dedupe
   // por igMessageId (único no schema) via skipDuplicates evita duplicar
   // tanto o que o VEXO já gravou quanto a própria mensagem atual do lead
-  // (event.messages, inserida mais abaixo, fora deste bloco).
-  if (isNewConversation) {
+  // (event.messages, inserida mais abaixo, fora deste bloco) — então rodar
+  // de novo (ex.: dois lembretes seguidos, cada um reabrindo a janela de
+  // staleness) nunca duplica o que já foi gravado.
+  if (shouldBackfillHistory(isNewConversation, conversation.lastMessageAt, firstResolvedAt)) {
     try {
       const historyItems = await getInstagramConversationHistory(decryptToken(igAccount.accessTokenEnc), igAccount.igUserId, lead.igScopedId);
       const currentBatchIds = new Set(event.messages.map((m) => m.igMessageId).filter((id): id is string => Boolean(id)));
@@ -886,7 +917,10 @@ export async function handleInboundInstagramMessage(
             `(${toBackfill.length - result.count} ignorada(s) por já existir, via igMessageId).`
         );
       } else if (historyItems.length === 0) {
-        console.log(`[vexo:history-backfill] Nenhum histórico anterior pra gravar — conversation=${conversation.id} lead=${lead.id} (primeira conversa deste lead).`);
+        console.log(
+          `[vexo:history-backfill] Nenhum histórico anterior pra gravar — conversation=${conversation.id} lead=${lead.id} ` +
+            `(motivo do disparo: ${isNewConversation ? "primeira conversa deste lead" : `conversa parada há mais de ${HISTORY_BACKFILL_STALE_HOURS}h`}).`
+        );
       }
     } catch (err) {
       // Mesma rede de segurança do resto desta função (nome/username/foto
