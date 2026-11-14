@@ -8,6 +8,7 @@ import { syncAllGoogleCalendars } from "@/lib/google-calendar-sync";
 import { backfillLeadInstagramUsernames } from "@/lib/lead-username-backfill";
 import { refreshLeadProfilePictures } from "@/lib/lead-profile-picture-backfill";
 import { processAttendanceConfirmationTimeouts } from "@/lib/conversation-pipeline";
+import { refreshAllInstagramTokens } from "@/lib/instagram-token-refresh";
 
 // Worker de background do VEXO — processo separado (serviço próprio no
 // Railway) que compartilha o mesmo banco Postgres da aplicação web.
@@ -27,6 +28,7 @@ const USERNAME_BACKFILL_INTERVAL_MS = 10 * 60 * 1000;
 const PROFILE_PICTURE_BACKFILL_INTERVAL_MS = 10 * 60 * 1000;
 const ATTENDANCE_CONFIRMATION_TIMEOUT_INTERVAL_MS = 3 * 60 * 1000;
 const CLINIC_REPORTS_INTERVAL_MS = 15 * 60 * 1000;
+const INSTAGRAM_TOKEN_REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
 // Alarme de atraso cumulativo — ver diagnóstico de capacidade (avaliação de
 // escala pra 100 clínicas): node-cron não tem proteção nenhuma contra
@@ -154,5 +156,22 @@ cron.schedule("*/10 * * * *", () =>
   runSafely("refreshLeadProfilePictures", refreshLeadProfilePictures, PROFILE_PICTURE_BACKFILL_INTERVAL_MS)
 );
 
+// Renovação do token de longa duração do Instagram (ver comentário grande
+// em instagram-token-refresh.ts) — problema real corrigido: o token da
+// Clínica Demo venceu sozinho, sem nenhuma renovação automática nem aviso
+// visível antes disso. Uma vez por dia é de sobra (janela de troca é de
+// 15 dias, sobre um token que dura 60) — horário de madrugada (6h de
+// Brasília) só pra não competir por rede/CPU com os outros jobs no mesmo
+// minuto, sem nenhum motivo mais forte que isso.
+cron.schedule(
+  "0 6 * * *",
+  () => runSafely("refreshAllInstagramTokens", refreshAllInstagramTokens, INSTAGRAM_TOKEN_REFRESH_INTERVAL_MS),
+  { timezone: TIMEZONE }
+);
+
 // Roda uma primeira vez imediatamente ao subir, para não esperar o primeiro tick.
 runSafely("dispatchDueMessages", dispatchDueMessages, DISPATCH_INTERVAL_MS);
+// Mesmo motivo do dispatch acima — não esperar até 24h pra ver o primeiro
+// resultado depois de um deploy novo (ex: contas existentes sem
+// tokenExpiresAt salvo, que precisam do backfill via debug_token).
+runSafely("refreshAllInstagramTokens", refreshAllInstagramTokens, INSTAGRAM_TOKEN_REFRESH_INTERVAL_MS);

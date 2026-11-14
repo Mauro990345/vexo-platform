@@ -177,6 +177,13 @@ export default async function ClinicConexoesPage({
 
   const base = `/crm/clinicas/${clinic.id}`;
   const instagramConnected = Boolean(clinic.instagramAccount);
+  // Token de longa duração vencido/sessão expirada (ver
+  // markInstagramNeedsReconnectByIgUserId, instagram.ts, e o renovador
+  // diário em instagram-token-refresh.ts) — a linha continua existindo
+  // (instagramConnected fica true), mas o token morreu de verdade; só
+  // reconectar de novo (novo OAuth) limpa isto. Mesmo padrão exato do
+  // Google Calendar (googleNeedsReconnect, abaixo).
+  const instagramNeedsReconnect = Boolean(clinic.instagramAccount?.needsReconnectAt);
   const businessDiscoveryConnected = Boolean(clinic.instagramAccount?.businessDiscoveryAccessTokenEnc);
   const googleConnected = Boolean(clinic.googleCalendarAccount);
   // invalid_grant detectado em qualquer chamada ao Google (ver
@@ -255,6 +262,20 @@ export default async function ClinicConexoesPage({
         </p>
       )}
 
+      {instagramNeedsReconnect && (
+        <p className="rounded-lg border border-vexo-warning/30 bg-vexo-warning/10 p-2 text-xs text-vexo-warning">
+          O Instagram desta clínica precisa reconectar — o token de acesso venceu (ou a Meta recusou a última
+          renovação automática) e a IA parou de conseguir enviar mensagens por este canal.
+          {clinic.instagramAccount!.needsReconnectReason && (
+            <>
+              {" "}
+              <span className="font-mono">{clinic.instagramAccount!.needsReconnectReason}</span>
+            </>
+          )}{" "}
+          Clique em &quot;Reconectar&quot; no card do Instagram abaixo.
+        </p>
+      )}
+
       {searchParams.status === "webhook-ok" && (
         <p className="rounded-lg border border-vexo-success/30 bg-vexo-success/10 p-2 text-xs text-vexo-success">
           Webhook reativado — o Instagram foi reinscrito e deve voltar a entregar mensagens novas.
@@ -313,9 +334,13 @@ export default async function ClinicConexoesPage({
           description="Captura no Direct e leva a conversa pra IA."
           connected={instagramConnected}
           statusLabel={
-            instagramConnected ? `Conectado · @${clinic.instagramAccount!.igUsername ?? "conectado"}` : "Não conectado"
+            instagramNeedsReconnect
+              ? "Reconexão necessária"
+              : instagramConnected
+                ? `Conectado · @${clinic.instagramAccount!.igUsername ?? "conectado"}`
+                : "Não conectado"
           }
-          statusDot={instagramConnected ? "bg-vexo-success" : "bg-vexo-muted"}
+          statusDot={instagramNeedsReconnect ? "bg-vexo-warning" : instagramConnected ? "bg-vexo-success" : "bg-vexo-muted"}
           href={`/api/oauth/instagram/start?clinicId=${clinic.id}`}
           openInNewTab
           disconnectAction={disconnectInstagramAction.bind(null, clinic.id)}
@@ -324,6 +349,14 @@ export default async function ClinicConexoesPage({
           }
           connectedExtraAction={
             <>
+              {/* Token vencido/sessão expirada (ver instagramNeedsReconnect
+                  acima) — "Desconectar" sozinho não resolve nada (só apaga
+                  a linha, sem gerar OAuth novo); precisa do mesmo fluxo de
+                  "Conectar" de novo. Mesmo padrão exato do card do Google
+                  Calendar mais abaixo. */}
+              {instagramNeedsReconnect && (
+                <ConnectOAuthButton href={`/api/oauth/instagram/start?clinicId=${clinic.id}`} label="Reconectar" />
+              )}
               <form action={checkInstagramWebhookSubscriptionAction.bind(null, clinic.id)}>
                 <button
                   type="submit"

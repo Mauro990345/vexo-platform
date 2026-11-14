@@ -136,7 +136,7 @@ export async function ClientPanelView({
       select: {
         name: true,
         whatsappStatus: true,
-        instagramAccount: { select: { id: true } },
+        instagramAccount: { select: { id: true, needsReconnectAt: true } },
         googleCalendarAccount: { select: { id: true } },
         reactivationConfig: { select: { availablePeriods: true } },
         fullFaceBonusEnabled: true,
@@ -264,6 +264,7 @@ export async function ClientPanelView({
         <PanelOverview
           clinicName={clinic.name}
           instagramConnected={Boolean(clinic.instagramAccount)}
+          instagramNeedsReconnect={Boolean(clinic.instagramAccount?.needsReconnectAt)}
           googleConnected={Boolean(clinic.googleCalendarAccount)}
           whatsappConnected={clinic.whatsappStatus === "open"}
           headerAction={headerAction}

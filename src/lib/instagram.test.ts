@@ -1,8 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 const leadUpdateMock = vi.fn();
+const instagramAccountUpdateManyMock = vi.fn();
 vi.mock("@/lib/prisma", () => ({
-  prisma: { lead: { update: (...args: unknown[]) => leadUpdateMock(...args) } },
+  prisma: {
+    lead: { update: (...args: unknown[]) => leadUpdateMock(...args) },
+    instagramAccount: { updateMany: (...args: unknown[]) => instagramAccountUpdateManyMock(...args) },
+  },
 }));
 
 import {
@@ -523,5 +527,108 @@ describe("getInstagramConversationHistory", () => {
     const result = await getInstagramConversationHistory("token", "999", "17841400000000000");
 
     expect(result).toEqual([]);
+  });
+});
+
+// Bug real em produção (Clínica Demo, 11/11/2026): o token venceu sozinho
+// (code 190, "Session has expired") e isso nunca ficou visível — só
+// escondido em failReason de uma Message FAILED. sendInstagramMessage
+// passa a marcar InstagramAccount.needsReconnectAt nesse caso específico
+// (ver isExpiredTokenMetaError/markInstagramNeedsReconnectByIgUserId,
+// instagram.ts), ANTES de propagar o erro — a IA segue falhando em
+// enviar (comportamento preservado), mas agora com o aviso gravado.
+describe("sendInstagramMessage — detecção de sessão expirada (code 190)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.stubGlobal("fetch", vi.fn());
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('erro code 190 "Session has expired": marca precisa-reconectar por igUserId e ainda propaga o erro original', async () => {
+    const fetchMock = fetch as unknown as ReturnType<typeof vi.fn>;
+    fetchMock.mockResolvedValue(
+      new Response(
+        JSON.stringify({ error: { message: "Error validating access token: Session has expired.", type: "OAuthException", code: 190 } }),
+        { status: 400 }
+      )
+    );
+    instagramAccountUpdateManyMock.mockResolvedValue({ count: 1 });
+
+    await expect(
+      sendInstagramMessage({
+        accessTokenEnc: encryptToken("fake-token"),
+        igUserId: "17841400000000001",
+        recipientIgScopedId: "17841400000000000",
+        text: "oi",
+      })
+    ).rejects.toThrow(/Falha ao enviar mensagem no Instagram/);
+
+    expect(instagramAccountUpdateManyMock).toHaveBeenCalledWith({
+      where: { igUserId: "17841400000000001" },
+      data: expect.objectContaining({ needsReconnectAt: expect.any(Date), needsReconnectReason: expect.stringContaining("sessão expirada") }),
+    });
+  });
+
+  it("erro comum (não code 190, não rate limit): NÃO marca precisa-reconectar", async () => {
+    const fetchMock = fetch as unknown as ReturnType<typeof vi.fn>;
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ error: { message: "The action is invalid since it's not the thread owner", code: 10 } }), { status: 400 })
+    );
+
+    await expect(
+      sendInstagramMessage({
+        accessTokenEnc: encryptToken("fake-token"),
+        igUserId: "17841400000000001",
+        recipientIgScopedId: "17841400000000000",
+        text: "oi",
+      })
+    ).rejects.toThrow();
+
+    expect(instagramAccountUpdateManyMock).not.toHaveBeenCalled();
+  });
+
+  it("rate limit (429): NÃO marca precisa-reconectar nem chama o diagnóstico — é só retry, nunca sessão expirada", async () => {
+    const fetchMock = fetch as unknown as ReturnType<typeof vi.fn>;
+    // mockImplementation (não mockResolvedValue) — cada tentativa do
+    // withRetry precisa de um Response NOVO, já que o corpo só pode ser
+    // lido uma vez por instância.
+    fetchMock.mockImplementation(async () => new Response(JSON.stringify({ error: { message: "rate limited" } }), { status: 429 }));
+
+    await expect(
+      sendInstagramMessage({
+        accessTokenEnc: encryptToken("fake-token"),
+        igUserId: "17841400000000001",
+        recipientIgScopedId: "17841400000000000",
+        text: "oi",
+      })
+    ).rejects.toThrow();
+
+    expect(instagramAccountUpdateManyMock).not.toHaveBeenCalled();
+  }, 10000);
+
+  it("sendInstagramGenericTemplateCard com code 190: marca precisa-reconectar do mesmo jeito", async () => {
+    const fetchMock = fetch as unknown as ReturnType<typeof vi.fn>;
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ error: { message: "Error validating access token: Session has expired.", code: 190 } }), { status: 400 })
+    );
+    instagramAccountUpdateManyMock.mockResolvedValue({ count: 1 });
+
+    await expect(
+      sendInstagramGenericTemplateCard({
+        accessTokenEnc: encryptToken("fake-token"),
+        igUserId: "17841400000000001",
+        recipientIgScopedId: "17841400000000000",
+        title: "Clínica Bela Vida",
+        subtitle: "assunto",
+      })
+    ).rejects.toThrow();
+
+    expect(instagramAccountUpdateManyMock).toHaveBeenCalledWith({
+      where: { igUserId: "17841400000000001" },
+      data: expect.objectContaining({ needsReconnectAt: expect.any(Date) }),
+    });
   });
 });

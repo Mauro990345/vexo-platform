@@ -121,12 +121,21 @@ export async function GET(req: NextRequest) {
           : { igUserId: result.igUserId, webhookIdVerified: false }),
         igUsername: result.igUsername,
         accessTokenEnc: encryptToken(result.accessToken),
+        tokenExpiresAt: result.tokenExpiresAt,
+        // Reconexão de verdade (novo OAuth completo) é o sinal mais forte
+        // possível de que a conexão está saudável — limpa qualquer aviso
+        // de "precisa reconectar" de uma falha anterior (sessão expirada,
+        // ver markInstagramNeedsReconnectByIgUserId, instagram.ts). Mesmo
+        // padrão exato do callback do Google Calendar.
+        needsReconnectAt: null,
+        needsReconnectReason: null,
       },
       create: {
         clinicId,
         igUserId: result.igUserId,
         igUsername: result.igUsername,
         accessTokenEnc: encryptToken(result.accessToken),
+        tokenExpiresAt: result.tokenExpiresAt,
         webhookIdVerified: false,
       },
     });

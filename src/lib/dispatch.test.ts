@@ -92,7 +92,7 @@ vi.mock("@/lib/conversation-pipeline", async () => {
   };
 });
 
-import { dispatchDueMessages } from "@/lib/dispatch";
+import { dispatchDueMessages, canResendFailedMessage, META_MESSAGING_WINDOW_MS } from "@/lib/dispatch";
 import {
   ATTENDANCE_VIDEO_DELAY_AFTER_INTRO_MS,
   ATTENDANCE_TIP_DELAY_AFTER_VIDEO_MS,
@@ -1044,5 +1044,33 @@ describe("dispatchDueMessages — confirmação de agendamento é só por WhatsA
         data: expect.objectContaining({ status: "FAILED", failReason: "Clínica sem WhatsApp conectado." }),
       })
     );
+  });
+});
+
+// Pedido explícito: depois de reconectar o Instagram, dar um jeito de
+// reenviar uma mensagem que falhou por sessão expirada — só dentro da
+// janela de mensagens da Meta (24h desde a última mensagem do LEAD),
+// senão reenviar só falharia de novo com outro erro da Graph API (ver
+// resendFailedMessageAction, dispatch-status/actions.ts).
+describe("canResendFailedMessage", () => {
+  const NOW = new Date("2026-11-14T12:00:00Z");
+
+  it("lead nunca mandou mensagem (lastLeadMessageAt null): não pode reenviar", () => {
+    expect(canResendFailedMessage(null, NOW)).toBe(false);
+  });
+
+  it("última mensagem do lead há menos de 24h: pode reenviar", () => {
+    const lastLeadMessageAt = new Date(NOW.getTime() - (META_MESSAGING_WINDOW_MS - 60 * 60 * 1000));
+    expect(canResendFailedMessage(lastLeadMessageAt, NOW)).toBe(true);
+  });
+
+  it("exatamente no limiar de 24h: ainda pode (<=, não só <)", () => {
+    const lastLeadMessageAt = new Date(NOW.getTime() - META_MESSAGING_WINDOW_MS);
+    expect(canResendFailedMessage(lastLeadMessageAt, NOW)).toBe(true);
+  });
+
+  it("última mensagem do lead há mais de 24h: NÃO pode reenviar — janela da Meta já passou", () => {
+    const lastLeadMessageAt = new Date(NOW.getTime() - (META_MESSAGING_WINDOW_MS + 60 * 60 * 1000));
+    expect(canResendFailedMessage(lastLeadMessageAt, NOW)).toBe(false);
   });
 });

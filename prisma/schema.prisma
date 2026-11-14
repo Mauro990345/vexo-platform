@@ -194,6 +194,24 @@ model InstagramAccount {
   // mensagem normalmente, o ID salvo já está certo.
   webhookIdVerified Boolean @default(true)
 
+  // Preenchido quando o REFRESH diário (ver refreshAllInstagramTokens,
+  // instagram-token-refresh.ts) detecta que o token já venceu de verdade
+  // (tokenExpiresAt no passado — ig_refresh_token não recupera isso, só
+  // reconectar via OAuth) ou quando qualquer envio real (sendInstagramMessage/
+  // sendInstagramGenericTemplateCard, instagram.ts) recebe de volta o erro
+  // de sessão expirada da Meta (code 190 / "Session has expired") — mesmo
+  // bug real que motivou este campo: a conexão da Clínica Demo venceu
+  // sozinha e a falha só aparecia escondida em "Falharam ao enviar", sem
+  // nenhum aviso visível nem renovação automática. NULL = conexão presumida
+  // saudável. Mesmo padrão exato de GoogleCalendarAccount.needsReconnectAt
+  // (google-calendar.ts) — nunca limpo por uma chamada bem-sucedida comum,
+  // só por um refresh de token que funcione de verdade OU por reconectar
+  // via OAuth (ver callback, que limpa os dois campos no upsert). Alimenta
+  // a bolinha de status em Conexões, o selo do Painel (ChannelStatusPill)
+  // e a aba Status da clínica.
+  needsReconnectAt     DateTime?
+  needsReconnectReason String?   @db.Text
+
   // Conexão SEGUNDA e OPCIONAL, separada da conexão principal acima —
   // "Login do Facebook para Empresas" (produto DIFERENTE do "Instagram API
   // with Instagram Login" usado pra tudo mais neste model), só pra habilitar
