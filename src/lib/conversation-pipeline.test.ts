@@ -101,6 +101,8 @@ import {
   buildInstagramConfirmationCardSubtitle,
   INSTAGRAM_CONFIRMATION_CARD_ENABLED,
   buildHistoryBackfillRows,
+  shouldBackfillHistory,
+  HISTORY_BACKFILL_STALE_HOURS,
 } from "@/lib/conversation-pipeline";
 
 // Bug real corrigido (ver comentário grande em buildAvailabilityCheck):
@@ -1217,5 +1219,74 @@ describe("buildHistoryBackfillRows", () => {
     const rows = buildHistoryBackfillRows(historyItems, new Set(["mid.ja-no-lote"]), CONVERSATION_ID);
 
     expect(rows.map((r) => r.igMessageId)).toEqual(["mid.novo"]);
+  });
+});
+
+// Decisão pura de QUANDO disparar o backfill (ver uso em
+// handleInboundInstagramMessage, não testável direto) — pedido do cliente:
+// cobrir também card/lembrete/abordagem mandados enquanto a conversa já
+// existe (lead agendado/em follow-up), não só na primeira conversa.
+describe("shouldBackfillHistory", () => {
+  const NOW = new Date("2026-11-14T12:00:00Z");
+
+  it("primeira conversa de verdade do lead (isNewConversation): sempre dispara, mesmo sem lastMessageAt", () => {
+    expect(shouldBackfillHistory(true, null, NOW)).toBe(true);
+  });
+
+  it(`conversa já existia, card colado e parada há MAIS de ${HISTORY_BACKFILL_STALE_HOURS}h: dispara`, () => {
+    const lastMessageAt = new Date(NOW.getTime() - (HISTORY_BACKFILL_STALE_HOURS + 1) * 60 * 60 * 1000);
+    expect(shouldBackfillHistory(false, lastMessageAt, NOW)).toBe(true);
+  });
+
+  it(`conversa com atividade há MENOS de ${HISTORY_BACKFILL_STALE_HOURS}h: NÃO dispara (não rechama a Meta a cada mensagem)`, () => {
+    const lastMessageAt = new Date(NOW.getTime() - (HISTORY_BACKFILL_STALE_HOURS - 1) * 60 * 60 * 1000);
+    expect(shouldBackfillHistory(false, lastMessageAt, NOW)).toBe(false);
+  });
+
+  it("exatamente no limiar (igual a HISTORY_BACKFILL_STALE_HOURS): NÃO dispara — só acima do limiar", () => {
+    const lastMessageAt = new Date(NOW.getTime() - HISTORY_BACKFILL_STALE_HOURS * 60 * 60 * 1000);
+    expect(shouldBackfillHistory(false, lastMessageAt, NOW)).toBe(false);
+  });
+
+  it("conversa já existia mas nunca teve lastMessageAt registrado: NÃO dispara (sem base pra medir o gap)", () => {
+    expect(shouldBackfillHistory(false, null, NOW)).toBe(false);
+  });
+});
+
+// "Rodar duas vezes não duplica" — skipDuplicates é mecanismo nativo do
+// Prisma (não é código nosso), mas simulamos aqui o efeito real dele contra
+// um "banco" em memória, pra provar que o backfill disparando de novo numa
+// conversa que já recebeu backfill antes (ex.: dois lembretes seguidos,
+// cada um reabrindo a janela de staleness) nunca grava a mesma mensagem
+// duas vezes.
+describe("buildHistoryBackfillRows — idempotência (rodar duas vezes não duplica)", () => {
+  function simulateCreateManySkipDuplicates(store: Map<string, unknown>, rows: ReturnType<typeof buildHistoryBackfillRows>) {
+    let inserted = 0;
+    for (const row of rows) {
+      if (store.has(row.igMessageId)) continue; // mesmo efeito de skipDuplicates (igMessageId @unique)
+      store.set(row.igMessageId, row);
+      inserted++;
+    }
+    return inserted;
+  }
+
+  it("mesmo histórico da Meta processado duas vezes (ex.: lembrete reabriu a janela de staleness 2x): só grava cada mensagem uma vez", () => {
+    const historyItems: Parameters<typeof buildHistoryBackfillRows>[0] = [
+      { igMessageId: "mid.card", text: "Faltou D15", fromBusiness: true, createdAt: new Date("2026-11-02T09:00:00Z") },
+      { igMessageId: "mid.lembrete", text: "Oi! Passando pra lembrar da sua consulta amanhã às 15h 😊", fromBusiness: true, createdAt: new Date("2026-11-03T08:00:00Z") },
+    ];
+    const store = new Map<string, unknown>();
+
+    const rows1 = buildHistoryBackfillRows(historyItems, new Set(), "conv-1");
+    const inserted1 = simulateCreateManySkipDuplicates(store, rows1);
+
+    // 2ª passagem pelo mesmo histórico (a Meta devolve tudo de novo — ela
+    // não sabe o que o VEXO já salvou; quem evita duplicar é o nosso lado).
+    const rows2 = buildHistoryBackfillRows(historyItems, new Set(), "conv-1");
+    const inserted2 = simulateCreateManySkipDuplicates(store, rows2);
+
+    expect(inserted1).toBe(2);
+    expect(inserted2).toBe(0); // nada novo pra gravar na 2ª vez
+    expect(store.size).toBe(2); // sem duplicata no "banco"
   });
 });
