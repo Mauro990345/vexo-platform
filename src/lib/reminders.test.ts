@@ -4,10 +4,14 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 // processReminders realmente usa recebem implementação de verdade.
 const appointmentFindManyMock = vi.fn();
 const reminderLogCreateMock = vi.fn();
+const conversationFindFirstMock = vi.fn();
+const messageCreateMock = vi.fn();
 vi.mock("@/lib/prisma", () => ({
   prisma: {
     appointment: { findMany: (...args: unknown[]) => appointmentFindManyMock(...args) },
     reminderLog: { create: (...args: unknown[]) => reminderLogCreateMock(...args) },
+    conversation: { findFirst: (...args: unknown[]) => conversationFindFirstMock(...args) },
+    message: { create: (...args: unknown[]) => messageCreateMock(...args) },
   },
 }));
 
@@ -42,7 +46,7 @@ function buildAppointment(overrides: Partial<Record<string, unknown>> = {}) {
   return {
     id: "appt-1",
     scheduledAt: new Date(NOW.getTime() + 24 * 60 * 60 * 1000),
-    lead: { name: "Maria Lima", phone: "21998223038", igScopedId: "ig-scoped-1" },
+    lead: { id: "lead-1", name: "Maria Lima", phone: "21998223038", igScopedId: "ig-scoped-1" },
     clinic: {
       reminderConfig: null,
       instagramAccount: { accessTokenEnc: "enc-token", igUserId: "ig-user-1" },
@@ -63,6 +67,8 @@ describe("processReminders — sempre por Instagram, nunca por WhatsApp", () => 
     vi.setSystemTime(NOW);
     sendInstagramMessageMock.mockResolvedValue({ messageId: "ig-msg-1" });
     reminderLogCreateMock.mockResolvedValue({});
+    conversationFindFirstMock.mockResolvedValue(null);
+    messageCreateMock.mockResolvedValue({});
     // undefined (nome desconhecido) por padrão — testes que precisam de um
     // nome resolvido configuram isto explicitamente.
     ensureLeadFirstNameFromInstagramMock.mockResolvedValue(undefined);
@@ -121,6 +127,8 @@ describe("processReminders — template customizado com {{primeiro_nome}}/{{data
     vi.setSystemTime(NOW);
     sendInstagramMessageMock.mockResolvedValue({ messageId: "ig-msg-1" });
     reminderLogCreateMock.mockResolvedValue({});
+    conversationFindFirstMock.mockResolvedValue(null);
+    messageCreateMock.mockResolvedValue({});
   });
 
   afterEach(() => {
@@ -179,5 +187,74 @@ describe("processReminders — template customizado com {{primeiro_nome}}/{{data
 
     expect(result.sent).toBe(2);
     expect(ensureLeadFirstNameFromInstagramMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+// Fix pedido pelo cliente: lembrete só gravava em ReminderLog, nunca em
+// Message — a IA nunca via o lembrete no histórico da conversa. Agora
+// também grava uma Message (sender "AI", nunca "SYSTEM" — toChatHistory
+// exclui SYSTEM do contexto da IA de propósito, ver chat-history.ts), SÓ
+// quando já existe uma Conversation pra este lead (nunca cria uma nova —
+// regra de produto: não inflar o banco com conversa de quem nunca
+// respondeu no Instagram).
+describe("processReminders — lembrete também grava em Message (visível pra IA)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+    sendInstagramMessageMock.mockResolvedValue({ messageId: "ig-msg-lembrete-1" });
+    reminderLogCreateMock.mockResolvedValue({});
+    messageCreateMock.mockResolvedValue({});
+    ensureLeadFirstNameFromInstagramMock.mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("conversa já existe pra este lead: grava Message com sender AI, direction OUTBOUND e o igMessageId do envio", async () => {
+    conversationFindFirstMock.mockResolvedValue({ id: "conv-1" });
+    const appt = buildAppointment();
+    appointmentFindManyMock.mockResolvedValue([appt]);
+
+    await processReminders();
+
+    expect(conversationFindFirstMock).toHaveBeenCalledWith({
+      where: { leadId: "lead-1" },
+      orderBy: { createdAt: "desc" },
+    });
+    expect(messageCreateMock).toHaveBeenCalledTimes(1);
+    const [{ data }] = messageCreateMock.mock.calls[0] as [{ data: Record<string, unknown> }];
+    expect(data.conversationId).toBe("conv-1");
+    expect(data.sender).toBe("AI");
+    expect(data.direction).toBe("OUTBOUND");
+    expect(data.channel).toBe("INSTAGRAM");
+    expect(data.igMessageId).toBe("ig-msg-lembrete-1");
+    expect(data.status).toBe("SENT");
+  });
+
+  it("lead nunca respondeu no Instagram (sem Conversation ainda): NÃO cria Conversation nem Message — só o ReminderLog de sempre", async () => {
+    conversationFindFirstMock.mockResolvedValue(null);
+    const appt = buildAppointment();
+    appointmentFindManyMock.mockResolvedValue([appt]);
+
+    const result = await processReminders();
+
+    expect(result.sent).toBe(1); // lembrete foi enviado normalmente
+    expect(messageCreateMock).not.toHaveBeenCalled();
+    expect(reminderLogCreateMock).toHaveBeenCalledTimes(1); // comportamento de sempre, preservado
+  });
+
+  it("2º lembrete do mesmo agendamento também grava sua própria Message (uma por lembrete, não uma só pro agendamento)", async () => {
+    conversationFindFirstMock.mockResolvedValue({ id: "conv-1" });
+    const appt = buildAppointment({
+      scheduledAt: new Date(NOW.getTime() + 3 * 60 * 60 * 1000), // bate 24h e 3h juntos
+    });
+    appointmentFindManyMock.mockResolvedValue([appt]);
+
+    const result = await processReminders();
+
+    expect(result.sent).toBe(2);
+    expect(messageCreateMock).toHaveBeenCalledTimes(2);
   });
 });

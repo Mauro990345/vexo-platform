@@ -87,7 +87,7 @@ export async function processReminders(): Promise<{ sent: number }> {
         : formatReminderMessage({ leadFirstName: primeiroNome ?? "tudo bem", hoursBefore, scheduledAt: appt.scheduledAt });
 
       try {
-        await sendInstagramMessage({
+        const { messageId } = await sendInstagramMessage({
           accessTokenEnc: appt.clinic.instagramAccount.accessTokenEnc,
           igUserId: appt.clinic.instagramAccount.igUserId,
           recipientIgScopedId: appt.lead.igScopedId,
@@ -97,6 +97,34 @@ export async function processReminders(): Promise<{ sent: number }> {
         await prisma.reminderLog.create({
           data: { appointmentId: appt.id, hoursBefore, channel: "instagram" },
         });
+
+        // Grava também em Message (pedido explícito: a IA precisa ver o
+        // lembrete no histórico da conversa, não só no ReminderLog interno).
+        // sender "AI" (nunca "SYSTEM") porque toChatHistory/chat-history.ts
+        // exclui SYSTEM do contexto passado à IA de propósito — mesma
+        // convenção do passo automático do Follow-up (follow-up.ts).
+        // Best-effort e isolado: se a conversa ainda não existir pra este
+        // lead (nunca respondeu no Instagram), não cria Conversation aqui —
+        // só anexa se já houver uma, pra não inflar o banco com conversas
+        // de quem nunca respondeu.
+        const conversation = await prisma.conversation.findFirst({
+          where: { leadId: appt.lead.id },
+          orderBy: { createdAt: "desc" },
+        });
+        if (conversation) {
+          await prisma.message.create({
+            data: {
+              conversationId: conversation.id,
+              direction: "OUTBOUND",
+              sender: "AI",
+              channel: "INSTAGRAM",
+              content: text,
+              igMessageId: messageId,
+              status: "SENT",
+              sentAt: now,
+            },
+          });
+        }
         sent++;
       } catch (err) {
         console.error(`[vexo] Falha ao enviar lembrete (appointment=${appt.id}, hoursBefore=${hoursBefore}):`, err);

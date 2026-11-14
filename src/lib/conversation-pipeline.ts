@@ -20,6 +20,8 @@ import {
   getInstagramUserProfile,
   getInstagramConversationParticipantUsername,
   getInstagramProfilePicture,
+  getInstagramConversationHistory,
+  type InstagramConversationHistoryItem,
 } from "@/lib/instagram";
 import { PROFILE_PICTURE_REFRESH_WINDOW_MS } from "@/lib/lead-profile-picture-backfill";
 import { decryptToken } from "@/lib/crypto";
@@ -88,6 +90,47 @@ export const CLINIC_CONTACT_CARD_RESEND_COOLDOWN_MS = 60 * 60 * 1000;
 export function resolveClinicWhatsappLink(clientWhatsappNumber: string | null | undefined): string | null {
   const validation = validateBrazilianPhone(clientWhatsappNumber ?? "");
   return validation.valid ? validation.e164 : null;
+}
+
+// Peça pura do backfill de histórico (ver bloco isNewConversation em
+// handleInboundInstagramMessage, não testável direto) — recebe o que
+// getInstagramConversationHistory devolveu e monta as linhas de Message
+// pra createMany, já excluindo o que está no lote atual do webhook
+// (currentBatchIds) pra não tentar duplicar a própria mensagem do lead que
+// chegou agora. Dedupe final contra o que já existe no banco é por
+// skipDuplicates (igMessageId é @unique no schema), não aqui.
+export function buildHistoryBackfillRows(
+  historyItems: InstagramConversationHistoryItem[],
+  currentBatchIds: Set<string>,
+  conversationId: string
+): {
+  conversationId: string;
+  direction: "INBOUND" | "OUTBOUND";
+  sender: "AI" | "LEAD";
+  content: string;
+  igMessageId: string;
+  sentAt: Date;
+  createdAt: Date;
+  status: "SENT";
+}[] {
+  return historyItems
+    .filter((item) => !currentBatchIds.has(item.igMessageId))
+    .map((item) => ({
+      conversationId,
+      direction: item.fromBusiness ? ("OUTBOUND" as const) : ("INBOUND" as const),
+      // AI (não SYSTEM): toChatHistory (chat-history.ts) exclui SYSTEM do
+      // contexto da IA de propósito — pra isso realmente entrar no que a
+      // IA lê, precisa ser um sender que vira turno "assistant". Mesma
+      // convenção já usada pelo passo automático de WhatsApp do Follow-up
+      // (follow-up.ts) pra conteúdo "mandado pela clínica", não gerado
+      // palavra por palavra pela IA.
+      sender: item.fromBusiness ? ("AI" as const) : ("LEAD" as const),
+      content: item.text,
+      igMessageId: item.igMessageId,
+      sentAt: item.createdAt,
+      createdAt: item.createdAt,
+      status: "SENT" as const,
+    }));
 }
 
 // Até onde cortar a janela do classificador (classifyConversation julga a
@@ -806,10 +849,51 @@ export async function handleInboundInstagramMessage(
     orderBy: { createdAt: "desc" },
   });
 
+  let isNewConversation = false;
   if (!conversation) {
     conversation = await prisma.conversation.create({
       data: { clinicId: clinic.id, leadId: lead.id, status: "NEW" },
     });
+    isNewConversation = true;
+  }
+
+  // Backfill do histórico ANTERIOR da conversa no Instagram (pedido
+  // explícito) — SÓ na primeira conversa de verdade deste lead (nunca de
+  // novo numa conversa que já existia, pra não rechamar a Meta em toda
+  // mensagem). Cobre o que a própria clínica mandou ANTES da primeira
+  // resposta do lead chegar ao VEXO (abordagem manual por outro app, card
+  // colado no Direct pela secretária, lembrete automático) e qualquer
+  // resposta antiga do lead que porventura falte — sem disparar a IA pra
+  // nenhuma delas: só grava Message (ver toChatHistory/chat-history.ts,
+  // que já inclui qualquer linha aqui no histórico passado pra IA), nunca
+  // chama classifyConversation/generateLeadReply pra este lote.
+  //
+  // getInstagramConversationHistory é BEST EFFORT por design (nunca lança
+  // — ver comentário grande dela, instagram.ts): se a Meta não devolver
+  // nada, a conversa segue exatamente como hoje, sem o backfill. dedupe
+  // por igMessageId (único no schema) via skipDuplicates evita duplicar
+  // tanto o que o VEXO já gravou quanto a própria mensagem atual do lead
+  // (event.messages, inserida mais abaixo, fora deste bloco).
+  if (isNewConversation) {
+    try {
+      const historyItems = await getInstagramConversationHistory(decryptToken(igAccount.accessTokenEnc), igAccount.igUserId, lead.igScopedId);
+      const currentBatchIds = new Set(event.messages.map((m) => m.igMessageId).filter((id): id is string => Boolean(id)));
+      const toBackfill = buildHistoryBackfillRows(historyItems, currentBatchIds, conversation.id);
+      if (toBackfill.length > 0) {
+        const result = await prisma.message.createMany({ data: toBackfill, skipDuplicates: true });
+        console.log(
+          `[vexo:history-backfill] ${result.count} mensagem(ns) de histórico gravada(s) pra conversation=${conversation.id} lead=${lead.id} ` +
+            `(${toBackfill.length - result.count} ignorada(s) por já existir, via igMessageId).`
+        );
+      } else if (historyItems.length === 0) {
+        console.log(`[vexo:history-backfill] Nenhum histórico anterior pra gravar — conversation=${conversation.id} lead=${lead.id} (primeira conversa deste lead).`);
+      }
+    } catch (err) {
+      // Mesma rede de segurança do resto desta função (nome/username/foto
+      // de perfil, acima): um erro aqui NUNCA pode impedir o lead de
+      // receber a resposta da IA à mensagem atual dele.
+      console.error(`[vexo:history-backfill] Erro inesperado ao tentar backfill de histórico pra lead=${lead.id}:`, err);
+    }
   }
 
   // Conversa já escalonada para humano: a IA não retoma sozinha.

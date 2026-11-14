@@ -100,6 +100,7 @@ import {
   decodeInstagramConfirmationCard,
   buildInstagramConfirmationCardSubtitle,
   INSTAGRAM_CONFIRMATION_CARD_ENABLED,
+  buildHistoryBackfillRows,
 } from "@/lib/conversation-pipeline";
 
 // Bug real corrigido (ver comentário grande em buildAvailabilityCheck):
@@ -1137,5 +1138,84 @@ describe("processAttendanceConfirmationTimeouts", () => {
 
     expect(result).toEqual({ fired: 1 }); // só o "good" disparou
     expect(messageCreateMock).toHaveBeenCalledTimes(1); // só a apresentação do "good"
+  });
+});
+
+// Backfill de histórico do Instagram (pedido do cliente: a IA precisa ver
+// no histórico tudo que foi mandado ao lead pelo Instagram antes da
+// primeira resposta dele — abordagem manual por outro app, card colado
+// pela secretária, lembrete automático). buildHistoryBackfillRows é a
+// peça PURA extraída do bloco `isNewConversation` em
+// handleInboundInstagramMessage (não testável direto — ver comentário em
+// resolveClinicWhatsappLink, acima); a chamada à Meta
+// (getInstagramConversationHistory) já é testada isoladamente em
+// instagram.test.ts, sempre devolvendo [] em qualquer falha.
+describe("buildHistoryBackfillRows", () => {
+  const CONVERSATION_ID = "conv-demo-1";
+
+  // Cenário "Clínica Demo" pedido pelo usuário: a Meta devolve, no
+  // histórico da conversa, a abordagem manual (mandada de outro app), o
+  // card colado pela secretária ("Faltou D15") e o lembrete automático —
+  // tudo ANTES da primeira resposta do lead, que chega agora no webhook
+  // (currentBatchIds) e não deve ser duplicada pelo backfill.
+  it("Clínica Demo: abordagem + card colado + lembrete viram linhas sender=AI/OUTBOUND, sem duplicar a resposta atual do lead", () => {
+    const historyItems: Parameters<typeof buildHistoryBackfillRows>[0] = [
+      { igMessageId: "mid.abordagem", text: "Oi! Vi que você se interessou pelo procedimento X, bora marcar uma avaliação?", fromBusiness: true, createdAt: new Date("2026-11-01T10:00:00Z") },
+      { igMessageId: "mid.card", text: "Faltou D15", fromBusiness: true, createdAt: new Date("2026-11-02T09:00:00Z") },
+      { igMessageId: "mid.lembrete", text: "Oi! Passando pra lembrar da sua consulta amanhã às 15h 😊", fromBusiness: true, createdAt: new Date("2026-11-03T08:00:00Z") },
+      { igMessageId: "mid.resposta-atual", text: "Oi, desculpa a demora! Pode ser sim", fromBusiness: false, createdAt: new Date("2026-11-04T12:00:00Z") },
+    ];
+    const currentBatchIds = new Set(["mid.resposta-atual"]); // já é inserida pelo fluxo normal, fora do backfill
+
+    const rows = buildHistoryBackfillRows(historyItems, currentBatchIds, CONVERSATION_ID);
+
+    expect(rows).toHaveLength(3);
+    expect(rows.map((r) => r.igMessageId)).toEqual(["mid.abordagem", "mid.card", "mid.lembrete"]);
+    for (const row of rows) {
+      expect(row.conversationId).toBe(CONVERSATION_ID);
+      expect(row.direction).toBe("OUTBOUND");
+      // sender AI (nunca SYSTEM) — é exatamente isso que faz a IA
+      // enxergar essas mensagens no histórico (toChatHistory exclui
+      // SYSTEM de propósito, ver chat-history.ts).
+      expect(row.sender).toBe("AI");
+      expect(row.status).toBe("SENT");
+    }
+  });
+
+  it("resposta antiga do lead que porventura esteja só no histórico da Meta (não no banco): vira sender=LEAD/INBOUND", () => {
+    const historyItems: Parameters<typeof buildHistoryBackfillRows>[0] = [
+      { igMessageId: "mid.resposta-antiga", text: "Quanto custa?", fromBusiness: false, createdAt: new Date("2026-10-20T10:00:00Z") },
+    ];
+
+    const rows = buildHistoryBackfillRows(historyItems, new Set(), CONVERSATION_ID);
+
+    expect(rows).toEqual([
+      {
+        conversationId: CONVERSATION_ID,
+        direction: "INBOUND",
+        sender: "LEAD",
+        content: "Quanto custa?",
+        igMessageId: "mid.resposta-antiga",
+        sentAt: new Date("2026-10-20T10:00:00Z"),
+        createdAt: new Date("2026-10-20T10:00:00Z"),
+        status: "SENT",
+      },
+    ]);
+  });
+
+  it("Meta não devolve histórico (getInstagramConversationHistory falhou ou veio vazio): [] — nenhuma linha gravada", () => {
+    const rows = buildHistoryBackfillRows([], new Set(), CONVERSATION_ID);
+    expect(rows).toEqual([]);
+  });
+
+  it("exclui do backfill qualquer item que já está no lote atual do webhook, mesmo vindo de fromBusiness", () => {
+    const historyItems: Parameters<typeof buildHistoryBackfillRows>[0] = [
+      { igMessageId: "mid.ja-no-lote", text: "mensagem que o VEXO já vai gravar pelo fluxo normal", fromBusiness: false, createdAt: new Date("2026-11-04T12:00:00Z") },
+      { igMessageId: "mid.novo", text: "mensagem de fato nova pro backfill", fromBusiness: true, createdAt: new Date("2026-11-01T10:00:00Z") },
+    ];
+
+    const rows = buildHistoryBackfillRows(historyItems, new Set(["mid.ja-no-lote"]), CONVERSATION_ID);
+
+    expect(rows.map((r) => r.igMessageId)).toEqual(["mid.novo"]);
   });
 });
