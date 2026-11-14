@@ -36,6 +36,7 @@ export type WeekNav = { prevHref: string; todayHref: string; nextHref: string; l
 export function PanelOverview({
   clinicName,
   instagramConnected,
+  instagramNeedsReconnect = false,
   googleConnected,
   whatsappConnected,
   headerAction,
@@ -48,6 +49,7 @@ export function PanelOverview({
 }: {
   clinicName: string;
   instagramConnected: boolean;
+  instagramNeedsReconnect?: boolean;
   googleConnected: boolean;
   whatsappConnected: boolean;
   headerAction?: ReactNode;
@@ -84,7 +86,13 @@ export function PanelOverview({
               mesma posição de ponto de status (MOBILE_STATUS_BADGE_SIZE,
               já compartilhado pelos 3 — ver ChannelStatusPill.tsx). */}
           <div className="flex flex-wrap items-center gap-1.5">
-            <ChannelStatusPill connected={instagramConnected} label="Instagram" icon={<InstagramGlyphIcon className={MOBILE_STATUS_BADGE_SIZE} />} iconBg="" />
+            <ChannelStatusPill
+              connected={instagramConnected}
+              needsReconnect={instagramNeedsReconnect}
+              label="Instagram"
+              icon={<InstagramGlyphIcon className={MOBILE_STATUS_BADGE_SIZE} />}
+              iconBg=""
+            />
             <ChannelStatusPill connected={googleConnected} label="Google Calendar" icon={<Calendar className="h-3.5 w-3.5" strokeWidth={2.5} />} iconBg="bg-blue-500" />
             <ChannelStatusPill connected={whatsappConnected} label="WhatsApp" icon={<WhatsAppGlyphIcon className={MOBILE_STATUS_BADGE_SIZE} />} iconBg="" />
           </div>

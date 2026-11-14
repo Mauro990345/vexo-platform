@@ -71,7 +71,13 @@ separado (`rounded-control`/borda fina/fundo sutil, ~8px de espaço entre eles v
 não mais uma linha dentro de um bloco único com `divide-y` (bordas duplicadas). Ícones de
 integração do cabeçalho (Instagram/Google Calendar/WhatsApp, `ChannelStatusPill.tsx`) preenchem o
 mesmo badge de ~24px por igual — antes só o Google tinha esse preenchimento (via `iconBg`),
-Instagram/WhatsApp ficavam com um ícone pequeno boiando num badge maior. Linha de "Para fazer
+Instagram/WhatsApp ficavam com um ícone pequeno boiando num badge maior. `ChannelStatusPill.tsx`
+tem um terceiro estado além de conectado/não conectado: `needsReconnect` (token vencido de verdade,
+ex. sessão expirada da Meta) — ponto de status âmbar (`bg-vexo-warning`, nunca vermelho/rosa) em vez
+do verde de "conectado" ou cinza de "não conectado", badge esmaecido igual ao de "não conectado"
+(a cor continua só no pontinho, nunca no ícone/fundo inteiro). Mesma regra em Conexões
+(`conexoes/page.tsx`): "Reconexão necessária" com `bg-vexo-warning`, nunca mais que isso — já era o
+padrão pro Google Calendar, estendido aqui pro Instagram. Linha de "Para fazer
 hoje": nome completo do paciente em destaque na 1ª linha (nunca mais cortado pela etiqueta/@); 2ª
 linha com a etiqueta de tipo (texto pequeno, fundo bem sutil — `bg-vexo-surface2`/`text-vexo-muted`
 — igual pros 4 tipos, nunca mais o selo colorido por família), o motivo em cinza e o @ do Instagram

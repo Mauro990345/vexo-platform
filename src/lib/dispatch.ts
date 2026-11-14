@@ -61,6 +61,23 @@ async function reclaimStaleSendingMessages(): Promise<void> {
   });
 }
 
+// Janela padrão de mensagens da Meta (24h desde a ÚLTIMA mensagem que o
+// LEAD mandou) — fora dela, a API do Instagram rejeita envio livre de
+// template padrão pra quem não escreveu recentemente. Usada só pelo
+// "Reenviar" manual da aba Status (ver resendFailedMessageAction,
+// dispatch-status/actions.ts): depois de reconectar o Instagram (token
+// vencido, ver instagram-token-refresh.ts), uma mensagem que falhou por
+// isso só pode ser reenviada de verdade se o lead ainda estiver dentro
+// dessa janela — passado isso, só uma nova mensagem do lead reabre a
+// conversa, reenviar não resolve.
+export const META_MESSAGING_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+// Peça pura — testável isoladamente, sem tocar o banco.
+export function canResendFailedMessage(lastLeadMessageAt: Date | null, now: Date): boolean {
+  if (!lastLeadMessageAt) return false;
+  return now.getTime() - lastLeadMessageAt.getTime() <= META_MESSAGING_WINDOW_MS;
+}
+
 // Claim atômico e exclusivo de UMA mensagem — ver comentário grande acima.
 // count === 0 significa que outra execução concorrente já reivindicou (ou
 // já processou) essa mensagem; o caller deve pular sem reenviar. É esse

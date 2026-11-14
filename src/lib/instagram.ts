@@ -91,6 +91,56 @@ function isRetryableMetaError(status: number, bodyText: string): boolean {
   }
 }
 
+// Bug real em produção (Clínica Demo, 11/11/2026): o token de longa duração
+// venceu sozinho — a Meta respondeu "Error validating access token: Session
+// has expired", code 190 (OAuthException), e a única coisa que aconteceu foi
+// a Message correspondente virar FAILED. Nenhum aviso visível, nenhuma
+// renovação automática. Este helper detecta especificamente ESSA classe de
+// erro (nunca retryable — ver isRetryableMetaError acima, que já roda antes
+// e nunca deixa chegar aqui pra 429/5xx/rate limit) pra marcar a conexão
+// como "precisa reconectar" (ver markInstagramNeedsReconnectByIgUserId,
+// abaixo) no ÚNICO ponto onde um envio de verdade pode falhar por isso —
+// cobre tanto o envio síncrono da resposta da IA (dispatch.ts, worker)
+// quanto lembretes (reminders.ts) e qualquer outro chamador, já que todos
+// passam por sendInstagramMessage/sendInstagramGenericTemplateCard.
+// Code 190 é o sinal mais confiável (campo estruturado, não depende do
+// texto exato da mensagem, que a Meta já reformulou mais de uma vez pro
+// mesmo erro); o fallback por texto cobre o caso do corpo não vir como JSON
+// válido (nunca confirmado acontecer aqui, mas visto noutras integrações
+// Meta sob certas condições de erro de borda).
+function isExpiredTokenMetaError(status: number, bodyText: string): boolean {
+  try {
+    const parsed = JSON.parse(bodyText) as { error?: { code?: number; message?: string } };
+    if (parsed.error?.code === 190) return true;
+    if (typeof parsed.error?.message === "string" && /session has expired|sessão expirou|session expirou/i.test(parsed.error.message)) {
+      return true;
+    }
+  } catch {
+    // corpo não é JSON válido — cai no fallback de texto abaixo
+  }
+  return /session has expired|sessão expirou|session expirou/i.test(bodyText);
+}
+
+// Grava que esta clínica precisa reconectar o Instagram — mesmo papel
+// exato de markGoogleCalendarNeedsReconnect (google-calendar.ts): alimenta
+// a bolinha de status em Conexões, o selo do Painel (ChannelStatusPill) e
+// a aba Status da clínica. Por igUserId (não clinicId): quem chama
+// sendInstagramMessage/sendInstagramGenericTemplateCard só tem o igUserId
+// da conta remetente à mão (params.igUserId), não o clinicId — e
+// InstagramAccount.igUserId é @unique por clínica, então updateMany aqui
+// nunca afeta mais de uma linha. Nunca lança: uma falha ao GRAVAR o aviso
+// não pode piorar a falha original de envio que já está sendo propagada.
+export async function markInstagramNeedsReconnectByIgUserId(igUserId: string, reason: string): Promise<void> {
+  try {
+    await prisma.instagramAccount.updateMany({
+      where: { igUserId },
+      data: { needsReconnectAt: new Date(), needsReconnectReason: reason.slice(0, 2000) },
+    });
+  } catch (err) {
+    console.error(`[vexo:instagram-token] Falha ao marcar precisa-reconectar pra igUserId=${igUserId}:`, err);
+  }
+}
+
 // Extensões de imagem salvas por saveUploadedAttachment (ver
 // ALLOWED_EXTENSION_BY_MIME, src/lib/uploads.ts) — qualquer outra extensão
 // (mp4/mov/webm, ou uma URL externa sem extensão reconhecível, ex. CDN de
@@ -208,6 +258,19 @@ export async function sendInstagramMessage(params: {
                   (diagErr) => `falha ao consultar debug_token: ${diagErr instanceof Error ? diagErr.message : String(diagErr)}`
                 )
             : "META_INSTAGRAM_APP_ID/META_APP_SECRET não configurados";
+
+        // Sessão expirada (ver isExpiredTokenMetaError acima) — marca a
+        // conexão como "precisa reconectar" ANTES de propagar o erro, pra
+        // isso ficar visível em Conexões/Painel/Status em vez de só
+        // escondido no failReason desta mensagem (bug real corrigido, ver
+        // comentário grande em isExpiredTokenMetaError).
+        if (isExpiredTokenMetaError(res.status, body)) {
+          await markInstagramNeedsReconnectByIgUserId(
+            params.igUserId,
+            `Falha ao enviar mensagem (sessão expirada): ${body}`
+          );
+        }
+
         throw new Error(
           `Falha ao enviar mensagem no Instagram (${res.status}) para recipient=${params.recipientIgScopedId} (conta remetente igUserId=${params.igUserId}): ${body}\nDiagnóstico debug_token: ${scopeDiagnosis}`
         );
@@ -277,6 +340,12 @@ export async function sendInstagramGenericTemplateCard(params: {
 
   if (!res.ok) {
     const body = await res.text();
+    // Mesma detecção de sessão expirada de sendInstagramMessage (ver
+    // isExpiredTokenMetaError, acima) — este cartão é outro ponto real de
+    // envio pela mesma conexão, então precisa do mesmo aviso.
+    if (isExpiredTokenMetaError(res.status, body)) {
+      await markInstagramNeedsReconnectByIgUserId(params.igUserId, `Falha ao enviar cartão (sessão expirada): ${body}`);
+    }
     throw new Error(
       `Falha ao enviar cartão no Instagram (${res.status}) para recipient=${params.recipientIgScopedId} (conta remetente igUserId=${params.igUserId}): ${body}`
     );
@@ -730,10 +799,18 @@ export function buildInstagramOAuthUrl(state: string): string {
   return url.toString();
 }
 
+// Vida padrão documentada por qualquer token de longa duração deste produto
+// (tanto o primeiro, via ig_exchange_token, quanto depois de um refresh via
+// ig_refresh_token) — usado só como FALLBACK se a resposta da Meta vier sem
+// "expires_in" por algum motivo (nunca confirmado acontecer, mas mais seguro
+// que deixar tokenExpiresAt sem nenhum valor nesse caso raro).
+export const INSTAGRAM_LONG_LIVED_TOKEN_LIFETIME_MS = 60 * 24 * 60 * 60 * 1000;
+
 export async function exchangeInstagramCode(code: string): Promise<{
   accessToken: string;
   igUserId: string;
   igUsername?: string;
+  tokenExpiresAt: Date;
 }> {
   const clientId = process.env.META_INSTAGRAM_APP_ID;
   const clientSecret = process.env.META_APP_SECRET;
@@ -783,7 +860,19 @@ export async function exchangeInstagramCode(code: string): Promise<{
   if (!llRes.ok) {
     throw new Error(`Falha ao obter token de longa duração (HTTP ${llRes.status}): ${await llRes.text()}`);
   }
-  const { access_token: longLivedToken } = (await llRes.json()) as { access_token: string };
+  // expires_in em segundos (documentado como 5184000 = 60 dias) — nunca
+  // capturado antes desta correção, por isso InstagramAccount.tokenExpiresAt
+  // nunca era preenchido pra Instagram (só pra Google Calendar, que sempre
+  // leu expiry_date). Sem essa data salva não tem como saber quando renovar
+  // nem quando o token já venceu — ver refreshAllInstagramTokens,
+  // instagram-token-refresh.ts.
+  const { access_token: longLivedToken, expires_in: expiresInSeconds } = (await llRes.json()) as {
+    access_token: string;
+    expires_in?: number;
+  };
+  const tokenExpiresAt = new Date(
+    Date.now() + (typeof expiresInSeconds === "number" ? expiresInSeconds * 1000 : INSTAGRAM_LONG_LIVED_TOKEN_LIFETIME_MS)
+  );
 
   // 3. Username e "id" da própria conta segundo graph.instagram.com/me.
   //
@@ -820,7 +909,100 @@ export async function exchangeInstagramCode(code: string): Promise<{
     accessToken: longLivedToken,
     igUserId: meId,
     igUsername: meUsername,
+    tokenExpiresAt,
   };
+}
+
+// Renovação do token de longa duração — grant_type PRÓPRIO deste produto
+// (ig_refresh_token, não fb_exchange_token nem ig_exchange_token outra vez),
+// endpoint sem versão (igual ao exemplo oficial da Meta pra este edge
+// específico — diferente de toda outra chamada deste arquivo, que usa
+// IG_GRAPH_BASE com versão). Só funciona se o token: (a) ainda estiver
+// válido (não dá pra renovar um token já vencido — só reconectar via OAuth
+// de novo resolve esse caso, ver refreshAllInstagramTokens,
+// instagram-token-refresh.ts) e (b) tiver mais de 24h desde que foi emitido
+// (regra documentada da própria Meta). A chamadora (refreshAllInstagramTokens)
+// só invoca esta função dentro da janela de 15 dias antes do vencimento —
+// como o token dura 60 dias, chegar a 15 dias restantes já garante bem mais
+// de 24h de vida, então essa segunda condição nunca é o motivo real de uma
+// falha aqui na prática.
+// NUNCA TESTADO CONTRA A META DE VERDADE (sem acesso de rede nesta sandbox)
+// — mesmo endpoint documentado por developers.facebook.com/docs/instagram-platform,
+// mas este arquivo já tem histórico de documentação da Meta não bater com o
+// comportamento real (ver investigação grande em
+// getInstagramConversationParticipantProfilePicture, mais abaixo). Qualquer
+// divergência aparece nos logs [vexo:instagram-token-refresh] em produção.
+export async function refreshInstagramLongLivedToken(accessToken: string): Promise<{ accessToken: string; tokenExpiresAt: Date }> {
+  return withRetry(
+    async () => {
+      const url = new URL("https://graph.instagram.com/refresh_access_token");
+      url.searchParams.set("grant_type", "ig_refresh_token");
+      url.searchParams.set("access_token", accessToken);
+
+      const res = await fetch(url.toString());
+      if (!res.ok) {
+        const body = await res.text();
+        if (isRetryableMetaError(res.status, body)) {
+          throw new RetryableError(`Falha ao renovar token de longa duração (HTTP ${res.status}): ${body}`);
+        }
+        throw new Error(`Falha ao renovar token de longa duração (HTTP ${res.status}): ${body}`);
+      }
+
+      const { access_token: newAccessToken, expires_in: expiresInSeconds } = (await res.json()) as {
+        access_token: string;
+        expires_in?: number;
+      };
+      return {
+        accessToken: newAccessToken,
+        tokenExpiresAt: new Date(
+          Date.now() + (typeof expiresInSeconds === "number" ? expiresInSeconds * 1000 : INSTAGRAM_LONG_LIVED_TOKEN_LIFETIME_MS)
+        ),
+      };
+    },
+    { label: "refreshInstagramLongLivedToken" }
+  );
+}
+
+// Leitura (SEM side effect) do vencimento real de um token, pelo endpoint
+// universal da Graph API (debug_token — mesmo usado pelo diagnóstico de
+// escopo em sendInstagramMessage, acima) — usada só pra PREENCHER
+// InstagramAccount.tokenExpiresAt de contas conectadas ANTES desta correção
+// existir (nunca tiveram esse campo gravado, então refreshAllInstagramTokens
+// não teria como saber se estão perto de vencer). `null` cobre toda falha
+// não-fatal (env vars ausentes, rede, resposta inesperada) — chamadora trata
+// como "não deu pra descobrir agora, tenta de novo no próximo ciclo diário",
+// nunca como "token inválido".
+export async function debugInstagramToken(accessToken: string): Promise<{ isValid: boolean; expiresAt: Date | null } | null> {
+  const appId = process.env.META_INSTAGRAM_APP_ID;
+  const appSecret = process.env.META_APP_SECRET;
+  if (!appId || !appSecret) {
+    console.warn("[vexo:instagram-token-refresh] META_INSTAGRAM_APP_ID/META_APP_SECRET não configurados — não deu pra consultar debug_token.");
+    return null;
+  }
+
+  try {
+    const res = await fetch(
+      `https://graph.facebook.com/debug_token?input_token=${encodeURIComponent(accessToken)}&access_token=${encodeURIComponent(`${appId}|${appSecret}`)}`
+    );
+    if (!res.ok) {
+      console.warn(`[vexo:instagram-token-refresh] debug_token devolveu HTTP ${res.status}: ${await res.text()}`);
+      return null;
+    }
+    const parsed = (await res.json()) as { data?: { is_valid?: boolean; expires_at?: number } };
+    if (typeof parsed.data?.is_valid !== "boolean") {
+      console.warn(`[vexo:instagram-token-refresh] debug_token sem "data.is_valid" na resposta: ${JSON.stringify(parsed)}`);
+      return null;
+    }
+    // expires_at=0 é o valor que a própria Meta documenta pra "nunca
+    // expira" (não se aplica a token de usuário deste produto, mas tratado
+    // aqui mesmo assim, por segurança) — null em vez de uma data de 1970.
+    const expiresAt =
+      typeof parsed.data.expires_at === "number" && parsed.data.expires_at > 0 ? new Date(parsed.data.expires_at * 1000) : null;
+    return { isValid: parsed.data.is_valid, expiresAt };
+  } catch (err) {
+    console.warn("[vexo:instagram-token-refresh] Erro inesperado ao consultar debug_token:", err);
+    return null;
+  }
 }
 
 // Conversation Routing / Handover Protocol da Meta: configurar um "app

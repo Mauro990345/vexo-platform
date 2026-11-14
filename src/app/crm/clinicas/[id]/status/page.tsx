@@ -4,8 +4,9 @@ import { prisma } from "@/lib/prisma";
 import { requireInternalSession } from "@/lib/session";
 import { getSilenceHours } from "@/lib/follow-up";
 import { LocalDateTime } from "@/components/LocalDateTime";
-import { closeStuckFollowUpLogForClinicAction } from "@/app/crm/(global)/dispatch-status/actions";
+import { closeStuckFollowUpLogForClinicAction, resendFailedMessageAction } from "@/app/crm/(global)/dispatch-status/actions";
 import { runEvolutionDiagnostics } from "@/lib/evolution-diagnostics";
+import { canResendFailedMessage } from "@/lib/dispatch";
 
 export const dynamic = "force-dynamic";
 
@@ -36,7 +37,13 @@ export default async function ClinicStatusPage({ params }: { params: { id: strin
 
   const clinic = await prisma.clinic.findUnique({
     where: { id: params.id },
-    select: { id: true, whatsappInstanceName: true, instagramAccount: { select: { igUserId: true } } },
+    select: {
+      id: true,
+      whatsappInstanceName: true,
+      instagramAccount: {
+        select: { igUserId: true, igUsername: true, tokenExpiresAt: true, needsReconnectAt: true, needsReconnectReason: true },
+      },
+    },
   });
   if (!clinic) notFound();
 
@@ -127,6 +134,54 @@ export default async function ClinicStatusPage({ params }: { params: { id: strin
           </Link>
         </div>
       </div>
+
+      {/* Conexão do Instagram — pedido explícito (bug real: a conexão da
+          Clínica Demo venceu sozinha em 11/11/2026 e nada avisou disso
+          antes da mensagem já ter falhado). needsReconnectAt é gravado por
+          markInstagramNeedsReconnectByIgUserId (instagram.ts, qualquer
+          envio real que receba "sessão expirada" da Meta) e pelo renovador
+          diário (refreshAllInstagramTokens, instagram-token-refresh.ts). */}
+      <section className="space-y-2 rounded-xl border border-vexo-border bg-vexo-surface p-3">
+        <h2 className="text-sm font-semibold">Conexão do Instagram</h2>
+        {!clinic.instagramAccount ? (
+          <p className="text-xs text-vexo-muted">Esta clínica ainda não tem Instagram conectado (ver aba Conexões).</p>
+        ) : clinic.instagramAccount.needsReconnectAt ? (
+          <div className="space-y-1.5 rounded-lg border border-vexo-warning/30 bg-vexo-warning/10 p-2 text-xs text-vexo-warning">
+            <p className="font-medium">
+              Precisa reconectar — o token de acesso venceu (ou a renovação automática falhou) desde{" "}
+              <LocalDateTime iso={clinic.instagramAccount.needsReconnectAt.toISOString()} />. A IA não consegue mais
+              enviar mensagens por este canal até reconectar.
+            </p>
+            {clinic.instagramAccount.needsReconnectReason && (
+              <p className="font-mono">{clinic.instagramAccount.needsReconnectReason}</p>
+            )}
+            <Link
+              href={`/crm/clinicas/${clinic.id}/conexoes`}
+              className="inline-block rounded-lg border border-vexo-warning/40 px-2 py-1 font-medium hover:bg-vexo-warning/10"
+            >
+              Ir pra Conexões e reconectar
+            </Link>
+          </div>
+        ) : (
+          <div className="space-y-1 text-xs text-vexo-muted">
+            <p className="text-vexo-success">
+              Conectada{clinic.instagramAccount.igUsername && <> · @{clinic.instagramAccount.igUsername}</>} — sem
+              nenhum aviso de reconexão pendente.
+            </p>
+            {clinic.instagramAccount.tokenExpiresAt ? (
+              <p>
+                Token válido até <LocalDateTime iso={clinic.instagramAccount.tokenExpiresAt.toISOString()} /> — a
+                renovação automática (diária, pelo worker) tenta renovar sozinha faltando 15 dias ou menos pra isso.
+              </p>
+            ) : (
+              <p>
+                Vencimento do token ainda não descoberto — o renovador diário (worker) preenche isso automaticamente
+                no próximo ciclo (via debug_token, consulta sem efeito nenhum na conexão).
+              </p>
+            )}
+          </div>
+        )}
+      </section>
 
       {/* Diagnóstico da Evolution — SOMENTE LEITURA (ver evolution-diagnostics.ts):
           nunca envia mensagem de teste, nunca grava nada no banco. Existe
@@ -319,28 +374,53 @@ export default async function ClinicStatusPage({ params }: { params: { id: strin
             </p>
           ) : (
             <div className="space-y-2">
-              {recentFailed.map((m) => (
-                <div key={m.id} className="rounded-xl border border-vexo-border bg-vexo-surface p-3 text-xs">
-                  <div className="flex flex-wrap items-center gap-2 text-vexo-muted">
-                    <span className="font-medium text-vexo-fg">
-                      {m.conversation.lead.name ?? m.conversation.lead.igUsername ?? "lead sem nome"}
-                    </span>
-                    <span>·</span>
-                    <span>
-                      criada em <LocalDateTime iso={m.createdAt.toISOString()} />
-                    </span>
-                    <Link href={`/crm/conversas/${m.conversationId}`} className="ml-auto underline hover:text-vexo-fg">
-                      Ver conversa
-                    </Link>
+              {recentFailed.map((m) => {
+                // Pedido explícito: depois de reconectar, dar um jeito de
+                // reenviar sem esperar o lead escrever de novo — só dentro
+                // da janela de 24h da Meta desde a última mensagem DELE
+                // (canResendFailedMessage, dispatch.ts), senão reenviar só
+                // falharia de novo com outro erro da Graph API.
+                const resendable = canResendFailedMessage(m.conversation.lastLeadMessageAt, now);
+                return (
+                  <div key={m.id} className="rounded-xl border border-vexo-border bg-vexo-surface p-3 text-xs">
+                    <div className="flex flex-wrap items-center gap-2 text-vexo-muted">
+                      <span className="font-medium text-vexo-fg">
+                        {m.conversation.lead.name ?? m.conversation.lead.igUsername ?? "lead sem nome"}
+                      </span>
+                      <span>·</span>
+                      <span>
+                        criada em <LocalDateTime iso={m.createdAt.toISOString()} />
+                      </span>
+                      <Link href={`/crm/conversas/${m.conversationId}`} className="ml-auto underline hover:text-vexo-fg">
+                        Ver conversa
+                      </Link>
+                    </div>
+                    <p className="mt-1.5 text-vexo-fg">{m.content}</p>
+                    {m.failReason && (
+                      <p className="mt-1.5 rounded-lg border border-vexo-error/30 bg-vexo-error/10 p-2 text-vexo-error">
+                        {m.failReason}
+                      </p>
+                    )}
+                    <div className="mt-1.5 flex items-center justify-end">
+                      {resendable ? (
+                        <form action={resendFailedMessageAction.bind(null, m.id, clinic.id)}>
+                          <button
+                            type="submit"
+                            title="Volta esta mensagem pra fila de envio normal — útil depois de reconectar o Instagram."
+                            className="rounded-lg border border-vexo-accent px-2.5 py-1 font-medium text-vexo-accent hover:bg-vexo-accent/10"
+                          >
+                            Reenviar
+                          </button>
+                        </form>
+                      ) : (
+                        <span className="text-vexo-muted" title="A janela de 24h da Meta desde a última mensagem do lead já passou — reenviar não resolveria.">
+                          Fora da janela de 24h da Meta pra reenviar
+                        </span>
+                      )}
+                    </div>
                   </div>
-                  <p className="mt-1.5 text-vexo-fg">{m.content}</p>
-                  {m.failReason && (
-                    <p className="mt-1.5 rounded-lg border border-vexo-error/30 bg-vexo-error/10 p-2 text-vexo-error">
-                      {m.failReason}
-                    </p>
-                  )}
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
