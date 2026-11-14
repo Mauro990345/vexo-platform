@@ -11,6 +11,7 @@ import {
   ensureLeadFirstNameFromInstagram,
   sendInstagramMessage,
   sendInstagramGenericTemplateCard,
+  getInstagramConversationHistory,
 } from "@/lib/instagram";
 import { encryptToken } from "@/lib/crypto";
 
@@ -419,5 +420,108 @@ describe("sendInstagramGenericTemplateCard", () => {
     expect(element.title).toBe("Clínica Bela Vida");
     expect(element.subtitle).toBe("amanhã (05/09) às 15h · Av. Paulista, 1000");
     expect(element.buttons).toBeUndefined();
+  });
+});
+
+// Backfill de histórico (pedido do cliente: a IA precisa ver no histórico
+// tudo que foi mandado ao lead pelo Instagram antes dele responder pela
+// primeira vez — abordagem manual, card colado, lembrete). Chamada NUNCA
+// testada de verdade contra a Meta (sem acesso de rede nesta sandbox) —
+// estes testes cobrem só o contrato: nunca lança, sempre degrada pra []
+// quando a Meta não devolve o que é esperado.
+describe("getInstagramConversationHistory", () => {
+  beforeEach(() => {
+    vi.stubGlobal("fetch", vi.fn());
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("lead de seed/demo (igScopedId não numérico): não chama a API, devolve []", async () => {
+    const fetchMock = fetch as unknown as ReturnType<typeof vi.fn>;
+
+    const result = await getInstagramConversationHistory("token", "999", "demo-new-0");
+
+    expect(result).toEqual([]);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("sucesso: devolve as mensagens de texto, marcando fromBusiness quando from.id === igUserId", async () => {
+    const fetchMock = fetch as unknown as ReturnType<typeof vi.fn>;
+    fetchMock.mockResolvedValue(
+      jsonResponse(200, {
+        data: [
+          {
+            messages: {
+              data: [
+                { id: "mid.1", message: "Oi! Vi que você se interessou pelo procedimento X", from: { id: "999" }, created_time: "2026-11-01T10:00:00+0000" },
+                { id: "mid.2", message: "Faltou D15", from: { id: "999" }, created_time: "2026-11-02T09:00:00+0000" },
+                { id: "mid.3", message: "Oi, ainda não respondi porque...", from: { id: "17841400000000000" }, created_time: "2026-11-03T12:00:00+0000" },
+              ],
+            },
+          },
+        ],
+      })
+    );
+
+    const result = await getInstagramConversationHistory("token", "999", "17841400000000000");
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(result).toEqual([
+      { igMessageId: "mid.1", text: "Oi! Vi que você se interessou pelo procedimento X", fromBusiness: true, createdAt: new Date("2026-11-01T10:00:00+0000") },
+      { igMessageId: "mid.2", text: "Faltou D15", fromBusiness: true, createdAt: new Date("2026-11-02T09:00:00+0000") },
+      { igMessageId: "mid.3", text: "Oi, ainda não respondi porque...", fromBusiness: false, createdAt: new Date("2026-11-03T12:00:00+0000") },
+    ]);
+  });
+
+  it("filtra itens sem texto (mídia pura) ou sem os campos esperados, sem quebrar os demais", async () => {
+    const fetchMock = fetch as unknown as ReturnType<typeof vi.fn>;
+    fetchMock.mockResolvedValue(
+      jsonResponse(200, {
+        data: [
+          {
+            messages: {
+              data: [
+                { id: "mid.1", message: "Lembrete: sua consulta é amanhã às 15h", from: { id: "999" }, created_time: "2026-11-05T08:00:00+0000" },
+                { id: "mid.2", from: { id: "999" }, created_time: "2026-11-05T08:01:00+0000" }, // só mídia, sem `message`
+              ],
+            },
+          },
+        ],
+      })
+    );
+
+    const result = await getInstagramConversationHistory("token", "999", "17841400000000000");
+
+    expect(result).toHaveLength(1);
+    expect(result[0]?.igMessageId).toBe("mid.1");
+  });
+
+  it("HTTP de erro: devolve [] sem lançar", async () => {
+    const fetchMock = fetch as unknown as ReturnType<typeof vi.fn>;
+    fetchMock.mockResolvedValue(new Response("boom", { status: 500 }));
+
+    const result = await getInstagramConversationHistory("token", "999", "17841400000000000");
+
+    expect(result).toEqual([]);
+  });
+
+  it('resposta sem o campo "messages" (Meta não expõe esse campo pro produto, ou conversa sem histórico): devolve [] sem lançar', async () => {
+    const fetchMock = fetch as unknown as ReturnType<typeof vi.fn>;
+    fetchMock.mockResolvedValue(jsonResponse(200, { data: [{ id: "conv.1" }] }));
+
+    const result = await getInstagramConversationHistory("token", "999", "17841400000000000");
+
+    expect(result).toEqual([]);
+  });
+
+  it("erro de rede (fetch rejeita): devolve [] sem lançar", async () => {
+    const fetchMock = fetch as unknown as ReturnType<typeof vi.fn>;
+    fetchMock.mockRejectedValue(new Error("network down"));
+
+    const result = await getInstagramConversationHistory("token", "999", "17841400000000000");
+
+    expect(result).toEqual([]);
   });
 });

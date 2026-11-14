@@ -475,6 +475,88 @@ export function isRealIgScopedId(igScopedId: string): boolean {
   return /^\d+$/.test(igScopedId);
 }
 
+export type InstagramConversationHistoryItem = {
+  igMessageId: string;
+  text: string;
+  fromBusiness: boolean;
+  createdAt: Date;
+};
+
+// Histórico de mensagens de uma conversa — MESMO edge da Conversations API
+// de getInstagramConversationParticipantUsername (abaixo), campo DIFERENTE
+// ("messages" em vez de "participants"). CAPACIDADE NUNCA TESTADA EM
+// PRODUÇÃO antes desta função (pedido explícito do usuário pra implementar
+// mesmo assim, com fallback defensivo — ver conversa que motivou isto):
+// diferente do username (que "vem de graça" nesta mesma API, confirmado em
+// produção), não há confirmação de que o campo "messages" devolve
+// conteúdo de texto pra este produto ("Instagram API with Instagram
+// Login") — a Meta documenta o campo, mas este mesmo arquivo já registrou
+// mais de uma vez documentação que não bateu com o comportamento real
+// (ver o histórico de 5 rodadas em getInstagramConversationParticipantProfilePicture,
+// abaixo). Por isso NUNCA lança: qualquer falha (API não suporta o campo,
+// erro de rede, resposta sem "messages", mensagem sem texto/só mídia) é
+// só logada com o prefixo [vexo:history-backfill] e devolve [] — quem
+// chama (handleInboundInstagramMessage) trata "sem histórico" exatamente
+// como o comportamento de hoje, nunca quebra o processamento da mensagem
+// atual do lead por causa disto. Sem retry de propósito (withRetry, usado
+// nas outras chamadas deste arquivo, atrasaria ainda mais um caminho que
+// já é best-effort) — uma falha aqui é só "backfill não aconteceu desta
+// vez", nunca motivo pra segurar a resposta da IA ao lead.
+export async function getInstagramConversationHistory(
+  accessToken: string,
+  igUserId: string,
+  leadIgScopedId: string
+): Promise<InstagramConversationHistoryItem[]> {
+  if (!isRealIgScopedId(leadIgScopedId)) {
+    console.log(`[vexo:history-backfill] igScopedId=${leadIgScopedId} não é um IGSID numérico real (provável lead de seed/demo) — pulado, sem chamar a API.`);
+    return [];
+  }
+
+  const url = new URL(`${IG_GRAPH_BASE}/${igUserId}/conversations`);
+  url.searchParams.set("platform", "instagram");
+  url.searchParams.set("user_id", leadIgScopedId);
+  url.searchParams.set("fields", "messages.limit(100){id,message,from,created_time}");
+  url.searchParams.set("access_token", accessToken);
+
+  try {
+    const res = await fetch(url.toString());
+    if (!res.ok) {
+      const body = await res.text();
+      console.warn(`[vexo:history-backfill] Falha ao buscar histórico da conversa (HTTP ${res.status}) pra igScopedId=${leadIgScopedId}: ${body}`);
+      return [];
+    }
+
+    const data = (await res.json()) as {
+      data?: { messages?: { data?: { id: string; message?: string; from?: { id: string }; created_time?: string }[] } }[];
+    };
+    const rawMessages = data.data?.[0]?.messages?.data;
+    if (!rawMessages || rawMessages.length === 0) {
+      console.log(
+        `[vexo:history-backfill] Conversations API não devolveu "messages" (ou veio vazio) pra igScopedId=${leadIgScopedId} — ` +
+          `a Meta pode não expor esse campo pra este produto, ou a conversa genuinamente não tem histórico anterior.`
+      );
+      return [];
+    }
+
+    const items = rawMessages
+      .filter((m): m is { id: string; message: string; from?: { id: string }; created_time: string } => Boolean(m.id && m.message && m.created_time))
+      .map((m) => ({
+        igMessageId: m.id,
+        text: m.message,
+        fromBusiness: m.from?.id === igUserId,
+        createdAt: new Date(m.created_time),
+      }));
+    console.log(
+      `[vexo:history-backfill] ${items.length} mensagem(ns) de texto encontrada(s) no histórico pra igScopedId=${leadIgScopedId} ` +
+        `(de ${rawMessages.length} retornada(s) pela Meta — a diferença é mídia sem texto, ou item sem os campos esperados).`
+    );
+    return items;
+  } catch (err) {
+    console.warn(`[vexo:history-backfill] Erro inesperado ao buscar histórico da conversa pra igScopedId=${leadIgScopedId}:`, err);
+    return [];
+  }
+}
+
 export async function getInstagramConversationParticipantUsername(
   accessToken: string,
   igUserId: string,
