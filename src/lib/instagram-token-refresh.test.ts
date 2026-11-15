@@ -40,9 +40,8 @@ function daysFromNow(days: number): Date {
   return new Date(NOW.getTime() + days * 24 * 60 * 60 * 1000);
 }
 
-// Peça pura — mesma cobertura de shouldBackfillHistory em
-// conversation-pipeline.test.ts (primeira conversa / dentro da janela /
-// fora da janela / limiar exato / sem base pra decidir).
+// Peça pura de decisão — cobre sem token salvo / dentro da janela de
+// renovação / fora dela / limiar exato.
 describe("decideInstagramTokenRefreshAction", () => {
   it("sem tokenExpiresAt salvo (toda conta de Instagram antes desta correção): backfill_expiry", () => {
     expect(decideInstagramTokenRefreshAction(null, NOW)).toBe("backfill_expiry");
