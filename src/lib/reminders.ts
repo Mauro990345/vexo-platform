@@ -112,18 +112,26 @@ export async function processReminders(): Promise<{ sent: number }> {
           orderBy: { createdAt: "desc" },
         });
         if (conversation) {
-          await prisma.message.create({
-            data: {
-              conversationId: conversation.id,
-              direction: "OUTBOUND",
-              sender: "AI",
-              channel: "INSTAGRAM",
-              content: text,
-              igMessageId: messageId,
-              status: "SENT",
-              sentAt: now,
-            },
-          });
+          // try/catch próprio: o backfill do histórico do Instagram (roda a
+          // cada mensagem do lead) pode já ter gravado este lembrete com o
+          // mesmo igMessageId (único). Nesse caso a IA já vê o lembrete, e
+          // o erro de duplicado não pode contar como falha de envio.
+          try {
+            await prisma.message.create({
+              data: {
+                conversationId: conversation.id,
+                direction: "OUTBOUND",
+                sender: "AI",
+                channel: "INSTAGRAM",
+                content: text,
+                igMessageId: messageId,
+                status: "SENT",
+                sentAt: now,
+              },
+            });
+          } catch (err) {
+            console.warn(`[vexo] Lembrete enviado, mas não gravou Message (provável cópia já criada pelo backfill, appointment=${appt.id}):`, err);
+          }
         }
         sent++;
       } catch (err) {

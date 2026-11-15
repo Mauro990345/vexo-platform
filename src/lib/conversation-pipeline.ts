@@ -92,27 +92,6 @@ export function resolveClinicWhatsappLink(clientWhatsappNumber: string | null | 
   return validation.valid ? validation.e164 : null;
 }
 
-// Janela de "conversa parada" que faz o backfill de histórico (ver bloco
-// logo abaixo de conversation.findFirst, em handleInboundInstagramMessage)
-// rodar de novo numa conversa que já existia — não só na primeira conversa
-// do lead. Pedido explícito: um card colado ou lembrete mandado enquanto a
-// conversa está parada (ex.: lead já agendado/em follow-up) só é visto pela
-// Meta Conversations API quando o lead responde; sem essa janela, ficaria
-// invisível pra IA pra sempre nesse caso. Constante nomeada de propósito,
-// fácil de ajustar.
-export const HISTORY_BACKFILL_STALE_HOURS = 3;
-
-// Peça pura da decisão de disparar o backfill (ver uso em
-// handleInboundInstagramMessage, não testável direto) — OU é a primeira
-// conversa de verdade deste lead, OU a conversa já existia mas estava
-// parada há mais de HISTORY_BACKFILL_STALE_HOURS (sem lastMessageAt ainda
-// registrado conta como "não parada" — não há base pra medir o gap).
-export function shouldBackfillHistory(isNewConversation: boolean, lastMessageAt: Date | null, now: Date): boolean {
-  if (isNewConversation) return true;
-  if (!lastMessageAt) return false;
-  return now.getTime() - lastMessageAt.getTime() > HISTORY_BACKFILL_STALE_HOURS * 60 * 60 * 1000;
-}
-
 // Peça pura do backfill de histórico (ver bloco isNewConversation em
 // handleInboundInstagramMessage, não testável direto) — recebe o que
 // getInstagramConversationHistory devolveu e monta as linhas de Message
@@ -887,15 +866,12 @@ export async function handleInboundInstagramMessage(
   // qualquer linha aqui no histórico passado pra IA), nunca chama
   // classifyConversation/generateLeadReply pra este lote.
   //
-  // Dispara em dois casos (OU): (1) primeira conversa de verdade deste lead
-  // (isNewConversation), ou (2) a conversa já existia mas estava parada há
-  // mais de HISTORY_BACKFILL_STALE_HOURS — é exatamente a janela em que um
-  // card/lembrete/abordagem pode ter sido mandado sem o lead ter respondido
-  // ainda. `conversation.lastMessageAt` aqui é o valor ANTES desta resposta
-  // atualizar a conversa (a mesma leitura de `conversation.findFirst` acima,
-  // update só acontece mais abaixo) — mesmo padrão já usado por `wentSilent`
-  // nesta função. Conversa "quente" (respondida há menos de
-  // HISTORY_BACKFILL_STALE_HOURS) não rechama a Meta a cada mensagem.
+  // Dispara em TODA mensagem do lead (não só na primeira conversa nem só
+  // depois de pausa): o lead acha que fala com um humano, então pode citar
+  // qualquer coisa que a clínica escreveu antes — inclusive algo mandado à
+  // mão minutos atrás, com a conversa "quente". Uma regra de "só se parada
+  // há mais de X horas" deixava exatamente esse caso de fora (a mensagem
+  // manual feita há menos de X horas nunca chegava na IA).
   //
   // getInstagramConversationHistory é BEST EFFORT por design (nunca lança
   // — ver comentário grande dela, instagram.ts): se a Meta não devolver
@@ -905,7 +881,7 @@ export async function handleInboundInstagramMessage(
   // (event.messages, inserida mais abaixo, fora deste bloco) — então rodar
   // de novo (ex.: dois lembretes seguidos, cada um reabrindo a janela de
   // staleness) nunca duplica o que já foi gravado.
-  if (shouldBackfillHistory(isNewConversation, conversation.lastMessageAt, firstResolvedAt)) {
+  {
     try {
       const historyItems = await getInstagramConversationHistory(decryptToken(igAccount.accessTokenEnc), igAccount.igUserId, lead.igScopedId);
       const currentBatchIds = new Set(event.messages.map((m) => m.igMessageId).filter((id): id is string => Boolean(id)));
@@ -919,7 +895,7 @@ export async function handleInboundInstagramMessage(
       } else if (historyItems.length === 0) {
         console.log(
           `[vexo:history-backfill] Nenhum histórico anterior pra gravar — conversation=${conversation.id} lead=${lead.id} ` +
-            `(motivo do disparo: ${isNewConversation ? "primeira conversa deste lead" : `conversa parada há mais de ${HISTORY_BACKFILL_STALE_HOURS}h`}).`
+            `(${isNewConversation ? "primeira conversa deste lead" : "conversa já existente"}).`
         );
       }
     } catch (err) {

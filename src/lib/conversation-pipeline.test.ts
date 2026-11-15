@@ -101,8 +101,6 @@ import {
   buildInstagramConfirmationCardSubtitle,
   INSTAGRAM_CONFIRMATION_CARD_ENABLED,
   buildHistoryBackfillRows,
-  shouldBackfillHistory,
-  HISTORY_BACKFILL_STALE_HOURS,
 } from "@/lib/conversation-pipeline";
 
 // Bug real corrigido (ver comentário grande em buildAvailabilityCheck):
@@ -1219,37 +1217,6 @@ describe("buildHistoryBackfillRows", () => {
     const rows = buildHistoryBackfillRows(historyItems, new Set(["mid.ja-no-lote"]), CONVERSATION_ID);
 
     expect(rows.map((r) => r.igMessageId)).toEqual(["mid.novo"]);
-  });
-});
-
-// Decisão pura de QUANDO disparar o backfill (ver uso em
-// handleInboundInstagramMessage, não testável direto) — pedido do cliente:
-// cobrir também card/lembrete/abordagem mandados enquanto a conversa já
-// existe (lead agendado/em follow-up), não só na primeira conversa.
-describe("shouldBackfillHistory", () => {
-  const NOW = new Date("2026-11-14T12:00:00Z");
-
-  it("primeira conversa de verdade do lead (isNewConversation): sempre dispara, mesmo sem lastMessageAt", () => {
-    expect(shouldBackfillHistory(true, null, NOW)).toBe(true);
-  });
-
-  it(`conversa já existia, card colado e parada há MAIS de ${HISTORY_BACKFILL_STALE_HOURS}h: dispara`, () => {
-    const lastMessageAt = new Date(NOW.getTime() - (HISTORY_BACKFILL_STALE_HOURS + 1) * 60 * 60 * 1000);
-    expect(shouldBackfillHistory(false, lastMessageAt, NOW)).toBe(true);
-  });
-
-  it(`conversa com atividade há MENOS de ${HISTORY_BACKFILL_STALE_HOURS}h: NÃO dispara (não rechama a Meta a cada mensagem)`, () => {
-    const lastMessageAt = new Date(NOW.getTime() - (HISTORY_BACKFILL_STALE_HOURS - 1) * 60 * 60 * 1000);
-    expect(shouldBackfillHistory(false, lastMessageAt, NOW)).toBe(false);
-  });
-
-  it("exatamente no limiar (igual a HISTORY_BACKFILL_STALE_HOURS): NÃO dispara — só acima do limiar", () => {
-    const lastMessageAt = new Date(NOW.getTime() - HISTORY_BACKFILL_STALE_HOURS * 60 * 60 * 1000);
-    expect(shouldBackfillHistory(false, lastMessageAt, NOW)).toBe(false);
-  });
-
-  it("conversa já existia mas nunca teve lastMessageAt registrado: NÃO dispara (sem base pra medir o gap)", () => {
-    expect(shouldBackfillHistory(false, null, NOW)).toBe(false);
   });
 });
 

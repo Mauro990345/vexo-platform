@@ -7,6 +7,7 @@ const messageFindManyMock = vi.fn();
 const messageUpdateManyMock = vi.fn();
 const messageUpdateMock = vi.fn();
 const messageCreateMock = vi.fn();
+const messageDeleteManyMock = vi.fn();
 const conversationUpdateMock = vi.fn();
 const conversationFindUniqueMock = vi.fn();
 const appointmentFindUniqueMock = vi.fn();
@@ -37,6 +38,7 @@ vi.mock("@/lib/prisma", () => ({
             update: (...args: unknown[]) => messageUpdateMock(...args),
             create: (...args: unknown[]) => messageCreateMock(...args),
             updateMany: (...args: unknown[]) => messageUpdateManyMock(...args),
+            deleteMany: (...args: unknown[]) => messageDeleteManyMock(...args),
           },
           conversation: {
             update: (...args: unknown[]) => conversationUpdateMock(...args),
@@ -284,6 +286,20 @@ describe("dispatchDueMessages — cadeia de confirmação de presença (apresent
       appointmentId: APPOINTMENT_ID,
       scheduledAtMs: SCHEDULED_AT_MS,
     });
+  });
+
+  it("lead respondeu no mesmo instante e o backfill já gravou esta mensagem (mesmo igMessageId): apaga a cópia ANTES de gravar, pra não quebrar o envio nem reenviar", async () => {
+    const intro = buildIntroMessage();
+    messageFindManyMock.mockResolvedValueOnce([intro]);
+
+    const result = await dispatchDueMessages();
+
+    expect(result.sent).toBe(1);
+    expect(messageDeleteManyMock).toHaveBeenCalledWith({
+      where: { igMessageId: "ig-msg-1", id: { not: intro.id } },
+    });
+    // a remoção da cópia vem antes do update que grava o igMessageId
+    expect(messageDeleteManyMock.mock.invocationCallOrder[0]!).toBeLessThan(messageUpdateMock.mock.invocationCallOrder[0]!);
   });
 
   it("vídeo enviado com sucesso cria o cafezinho (próximo elo) com scheduledFor = sentAt + 10s", async () => {

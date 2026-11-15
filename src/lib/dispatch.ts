@@ -429,6 +429,15 @@ async function dispatchOneMessage(
     // primeiro (o timer antecipado, momentos depois, ou o ciclo normal,
     // até 15s depois) — nunca SE ele existe de forma durável.
     const nextChainLink = await prisma.$transaction(async (tx): Promise<NextChainLink> => {
+      // O histórico do Instagram agora é lido a cada mensagem do lead
+      // (backfill). Se o lead respondeu no mesmo instante em que esta
+      // mensagem saiu, o backfill pode já ter gravado esta mesma mensagem
+      // (mesmo igMessageId). igMessageId é único: sem remover essa cópia, o
+      // update abaixo quebraria, a mensagem voltaria pra PENDING e seria
+      // REENVIADA ao lead. A cópia tem o mesmo texto, então apagar é seguro.
+      if (result.messageId) {
+        await tx.message.deleteMany({ where: { igMessageId: result.messageId, id: { not: message.id } } });
+      }
       await tx.message.update({
         where: { id: message.id },
         data: { status: "SENT", sentAt: now, igMessageId: result.messageId },
