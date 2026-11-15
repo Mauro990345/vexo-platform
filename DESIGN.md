@@ -588,3 +588,28 @@ que a tela Configurações sobrescreve. Nunca "M8 Growth" nessas páginas.
     (`min-w-0`). O bloco "Depois" fica mais baixo só a partir de 900px (`.pub-after*` em
     `globals.css`: padding 22/26px, chat 14px abaixo do título, 7px entre balões, balões com 6px e
     card com 9px de padding vertical); abaixo de 900px nada muda.
+  - **"Geração de demanda"**: subtítulo do hero (`text-[15px]`, abaixo do H1) e o `metadata`
+    (title/description) da página passaram a nomear "geração de demanda" explicitamente. H1,
+    etiqueta acima dele (eyebrow "Social selling para clínicas de saúde") e o resto dos textos
+    ficaram como estavam — a etiqueta do rodapé (`PublicFooter.tsx`) também não mudou, é outro
+    texto, não a mesma string do title/description. `layout.tsx` (fallback de título/descrição do
+    app inteiro, não só da página pública) e `sitemap.ts` não duplicam esse texto, por isso não
+    mudaram.
+  - **Marca d'água "VEXO" no bloco de contato**: `<p aria-hidden>` dentro de `.pub-cta-band`,
+    decorativa — `pointer-events-none select-none`, nunca disputa leitura/clique. Tamanho em dois
+    tokens novos da escala de fonte (`pub-watermark` 104px celular / `pub-watermark-lg` 320px
+    desktop, peso 700, tracking -0.03em — mesmo padrão de nomeação do `pub-hero`/`pub-hero-lg`).
+    Cor: token novo `pubWatermark` (`--pub-watermark`, branco puro) usado a 4% de opacidade
+    (`text-vexo-pubWatermark/[0.04]`) — "só um pouco mais clara que o fundo", nunca sólida; se
+    precisar ajustar a intensidade depois, mexer só nesse número de opacidade no uso, não na
+    variável. Ancorada ao rodapé do GRUPO título/subtítulo/botão (não ao rodapé da faixa inteira):
+    o cartão do relatório logo abaixo é opaco e cola na base real da faixa sem margem nenhuma
+    (inclusive no celular, onde ele ocupa 100% da largura disponível) — ancorar no fundo da faixa
+    inteira escondia a palavra 100% atrás dele em qualquer largura de tela. `translate-y-1/2` corta
+    a metade de baixo; o que sobra da largura (ela cresce livre, centrada) é cortado pelo
+    `overflow-hidden` que a própria `.pub-cta-band` já tinha, sem precisar de nenhum contêiner novo
+    só pra isso. Pegadinha de empilhamento: o bloco pai precisou ganhar `z-0` além de `relative` —
+    só `relative` (sem `z-index` próprio) não cria um novo contexto de empilhamento, e um
+    `z-index` negativo do filho "escapa" pra trás do PRÓPRIO degradê de fundo do bloco, ficando
+    100% invisível (armadilha real, encontrada só testando com captura de tela — visualmente
+    idêntico a "não renderizou nada").

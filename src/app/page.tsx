@@ -32,9 +32,9 @@ import { FAQ_ITEMS } from "@/components/public/faq-items";
 // canal por função, sem quem faz a primeira mensagem, sem regra de
 // reativação nem fluxo interno. Esses detalhes ficam só nas páginas legais.
 export const metadata: Metadata = {
-  title: "VEXO IA — Social selling para clínicas de saúde",
+  title: "VEXO IA — Geração de demanda para clínicas de saúde",
   description:
-    "O VEXO IA atende o paciente, agenda, confirma e traz de volta quem sumiu. Da captação ao agendamento, em um só fluxo, para clínicas de saúde.",
+    "O VEXO IA faz a geração de demanda da clínica: atende o paciente, agenda, confirma e traz de volta quem sumiu. Da captação ao agendamento, em um só fluxo, para clínicas de saúde.",
   alternates: { canonical: "/" },
 };
 
@@ -196,8 +196,8 @@ export default function HomePage() {
           Da captação ao agendamento, <span className="text-vexo-pubAccent">a gente faz tudo por você.</span>
         </h1>
         <p className="mx-auto mt-5 max-w-[560px] text-[15px] leading-relaxed text-vexo-pubFg2">
-          O VEXO IA substitui gestor de tráfego, campanhas, CRC e SDR em um só fluxo. Ele atende o paciente, agenda, confirma e
-          traz de volta quem sumiu. Sua equipe só atende.
+          O VEXO IA faz a geração de demanda da clínica e substitui gestor de tráfego, campanhas, CRC e SDR em um só fluxo. Ele
+          atende o paciente, agenda, confirma e traz de volta quem sumiu. Sua equipe só atende.
         </p>
         <div className="mt-7 flex flex-col items-center justify-center gap-3 sm:flex-row">
           <Link
@@ -468,18 +468,46 @@ export default function HomePage() {
 
       {/* Contato — faixa final em degradê, com o relatório "espiando" */}
       <section id="contato" className="scroll-mt-24 px-4 pb-12 pt-10 sm:pb-16">
-        <div className="pub-cta-band mx-auto max-w-[1040px] overflow-hidden rounded-pub-cta px-5 pt-[72px] text-center">
-          <h2 className="text-pub-h2 text-white md:text-pub-h2-lg">
-            Quer ver o VEXO funcionando <em className="font-pub-serif font-normal italic">na sua clínica?</em>
-          </h2>
-          <p className="mt-3 text-white/[0.92]">Fale com o time do VEXO e receba uma demonstração.</p>
-          <a
-            href={`mailto:${LEGAL_INFO.emails.contact}`}
-            className="mt-6 inline-flex items-center gap-2 rounded-full bg-white px-6 py-2.5 text-[15px] font-medium text-vexo-pubLightTitle motion-safe:transition-opacity hover:opacity-90"
-          >
-            <Mail size={16} strokeWidth={1.8} aria-hidden="true" />
-            {LEGAL_INFO.emails.contact}
-          </a>
+        <div className="pub-cta-band relative z-0 mx-auto max-w-[1040px] overflow-hidden rounded-pub-cta px-5 pt-[72px] text-center">
+          {/* Marca d'água "VEXO" ao fundo — decorativa, nunca disputa leitura
+              nem clique: z-index negativo (sempre atrás do conteúdo estático,
+              já que o bloco pai ganhou z-0 pra formar seu próprio contexto de
+              empilhamento — sem isso, um z-index negativo "escapa" do pai e
+              acaba atrás do PRÓPRIO degradê de fundo do bloco, invisível por
+              completo), pointer-events-none, select-none e aria-hidden.
+              Ancorada ao rodapé deste grupo (título/subtítulo/botão), não ao
+              rodapé do bloco inteiro — o cartão do relatório logo abaixo é
+              opaco e cola na base real do bloco (sem padding embaixo, ver
+              DESIGN.md), então ancorar no fundo do bloco inteiro escondia a
+              palavra 100% atrás dele em qualquer largura de tela (inclusive
+              celular, onde o cartão ocupa 100% da largura disponível, sem
+              nenhuma margem lateral pra "espiar"). Aqui, cortada pela metade
+              (translate-y-1/2) ainda lê como "rodapé" (ponto antes do espaço
+              que leva ao cartão), com boa parte ficando visível nas margens
+              ao lado do cartão no desktop e acima dele no celular. Cor:
+              --pub-watermark (branco) a 4% — só um pouco mais clara que o
+              degradê de fundo, nunca sólida. Largura não controlada (cresce
+              livre, centrada) — o que sobrar do bloco corta ela, nunca o
+              contrário, então não gera rolagem horizontal em celular. */}
+          <div className="relative">
+            <p
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-x-0 bottom-0 -z-10 translate-y-1/2 select-none whitespace-nowrap text-center text-pub-watermark leading-none text-vexo-pubWatermark/[0.04] md:text-pub-watermark-lg"
+            >
+              VEXO
+            </p>
+            <h2 className="text-pub-h2 text-white md:text-pub-h2-lg">
+              Quer ver o VEXO funcionando <em className="font-pub-serif font-normal italic">na sua clínica?</em>
+            </h2>
+            <p className="mt-3 text-white/[0.92]">Fale com o time do VEXO e receba uma demonstração.</p>
+            <a
+              href={`mailto:${LEGAL_INFO.emails.contact}`}
+              className="mt-6 inline-flex items-center gap-2 rounded-full bg-white px-6 py-2.5 text-[15px] font-medium text-vexo-pubLightTitle motion-safe:transition-opacity hover:opacity-90"
+            >
+              <Mail size={16} strokeWidth={1.8} aria-hidden="true" />
+              {LEGAL_INFO.emails.contact}
+            </a>
+          </div>
 
           <div className="mx-auto mt-10 max-w-[720px]" aria-hidden="true">
             <div className="rounded-t-[28px] border border-b-0 border-vexo-pubEdge/10 bg-vexo-pubPeek p-5 text-left sm:p-6">
