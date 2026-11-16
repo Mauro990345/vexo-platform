@@ -77,14 +77,23 @@ function ExampleTag({ light = false }: { light?: boolean }) {
   );
 }
 
+// 11 chips (4 novos, misturados com os 7 originais — pedido explícito:
+// "misturados com os atuais, não tudo no final", pra nuvem parecer natural)
+// — equilibram a altura do box "Antes" com o "Depois" ao lado (ver
+// items-stretch no grid pai e DESIGN.md, "Antes/Depois"). Só a DOR, nunca
+// como o VEXO resolve (mesmo princípio de conteúdo da rodada final).
 const BEFORE_PILLS: Array<{ label: string; rotate: string }> = [
   { label: "Gestor de tráfego", rotate: "-rotate-3" },
-  { label: "Campanhas", rotate: "rotate-2" },
-  { label: "CRC", rotate: "-rotate-1" },
-  { label: "SDR", rotate: "rotate-3" },
-  { label: "Planilhas", rotate: "-rotate-2" },
-  { label: "WhatsApp manual", rotate: "rotate-1" },
-  { label: "Leads esquecidos", rotate: "-rotate-3" },
+  { label: "Prospecção fria", rotate: "rotate-2" },
+  { label: "Campanhas", rotate: "-rotate-1" },
+  { label: "CRC", rotate: "rotate-3" },
+  { label: "Leads desqualificados", rotate: "-rotate-2" },
+  { label: "SDR", rotate: "rotate-1" },
+  { label: "Planilhas", rotate: "-rotate-3" },
+  { label: "Agenda com buracos", rotate: "rotate-2" },
+  { label: "WhatsApp manual", rotate: "-rotate-1" },
+  { label: "Pacientes que sumiram", rotate: "rotate-3" },
+  { label: "Leads esquecidos", rotate: "-rotate-2" },
 ];
 
 const HOW_STEPS: Array<{ n: string; title: string; text: string; icon: ReactNode }> = [
@@ -230,10 +239,20 @@ export default function HomePage() {
         <p className="mt-3 max-w-[560px] text-vexo-pubFg2">
           Gestor de tráfego, campanhas, CRC e SDR, cada um com seu custo e seu ritmo. O VEXO junta tudo em um fluxo único.
         </p>
-        <div className="mt-8 grid items-start gap-4 md:grid-cols-[1fr_1.3fr]">
-          <div className="pub-block rounded-pub p-6 sm:p-7">
+        {/* items-stretch (não items-start): os dois boxes terminam na mesma
+            altura no desktop — ver DESIGN.md, "Antes/Depois". Sem efeito no
+            celular (uma coluna só, cada box já ocupa a linha inteira). */}
+        <div className="mt-8 grid items-stretch gap-4 md:grid-cols-[1fr_1.3fr]">
+          <div className="pub-block flex flex-col rounded-pub p-6 sm:p-7">
             <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-vexo-pubMuted">Antes</p>
-            <ul className="mt-5 flex flex-wrap gap-2.5" aria-label="Antes do VEXO">
+            {/* content-between (não content-start): com items-stretch, uma
+                folga pequena pode sobrar embaixo da última linha de chips —
+                em vez de deixar isso como espaço morto (ou centralizar o
+                bloco inteiro, com vazio em cima E embaixo), essa folga vira
+                espaço extra DISTRIBUÍDO ENTRE as linhas (space-between só
+                soma ao gap-2.5 já existente, nunca cria vazio antes da 1ª
+                linha nem depois da última). */}
+            <ul className="mt-5 flex flex-1 flex-wrap content-between gap-2.5" aria-label="Antes do VEXO">
               {BEFORE_PILLS.map((p) => (
                 <li
                   key={p.label}
@@ -288,7 +307,7 @@ export default function HomePage() {
               </div>
             </div>
 
-            <div className="mt-4 flex flex-wrap items-center gap-2">
+            <div className="pub-after-tags mt-4 flex flex-wrap items-center gap-2">
               {["Lembrete no dia anterior", "Reativação programada"].map((tag) => (
                 <span key={tag} className="rounded-full border border-vexo-pubEdge/[0.12] bg-vexo-pubEdge/[0.04] px-3 py-1 text-xs text-vexo-pubFg2">
                   {tag}

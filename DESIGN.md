@@ -586,8 +586,8 @@ que a tela Configurações sobrescreve. Nunca "M8 Growth" nessas páginas.
   - **Ajuste fino**: o cartão do relatório no CTA não tem mais altura fixa nem corte — aparece
     inteiro, colado na base da faixa (cantos só no topo), com os 4 números em 2×2 no celular
     (`min-w-0`). O bloco "Depois" fica mais baixo só a partir de 900px (`.pub-after*` em
-    `globals.css`: padding 22/26px, chat 14px abaixo do título, 7px entre balões, balões com 6px e
-    card com 9px de padding vertical); abaixo de 900px nada muda.
+    `globals.css` — valores atualizados na rodada "Antes/Depois" abaixo); abaixo de 900px nada
+    muda.
   - **"Geração de demanda"**: subtítulo do hero (`text-[15px]`, abaixo do H1) e o `metadata`
     (title/description) da página passaram a nomear "geração de demanda" explicitamente. H1,
     etiqueta acima dele (eyebrow "Social selling para clínicas de saúde") e o resto dos textos
@@ -613,3 +613,32 @@ que a tela Configurações sobrescreve. Nunca "M8 Growth" nessas páginas.
     `z-index` negativo do filho "escapa" pra trás do PRÓPRIO degradê de fundo do bloco, ficando
     100% invisível (armadilha real, encontrada só testando com captura de tela — visualmente
     idêntico a "não renderizou nada").
+  - **Antes/Depois — equilíbrio de altura no desktop**: o box "Antes" (chips) ficava bem mais baixo
+    que o "Depois" (conversa de exemplo), com vazio embaixo. Correção meio a meio:
+    - **Chips novos**: "Prospecção fria", "Leads desqualificados", "Agenda com buracos", "Pacientes
+      que sumiram" — misturados entre os 7 originais (`BEFORE_PILLS`, `page.tsx`), não
+      concentrados no fim, mesmo estilo (borda, inclinação alternada `rotate-N`/`-rotate-N`, texto)
+      dos que já existiam. Só a dor, nunca a solução.
+    - **Depois mais compacto** (só desktop, `@media (min-width: 900px)` em `globals.css`): mais um
+      corte (~16% sobre o tamanho já reduzido da rodada anterior) em cima do padding do bloco
+      (12→16px), do espaço antes do chat (10px), do espaço entre balões (5px), do padding vertical
+      dos balões (4px) e do card (6px), e um novo corte no espaço até os chips finais
+      (`.pub-after-tags`, 10px — não existia antes, essa margem nunca tinha sido tocada). Corte
+      total em relação ao tamanho original (antes de qualquer rodada): ~16%, dentro da faixa
+      pedida (15–20%).
+    - **Altura igual garantida por CSS, não só visualmente parecida**: o grid pai (`page.tsx`)
+      trocou `items-start` por `items-stretch` — os dois boxes sempre terminam exatamente na mesma
+      altura, qualquer que seja o conteúdo de cada lado. O box "Antes" virou `flex flex-col`, com o
+      `<ul>` dos chips em `flex-1 content-between` (não `content-start`): a folga que sobra quando o
+      box estica pra bater com o "Depois" vira espaço extra DISTRIBUÍDO ENTRE as linhas de chips
+      (nunca um vazio só embaixo, nem centralizado com vazio em cima e embaixo também) — `gap-2.5`
+      continua sendo o mínimo entre linhas, `content-between` só soma o que sobra em cima disso.
+    - **Pegadinha de especificidade CSS, achada só comparando o CSS compilado de verdade** (o
+      código-fonte sozinho não mostra isso): o seletor `.pub-after` sozinho perdia pro `sm:p-7` do
+      próprio elemento — Tailwind injeta o bloco de variantes `sm:` DEPOIS deste arquivo na folha
+      final, e com a mesma especificidade (uma classe) o último no documento vence. Virou
+      `.pub-after.pub-after` (mesma classe duas vezes, especificidade 0,2,0) pra não depender de
+      onde cada bloco cai na folha compilada.
+    - **Celular**: inalterado — uma coluna só (sem `items-stretch` fazendo efeito, já que cada box
+      ocupa a linha inteira sozinho), chips novos aparecem com a mesma quebra de linha de sempre,
+      sem rolagem horizontal (testado 390/360px).
