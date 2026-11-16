@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useState, useTransition } from "react";
 import { Button } from "@/components/Button";
 import { Card } from "@/components/Card";
-import { toggleActiveInQueueAction, updateDailyLimitAction, uploadApproachLeadsAction } from "./actions";
+import { toggleActiveInQueueAction, updateDailyLimitAction, uploadApproachLeadsAction, updateApproachWindowAction } from "./actions";
+import type { ApproachWindow } from "@/lib/approach-queue-db";
 
 type PrepClinic = {
   id: string;
@@ -16,7 +17,7 @@ type PrepClinic = {
   hasMessages: boolean;
 };
 
-export function AbordagemPrepView({ clinics }: { clinics: PrepClinic[] }) {
+export function AbordagemPrepView({ clinics, window }: { clinics: PrepClinic[]; window: ApproachWindow }) {
   const selectedCount = clinics.filter((c) => c.activeInQueue).length;
 
   return (
@@ -28,6 +29,10 @@ export function AbordagemPrepView({ clinics }: { clinics: PrepClinic[] }) {
       </p>
 
       <div className="mt-4">
+        <WindowForm window={window} />
+      </div>
+
+      <div className="mt-3">
         <UploadForm clinics={clinics} />
       </div>
 
@@ -120,6 +125,78 @@ function DailyLimitField({ clinicId, dailyLimit }: { clinicId: string; dailyLimi
         </span>
       )}
     </div>
+  );
+}
+
+function minutesToTimeInputValue(minutes: number): string {
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
+
+// Mesmo modelo do "Horário inicial/final" do Follow-up
+// (updateFollowUpWindow, crm/(global)/follow-up/actions.ts) — horário com
+// minutos, valida início < fim. Vale pra TODAS as clínicas (um horário só,
+// pedido explícito) — padrão 7h-20h até salvar outro aqui.
+function WindowForm({ window: approachWindow }: { window: ApproachWindow }) {
+  const [isPending, startTransition] = useTransition();
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const formData = new FormData(e.currentTarget);
+    setError(null);
+    setSaved(false);
+    startTransition(async () => {
+      try {
+        await updateApproachWindowAction(formData);
+        setSaved(true);
+        window.setTimeout(() => setSaved(false), 2000);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Não foi possível salvar o horário.");
+      }
+    });
+  }
+
+  return (
+    <Card as="form" onSubmit={handleSubmit} className="space-y-2">
+      <p className="text-xs font-medium text-vexo-fg">Horário permitido</p>
+      <p className="text-caption text-vexo-muted">Vale para todas as clínicas. Fora dele, a Fila fica bloqueada.</p>
+      <div className="flex flex-wrap items-end gap-2">
+        <div>
+          <label className="mb-1 block text-caption text-vexo-muted" htmlFor="windowStart">
+            Das
+          </label>
+          <input
+            id="windowStart"
+            name="windowStart"
+            type="time"
+            required
+            defaultValue={minutesToTimeInputValue(approachWindow.startMinute)}
+            className="rounded-control border border-vexo-border bg-vexo-bg px-2 py-1.5 text-xs text-vexo-fg outline-none focus:border-vexo-accent"
+          />
+        </div>
+        <div>
+          <label className="mb-1 block text-caption text-vexo-muted" htmlFor="windowEnd">
+            às
+          </label>
+          <input
+            id="windowEnd"
+            name="windowEnd"
+            type="time"
+            required
+            defaultValue={minutesToTimeInputValue(approachWindow.endMinute)}
+            className="rounded-control border border-vexo-border bg-vexo-bg px-2 py-1.5 text-xs text-vexo-fg outline-none focus:border-vexo-accent"
+          />
+        </div>
+        <Button type="submit" variant="outline" size="sm" disabled={isPending}>
+          {saved ? "Salvo ✓" : "Salvar"}
+        </Button>
+      </div>
+      <p className="text-caption text-vexo-muted">Horário de São Paulo.</p>
+      {error && <p className="text-caption text-vexo-error">{error}</p>}
+    </Card>
   );
 }
 

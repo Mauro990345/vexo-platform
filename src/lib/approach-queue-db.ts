@@ -10,9 +10,35 @@ import {
   resolveAvailableApproachSlots,
   pickNextApproachMessageSlot,
   fillApproachMessageTemplate,
+  validateApproachWindow,
+  DEFAULT_APPROACH_WINDOW_START_MINUTE,
+  DEFAULT_APPROACH_WINDOW_END_MINUTE,
   type ApproachAccountState,
   type ApproachUploadRow,
 } from "@/lib/approach-queue";
+
+// ---------------------------------------------------------------------------
+// Horário permitido — GLOBAL, singleton (ver ApproachWindowSettings, schema.prisma)
+// ---------------------------------------------------------------------------
+
+export type ApproachWindow = { startMinute: number; endMinute: number };
+
+export async function getApproachWindow(): Promise<ApproachWindow> {
+  const settings = await prisma.approachWindowSettings.findUnique({ where: { id: "singleton" } });
+  return {
+    startMinute: settings?.startMinute ?? DEFAULT_APPROACH_WINDOW_START_MINUTE,
+    endMinute: settings?.endMinute ?? DEFAULT_APPROACH_WINDOW_END_MINUTE,
+  };
+}
+
+export async function setApproachWindow(startMinute: number, endMinute: number): Promise<void> {
+  validateApproachWindow(startMinute, endMinute);
+  await prisma.approachWindowSettings.upsert({
+    where: { id: "singleton" },
+    update: { startMinute, endMinute },
+    create: { id: "singleton", startMinute, endMinute },
+  });
+}
 
 // Funções COM banco da Fila de abordagem — lógica pura em approach-queue.ts
 // (testada sem Prisma); aqui só orquestração + persistência. Mesma divisão
@@ -174,14 +200,14 @@ export async function countApproachedToday(clinicId: string, now: Date): Promise
 // (getApproachBoard) quanto pelas actions de enviar/desfazer/pular/pausar
 // (cada uma devolve o snapshot só da conta que mexeu, pro cliente atualizar
 // aquele card sem precisar recarregar o board inteiro).
-export async function getApproachBoardAccount(clinicId: string, now: Date = new Date()): Promise<ApproachBoardAccount | null> {
+export async function getApproachBoardAccount(clinicId: string, now: Date = new Date(), window?: ApproachWindow): Promise<ApproachBoardAccount | null> {
   const clinic = await prisma.clinic.findUnique({
     where: { id: clinicId },
     select: { id: true, name: true, instagramAccount: { select: { igUsername: true } } },
   });
   if (!clinic) return null;
 
-  const [config, sentToday, items] = await Promise.all([
+  const [config, sentToday, items, resolvedWindow] = await Promise.all([
     getOrCreateApproachQueueConfig(clinicId),
     countApproachedToday(clinicId, now),
     prisma.approachQueueItem.findMany({
@@ -190,6 +216,7 @@ export async function getApproachBoardAccount(clinicId: string, now: Date = new 
       take: 3,
       select: { id: true, username: true, name: true },
     }),
+    window ? Promise.resolve(window) : getApproachWindow(),
   ]);
   const state = computeApproachAccountState({
     now,
@@ -197,6 +224,8 @@ export async function getApproachBoardAccount(clinicId: string, now: Date = new 
     dailyLimit: config.dailyLimit,
     sentToday,
     lockedUntil: config.lockedUntil,
+    windowStartMinute: resolvedWindow.startMinute,
+    windowEndMinute: resolvedWindow.endMinute,
   });
   return {
     clinicId: clinic.id,
@@ -209,14 +238,17 @@ export async function getApproachBoardAccount(clinicId: string, now: Date = new 
   };
 }
 
-export async function getApproachBoard(now: Date = new Date()): Promise<ApproachBoardAccount[]> {
-  const clinics = await prisma.clinic.findMany({
-    where: { approachQueueConfig: { is: { activeInQueue: true } } },
-    select: { id: true },
-    orderBy: { name: "asc" },
-  });
-  const accounts = await Promise.all(clinics.map((c) => getApproachBoardAccount(c.id, now)));
-  return accounts.filter((a): a is ApproachBoardAccount => a !== null);
+export async function getApproachBoard(now: Date = new Date()): Promise<{ accounts: ApproachBoardAccount[]; window: ApproachWindow }> {
+  const [clinics, window] = await Promise.all([
+    prisma.clinic.findMany({
+      where: { approachQueueConfig: { is: { activeInQueue: true } } },
+      select: { id: true },
+      orderBy: { name: "asc" },
+    }),
+    getApproachWindow(),
+  ]);
+  const accounts = await Promise.all(clinics.map((c) => getApproachBoardAccount(c.id, now, window)));
+  return { accounts: accounts.filter((a): a is ApproachBoardAccount => a !== null), window };
 }
 
 // ---------------------------------------------------------------------------
@@ -233,7 +265,7 @@ export type SendApproachResult =
 // do item (anti duplo-toque, mesmo padrão de sendReactivationWhatsAppMessage,
 // reactivation.ts), log em ApproachLog e nova espera sorteada.
 export async function sendNextApproachItem(clinicId: string, now: Date = new Date()): Promise<SendApproachResult> {
-  const [config, messagesConfig, sentToday, item] = await Promise.all([
+  const [config, messagesConfig, sentToday, item, window] = await Promise.all([
     getOrCreateApproachQueueConfig(clinicId),
     getApproachMessagesConfig(clinicId),
     countApproachedToday(clinicId, now),
@@ -241,9 +273,18 @@ export async function sendNextApproachItem(clinicId: string, now: Date = new Dat
       where: { clinicId, status: "QUEUED" },
       orderBy: { createdAt: "asc" },
     }),
+    getApproachWindow(),
   ]);
 
-  const state = computeApproachAccountState({ now, paused: config.paused, dailyLimit: config.dailyLimit, sentToday, lockedUntil: config.lockedUntil });
+  const state = computeApproachAccountState({
+    now,
+    paused: config.paused,
+    dailyLimit: config.dailyLimit,
+    sentToday,
+    lockedUntil: config.lockedUntil,
+    windowStartMinute: window.startMinute,
+    windowEndMinute: window.endMinute,
+  });
   if (state.kind === "OUTSIDE_HOURS") return { ok: false, reason: "outside_hours" };
   if (state.kind === "PAUSED") return { ok: false, reason: "paused" };
   if (state.kind === "LIMIT_REACHED") return { ok: false, reason: "limit_reached" };

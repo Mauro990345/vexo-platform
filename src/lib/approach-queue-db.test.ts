@@ -12,6 +12,8 @@ const approachQueueConfigUpdateMock = vi.fn();
 const approachMessagesConfigFindUniqueMock = vi.fn();
 const approachLogCreateMock = vi.fn();
 const approachLogDeleteMock = vi.fn();
+const approachWindowSettingsFindUniqueMock = vi.fn();
+const approachWindowSettingsUpsertMock = vi.fn();
 
 vi.mock("@/lib/prisma", () => ({
   prisma: {
@@ -33,10 +35,14 @@ vi.mock("@/lib/prisma", () => ({
       create: (...args: unknown[]) => approachLogCreateMock(...args),
       delete: (...args: unknown[]) => approachLogDeleteMock(...args),
     },
+    approachWindowSettings: {
+      findUnique: (...args: unknown[]) => approachWindowSettingsFindUniqueMock(...args),
+      upsert: (...args: unknown[]) => approachWindowSettingsUpsertMock(...args),
+    },
   },
 }));
 
-import { uploadApproachLeads, sendNextApproachItem, undoLastApproachSend, skipApproachItem } from "./approach-queue-db";
+import { uploadApproachLeads, sendNextApproachItem, undoLastApproachSend, skipApproachItem, setApproachWindow } from "./approach-queue-db";
 
 const NOW = new Date("2026-01-15T14:00:00Z"); // 11h em São Paulo — dentro do horário
 
@@ -53,6 +59,8 @@ beforeEach(() => {
   approachMessagesConfigFindUniqueMock.mockReset().mockResolvedValue({ message1: "Oi {nome}!", message2: "Fala {nome}", message3: null, message4: null, message5: null });
   approachLogCreateMock.mockReset().mockResolvedValue({ id: "log-1" });
   approachLogDeleteMock.mockReset().mockResolvedValue({});
+  approachWindowSettingsFindUniqueMock.mockReset().mockResolvedValue(null); // sem linha salva -> padrão 7h-20h
+  approachWindowSettingsUpsertMock.mockReset().mockResolvedValue({});
 });
 
 describe("uploadApproachLeads — duplicados", () => {
@@ -193,5 +201,45 @@ describe("skipApproachItem", () => {
   it("já não está mais QUEUED (ex.: já foi enviado) — count 0", async () => {
     approachQueueItemUpdateManyMock.mockResolvedValue({ count: 0 });
     expect(await skipApproachItem("item-1")).toEqual({ ok: false });
+  });
+});
+
+describe("setApproachWindow", () => {
+  it("salva início/fim válidos", async () => {
+    await setApproachWindow(420, 1200);
+    expect(approachWindowSettingsUpsertMock).toHaveBeenCalledWith({
+      where: { id: "singleton" },
+      update: { startMinute: 420, endMinute: 1200 },
+      create: { id: "singleton", startMinute: 420, endMinute: 1200 },
+    });
+  });
+
+  it("início >= fim — rejeita sem gravar nada", async () => {
+    await expect(setApproachWindow(1200, 420)).rejects.toThrow();
+    expect(approachWindowSettingsUpsertMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("sendNextApproachItem — janela customizada", () => {
+  function baseConfig(overrides: Record<string, unknown> = {}) {
+    return { clinicId: "clinic-1", dailyLimit: 60, paused: false, activeInQueue: true, lockedUntil: null, lastMessageSlot: null, ...overrides };
+  }
+
+  it("janela salva mais restrita (13h-18h): 11h em São Paulo fica fora do horário", async () => {
+    approachWindowSettingsFindUniqueMock.mockResolvedValue({ id: "singleton", startMinute: 13 * 60, endMinute: 18 * 60 });
+    approachQueueConfigUpsertMock.mockResolvedValue(baseConfig());
+
+    const result = await sendNextApproachItem("clinic-1", NOW); // NOW = 11h em São Paulo
+    expect(result).toEqual({ ok: false, reason: "outside_hours" });
+  });
+
+  it("janela salva mais ampla (0h-23h59): 11h em São Paulo está dentro mesmo fora do padrão 7h-20h", async () => {
+    approachWindowSettingsFindUniqueMock.mockResolvedValue({ id: "singleton", startMinute: 0, endMinute: 23 * 60 + 59 });
+    approachQueueConfigUpsertMock.mockResolvedValue(baseConfig());
+    approachQueueItemFindFirstMock.mockResolvedValue({ id: "item-1", username: "fulano.ig", name: null });
+    approachQueueItemUpdateManyMock.mockResolvedValue({ count: 1 });
+
+    const result = await sendNextApproachItem("clinic-1", NOW);
+    expect(result.ok).toBe(true);
   });
 });

@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
-import { isWithinApproachHours, formatApproachCountdown, APPROACH_WINDOW_START_HOUR, APPROACH_WINDOW_END_HOUR } from "@/lib/approach-queue";
+import Link from "next/link";
+import { useEffect, useState, useTransition } from "react";
+import { isWithinApproachHours, formatApproachCountdown, formatApproachWindowLabel } from "@/lib/approach-queue";
 import { copyToClipboard } from "@/lib/clipboard";
 import {
   getApproachBoardAction,
@@ -10,8 +11,8 @@ import {
   skipApproachItemAction,
   setApproachPausedAction,
   type SendApproachMessageActionResult,
-} from "../actions";
-import type { ApproachBoardAccount } from "@/lib/approach-queue-db";
+} from "../../(global)/abordagem/actions";
+import type { ApproachBoardAccount, ApproachWindow } from "@/lib/approach-queue-db";
 
 const POLL_INTERVAL_MS = 15_000;
 const TICK_INTERVAL_MS = 1_000;
@@ -28,15 +29,16 @@ function firstNameOnly(name: string): string {
   return name.trim().split(/\s+/)[0] ?? name;
 }
 
-export function FilaView({ initialBoard }: { initialBoard: ApproachBoardAccount[] }) {
-  const [accounts, setAccounts] = useState(initialBoard);
+export function FilaView({ initialAccounts, initialWindow }: { initialAccounts: ApproachBoardAccount[]; initialWindow: ApproachWindow }) {
+  const [accounts, setAccounts] = useState(initialAccounts);
+  const [approachWindow, setApproachWindow] = useState(initialWindow);
   const [fetchedAtByClinic, setFetchedAtByClinic] = useState<Record<string, number>>(() =>
-    Object.fromEntries(initialBoard.map((a) => [a.clinicId, Date.now()]))
+    Object.fromEntries(initialAccounts.map((a) => [a.clinicId, Date.now()]))
   );
-  const [selectedClinicId, setSelectedClinicId] = useState<string | null>(initialBoard[0]?.clinicId ?? null);
+  const [selectedClinicId, setSelectedClinicId] = useState<string | null>(initialAccounts[0]?.clinicId ?? null);
   const [now, setNow] = useState(() => Date.now());
   const [isPending, startTransition] = useTransition();
-  const [withinHours, setWithinHours] = useState(() => isWithinApproachHours(new Date()));
+  const [withinHours, setWithinHours] = useState(() => isWithinApproachHours(new Date(), initialWindow.startMinute, initialWindow.endMinute));
 
   // Tick de 1s só pra recalcular o "Aguarde m:ss" exibido — nunca refaz a
   // busca no servidor sozinho (ver poll abaixo, que é quem de fato
@@ -44,21 +46,24 @@ export function FilaView({ initialBoard }: { initialBoard: ApproachBoardAccount[
   useEffect(() => {
     const id = window.setInterval(() => {
       setNow(Date.now());
-      setWithinHours(isWithinApproachHours(new Date()));
+      setWithinHours(isWithinApproachHours(new Date(), approachWindow.startMinute, approachWindow.endMinute));
     }, TICK_INTERVAL_MS);
     return () => window.clearInterval(id);
-  }, []);
+  }, [approachWindow]);
 
   // Sincroniza com o servidor periodicamente — pega mudanças feitas em
-  // outro aparelho (trocar de celular pro computador, pedido explícito) e
-  // qualquer upload novo de leads. Pulado enquanto uma ação local está em
-  // andamento, pra não sobrescrever um estado otimista no meio do caminho.
+  // outro aparelho (trocar de celular pro computador, pedido explícito),
+  // upload novo de leads e o horário permitido (se o admin salvar um novo
+  // na tela de Preparação enquanto a Fila está aberta). Pulado enquanto uma
+  // ação local está em andamento, pra não sobrescrever um estado otimista
+  // no meio do caminho.
   useEffect(() => {
     const id = window.setInterval(async () => {
       if (isPending) return;
       const board = await getApproachBoardAction();
-      setAccounts(board);
-      setFetchedAtByClinic(Object.fromEntries(board.map((a) => [a.clinicId, Date.now()])));
+      setAccounts(board.accounts);
+      setApproachWindow(board.window);
+      setFetchedAtByClinic(Object.fromEntries(board.accounts.map((a) => [a.clinicId, Date.now()])));
     }, POLL_INTERVAL_MS);
     return () => window.clearInterval(id);
   }, [isPending]);
@@ -101,45 +106,45 @@ export function FilaView({ initialBoard }: { initialBoard: ApproachBoardAccount[
     });
   }
 
-  if (!withinHours) {
-    return (
-      <div className="mx-auto max-w-[520px] px-4 py-6 sm:px-0">
-        <h1 className="text-base font-semibold tracking-tight text-vexo-fg">Abordagem</h1>
-        <p className="mt-4 rounded-block bg-vexo-surface p-block text-center text-sm text-vexo-muted">
-          Fora do horário ({APPROACH_WINDOW_START_HOUR}h às {APPROACH_WINDOW_END_HOUR}h)
-        </p>
-      </div>
-    );
-  }
-
   return (
-    <div className="mx-auto max-w-[520px] px-4 py-6 sm:px-0">
-      <h1 className="text-base font-semibold tracking-tight text-vexo-fg">Abordagem</h1>
+    <div className="mx-auto max-w-[520px] px-4 py-4 sm:px-0">
+      <Link href="/crm/abordagem" className="text-caption text-vexo-muted hover:text-vexo-accent">
+        ← Preparação
+      </Link>
+      <h1 className="mt-1 text-base font-semibold tracking-tight text-vexo-fg">Abordagem</h1>
 
-      <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
-        {accounts.map((account) => (
-          <AccountChip
-            key={account.clinicId}
-            account={account}
-            now={now}
-            fetchedAt={fetchedAtByClinic[account.clinicId] ?? now}
-            selected={account.clinicId === selectedClinicId}
-            onSelect={() => setSelectedClinicId(account.clinicId)}
-          />
-        ))}
-        {accounts.length === 0 && <p className="text-xs text-vexo-muted">Nenhuma conta marcada em Abordagem.</p>}
-      </div>
+      {!withinHours ? (
+        <p className="mt-4 rounded-block bg-vexo-surface p-block text-center text-sm text-vexo-muted">
+          Fora do horário ({formatApproachWindowLabel(approachWindow.startMinute, approachWindow.endMinute)})
+        </p>
+      ) : (
+        <>
+          <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
+            {accounts.map((account) => (
+              <AccountChip
+                key={account.clinicId}
+                account={account}
+                now={now}
+                fetchedAt={fetchedAtByClinic[account.clinicId] ?? now}
+                selected={account.clinicId === selectedClinicId}
+                onSelect={() => setSelectedClinicId(account.clinicId)}
+              />
+            ))}
+            {accounts.length === 0 && <p className="text-xs text-vexo-muted">Nenhuma conta marcada em Abordagem.</p>}
+          </div>
 
-      {selected && (
-        <SelectedAccountPanel
-          account={selected}
-          now={now}
-          fetchedAt={fetchedAtByClinic[selected.clinicId] ?? now}
-          onSend={() => handleSend(selected.clinicId)}
-          onSkip={(itemId) => handleSkip(selected.clinicId, itemId)}
-          onUndo={() => handleUndo(selected.clinicId)}
-          onPauseToggle={(paused) => handlePauseToggle(selected.clinicId, paused)}
-        />
+          {selected && (
+            <SelectedAccountPanel
+              account={selected}
+              now={now}
+              fetchedAt={fetchedAtByClinic[selected.clinicId] ?? now}
+              onSend={() => handleSend(selected.clinicId)}
+              onSkip={(itemId) => handleSkip(selected.clinicId, itemId)}
+              onUndo={() => handleUndo(selected.clinicId)}
+              onPauseToggle={(paused) => handlePauseToggle(selected.clinicId, paused)}
+            />
+          )}
+        </>
       )}
     </div>
   );
@@ -167,21 +172,23 @@ function AccountChip({
   const remaining = liveRemainingMs(account, now, fetchedAt);
   const effectivelyWaiting = account.state.kind === "WAITING" && remaining > 0;
 
-  const circleClass = account.state.kind === "PAUSED"
-    ? "bg-vexo-border text-vexo-muted"
-    : account.state.kind === "LIMIT_REACHED"
-      ? "bg-vexo-warning/25 text-vexo-warning"
-      : effectivelyWaiting
-        ? "bg-vexo-muted/20 text-vexo-muted"
-        : "bg-vexo-success/25 text-vexo-success";
+  const circleClass =
+    account.state.kind === "PAUSED"
+      ? "bg-vexo-border text-vexo-muted"
+      : account.state.kind === "LIMIT_REACHED"
+        ? "bg-vexo-warning/25 text-vexo-warning"
+        : effectivelyWaiting
+          ? "bg-vexo-muted/20 text-vexo-muted"
+          : "bg-vexo-success/25 text-vexo-success";
 
-  const subLabel = account.state.kind === "PAUSED"
-    ? "Pausada"
-    : account.state.kind === "LIMIT_REACHED"
-      ? "Limite de hoje"
-      : effectivelyWaiting
-        ? formatApproachCountdown(remaining)
-        : `${account.sentToday}/${account.dailyLimit}`;
+  const subLabel =
+    account.state.kind === "PAUSED"
+      ? "Pausada"
+      : account.state.kind === "LIMIT_REACHED"
+        ? "Limite de hoje"
+        : effectivelyWaiting
+          ? formatApproachCountdown(remaining)
+          : `${account.sentToday}/${account.dailyLimit}`;
 
   return (
     <button
@@ -265,7 +272,10 @@ function SelectedAccountPanel({
   );
 }
 
-function LeadCard({
+// Sem nome (caso comum — a lista só traz o @), mostra SÓ o @ em destaque,
+// sem repetir numa 2ª linha embaixo (bug relatado: o card duplicava o
+// mesmo @ duas vezes). Com nome, primeiro nome em destaque + @ embaixo.
+export function LeadCard({
   name,
   username,
   active,
@@ -286,17 +296,29 @@ function LeadCard({
 }) {
   if (!active) {
     return (
-      <div className="rounded-control border border-vexo-border bg-vexo-surface px-3 py-2 opacity-50">
-        <p className="truncate text-caption text-vexo-fg">{name ?? username}</p>
-        <p className="truncate text-caption text-vexo-muted">@{username}</p>
+      <div className="rounded-control border border-vexo-border bg-vexo-surface px-3 py-2 opacity-50" data-lead-card>
+        {name ? (
+          <>
+            <p className="truncate text-caption text-vexo-fg">{name}</p>
+            <p className="truncate text-caption text-vexo-muted">@{username}</p>
+          </>
+        ) : (
+          <p className="truncate text-caption text-vexo-fg">@{username}</p>
+        )}
       </div>
     );
   }
 
   return (
-    <div className="rounded-block border border-vexo-border bg-vexo-surface p-block">
-      <p className="text-base font-semibold text-vexo-fg">{name ? firstNameOnly(name) : username}</p>
-      <p className="text-caption text-vexo-muted">@{username}</p>
+    <div className="rounded-block border border-vexo-border bg-vexo-surface p-block" data-lead-card>
+      {name ? (
+        <>
+          <p className="text-base font-semibold text-vexo-fg">{firstNameOnly(name)}</p>
+          <p className="text-caption text-vexo-muted">@{username}</p>
+        </>
+      ) : (
+        <p className="text-base font-semibold text-vexo-fg">@{username}</p>
+      )}
       <div className="mt-2.5 flex items-center gap-2">
         {ready ? (
           <>
