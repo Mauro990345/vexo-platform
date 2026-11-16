@@ -144,6 +144,40 @@ sentido pra uma tela de configuração foram aplicados aqui:
   seções com contador tipo "Atrasados (N)", "Enviados (N)"/"Histórico (N)", tamanho de fonte de
   nome/@/telefone, avatar e selo do Instagram — nenhum desses elementos existe em Follow-up.
 
+## Fila de abordagem (1ª mensagem manual, pelo Instagram do celular)
+`/crm/abordagem` (preparação, só admin), `/crm/abordagem/[clinicId]/mensagens` e `/crm/abordagem/fila`
+(a tela principal, usada no celular) — ver `src/lib/approach-queue.ts`. Mobile-first de verdade, não
+só "funciona no celular": uma coluna só, centralizada em `max-w-[520px]` também no computador (nunca
+colunas lado a lado) — compacto e sem nenhum espaçamento grande de propósito, usando `Button`/`Card`/
+`rounded-control`/`rounded-block`/`control-x`/`control-y` (Etapa 2 da migração) em vez de qualquer
+classe solta nova.
+- **Bolinha de estado da conta** (linha de contas no topo da Fila): 4 estados, cada um reaproveitando
+  um token semântico já existente (nenhuma cor nova no projeto) — verde (`bg-vexo-success/25`) =
+  liberada; cinza (`bg-vexo-muted/20`) = aguardando (mostra o `m:ss` regressivo no lugar do contador);
+  dourado (`bg-vexo-warning/25`) = limite do dia atingido; cinza ESCURO (`bg-vexo-border`, mais sólido
+  que o cinza de aguardando, sem precisar de um token novo) = pausada. A distinção "cinza" vs "cinza
+  escuro" vem do PREENCHIMENTO (translúcido vs sólido) do mesmo par `vexo-muted`/`vexo-border`, não de
+  uma cor nova.
+- **Só o primeiro card de lead é ativo** (grande, com botão) — os outros 2 abaixo ficam esmaecidos
+  (`opacity-50`, só nome/@), igual ao padrão de itens "esmaecidos/recolhidos" já usado alhures no
+  Painel (grupo "Enviados (N)"). O botão "Enviar mensagem" (azul, `bg-vexo-accent`) ocupa a largura
+  toda; "Pular" é um botão pequeno de contorno ao lado, nunca do mesmo tamanho — discreto de propósito
+  (pedido explícito: evitar toque errado).
+- **Espera (3-5min, sorteada a cada envio)**: o botão do card ativo vira cinza/desativado
+  ("Aguarde m:ss") — nunca some, só desativa, mesmo padrão visual de qualquer botão `disabled` do
+  projeto (`bg-vexo-surface2`/`text-vexo-muted`). O `m:ss` é recalculado no cliente a cada segundo a
+  partir de um timestamp absoluto (`lockedUntil`, vindo do servidor) — nunca um contador decrescente
+  "cru" no estado local, que dessincronizaria ao trocar de aba/aparelho.
+- **Fora do horário (7h-20h, São Paulo)**: tela inteira substituída por um aviso só (`Card` com texto
+  centralizado) — nenhuma conta nem card aparece, igual ao "não mostrar nada além disso" pedido
+  explicitamente (sem totais, sem lista de próximos, sem texto de origem do lead).
+- **Tela de preparação**: linha compacta por clínica (checkbox + nome/@ + campo numérico pequeno de
+  limite + link "Mensagens") dentro de `rounded-control`/`border-vexo-border`/`bg-vexo-surface` —
+  mesmo visual de linha de lista já usado em `ClinicSearchList.tsx`, só com os controles extras que
+  esta tela precisa. Link "Mensagens" em `text-vexo-warning` (não `text-vexo-accent`) quando a clínica
+  ainda não tem nenhuma mensagem cadastrada — mesmo princípio semântico do ponto âmbar de
+  "needsReconnect" (chama atenção pra uma pendência, sem usar vermelho/rosa).
+
 ## Relatório de resultados (quinzenal/mensal) — envio automático por WhatsApp
 Nova tela, administrada pela página "Contas" (`/crm`, só admin — ver DESIGN.md/CLAUDE.md,
 `ClinicReportPanel.tsx`/`report-actions.ts`). Mesmos tokens/componentes de sempre, nenhuma cor solta:

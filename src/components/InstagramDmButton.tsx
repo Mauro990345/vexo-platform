@@ -3,38 +3,10 @@
 import { useState } from "react";
 import { InstagramGlyphIcon } from "@/components/BrandIcons";
 import { INSTAGRAM_ACTION_BUTTON_CLASS } from "@/components/ReactivationActionButtonStyle";
+import { copyToClipboard } from "@/lib/clipboard";
 
 const LABEL_RESET_DELAY_MS = 2000;
 const TOAST_DURATION_MS = 2500;
-
-// Fallback de clipboard: navigator.clipboard.writeText pode falhar (sem
-// permissão, contexto não-seguro, navegador antigo) — document.execCommand
-// ("copy") via um textarea temporário é o método antigo que ainda funciona
-// nesses casos.
-async function copyToClipboard(text: string): Promise<boolean> {
-  if (navigator.clipboard?.writeText) {
-    try {
-      await navigator.clipboard.writeText(text);
-      return true;
-    } catch {
-      // cai pro fallback abaixo
-    }
-  }
-  try {
-    const textarea = document.createElement("textarea");
-    textarea.value = text;
-    textarea.style.position = "fixed";
-    textarea.style.opacity = "0";
-    document.body.appendChild(textarea);
-    textarea.focus();
-    textarea.select();
-    const ok = document.execCommand("copy");
-    document.body.removeChild(textarea);
-    return ok;
-  } catch {
-    return false;
-  }
-}
 
 // Botão "Instagram" da faixa de Reativação (ver ReactivationRail.tsx) — um
 // clique faz DUAS coisas: copia a mensagem sugerida pra área de
