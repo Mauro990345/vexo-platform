@@ -205,8 +205,7 @@ export default function HomePage() {
           Da captação ao agendamento, <span className="text-vexo-pubAccent">a gente faz tudo por você.</span>
         </h1>
         <p className="mx-auto mt-5 max-w-[560px] text-[15px] leading-relaxed text-vexo-pubFg2">
-          O VEXO IA faz a geração de demanda da clínica e substitui gestor de tráfego, campanhas, CRC e SDR em um só fluxo. Ele
-          atende o paciente, agenda, confirma e traz de volta quem sumiu. Sua equipe só atende.
+          O VEXO IA faz a geração de demanda, atende, agenda e traz de volta quem sumiu. Sua equipe só atende.
         </p>
         <div className="mt-7 flex flex-col items-center justify-center gap-3 sm:flex-row">
           <Link

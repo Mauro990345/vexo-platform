@@ -200,7 +200,7 @@ describe("página inicial — ajustes de design e conteúdo (2ª rodada)", () =>
 
   it("diz O QUE o VEXO faz, nunca COMO: sem canal por função, sem quem faz a primeira mensagem, sem regra de reativação", () => {
     const h = html();
-    expect(h).toContain("Ele atende o paciente, agenda, confirma e traz de volta quem sumiu. Sua equipe só atende.");
+    expect(h).toContain("O VEXO IA faz a geração de demanda, atende, agenda e traz de volta quem sumiu. Sua equipe só atende.");
     for (const forbidden of [
       /pelo WhatsApp/i,
       /no Instagram e no WhatsApp/i,
