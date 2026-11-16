@@ -642,3 +642,37 @@ que a tela Configurações sobrescreve. Nunca "M8 Growth" nessas páginas.
     - **Celular**: inalterado — uma coluna só (sem `items-stretch` fazendo efeito, já que cada box
       ocupa a linha inteira sozinho), chips novos aparecem com a mesma quebra de linha de sempre,
       sem rolagem horizontal (testado 390/360px).
+  - **Depois — respiro interno (rodada seguinte à de cima)**: a rodada anterior tinha comprimido o
+    espaçamento interno do box "Depois" pra bater a altura com o "Antes" — ficou com aparência
+    sufocada. Correção: inverte a lógica, abrindo mais espaço (não menos) e compensando com um
+    corte de texto em vez de um corte de espaçamento.
+    - **Texto ~8–12% menor** (só a partir de 900px, `globals.css`): título (`.pub-after-title`,
+      18→16px), balões do chat e título do cartão "Avaliação agendada" (`.pub-after-chat`,
+      14→12.5px, herdado pelos filhos sem classe de tamanho própria), subtítulo do cartão
+      (`.pub-after-card-sub`, 12→11px), chips finais (`.pub-after-tag`, 12→11px) e "Exemplo
+      ilustrativo" (`.pub-after-example`, 11→10px) — cada um com `line-height` reduzido junto
+      (Tailwind `text-sm`/`text-xs`/`text-lg` fixam `line-height` em par com o `font-size`; só
+      trocar o `font-size` no override não encolhe a caixa da linha, teria de reduzir os dois).
+    - **Mais respiro** (mesmas classes `.pub-after*` de antes, valores maiores, não menores):
+      padding do bloco 16px/24px → 17px/25px, espaço antes do chat 10→12px, espaço entre balões
+      5→6px, padding vertical dos balões 4→5px, do cartão 6→7px, espaço até os chips finais
+      10→12px.
+    - **Altura final idêntica à rodada anterior (304.5px nas três larguras testadas), não por
+      coincidência**: o corte de texto (que reduz a altura) e o aumento de espaçamento (que
+      aumenta) foram ajustados em conjunto, medindo a cada tentativa com Playwright
+      (`getBoundingClientRect`) até os dois lados baterem de novo — o cálculo manual por si só
+      errou por ~20% na primeira tentativa (face ao `line-height` fixo do Tailwind, que não muda
+      só com o `font-size`), só a medição real pegou isso.
+    - **`.pub-after` ganhou `flex flex-col justify-between`** (no JSX, não só no CSS — vale em
+      qualquer largura, mas só tem efeito visível a partir de 900px, quando `items-stretch` pode
+      esticar o box): qualquer folga entre a altura calculada do conteúdo e a altura do box
+      "Antes" ao lado vira espaço extra DISTRIBUÍDO ENTRE os 3 blocos (cabeçalho, chat, chips) em
+      vez de sobrar como vazio só embaixo — mesmo princípio do `content-between` do box "Antes",
+      e a rede de segurança que evita depender de acertar o pixel exato na mão.
+    - **Bolha azul (IA) sem canto pontiagudo**: tinha `rounded-br-[6px]` (canto inferior direito
+      pequeno, estilo "rabinho" de chat) — removido, ficou só `rounded-[18px]` nos quatro cantos,
+      em qualquer largura de tela (defeito visual, não ajuste de desktop). As bolhas da esquerda
+      mantêm o `rounded-bl-[6px]` (não reclamado, deixado como estava). Confirmado sem corte por
+      `overflow-hidden` de nenhum ancestral, e com a margem até a borda direita do box igual à
+      margem das bolhas da esquerda até a borda esquerda (ambas vêm do mesmo padding simétrico do
+      `.pub-after`).
