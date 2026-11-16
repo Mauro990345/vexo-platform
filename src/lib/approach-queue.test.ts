@@ -6,6 +6,9 @@ import {
   resolveApproachUploadRows,
   parseApproachUsernamesTxt,
   isWithinApproachHours,
+  formatApproachWindowLabel,
+  parseApproachTimeToMinutes,
+  validateApproachWindow,
   startOfApproachDay,
   randomApproachWaitMs,
   formatApproachCountdown,
@@ -71,15 +74,41 @@ describe("resolveApproachUploadRows", () => {
       { username: "@ciclana.ig", name: "Ciclana" },
     ]);
   });
-  it("sem cabeçalho reconhecido, assume 1ª coluna = usuário, 2ª = nome", () => {
+  it("sem cabeçalho reconhecido, trata como lista de @ (1ª coluna, sem nome) — inclusive a 1ª linha", () => {
     const rows = [
       ["fulano.ig", "Fulano"],
       ["ciclana.ig", "Ciclana"],
     ];
     expect(resolveApproachUploadRows(rows)).toEqual([
-      { username: "fulano.ig", name: "Fulano" },
-      { username: "ciclana.ig", name: "Ciclana" },
+      { username: "fulano.ig", name: null },
+      { username: "ciclana.ig", name: null },
     ]);
+  });
+  it("regressão: um @ real contendo 'user'/'nome' como pedaço do texto NUNCA é tratado como cabeçalho (match é sempre exato, nunca substring)", () => {
+    // Bug real: 3 leads enviados, só 1 chegou na fila — a 1ª linha
+    // ("novo_user_99") "continha" a palavra "user" e era descartada como
+    // se fosse um cabeçalho, levando junto a 2ª linha (slice(1) também
+    // cortava o 2º @ de verdade).
+    const rows = [["novo_user_99"], ["bom.nome.aqui"], ["terceiro.perfil"]];
+    expect(resolveApproachUploadRows(rows)).toEqual([
+      { username: "novo_user_99", name: null },
+      { username: "bom.nome.aqui", name: null },
+      { username: "terceiro.perfil", name: null },
+    ]);
+  });
+  it("variações de cabeçalho aceitas: handle / full_name / nome completo", () => {
+    const rows = [
+      ["handle", "nome completo"],
+      ["fulano.ig", "Fulano Silva"],
+    ];
+    expect(resolveApproachUploadRows(rows)).toEqual([{ username: "fulano.ig", name: "Fulano Silva" }]);
+  });
+  it("variação de cabeçalho: user_name / full_name (com underscore)", () => {
+    const rows = [
+      ["user_name", "full_name"],
+      ["fulano.ig", "Fulano Silva"],
+    ];
+    expect(resolveApproachUploadRows(rows)).toEqual([{ username: "fulano.ig", name: "Fulano Silva" }]);
   });
   it("só uma coluna (sem nome) — nome fica null", () => {
     const rows = [["usuario"], ["fulano.ig"], ["ciclana.ig"]];
@@ -126,6 +155,44 @@ describe("isWithinApproachHours (7h-20h, São Paulo = UTC-3)", () => {
   });
   it("madrugada (03:00 UTC = meia-noite em São Paulo) — fora", () => {
     expect(isWithinApproachHours(new Date("2026-01-15T03:00:00Z"))).toBe(false);
+  });
+});
+
+describe("isWithinApproachHours — janela configurável (minutos)", () => {
+  it("janela 7h30-19h45: 7h29 fora, 7h30 dentro, 19h44 dentro, 19h45 fora", () => {
+    const start = 7 * 60 + 30;
+    const end = 19 * 60 + 45;
+    expect(isWithinApproachHours(new Date("2026-01-15T10:29:00Z"), start, end)).toBe(false); // 7h29 SP
+    expect(isWithinApproachHours(new Date("2026-01-15T10:30:00Z"), start, end)).toBe(true); // 7h30 SP
+    expect(isWithinApproachHours(new Date("2026-01-15T22:44:00Z"), start, end)).toBe(true); // 19h44 SP
+    expect(isWithinApproachHours(new Date("2026-01-15T22:45:00Z"), start, end)).toBe(false); // 19h45 SP
+  });
+});
+
+describe("formatApproachWindowLabel", () => {
+  it("horas exatas: 'Xh às Yh'", () => {
+    expect(formatApproachWindowLabel(7 * 60, 20 * 60)).toBe("7h às 20h");
+  });
+  it("com minutos: 'Xh30 às Yh45'", () => {
+    expect(formatApproachWindowLabel(7 * 60 + 30, 19 * 60 + 45)).toBe("7h30 às 19h45");
+  });
+});
+
+describe("parseApproachTimeToMinutes / validateApproachWindow", () => {
+  it("converte HH:MM em minutos desde a meia-noite", () => {
+    expect(parseApproachTimeToMinutes("07:00", "Horário inicial")).toBe(420);
+    expect(parseApproachTimeToMinutes("20:30", "Horário final")).toBe(1230);
+  });
+  it("formato inválido lança erro", () => {
+    expect(() => parseApproachTimeToMinutes("25h", "Horário inicial")).toThrow();
+    expect(() => parseApproachTimeToMinutes("25:00", "Horário inicial")).toThrow();
+  });
+  it("início < fim é válido", () => {
+    expect(() => validateApproachWindow(420, 1200)).not.toThrow();
+  });
+  it("início >= fim é inválido", () => {
+    expect(() => validateApproachWindow(1200, 420)).toThrow();
+    expect(() => validateApproachWindow(600, 600)).toThrow();
   });
 });
 
@@ -234,5 +301,18 @@ describe("computeApproachAccountState", () => {
   });
   it("liberada (sem nenhuma trava)", () => {
     expect(computeApproachAccountState({ now: INSIDE_HOURS, paused: false, dailyLimit: 60, sentToday: 5, lockedUntil: null })).toEqual({ kind: "READY" });
+  });
+  it("janela customizada: 11h (INSIDE_HOURS) fica fora se a janela salva for só 13h-18h", () => {
+    expect(
+      computeApproachAccountState({
+        now: INSIDE_HOURS,
+        paused: false,
+        dailyLimit: 60,
+        sentToday: 0,
+        lockedUntil: null,
+        windowStartMinute: 13 * 60,
+        windowEndMinute: 18 * 60,
+      })
+    ).toEqual({ kind: "OUTSIDE_HOURS" });
   });
 });

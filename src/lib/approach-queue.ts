@@ -78,42 +78,64 @@ export function parseCsvRows(text: string): string[][] {
   return rows.filter((r) => r.some((cell) => cell.trim().length > 0));
 }
 
-const USERNAME_HEADER_HINTS = ["usuario", "usuário", "username", "user", "instagram", "@", "handle", "perfil", "conta"];
-const NAME_HEADER_HINTS = ["nome", "name"];
+// Comparados DEPOIS de normalizeHeaderCell (minúsculo, sem acento, sem
+// pontuação/espaço/underscore) — "Usuário", "USER NAME" e "user_name" todos
+// viram formas comparáveis aqui. Lista pedida explicitamente: @ / username /
+// user / usuário / usuario / handle (coluna de @) e name / nome / full_name /
+// fullname / nome completo (coluna de nome).
+const USERNAME_HEADER_TOKENS = new Set(["usuario", "username", "user", "handle", "instagram", "perfil", "conta"]);
+const NAME_HEADER_TOKENS = new Set(["nome", "name", "fullname", "nomecompleto"]);
 
 function normalizeHeaderCell(cell: string): string {
   return cell
     .trim()
     .toLowerCase()
     .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "");
+    .replace(/[̀-ͯ]/g, "") // acentos
+    .replace(/[^a-z0-9]/g, ""); // espaço/underscore/pontuação — "full_name"/"nome completo" -> "fullname"/"nomecompleto"
 }
 
-// Linhas de tabela (CSV ou XLSX, já extraídas como células) → lista de
-// {username, name}. Detecta as colunas pelo CABEÇALHO (1ª linha) quando
-// algum título bate com os termos conhecidos; sem bater nenhum, assume a
-// 1ª coluna = usuário e a 2ª (se houver) = nome — não existe "origem"
-// (seguidor/curtiu/comentou) pra detectar, pedido explícito: todos os leads
+// Igualdade EXATA (nunca .includes/substring) — essencial: um @ real de
+// lead pode conter por acaso um pedaço de uma das palavras-chave (ex.: um
+// username como "novo_user_99" contém "user"), e um match por substring
+// tratava essa 1ª linha de dados como se fosse cabeçalho, descartando um
+// lead de verdade silenciosamente (bug real encontrado em produção — 3
+// leads enviados, só 1 chegou na fila). Comparar a célula INTEIRA (já
+// normalizada) contra o conjunto de tokens conhecidos elimina esse falso
+// positivo por completo.
+function isUsernameHeaderCell(cell: string): boolean {
+  if (cell.trim() === "@") return true; // normalizeHeaderCell tira todo não-alfanumérico, "@" sozinho viraria "" e nunca bateria
+  return USERNAME_HEADER_TOKENS.has(normalizeHeaderCell(cell));
+}
+
+function isNameHeaderCell(cell: string): boolean {
+  return NAME_HEADER_TOKENS.has(normalizeHeaderCell(cell));
+}
+
+// Linhas de tabela (CSV, já extraída como células) → lista de
+// {username, name}. Detecta as colunas pelo CABEÇALHO (1ª linha) só quando
+// alguma célula bate EXATAMENTE com um token conhecido (ver matchesAnyToken
+// acima). SEM header reconhecido, trata o arquivo inteiro (inclusive a 1ª
+// linha) como uma lista simples de @ — 1ª coluna de cada linha, sem nome
+// nenhum (pedido explícito: "se o arquivo não tiver cabeçalho, trate como
+// lista de @, um por linha") — nunca tenta adivinhar uma 2ª coluna como
+// nome nesse caso, pra não arriscar sacrificar a 1ª linha de novo. Não
+// existe "origem" (seguidor/curtiu/comentou) pra detectar — todos os leads
 // são iguais.
 export function resolveApproachUploadRows(rows: string[][]): ApproachUploadRow[] {
   if (rows.length === 0) return [];
 
-  const header = rows[0]!.map(normalizeHeaderCell);
-  let usernameCol = header.findIndex((h) => USERNAME_HEADER_HINTS.some((hint) => h.includes(hint)));
-  let nameCol = header.findIndex((h) => NAME_HEADER_HINTS.some((hint) => h.includes(hint)));
+  const header = rows[0]!;
+  const usernameCol = header.findIndex(isUsernameHeaderCell);
   const headerMatched = usernameCol !== -1;
+  const nameCol = headerMatched ? header.findIndex(isNameHeaderCell) : -1;
 
-  let dataRows = rows;
-  if (headerMatched) {
-    dataRows = rows.slice(1);
-  } else {
-    usernameCol = 0;
-    nameCol = rows[0]!.length > 1 ? 1 : -1;
-  }
+  const dataRows = headerMatched ? rows.slice(1) : rows;
+  const col = headerMatched ? usernameCol : 0;
 
   const result: ApproachUploadRow[] = [];
   for (const cells of dataRows) {
-    const usernameRaw = cells[usernameCol]?.trim();
+    const usernameRaw = cells[col]?.trim();
     if (!usernameRaw) continue;
     const nameRaw = nameCol !== -1 ? cells[nameCol]?.trim() : undefined;
     result.push({ username: usernameRaw, name: nameRaw || null });
@@ -131,22 +153,66 @@ export function parseApproachUsernamesTxt(text: string): ApproachUploadRow[] {
 }
 
 // ---------------------------------------------------------------------------
-// Horário permitido (7h-20h, São Paulo) + zerar à meia-noite
+// Horário permitido (configurável — padrão 7h-20h, São Paulo) + zerar à
+// meia-noite
 // ---------------------------------------------------------------------------
 
-export const APPROACH_WINDOW_START_HOUR = 7;
-export const APPROACH_WINDOW_END_HOUR = 20;
+// Padrão até o admin salvar outro valor na tela de Preparação (ver
+// ApproachWindowSettings, singleton igual a FollowUpSettings) — minutos
+// desde a meia-noite, mesma convenção de FollowUpSettings.windowStart/EndMinute.
+export const DEFAULT_APPROACH_WINDOW_START_MINUTE = 7 * 60; // 07:00
+export const DEFAULT_APPROACH_WINDOW_END_MINUTE = 20 * 60; // 20:00
 
-function saoPauloHour(now: Date): number {
+function saoPauloMinuteOfDay(now: Date): number {
   const shifted = new Date(now.getTime() - SAO_PAULO_UTC_OFFSET_HOURS * 60 * 60 * 1000);
-  return shifted.getUTCHours();
+  return shifted.getUTCHours() * 60 + shifted.getUTCMinutes();
 }
 
-// [7h, 20h) em São Paulo — às 20h em ponto já está fora (pedido explícito:
-// "das 7h às 20h").
-export function isWithinApproachHours(now: Date): boolean {
-  const hour = saoPauloHour(now);
-  return hour >= APPROACH_WINDOW_START_HOUR && hour < APPROACH_WINDOW_END_HOUR;
+// [startMinute, endMinute) em São Paulo — no minuto exato do fim já está
+// fora (pedido explícito, mesma convenção semiaberta usada em todo o
+// sistema, ver report-period.ts). Vale pra TODAS as clínicas — um horário
+// só, nunca por clínica (ver UI em AbordagemPrepView.tsx).
+export function isWithinApproachHours(
+  now: Date,
+  startMinute: number = DEFAULT_APPROACH_WINDOW_START_MINUTE,
+  endMinute: number = DEFAULT_APPROACH_WINDOW_END_MINUTE
+): boolean {
+  const minute = saoPauloMinuteOfDay(now);
+  return minute >= startMinute && minute < endMinute;
+}
+
+function formatApproachClockTime(minute: number): string {
+  const h = Math.floor(minute / 60);
+  const m = minute % 60;
+  return m === 0 ? `${h}h` : `${h}h${String(m).padStart(2, "0")}`;
+}
+
+// "7h às 20h" / "7h30 às 19h45" — rótulo do aviso "Fora do horário" na
+// Fila, sempre a partir do valor salvo (nunca um texto fixo, pedido
+// explícito desta rodada).
+export function formatApproachWindowLabel(startMinute: number, endMinute: number): string {
+  return `${formatApproachClockTime(startMinute)} às ${formatApproachClockTime(endMinute)}`;
+}
+
+// "HH:MM" (valor de <input type="time">) -> minutos desde a meia-noite —
+// mesmo formato/validação de parseTimeToMinutes (follow-up/actions.ts),
+// cópia própria aqui pra poder validar o par start<end sem depender de
+// Prisma (ver validateApproachWindow abaixo).
+export function parseApproachTimeToMinutes(value: string, label: string): number {
+  const match = /^(\d{1,2}):(\d{2})$/.exec(value);
+  if (!match) throw new Error(`${label} inválido — use o formato HH:MM.`);
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (hours > 23 || minutes > 59) throw new Error(`${label} inválido.`);
+  return hours * 60 + minutes;
+}
+
+// Valida o par (início < fim) — pedido explícito. Lançado tanto da UI de
+// Preparação quanto reutilizável em teste sem precisar montar um FormData.
+export function validateApproachWindow(startMinute: number, endMinute: number): void {
+  if (startMinute >= endMinute) {
+    throw new Error("O horário inicial precisa ser antes do horário final.");
+  }
 }
 
 // Início do dia civil em São Paulo (00:00 BRT) — mesmo deslocamento fixo de
@@ -244,8 +310,10 @@ export function computeApproachAccountState(params: {
   dailyLimit: number;
   sentToday: number;
   lockedUntil: Date | null;
+  windowStartMinute?: number;
+  windowEndMinute?: number;
 }): ApproachAccountState {
-  if (!isWithinApproachHours(params.now)) return { kind: "OUTSIDE_HOURS" };
+  if (!isWithinApproachHours(params.now, params.windowStartMinute, params.windowEndMinute)) return { kind: "OUTSIDE_HOURS" };
   if (params.paused) return { kind: "PAUSED" };
   if (params.sentToday >= params.dailyLimit) return { kind: "LIMIT_REACHED" };
   if (params.lockedUntil && params.lockedUntil.getTime() > params.now.getTime()) {

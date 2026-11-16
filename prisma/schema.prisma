@@ -1637,6 +1637,20 @@ model ApproachQueueItem {
   @@index([clinicId, status, createdAt])
 }
 
+// Horário permitido da Fila — GLOBAL (vale pra todas as clínicas, nunca por
+// clínica, pedido explícito), singleton igual a FollowUpSettings (mesmo
+// `id` fixo "singleton", mesma convenção de minutos desde a meia-noite em
+// Brasília). Padrão 7h-20h (420/1200) até o admin salvar outro valor na
+// tela de Preparação; ver validateApproachWindow/isWithinApproachHours,
+// approach-queue.ts.
+model ApproachWindowSettings {
+  id          String @id @default("singleton")
+  startMinute Int    @default(420)
+  endMinute   Int    @default(1200)
+
+  updatedAt DateTime @updatedAt
+}
+
 // Fotos de resultado (antes/depois) cadastradas por clínica, cada uma com
 // uma categoria/tag livre (ex: "botox", "preenchimento labial") — a IA
 // busca por categoria e anexa numa resposta quando o lead demonstra

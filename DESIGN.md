@@ -178,6 +178,37 @@ classe solta nova.
   ainda não tem nenhuma mensagem cadastrada — mesmo princípio semântico do ponto âmbar de
   "needsReconnect" (chama atenção pra uma pendência, sem usar vermelho/rosa).
 
+### Fila de abordagem — rodada 2 (bug de 3 cards, sem nome, layout limpo, horário configurável)
+- **Bug real corrigido — só 1 card em vez de 3**: a detecção de cabeçalho do CSV comparava cada
+  célula por SUBSTRING (`.includes("user")` etc.) contra os termos conhecidos. Um @ de verdade podia
+  "conter" um desses termos por acaso (ex.: `novo_user_99` contém "user") — a 1ª linha do arquivo era
+  então tratada como cabeçalho e descartada (`slice(1)`), levando embora um lead de verdade junto.
+  Corrigido em `resolveApproachUploadRows` (approach-queue.ts): a comparação agora é SEMPRE EXATA (a
+  célula inteira, já normalizada — minúsculo, sem acento, sem espaço/underscore/pontuação — precisa
+  bater com um dos termos, nunca conter um pedaço). Sem nenhuma célula batendo exatamente, o arquivo
+  inteiro (inclusive a 1ª linha) vira uma lista simples de @ — 1ª coluna de cada linha, sem nome
+  nenhum (pedido explícito: "se não tiver cabeçalho, trate como lista de @"). Termos aceitos:
+  `@`/`usuario`/`username`/`user`/`handle` (coluna de @) e `nome`/`name`/`full_name`/`nome completo`
+  (coluna de nome) — comparação já tolera `_`/espaço (`full_name` e `nome completo` normalizam pro
+  mesmo token).
+- **Lead sem nome (caso comum — a lista só traz o @)**: o card mostra SÓ o `@usuario` em destaque,
+  nunca repetido numa 2ª linha embaixo (bug visual corrigido — antes o @ aparecia duas vezes). Com
+  nome, primeiro nome em destaque + `@usuario` embaixo, como antes. Vale pro card ativo (grande) e
+  pros 2 esmaecidos.
+- **Tela da Fila sem o cabeçalho/abas do Painel**: `/crm/abordagem/fila` saiu de dentro do grupo de
+  rotas `(global)` (que aplica o `AppShell` — cabeçalho + sidebar/abas) pra uma pasta irmã
+  `crm/abordagem/fila/` (fora do grupo, mesma URL — grupos de rota do Next.js não entram na URL, só
+  decidem qual layout se aplica). Sem nenhum `layout.tsx` próprio nessa pasta, a página herda só o
+  layout mais básico (`crm/layout.tsx`, que só garante sessão, sem chrome nenhum) — assim, a tela some
+  com o cabeçalho e as abas, sobrando só o link pequeno "← Preparação" que a própria tela desenha. As
+  telas de Preparação e Mensagens continuam dentro de `(global)` normalmente (ninguém reclamou delas).
+- **Horário permitido configurável**: antes fixo no código (7h-20h); agora um singleton global
+  (`ApproachWindowSettings`, mesmo padrão exato de `FollowUpSettings` — um `id` fixo "singleton",
+  minutos desde a meia-noite em Brasília/São Paulo) editado na tela de Preparação com o MESMO modelo
+  visual do "Horário inicial/final" do Follow-up (`<input type="time">` Das/às + botão Salvar,
+  validando início < fim). Vale pra todas as clínicas (nunca por clínica). O aviso "Fora do horário"
+  na Fila usa `formatApproachWindowLabel` a partir do valor salvo, nunca mais um número fixo no texto.
+
 ## Relatório de resultados (quinzenal/mensal) — envio automático por WhatsApp
 Nova tela, administrada pela página "Contas" (`/crm`, só admin — ver DESIGN.md/CLAUDE.md,
 `ClinicReportPanel.tsx`/`report-actions.ts`). Mesmos tokens/componentes de sempre, nenhuma cor solta:

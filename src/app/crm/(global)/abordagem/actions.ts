@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireInternalSession } from "@/lib/session";
 import { buildInstagramDmLink } from "@/lib/reactivation";
+import { parseApproachTimeToMinutes, validateApproachWindow } from "@/lib/approach-queue";
 import {
   extractApproachRowsFromCsvText,
   parseApproachUsernamesTxt,
@@ -16,10 +17,13 @@ import {
   getApproachMessagesConfig,
   getApproachBoard,
   getApproachBoardAccount,
+  getApproachWindow,
+  setApproachWindow,
   sendNextApproachItem,
   undoLastApproachSend,
   skipApproachItem,
   type ApproachBoardAccount,
+  type ApproachWindow,
 } from "@/lib/approach-queue-db";
 
 // Admin só, por enquanto (ver comentário grande em UserRole.APPROACH_AGENT,
@@ -139,11 +143,30 @@ export async function getClinicNameAction(clinicId: string) {
   return clinic?.name ?? null;
 }
 
+// Horário permitido — GLOBAL, vale pra todas as clínicas (ver
+// ApproachWindowSettings/getApproachWindow, approach-queue-db.ts).
+export async function getApproachWindowAction(): Promise<ApproachWindow> {
+  await requireApproachAdmin();
+  return getApproachWindow();
+}
+
+export async function updateApproachWindowAction(formData: FormData) {
+  await requireApproachAdmin();
+  const startMinute = parseApproachTimeToMinutes(String(formData.get("windowStart") ?? ""), "Horário inicial");
+  const endMinute = parseApproachTimeToMinutes(String(formData.get("windowEnd") ?? ""), "Horário final");
+  validateApproachWindow(startMinute, endMinute);
+  await setApproachWindow(startMinute, endMinute);
+  revalidatePath(PREP_PATH);
+  revalidatePath(QUEUE_PATH);
+}
+
 // ---------------------------------------------------------------------------
 // Fila
 // ---------------------------------------------------------------------------
 
-export async function getApproachBoardAction(): Promise<ApproachBoardAccount[]> {
+export type ApproachBoard = { accounts: ApproachBoardAccount[]; window: ApproachWindow };
+
+export async function getApproachBoardAction(): Promise<ApproachBoard> {
   await requireApproachAdmin();
   return getApproachBoard(new Date());
 }
