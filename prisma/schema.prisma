@@ -18,6 +18,13 @@ enum UserRole {
   INTERNAL_ADMIN // Mauro / equipe M8 Growth — acesso total ao CRM
   INTERNAL_STAFF // secretária/atendente interna — acesso ao CRM
   CLIENT // login da clínica — painel somente leitura
+  // Reservado pro futuro: pessoa contratada que só vê a Fila de abordagem
+  // (/crm/abordagem/fila), e só das clínicas liberadas pra ela (ver
+  // ApproachAccess, abaixo). Nenhuma rota checa este valor ainda — hoje só
+  // INTERNAL_ADMIN/INTERNAL_STAFF acessam a Fila (requireInternalSession) —
+  // existe só pra não misturar com os outros papéis quando essa pessoa for
+  // contratada de verdade.
+  APPROACH_AGENT
 }
 
 model Clinic {
@@ -129,6 +136,10 @@ model Clinic {
   briefing              Briefing?
   reportConfig          ClinicReportConfig?
   reportDeliveries      ClinicReportDelivery[]
+  approachQueueConfig    ApproachQueueConfig?
+  approachMessagesConfig ApproachMessagesConfig?
+  approachQueueItems     ApproachQueueItem[]
+  approachAccess         ApproachAccess[]
 
   users           User[]
   leads           Lead[]
@@ -155,9 +166,29 @@ model User {
   clinicId String?
   clinic   Clinic? @relation(fields: [clinicId], references: [id], onDelete: Cascade)
 
+  approachAccess ApproachAccess[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([clinicId])
+}
+
+// Liberação por clínica pro papel APPROACH_AGENT (ver UserRole acima) — só
+// quem tem uma linha aqui pra aquela clínica deve enxergá-la na Fila.
+// INTERNAL_ADMIN/INTERNAL_STAFF nunca passam por aqui (já veem tudo via
+// requireInternalSession); esta tabela só importa pro papel novo, ainda sem
+// nenhuma rota lendo dela.
+model ApproachAccess {
+  id       String @id @default(cuid())
+  userId   String
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  clinicId String
+  clinic   Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([userId, clinicId])
   @@index([clinicId])
 }
 
@@ -1490,9 +1521,120 @@ model ApproachLog {
   loggedDate DateTime // data da abordagem (meia-noite, timezone da clínica)
   count      Int
 
+  // Linha criada automaticamente por um envio da Fila de abordagem (ver
+  // sendNextApproachItem, approach-queue.ts) — null pro lançamento manual
+  // de sempre (logApproach, crm/clinicas/actions.ts), que continua existindo
+  // à parte. Permite ao Desfazer (undoApproachSend) reverter exatamente
+  // esta linha (decrementar count, nunca mexer num lançamento manual).
+  approachQueueItem ApproachQueueItem?
+
   createdAt DateTime @default(now())
 
   @@index([clinicId, loggedDate])
+}
+
+// ---------------------------------------------------------------------------
+// Fila de abordagem (1ª mensagem manual, pelo Instagram do celular) — ver
+// DESIGN.md e src/lib/approach-queue.ts. Abordagem 100% manual: o VEXO
+// nunca envia nada sozinho pela API do Instagram, só organiza a fila,
+// sugere a mensagem (sorteada) e copia pra área de transferência + abre a
+// conversa no Instagram pro toque de "Enviar mensagem" (mesmo link
+// ig.me/m/<@>, ver buildInstagramDmLink em reactivation.ts).
+// ---------------------------------------------------------------------------
+
+// Configuração/estado por clínica — 1:1, sempre criada sob demanda
+// (upsert) na primeira vez que a clínica aparece na tela de preparação.
+model ApproachQueueConfig {
+  id       String @id @default(cuid())
+  clinicId String @unique
+  clinic   Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  dailyLimit Int @default(60) // "Limite por dia" da tela de preparação — ajustado clínica a clínica
+
+  // Checkbox "abordar agora" da tela de preparação — quais clínicas
+  // aparecem na Fila quando "Começar" é clicado. Persistido (não um estado
+  // só de navegação) pra sobreviver a troca de celular/computador.
+  activeInQueue Boolean @default(false)
+
+  paused Boolean @default(false) // "Pausar esta conta" / "Retomar conta"
+
+  // Horário em que a conta volta a ficar liberada pra enviar — preenchido a
+  // cada envio (ver sendNextApproachItem), nunca um contador na tela: o
+  // tempo restante (m:ss) é sempre recalculado a partir deste instante, o
+  // que permite trocar de celular/computador sem perder a espera em
+  // andamento. null = liberada agora (sujeito ainda a horário permitido/
+  // limite diário/pausa).
+  lockedUntil DateTime?
+
+  // Último slot de mensagem (1-5) sorteado — guardado só pra nunca repetir
+  // a mesma mensagem duas vezes seguidas (ver pickNextMessageSlot,
+  // approach-queue.ts). null antes do primeiro envio.
+  lastMessageSlot Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Até 5 mensagens prontas por clínica — 1:1, mesmo padrão de configuração
+// sob demanda de ApproachQueueConfig acima. message1-3 exigidas na tela de
+// Mensagens (pelo menos 1 precisa estar preenchida pra clínica aparecer na
+// Fila); message4-5 opcionais. Aceitam o placeholder "{nome}" (ver
+// fillApproachMessageTemplate, approach-queue.ts).
+model ApproachMessagesConfig {
+  id       String @id @default(cuid())
+  clinicId String @unique
+  clinic   Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  message1 String? @db.Text
+  message2 String? @db.Text
+  message3 String? @db.Text
+  message4 String? @db.Text
+  message5 String? @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum ApproachQueueItemStatus {
+  QUEUED // aguardando na fila, ainda não foi mostrado como card ativo
+  SENT // "Enviar mensagem" tocado — conta no Abordados, pode ser desfeito
+  SKIPPED // "Pular" tocado — sai da fila pra sempre, nunca conta, nunca volta
+}
+
+// Um lead na fila de abordagem de uma clínica — carregado pelo upload de
+// lista (CSV/XLSX/TXT, ver parseApproachUploadRows/parseApproachUsernamesTxt,
+// approach-queue.ts), NUNCA pelo webhook do Instagram (diferente de Lead,
+// que só existe depois de uma conversa real já ter começado — aqui é
+// exatamente o oposto, ainda ANTES de qualquer contato). Ordem da fila =
+// createdAt crescente entre os QUEUED da clínica (FIFO simples: novo lead
+// sempre entra no fim, nenhum campo de posição próprio necessário — ver
+// comentário grande em undoApproachSend sobre por que isso também resolve
+// "Desfazer volta pro topo" sem nenhuma lógica extra).
+model ApproachQueueItem {
+  id       String @id @default(cuid())
+  clinicId String
+  clinic   Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  username String // como foi digitado/importado (sem "@", preservando maiúsculas pra exibir)
+  // lower(username) — chave de deduplicação (ver dedupApproachUsernames,
+  // approach-queue.ts): nunca duas linhas com a mesma clinicId+usernameNormalized,
+  // mesmo que o upload tenha vindo com capitalização diferente.
+  usernameNormalized String
+  name               String? // opcional — vem da coluna de nome do upload, se houver
+
+  status ApproachQueueItemStatus @default(QUEUED)
+  sentAt DateTime?
+
+  // Linha de ApproachLog criada por ESTE envio (ver sendNextApproachItem) —
+  // null enquanto QUEUED/SKIPPED. Desfazer (undoApproachSend) apaga essa
+  // linha e volta este campo pra null junto com status->QUEUED.
+  approachLogId String?      @unique
+  approachLog   ApproachLog? @relation(fields: [approachLogId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+
+  @@unique([clinicId, usernameNormalized])
+  @@index([clinicId, status, createdAt])
 }
 
 // Fotos de resultado (antes/depois) cadastradas por clínica, cada uma com
