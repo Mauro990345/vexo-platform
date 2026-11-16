@@ -348,16 +348,21 @@ body {
   @apply bg-vexo-accent/40;
 }
 
-/* Página pública — bloco "Depois" (Antes/Depois) mais baixo SÓ no desktop
-   (>= 900px), reduzindo de forma uniforme padding do bloco, espaço antes
-   do chat, distância entre balões, padding vertical dos balões/card e
-   espaço até os chips finais ("Lembrete no dia anterior" etc). Fora das
-   @layer de propósito: precisa vencer os utilitários (p-5/sm:p-7, mt-5,
-   gap-2.5, py-2, p-3, mt-4) do mesmo elemento. Abaixo de 900px nada muda.
-   Rodada "Antes/Depois" (ver DESIGN.md): mais ~15-20% de corte em cima do
-   que já existia aqui, pra equilibrar com o box "Antes" ao lado (que
-   ganhou chips novos) — ambos saem com altura igual via items-stretch no
-   grid pai, não só visualmente parecida. */
+/* Página pública — bloco "Depois" (Antes/Depois) SÓ no desktop (>= 900px).
+   Fora das @layer de propósito: precisa vencer os utilitários (p-5/sm:p-7,
+   mt-5, gap-2.5, py-2, p-3, mt-4, text-xs, text-[11px]) do mesmo elemento.
+   Abaixo de 900px nada muda.
+   Rodada "respiro" (ver DESIGN.md): a rodada anterior tinha comprimido
+   demais o espaçamento pra bater a altura com o "Antes" — ficou
+   sufocado. Esta rodada inverte a lógica: MAIS espaço entre os blocos e
+   margem interna (não menos), compensado por um corte de ~8-12% no
+   tamanho do texto (título, balões, cartão, chips, "Exemplo ilustrativo")
+   em vez de apertar o espaçamento. `.pub-after` ganhou `flex flex-col
+   justify-between` no JSX (não só aqui): se a altura calculada do
+   conteúdo ficar um pouco menor que a do box "Antes" ao lado (altura
+   igual via items-stretch no grid pai), a folga é DISTRIBUÍDA ENTRE os 3
+   blocos (cabeçalho, chat, chips) em vez de sobrar como vazio embaixo —
+   mesmo princípio do `content-between` usado no box "Antes". */
 @media (min-width: 900px) {
   /* .pub-after.pub-after (não só .pub-after): o elemento também carrega a
      utilidade responsiva `sm:p-7` do Tailwind — mesma especificidade de
@@ -369,21 +374,39 @@ body {
      achado só comparando o CSS compilado de verdade (curl na folha
      servida pelo dev server), o código-fonte sozinho não mostra isso. */
   .pub-after.pub-after {
-    padding: 16px 24px;
+    padding: 17px 25px;
+  }
+  .pub-after-title {
+    font-size: 16px;
+    line-height: 26px;
   }
   .pub-after-chat {
-    margin-top: 10px;
-    gap: 5px;
+    margin-top: 12px;
+    gap: 6px;
+    font-size: 12.5px;
+    line-height: 18px;
   }
   .pub-after-bubble {
-    padding-top: 4px;
-    padding-bottom: 4px;
+    padding-top: 5px;
+    padding-bottom: 5px;
   }
   .pub-after-card {
-    padding-top: 6px;
-    padding-bottom: 6px;
+    padding-top: 7px;
+    padding-bottom: 7px;
+  }
+  .pub-after-card-sub {
+    font-size: 11px;
+    line-height: 14px;
+  }
+  .pub-after-tag {
+    font-size: 11px;
+    line-height: 14px;
+  }
+  .pub-after-example {
+    font-size: 10px;
+    line-height: 14px;
   }
   .pub-after-tags {
-    margin-top: 10px;
+    margin-top: 12px;
   }
 }

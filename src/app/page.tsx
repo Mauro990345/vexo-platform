@@ -264,13 +264,18 @@ export default function HomePage() {
           </div>
 
           {/* DEPOIS: conversa de exemplo → agendamento confirmado (tons de azul/neutro) */}
-          <div className="pub-after pub-glow-top rounded-pub-lg border p-5 sm:p-7" style={{ borderColor: "rgb(var(--pub-accent) / 0.34)" }}>
+          <div
+            className="pub-after pub-glow-top flex flex-col justify-between rounded-pub-lg border p-5 sm:p-7"
+            style={{ borderColor: "rgb(var(--pub-accent) / 0.34)" }}
+          >
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-[0.14em] text-vexo-pubAccent">
                   <VexoMark size={16} /> Depois
                 </p>
-                <h3 className="mt-2 text-lg font-semibold tracking-tight">Um fluxo só, do primeiro contato à consulta.</h3>
+                <h3 className="pub-after-title mt-2 text-lg font-semibold tracking-tight">
+                  Um fluxo só, do primeiro contato à consulta.
+                </h3>
               </div>
               <VexoLogo className="hidden shrink-0 opacity-90 sm:inline-flex" markSize={16} />
             </div>
@@ -279,7 +284,7 @@ export default function HomePage() {
               <p className="mr-auto max-w-[82%] pub-after-bubble rounded-[18px] rounded-bl-[6px] bg-vexo-pubEdge/[0.08] px-3.5 py-2 text-vexo-pubFg">
                 Oi! Queria saber como funciona a avaliação.
               </p>
-              <p className="pub-after-bubble pub-bubble-ai ml-auto max-w-[82%] rounded-[18px] rounded-br-[6px] px-3.5 py-2 text-white">
+              <p className="pub-after-bubble pub-bubble-ai ml-auto max-w-[82%] rounded-[18px] px-3.5 py-2 text-white">
                 Claro! Posso agendar uma avaliação para você. Prefere quinta às 14h ou sexta às 10h?
               </p>
               <p className="mr-auto max-w-[82%] pub-after-bubble rounded-[18px] rounded-bl-[6px] bg-vexo-pubEdge/[0.08] px-3.5 py-2 text-vexo-pubFg">
@@ -298,7 +303,7 @@ export default function HomePage() {
                 </LineIcon>
                 <div className="min-w-0 flex-1">
                   <p className="font-medium text-vexo-pubFg">Avaliação agendada</p>
-                  <p className="text-xs text-vexo-pubFg2">Quinta, 14h · confirmação enviada</p>
+                  <p className="pub-after-card-sub text-xs text-vexo-pubFg2">Quinta, 14h · confirmação enviada</p>
                 </div>
                 <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-vexo-pubAccent/15 px-2.5 py-1 text-xs font-medium text-vexo-pubAccent">
                   <Check size={13} strokeWidth={2.2} aria-hidden="true" /> Confirmada
@@ -308,11 +313,14 @@ export default function HomePage() {
 
             <div className="pub-after-tags mt-4 flex flex-wrap items-center gap-2">
               {["Lembrete no dia anterior", "Reativação programada"].map((tag) => (
-                <span key={tag} className="rounded-full border border-vexo-pubEdge/[0.12] bg-vexo-pubEdge/[0.04] px-3 py-1 text-xs text-vexo-pubFg2">
+                <span
+                  key={tag}
+                  className="pub-after-tag rounded-full border border-vexo-pubEdge/[0.12] bg-vexo-pubEdge/[0.04] px-3 py-1 text-xs text-vexo-pubFg2"
+                >
                   {tag}
                 </span>
               ))}
-              <span className="ml-auto text-[11px] text-vexo-pubMuted">Exemplo ilustrativo</span>
+              <span className="pub-after-example ml-auto text-[11px] text-vexo-pubMuted">Exemplo ilustrativo</span>
             </div>
           </div>
         </div>
