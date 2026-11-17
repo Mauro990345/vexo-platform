@@ -267,7 +267,7 @@ export function ClinicQueueCard({
         <button
           type="button"
           onClick={() => onSend(item)}
-          className={`shrink-0 whitespace-nowrap rounded-control bg-vexo-accent px-5 py-2 text-center text-body-sm font-medium text-vexo-accentFg transition hover:opacity-90 ${tapTargetClass}`}
+          className={`shrink-0 whitespace-nowrap rounded-control bg-vexo-accent px-5 py-1.5 text-center text-body-sm font-medium text-vexo-accentFg transition hover:opacity-90 ${tapTargetClass}`}
         >
           Enviar
         </button>
@@ -275,7 +275,7 @@ export function ClinicQueueCard({
         <button
           type="button"
           disabled
-          className="shrink-0 cursor-not-allowed whitespace-nowrap rounded-control bg-vexo-surface2 px-5 py-2 text-center text-body-sm font-medium text-vexo-muted"
+          className="shrink-0 cursor-not-allowed whitespace-nowrap rounded-control bg-vexo-surface2 px-5 py-1.5 text-center text-body-sm font-medium text-vexo-muted"
         >
           {reasonLabel ?? (effectivelyBatchPaused ? `Pausa ${formatApproachPauseCountdown(remaining)}` : `Aguarde ${formatApproachCountdown(remaining)}`)}
         </button>

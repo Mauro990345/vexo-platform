@@ -465,6 +465,17 @@ contagem nova) — pedido explícito: o botão "Enviar" não devia ter largura m
     recalculada no servidor, página `force-dynamic`) e depois de um upload de lista
     (`uploadApproachLeadsAction` já chama `revalidatePath` da Preparação).
 
+### Fila de abordagem — rodada 10 (botão "Enviar"/cinza mais baixos, ~34px)
+Ajuste fino só de altura sobre o card da rodada 9 (nenhuma lógica mudou). Padding vertical do
+botão (`py-2`, 8px) -> `py-1.5` (6px, escala padrão do Tailwind, já usada em outros botões do
+projeto) nos dois botões (azul "Enviar" e cinza dos estados de espera/pausa/limite/pausada/fora do
+horário) — a altura visual cai de ~38px pra ~34px, confirmada num teste real (Playwright). Nada
+mais muda: largura (`px-5`), letra (`text-body-sm`), cor (`bg-vexo-accent`/`bg-vexo-surface2`),
+cantos (`rounded-control`) e a área de toque ampliada (`::before` >= 44px, ver rodada 8) continuam
+exatamente iguais — a técnica do `::before` já usava `min-h-11` fixo, independente da altura
+visual do botão, então reduzir o padding não afeta a área tocável. Padding do card e espaço entre
+os cards (`px-block`/`py-block-y`/`space-y-2`) inalterados, por pedido explícito.
+
 ## Relatório de resultados (quinzenal/mensal) — envio automático por WhatsApp
 Nova tela, administrada pela página "Contas" (`/crm`, só admin — ver DESIGN.md/CLAUDE.md,
 `ClinicReportPanel.tsx`/`report-actions.ts`). Mesmos tokens/componentes de sempre, nenhuma cor solta:
