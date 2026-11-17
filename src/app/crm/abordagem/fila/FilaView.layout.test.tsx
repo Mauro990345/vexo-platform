@@ -29,6 +29,7 @@ function buildAccount(id: string, overrides: Partial<ApproachBoardAccount> = {})
     profilePictureUrl: null,
     dailyLimit: 60,
     sentToday: 3,
+    leadsRemaining: 320,
     state: { kind: "READY" },
     items: [{ id: `item-${id}`, username: `lead.${id}`, name: null, message: "Oi!", dmLink: `https://ig.me/m/lead.${id}` }],
     ...overrides,

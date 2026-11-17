@@ -218,6 +218,16 @@ describe("getApproachBoardAccount — atribuição de mensagem (ver ensureApproa
 
     expect(account?.profilePictureUrl).toBeNull();
   });
+
+  it("leadsRemaining conta só os QUEUED (não enviados, não pulados) — nunca confunde com sentToday", async () => {
+    approachQueueItemCountMock.mockImplementation(({ where }: { where: { status?: string } }) => Promise.resolve(where.status === "QUEUED" ? 320 : 7));
+
+    const account = await getApproachBoardAccount("clinic-1", NOW);
+
+    expect(account?.leadsRemaining).toBe(320);
+    expect(account?.sentToday).toBe(7);
+    expect(approachQueueItemCountMock).toHaveBeenCalledWith({ where: { clinicId: "clinic-1", status: "QUEUED" } });
+  });
 });
 
 describe("confirmApproachSend", () => {

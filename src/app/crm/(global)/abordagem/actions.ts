@@ -52,6 +52,10 @@ export async function listClinicsForPrep() {
       instagramAccount: { select: { igUsername: true } },
       approachQueueConfig: { select: { dailyLimit: true, activeInQueue: true, paused: true } },
       approachMessagesConfig: { select: { message1: true } },
+      // Quantos @ ainda faltam enviar (status QUEUED) — contagem filtrada
+      // da relação, resolvida numa query só pra todas as clínicas (ver
+      // DESIGN.md "Preparação — contador de leads restantes").
+      _count: { select: { approachQueueItems: { where: { status: "QUEUED" } } } },
     },
   });
   return clinics.map((c) => ({
@@ -62,6 +66,7 @@ export async function listClinicsForPrep() {
     activeInQueue: c.approachQueueConfig?.activeInQueue ?? false,
     paused: c.approachQueueConfig?.paused ?? false,
     hasMessages: Boolean(c.approachMessagesConfig?.message1),
+    leadsRemaining: c._count.approachQueueItems,
   }));
 }
 

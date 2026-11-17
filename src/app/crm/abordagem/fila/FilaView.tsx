@@ -232,7 +232,9 @@ export function ClinicQueueCard({
     <div className="flex items-center gap-2.5 rounded-block border border-vexo-border bg-vexo-surface px-block py-block-y" data-clinic-queue-card>
       <ClinicAvatar name={account.name} profilePictureUrl={account.profilePictureUrl} size="md" />
       <div className="min-w-0 flex-1">
-        <p className="truncate text-body-sm font-medium text-vexo-fg">{account.name}</p>
+        <p className="truncate text-body-sm font-medium text-vexo-fg">
+          {account.name} <span className="text-meta font-normal text-vexo-mutedLight">· {account.leadsRemaining}</span>
+        </p>
         {name ? (
           <p className="truncate text-meta text-vexo-muted">
             {firstNameOnly(name)} · @{username}
@@ -265,7 +267,7 @@ export function ClinicQueueCard({
         <button
           type="button"
           onClick={() => onSend(item)}
-          className={`min-w-cta-sm shrink-0 whitespace-nowrap rounded-control bg-vexo-accent px-8 py-2 text-center text-body-sm font-medium text-vexo-accentFg transition hover:opacity-90 ${tapTargetClass}`}
+          className={`shrink-0 whitespace-nowrap rounded-control bg-vexo-accent px-5 py-2 text-center text-body-sm font-medium text-vexo-accentFg transition hover:opacity-90 ${tapTargetClass}`}
         >
           Enviar
         </button>
@@ -273,7 +275,7 @@ export function ClinicQueueCard({
         <button
           type="button"
           disabled
-          className="min-w-cta-sm shrink-0 cursor-not-allowed whitespace-nowrap rounded-control bg-vexo-surface2 px-8 py-2 text-center text-body-sm font-medium text-vexo-muted"
+          className="shrink-0 cursor-not-allowed whitespace-nowrap rounded-control bg-vexo-surface2 px-5 py-2 text-center text-body-sm font-medium text-vexo-muted"
         >
           {reasonLabel ?? (effectivelyBatchPaused ? `Pausa ${formatApproachPauseCountdown(remaining)}` : `Aguarde ${formatApproachCountdown(remaining)}`)}
         </button>

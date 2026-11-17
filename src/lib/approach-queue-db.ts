@@ -222,6 +222,7 @@ export type ApproachBoardAccount = {
   profilePictureUrl: string | null;
   dailyLimit: number;
   sentToday: number;
+  leadsRemaining: number;
   state: ApproachAccountState;
   items: ApproachBoardItem[];
 };
@@ -230,6 +231,14 @@ export async function countApproachedToday(clinicId: string, now: Date): Promise
   return prisma.approachQueueItem.count({
     where: { clinicId, status: "SENT", sentAt: { gte: startOfApproachDay(now) } },
   });
+}
+
+// Quantos @ ainda faltam enviar nesta clínica (status QUEUED — não
+// enviado, não pulado; inclui o item ATIVO no card, que também é QUEUED
+// até o toque em "Enviar") — base do contador "N na fila" (ver DESIGN.md
+// "Preparação — contador de leads restantes").
+export async function countApproachQueueRemaining(clinicId: string): Promise<number> {
+  return prisma.approachQueueItem.count({ where: { clinicId, status: "QUEUED" } });
 }
 
 // Atribui (e PERSISTE) a mensagem sorteada pro item ATIVO (o primeiro da
@@ -279,9 +288,10 @@ export async function getApproachBoardAccount(clinicId: string, now: Date = new 
   });
   if (!clinic) return null;
 
-  const [config, sentToday, rawItems, resolvedWindow] = await Promise.all([
+  const [config, sentToday, leadsRemaining, rawItems, resolvedWindow] = await Promise.all([
     getOrCreateApproachQueueConfig(clinicId),
     countApproachedToday(clinicId, now),
+    countApproachQueueRemaining(clinicId),
     // Cada clínica participante tem sempre só 1 lead ativo na tela (o
     // próximo @ dela) — a fila de preparação pode ter mais itens atrás
     // dele, mas só o da frente aparece no board (ver DESIGN.md "3 cards").
@@ -326,6 +336,7 @@ export async function getApproachBoardAccount(clinicId: string, now: Date = new 
     profilePictureUrl: clinic.instagramAccount?.profilePictureUrl ?? null,
     dailyLimit: config.dailyLimit,
     sentToday,
+    leadsRemaining,
     state,
     items,
   };

@@ -434,6 +434,37 @@ iPhone 14 Pro Max (430×932) — ver `FilaView.layout.test.tsx`.
 - **Nome/@ longos**: continuam com `truncate` (uma linha, "…", nunca quebram o card nem empurram o
   botão) — já existia, só mudou de posição (agora dentro da linha horizontal).
 
+### Fila de abordagem — rodada 9 (botão "Enviar" mais compacto + contador de leads restantes)
+Ajuste fino sobre o card horizontal da rodada 8 (nenhuma lógica de envio mudou, só visual + 1
+contagem nova) — pedido explícito: o botão "Enviar" não devia ter largura mínima grande.
+- **Botão "Enviar" mais compacto**: a largura mínima nova da rodada 8 (`minWidth["cta-sm"]`,
+  116px) foi REMOVIDA — o token saiu do `tailwind.config.ts` (não ficou nenhum uso órfão). Padding
+  horizontal `px-8` (32px) -> `px-5` (20px, escala padrão do Tailwind) — o botão agora cresce só o
+  estritamente necessário pro texto (ex. "Fora do horário"), sem nenhuma largura "de reserva". A
+  altura (`py-2` + `text-body-sm`, ~38px visual) e a área de toque ampliada (`::before` >= 44px,
+  ver rodada 8) continuam exatamente iguais.
+- **Contador de leads restantes por clínica** (pedido explícito: "pra saber quando reabastecer a
+  lista") — conta `ApproachQueueItem` com `status: "QUEUED"` (nem enviado, nem pulado; inclui o
+  item ATIVO no card, que também é `QUEUED` até o toque em "Enviar"):
+  `countApproachQueueRemaining` (`approach-queue-db.ts`) pro board/card da Fila, e
+  `_count.approachQueueItems` (relação filtrada, resolvida numa query só pra todas as clínicas —
+  nenhum N+1) em `listClinicsForPrep` pra tela de Preparação.
+  - **Card da Fila**: o número aparece logo depois do nome da clínica, dentro do MESMO `<p>`
+    (`text-meta`/`text-vexo-mutedLight`, peso normal, nunca a cor de aviso) — ex. "Aura Clinic ·
+    320". Atualiza sozinho a cada envio/pulo/desfazer, junto com o `refreshBoard()` que a tela já
+    chama depois de qualquer ação (nenhum polling novo).
+  - **Tela de Preparação**: 2ª linha pequena (`text-meta`, 13px) embaixo do @ da clínica, dentro da
+    mesma `ClinicRow` compacta — "320 na fila · uns 5 dias" (`formatApproachDaysRemainingLabel`,
+    `approach-queue.ts`: dias = leads restantes ÷ limite por dia daquela clínica; acima de 3 dias
+    arredonda pra inteiro plural, "uns 5 dias"; entre 1 e 3 arredonda pra 1 casa decimal com
+    vírgula, singular, "uns 1,5 dia"; abaixo de 1, "menos de 1 dia"). Fila vazia é um caso próprio —
+    a linha mostra só "Fila vazia", nunca "0 na fila". Cor por nível de urgência
+    (`approachQueueLevel`, mesmos limiares da função de texto): `text-vexo-mutedLight` com 2 dias ou
+    mais; `text-vexo-warning` abaixo de 2 dias; `text-vexo-error` abaixo de 1 dia OU fila vazia —
+    tokens de cor já existentes no design system, nenhum novo. Atualiza ao abrir a tela (sempre
+    recalculada no servidor, página `force-dynamic`) e depois de um upload de lista
+    (`uploadApproachLeadsAction` já chama `revalidatePath` da Preparação).
+
 ## Relatório de resultados (quinzenal/mensal) — envio automático por WhatsApp
 Nova tela, administrada pela página "Contas" (`/crm`, só admin — ver DESIGN.md/CLAUDE.md,
 `ClinicReportPanel.tsx`/`report-actions.ts`). Mesmos tokens/componentes de sempre, nenhuma cor solta:
