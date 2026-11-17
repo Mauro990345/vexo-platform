@@ -136,4 +136,32 @@ describe("FilaView — 5 cards cabem na 1ª tela de um iPhone comum, sem rolar",
 
     await page.close();
   });
+
+  it("botão 'Enviar' tem ~34px de altura VISUAL (menor que antes), mesma largura de sempre", async () => {
+    const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+    await page.setContent(html);
+    await page.waitForTimeout(30);
+
+    const sendButtonBox = await page.getByRole("button", { name: "Enviar" }).first().boundingBox();
+    expect(sendButtonBox).not.toBeNull();
+    // ~34px pedido — aceita uma folga pequena pro cálculo de line-height do navegador.
+    expect(sendButtonBox!.height).toBeGreaterThanOrEqual(30);
+    expect(sendButtonBox!.height).toBeLessThanOrEqual(36);
+
+    await page.close();
+  });
+
+  it("botão cinza (desativado) tem a MESMA altura visual do botão azul", async () => {
+    const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+    await page.setContent(html);
+    await page.waitForTimeout(30);
+
+    const readyBox = await page.getByRole("button", { name: "Enviar" }).first().boundingBox();
+    const disabledBox = await page.locator("button[disabled]").first().boundingBox();
+    expect(readyBox).not.toBeNull();
+    expect(disabledBox).not.toBeNull();
+    expect(Math.abs(readyBox!.height - disabledBox!.height)).toBeLessThanOrEqual(1);
+
+    await page.close();
+  });
 });
