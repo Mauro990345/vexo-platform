@@ -7,6 +7,7 @@ import { processClinicReports } from "@/lib/clinic-reports";
 import { syncAllGoogleCalendars } from "@/lib/google-calendar-sync";
 import { backfillLeadInstagramUsernames } from "@/lib/lead-username-backfill";
 import { refreshLeadProfilePictures } from "@/lib/lead-profile-picture-backfill";
+import { refreshClinicProfilePictures } from "@/lib/clinic-profile-picture-backfill";
 import { processAttendanceConfirmationTimeouts } from "@/lib/conversation-pipeline";
 import { refreshAllInstagramTokens } from "@/lib/instagram-token-refresh";
 
@@ -26,6 +27,7 @@ const WEEKLY_SUMMARY_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
 const GOOGLE_CALENDAR_SYNC_INTERVAL_MS = 5 * 60 * 1000;
 const USERNAME_BACKFILL_INTERVAL_MS = 10 * 60 * 1000;
 const PROFILE_PICTURE_BACKFILL_INTERVAL_MS = 10 * 60 * 1000;
+const CLINIC_PROFILE_PICTURE_BACKFILL_INTERVAL_MS = 10 * 60 * 1000;
 const ATTENDANCE_CONFIRMATION_TIMEOUT_INTERVAL_MS = 3 * 60 * 1000;
 const CLINIC_REPORTS_INTERVAL_MS = 15 * 60 * 1000;
 const INSTAGRAM_TOKEN_REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1000;
@@ -154,6 +156,16 @@ cron.schedule("*/10 * * * *", () =>
 // (skip rápido, ver refreshLeadProfilePictures).
 cron.schedule("*/10 * * * *", () =>
   runSafely("refreshLeadProfilePictures", refreshLeadProfilePictures, PROFILE_PICTURE_BACKFILL_INTERVAL_MS)
+);
+
+// Foto de perfil da PRÓPRIA conta conectada (círculo da clínica, ver
+// ClinicAvatar.tsx) — MESMO padrão exato do job acima, só que pra
+// InstagramAccount.profilePictureUrl em vez de Lead.profilePictureUrl (ver
+// clinic-profile-picture-backfill.ts). Dataset bem menor (uma linha por
+// clínica, não por lead), mesma cadência de 10min por simplicidade — nunca
+// chega perto de qualquer rate limit com esse volume.
+cron.schedule("*/10 * * * *", () =>
+  runSafely("refreshClinicProfilePictures", refreshClinicProfilePictures, CLINIC_PROFILE_PICTURE_BACKFILL_INTERVAL_MS)
 );
 
 // Renovação do token de longa duração do Instagram (ver comentário grande

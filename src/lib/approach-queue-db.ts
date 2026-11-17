@@ -187,6 +187,7 @@ export type ApproachBoardAccount = {
   clinicId: string;
   name: string;
   igUsername: string | null;
+  profilePictureUrl: string | null;
   dailyLimit: number;
   sentToday: number;
   state: ApproachAccountState;
@@ -242,7 +243,7 @@ async function ensureApproachItemMessageAssigned(
 export async function getApproachBoardAccount(clinicId: string, now: Date = new Date(), window?: ApproachWindow): Promise<ApproachBoardAccount | null> {
   const clinic = await prisma.clinic.findUnique({
     where: { id: clinicId },
-    select: { id: true, name: true, instagramAccount: { select: { igUsername: true } } },
+    select: { id: true, name: true, instagramAccount: { select: { igUsername: true, profilePictureUrl: true } } },
   });
   if (!clinic) return null;
 
@@ -289,6 +290,7 @@ export async function getApproachBoardAccount(clinicId: string, now: Date = new 
     clinicId: clinic.id,
     name: clinic.name,
     igUsername: clinic.instagramAccount?.igUsername ?? null,
+    profilePictureUrl: clinic.instagramAccount?.profilePictureUrl ?? null,
     dailyLimit: config.dailyLimit,
     sentToday,
     state,

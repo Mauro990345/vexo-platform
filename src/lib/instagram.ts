@@ -811,6 +811,11 @@ export async function exchangeInstagramCode(code: string): Promise<{
   igUserId: string;
   igUsername?: string;
   tokenExpiresAt: Date;
+  // "profile_picture_url" pedido na MESMA chamada de /me que já lê
+  // id/username (passo 3 abaixo) — zero requisição extra. Null quando a
+  // conta não tem foto (perfil novo/vazio), nunca undefined, pra o
+  // chamador (callback OAuth) sempre ter um valor explícito pra gravar.
+  profilePictureUrl: string | null;
 }> {
   const clientId = process.env.META_INSTAGRAM_APP_ID;
   const clientSecret = process.env.META_APP_SECRET;
@@ -896,21 +901,49 @@ export async function exchangeInstagramCode(code: string): Promise<{
   // setInstagramWebhookIdAction em src/app/crm/clinicas/actions.ts e o
   // motivo de descarte visível em /crm/webhook-logs).
   const meRes = await fetch(
-    `${IG_GRAPH_BASE}/me?fields=id,username&access_token=${encodeURIComponent(longLivedToken)}`
+    `${IG_GRAPH_BASE}/me?fields=id,username,profile_picture_url&access_token=${encodeURIComponent(longLivedToken)}`
   );
   const meText = await meRes.text();
   const meId = extractIdField(meText, "id");
   if (!meId) {
     throw new Error(`Resposta de /me sem "id": ${meText}`);
   }
-  const meUsername = (JSON.parse(meText) as { username?: string }).username;
+  const meData = JSON.parse(meText) as { username?: string; profile_picture_url?: string };
 
   return {
     accessToken: longLivedToken,
     igUserId: meId,
-    igUsername: meUsername,
+    igUsername: meData.username,
     tokenExpiresAt,
+    profilePictureUrl: meData.profile_picture_url ?? null,
   };
+}
+
+// Refresh periódico (ver clinic-profile-picture-backfill.ts) — MESMA
+// convenção de getInstagramProfilePicture (foto do LEAD) logo abaixo, só
+// que pra conta PRÓPRIA da clínica (/me, não /{igScopedId}) e com o campo
+// "profile_picture_url" (nome do campo pro node de usuário do Instagram
+// Login, confirmado já em uso 3 linhas acima, em exchangeInstagramCode —
+// diferente de "profile_pic", usado pelo lookup de LEAD por IGSID).
+export async function getInstagramAccountProfilePicture(accessToken: string): Promise<string | null> {
+  const url = new URL(`${IG_GRAPH_BASE}/me`);
+  url.searchParams.set("fields", "profile_picture_url");
+  url.searchParams.set("access_token", accessToken);
+
+  return withRetry(
+    async () => {
+      const res = await fetch(url.toString());
+      if (!res.ok) {
+        const body = await res.text();
+        const message = `Falha ao buscar foto de perfil da conta (HTTP ${res.status}): ${body}`;
+        if (isRetryableMetaError(res.status, body)) throw new RetryableError(message);
+        throw new Error(message);
+      }
+      const data = (await res.json()) as { profile_picture_url?: string };
+      return data.profile_picture_url ?? null;
+    },
+    { label: "getInstagramAccountProfilePicture" }
+  );
 }
 
 // Renovação do token de longa duração — grant_type PRÓPRIO deste produto

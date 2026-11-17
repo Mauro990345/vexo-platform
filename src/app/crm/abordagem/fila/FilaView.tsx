@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState, useTransition } from "react";
 import { isWithinApproachHours, formatApproachCountdown, formatApproachWindowLabel } from "@/lib/approach-queue";
 import { copyToClipboard } from "@/lib/clipboard";
+import { ClinicAvatar } from "@/components/ClinicAvatar";
 import {
   getApproachBoardAction,
   confirmApproachSendAction,
@@ -16,14 +17,6 @@ import type { ApproachBoardAccount, ApproachBoardItem, ApproachWindow } from "@/
 const POLL_INTERVAL_MS = 15_000;
 const TICK_INTERVAL_MS = 1_000;
 const NOTICE_DURATION_MS = 3_000;
-
-function initialsOf(name: string): string {
-  const parts = name.trim().split(/\s+/);
-  return parts
-    .slice(0, 2)
-    .map((p) => p[0]?.toUpperCase() ?? "")
-    .join("");
-}
 
 function firstNameOnly(name: string): string {
   return name.trim().split(/\s+/)[0] ?? name;
@@ -228,7 +221,7 @@ function AccountChip({
       onClick={onSelect}
       className={`flex shrink-0 flex-col items-center gap-1.5 rounded-control px-2.5 py-2 text-center transition ${selected ? "bg-vexo-surface2" : ""}`}
     >
-      <span className={`flex h-12 w-12 items-center justify-center rounded-full text-base font-semibold ${circleClass}`}>{initialsOf(account.name)}</span>
+      <ClinicAvatar name={account.name} profilePictureUrl={account.profilePictureUrl} initialsClassName={circleClass} />
       <span className="max-w-[96px] truncate text-sm text-vexo-fg">{account.name}</span>
       <span className="text-meta text-vexo-muted">{subLabel}</span>
     </button>

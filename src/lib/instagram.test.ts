@@ -16,6 +16,8 @@ import {
   sendInstagramMessage,
   sendInstagramGenericTemplateCard,
   getInstagramConversationHistory,
+  getInstagramAccountProfilePicture,
+  exchangeInstagramCode,
 } from "@/lib/instagram";
 import { encryptToken } from "@/lib/crypto";
 
@@ -108,6 +110,86 @@ describe("retry em erro transitório da Graph API", () => {
     // Só as 2 chamadas de envio (1ª falhou, 2ª funcionou) — nenhuma chamada
     // extra ao debug_token, que só roda pra erro NÃO retryable.
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+});
+
+// Foto de perfil da PRÓPRIA conta conectada (círculo da clínica, ver
+// ClinicAvatar.tsx) — renovação periódica via clinic-profile-picture-backfill.ts.
+describe("getInstagramAccountProfilePicture", () => {
+  beforeEach(() => {
+    vi.stubGlobal("fetch", vi.fn());
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("devolve a URL quando a Graph API responde com profile_picture_url", async () => {
+    const fetchMock = fetch as unknown as ReturnType<typeof vi.fn>;
+    fetchMock.mockResolvedValueOnce(jsonResponse(200, { profile_picture_url: "https://scontent.cdninstagram.com/foto.jpg" }));
+
+    const url = await getInstagramAccountProfilePicture("token");
+
+    expect(url).toBe("https://scontent.cdninstagram.com/foto.jpg");
+    expect(fetchMock.mock.calls[0]![0]).toContain("fields=profile_picture_url");
+  });
+
+  it("conta sem foto cadastrada -> null (não erro)", async () => {
+    const fetchMock = fetch as unknown as ReturnType<typeof vi.fn>;
+    fetchMock.mockResolvedValueOnce(jsonResponse(200, {}));
+
+    expect(await getInstagramAccountProfilePicture("token")).toBeNull();
+  });
+
+  it("erro HTTP permanente (token inválido) -> lança, nunca devolve null silenciosamente", async () => {
+    const fetchMock = fetch as unknown as ReturnType<typeof vi.fn>;
+    fetchMock.mockResolvedValue(jsonResponse(400, { error: { message: "token inválido", code: 190 } }));
+
+    await expect(getInstagramAccountProfilePicture("token")).rejects.toThrow("Falha ao buscar foto de perfil da conta");
+  });
+});
+
+describe("exchangeInstagramCode — profile_picture_url", () => {
+  beforeEach(() => {
+    process.env.META_INSTAGRAM_APP_ID = "app-id";
+    process.env.META_APP_SECRET = "app-secret";
+    process.env.META_OAUTH_REDIRECT_URI = "https://vexo.example/callback";
+    vi.stubGlobal("fetch", vi.fn());
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    delete process.env.META_INSTAGRAM_APP_ID;
+    delete process.env.META_APP_SECRET;
+    delete process.env.META_OAUTH_REDIRECT_URI;
+  });
+
+  it("lê profile_picture_url na MESMA chamada de /me que já lê id/username — zero requisição extra", async () => {
+    const fetchMock = fetch as unknown as ReturnType<typeof vi.fn>;
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(200, { access_token: "short-lived" })) // 1. code -> token curto
+      .mockResolvedValueOnce(jsonResponse(200, { access_token: "long-lived", expires_in: 5184000 })) // 2. long-lived
+      .mockResolvedValueOnce(
+        jsonResponse(200, { id: "17841400000000000", username: "clinica.demo", profile_picture_url: "https://scontent.cdninstagram.com/clinica.jpg" })
+      ); // 3. /me
+
+    const result = await exchangeInstagramCode("fake-code");
+
+    expect(result.profilePictureUrl).toBe("https://scontent.cdninstagram.com/clinica.jpg");
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock.mock.calls[2]![0]).toContain("profile_picture_url");
+  });
+
+  it("conta sem foto cadastrada -> profilePictureUrl null (nunca undefined)", async () => {
+    const fetchMock = fetch as unknown as ReturnType<typeof vi.fn>;
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(200, { access_token: "short-lived" }))
+      .mockResolvedValueOnce(jsonResponse(200, { access_token: "long-lived", expires_in: 5184000 }))
+      .mockResolvedValueOnce(jsonResponse(200, { id: "17841400000000000", username: "clinica.demo" }));
+
+    const result = await exchangeInstagramCode("fake-code");
+
+    expect(result.profilePictureUrl).toBeNull();
   });
 });
 
