@@ -226,11 +226,11 @@ function AccountChip({
     <button
       type="button"
       onClick={onSelect}
-      className={`flex shrink-0 flex-col items-center gap-1 rounded-control px-2 py-1.5 text-center transition ${selected ? "bg-vexo-surface2" : ""}`}
+      className={`flex shrink-0 flex-col items-center gap-1.5 rounded-control px-2.5 py-2 text-center transition ${selected ? "bg-vexo-surface2" : ""}`}
     >
-      <span className={`flex h-9 w-9 items-center justify-center rounded-full text-xs font-semibold ${circleClass}`}>{initialsOf(account.name)}</span>
-      <span className="max-w-[72px] truncate text-caption text-vexo-fg">{account.name}</span>
-      <span className="text-caption text-vexo-muted">{subLabel}</span>
+      <span className={`flex h-12 w-12 items-center justify-center rounded-full text-base font-semibold ${circleClass}`}>{initialsOf(account.name)}</span>
+      <span className="max-w-[96px] truncate text-sm text-vexo-fg">{account.name}</span>
+      <span className="text-meta text-vexo-muted">{subLabel}</span>
     </button>
   );
 }
@@ -261,7 +261,7 @@ function SelectedAccountPanel({
   return (
     <div className="mt-4">
       <p className="text-sm font-medium text-vexo-fg">{account.name}</p>
-      <p className="text-caption text-vexo-muted">{account.igUsername ? `@${account.igUsername}` : "sem Instagram conectado"}</p>
+      <p className="text-meta text-vexo-mutedLight">{account.igUsername ? `@${account.igUsername}` : "sem Instagram conectado"}</p>
 
       {account.state.kind === "PAUSED" ? (
         <div className="mt-3 rounded-block bg-vexo-surface p-block text-center">
@@ -291,13 +291,13 @@ function SelectedAccountPanel({
       )}
 
       {effectivelyWaiting && (
-        <button type="button" onClick={onUndo} className="mt-1.5 text-caption text-vexo-muted hover:text-vexo-accent">
+        <button type="button" onClick={onUndo} className="mt-1.5 text-meta text-vexo-mutedLight hover:text-vexo-accent">
           Não enviei · Desfazer
         </button>
       )}
 
       {account.state.kind !== "PAUSED" && (
-        <button type="button" onClick={() => onPauseToggle(true)} className="mt-3 block text-caption text-vexo-muted hover:text-vexo-accent">
+        <button type="button" onClick={() => onPauseToggle(true)} className="mt-3 block text-meta text-vexo-mutedLight hover:text-vexo-accent">
           Pausar esta conta
         </button>
       )}
@@ -329,14 +329,14 @@ export function LeadCard({
 
   if (!active) {
     return (
-      <div className="rounded-control border border-vexo-border bg-vexo-surface px-3 py-2 opacity-50" data-lead-card>
+      <div className="rounded-control border border-vexo-border bg-vexo-surface px-3 py-2.5" data-lead-card>
         {name ? (
           <>
-            <p className="truncate text-caption text-vexo-fg">{name}</p>
-            <p className="truncate text-caption text-vexo-muted">@{username}</p>
+            <p className="truncate text-body-sm text-vexo-mutedLight">{name}</p>
+            <p className="truncate text-body-sm text-vexo-muted">@{username}</p>
           </>
         ) : (
-          <p className="truncate text-caption text-vexo-fg">@{username}</p>
+          <p className="truncate text-body-sm text-vexo-mutedLight">@{username}</p>
         )}
       </div>
     );
