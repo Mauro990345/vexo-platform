@@ -331,10 +331,15 @@ export async function getApproachBoardAccount(clinicId: string, now: Date = new 
   };
 }
 
-// Escolhe até 3 clínicas pra mostrar na tela: só as que têm lead ativo
-// (sem isso, não há "próximo @" pra mostrar no card), liberadas primeiro,
-// depois em espera/pausa da que volta mais cedo pra mais tarde (ver
-// approachAccountSortKey, approach-queue.ts, e DESIGN.md "3 cards").
+// Quantos cards aparecem ao mesmo tempo na tela da Fila (rodada 7: 3 -> 5,
+// só ajuste de quantidade/altura — ver DESIGN.md "rodada 7").
+export const APPROACH_BOARD_MAX_ACCOUNTS = 5;
+
+// Escolhe até APPROACH_BOARD_MAX_ACCOUNTS clínicas pra mostrar na tela: só
+// as que têm lead ativo (sem isso, não há "próximo @" pra mostrar no
+// card), liberadas primeiro, depois em espera/pausa da que volta mais cedo
+// pra mais tarde (ver approachAccountSortKey, approach-queue.ts, e
+// DESIGN.md "3/5 cards").
 export async function getApproachBoard(now: Date = new Date()): Promise<{ accounts: ApproachBoardAccount[]; window: ApproachWindow }> {
   const [clinics, window] = await Promise.all([
     prisma.clinic.findMany({
@@ -347,7 +352,7 @@ export async function getApproachBoard(now: Date = new Date()): Promise<{ accoun
   const accounts = await Promise.all(clinics.map((c) => getApproachBoardAccount(c.id, now, window)));
   const withLead = accounts.filter((a): a is ApproachBoardAccount => a !== null && a.items.length > 0);
   withLead.sort((a, b) => approachAccountSortKey(a.state) - approachAccountSortKey(b.state));
-  return { accounts: withLead.slice(0, 3), window };
+  return { accounts: withLead.slice(0, APPROACH_BOARD_MAX_ACCOUNTS), window };
 }
 
 // ---------------------------------------------------------------------------

@@ -481,7 +481,7 @@ describe("setApproachTiming", () => {
   });
 });
 
-describe("getApproachBoard — seleção e ordem dos 3 cards", () => {
+describe("getApproachBoard — seleção e ordem dos cards (até APPROACH_BOARD_MAX_ACCOUNTS)", () => {
   it("mostra só clínicas com lead ativo, liberadas primeiro e depois por quem volta mais cedo", async () => {
     clinicFindManyMock.mockResolvedValue([{ id: "a" }, { id: "b" }, { id: "c" }, { id: "d" }]);
     clinicFindUniqueMock.mockImplementation(({ where }: { where: { id: string } }) =>
@@ -503,8 +503,9 @@ describe("getApproachBoard — seleção e ordem dos 3 cards", () => {
     expect(board.accounts.map((acc) => acc.clinicId)).toEqual(["b", "c", "a"]);
   });
 
-  it("mais de 3 clínicas qualificadas — mostra só as 3 primeiras pela ordem", async () => {
-    clinicFindManyMock.mockResolvedValue([{ id: "a" }, { id: "b" }, { id: "c" }, { id: "d" }]);
+  it("5 clínicas qualificadas — mostra as 5 (não fica preso no limite antigo de 3)", async () => {
+    const ids = ["a", "b", "c", "d", "e"];
+    clinicFindManyMock.mockResolvedValue(ids.map((id) => ({ id })));
     clinicFindUniqueMock.mockImplementation(({ where }: { where: { id: string } }) =>
       Promise.resolve({ id: where.id, name: `Clínica ${where.id}`, instagramAccount: null })
     );
@@ -515,7 +516,23 @@ describe("getApproachBoard — seleção e ordem dos 3 cards", () => {
 
     const board = await getApproachBoard(NOW);
 
-    expect(board.accounts).toHaveLength(3);
+    expect(board.accounts).toHaveLength(5);
+  });
+
+  it("mais de 5 clínicas qualificadas — mostra só as 5 primeiras pela ordem", async () => {
+    const ids = ["a", "b", "c", "d", "e", "f"];
+    clinicFindManyMock.mockResolvedValue(ids.map((id) => ({ id })));
+    clinicFindUniqueMock.mockImplementation(({ where }: { where: { id: string } }) =>
+      Promise.resolve({ id: where.id, name: `Clínica ${where.id}`, instagramAccount: null })
+    );
+    approachQueueConfigUpsertMock.mockImplementation(({ where }: { where: { clinicId: string } }) => Promise.resolve(baseConfig({ clinicId: where.clinicId })));
+    approachQueueItemFindManyMock.mockImplementation(({ where }: { where: { clinicId: string } }) =>
+      Promise.resolve([{ id: `item-${where.clinicId}`, username: `${where.clinicId}.ig`, name: null, assignedMessage: "Oi!", assignedMessageSlot: 1 }])
+    );
+
+    const board = await getApproachBoard(NOW);
+
+    expect(board.accounts).toHaveLength(5);
   });
 });
 

@@ -336,6 +336,22 @@ abaixo.
   (`validateApproachTiming`). Mudar os valores só afeta as PRÓXIMAS esperas/pausas sorteadas — nunca
   apaga uma espera ou pausa já em andamento.
 
+### Fila de abordagem — rodada 7 (até 5 cards em vez de 3, altura mais enxuta)
+Só ajuste de quantidade/altura, pedido explícito — nenhuma lógica de seleção/ordem/toque/espera/pausa
+de lote mudou, só o limite de quantos cards aparecem e o respiro vertical de cada um.
+- **`APPROACH_BOARD_MAX_ACCOUNTS` (approach-queue-db.ts): 3 -> 5** — mesma função/ordem de sempre
+  (`approachAccountSortKey`: liberadas primeiro, depois por quem volta mais cedo), só o `slice` final
+  mudou de tamanho. Com menos de 5 clínicas qualificadas, mostra só as que existem, como já acontecia
+  com 3.
+- **Token novo `spacing["block-y"]` (10px)** em `tailwind.config.ts`, nomeado por papel ("padding
+  vertical reduzido do bloco") — o `ClinicQueueCard` passa de `p-block` (14px nos 4 lados) para
+  `px-block py-block-y` (14px nas laterais, 10px em cima/embaixo). Reduz só a altura, mantém o mesmo
+  respiro horizontal; nenhum tamanho de letra ou tom de cinza mudou. O espaçamento ENTRE os cards
+  (`space-y-2`, já existente) continua o mesmo.
+- **Sem rolagem forçada nem limite artificial**: a página não ganhou nenhum container de altura fixa
+  nem `overflow`; num celular pequeno que não caiba os 5 cards inteiros, a PÁGINA rola normalmente
+  (comportamento padrão do navegador) — preferível a espremer os cards, pedido explícito.
+
 ## Relatório de resultados (quinzenal/mensal) — envio automático por WhatsApp
 Nova tela, administrada pela página "Contas" (`/crm`, só admin — ver DESIGN.md/CLAUDE.md,
 `ClinicReportPanel.tsx`/`report-actions.ts`). Mesmos tokens/componentes de sempre, nenhuma cor solta:

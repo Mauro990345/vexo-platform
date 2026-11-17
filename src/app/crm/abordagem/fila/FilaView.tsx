@@ -22,7 +22,7 @@ function firstNameOnly(name: string): string {
   return name.trim().split(/\s+/)[0] ?? name;
 }
 
-// Cada clínica participante tem sempre só 1 lead ativo — até 3 cards de
+// Cada clínica participante tem sempre só 1 lead ativo — até 5 cards de
 // clínicas DIFERENTES na mesma tela, sem precisar trocar de conta clicando
 // (ver DESIGN.md "Fila de abordagem — rodada 6"). A ordem e a escolha de
 // QUAIS 3 clínicas aparecem já vêm prontas do servidor (getApproachBoard —
@@ -215,7 +215,7 @@ export function ClinicQueueCard({
   const { name, username } = item;
 
   return (
-    <div className="rounded-block border border-vexo-border bg-vexo-surface p-block" data-clinic-queue-card>
+    <div className="rounded-block border border-vexo-border bg-vexo-surface px-block py-block-y" data-clinic-queue-card>
       <div className="flex items-center gap-2.5">
         <ClinicAvatar name={account.name} profilePictureUrl={account.profilePictureUrl} size="md" />
         <div className="min-w-0 flex-1">

@@ -181,6 +181,11 @@ const config: Config = {
         "control-x": "0.625rem", // 10px = px-2.5
         "control-y": "0.375rem", // 6px = py-1.5
         block: "0.875rem", // 14px = p-3.5
+        // Padding VERTICAL reduzido do bloco (`p-block` continua 14px nos
+        // 4 lados pra quem já usa) — nomeado por papel ("altura um pouco
+        // mais enxuta"), não pela tela, pra qualquer card que precise
+        // caber mais itens na vertical sem mexer no respiro horizontal.
+        "block-y": "0.625rem", // 10px
       },
       boxShadow: {
         card: "0 1px 2px 0 rgb(0 0 0 / 0.4)",
