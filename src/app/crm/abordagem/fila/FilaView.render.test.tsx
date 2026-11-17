@@ -9,7 +9,7 @@ import { LeadCard } from "./FilaView";
 describe("LeadCard", () => {
   it("sem nome: mostra só o @ em destaque, UMA vez só (nunca repetido numa 2ª linha)", () => {
     const markup = renderToStaticMarkup(
-      <LeadCard name={null} username="fulano.ig" active ready waiting={false} countdown="0:00" onSend={() => {}} onSkip={() => {}} />
+      <LeadCard item={{ name: null, username: "fulano.ig" }} active ready waiting={false} countdown="0:00" onSend={() => {}} onSkip={() => {}} />
     );
     const occurrences = markup.split("fulano.ig").length - 1;
     expect(occurrences).toBe(1);
@@ -18,7 +18,7 @@ describe("LeadCard", () => {
 
   it("com nome: mostra o primeiro nome em destaque E o @ embaixo (2 informações, não duplicadas)", () => {
     const markup = renderToStaticMarkup(
-      <LeadCard name="Maria Clara" username="maria.ig" active ready waiting={false} countdown="0:00" onSend={() => {}} onSkip={() => {}} />
+      <LeadCard item={{ name: "Maria Clara", username: "maria.ig" }} active ready waiting={false} countdown="0:00" onSend={() => {}} onSkip={() => {}} />
     );
     expect(markup).toContain("Maria");
     expect(markup).not.toContain("Clara"); // só o primeiro nome
@@ -27,7 +27,7 @@ describe("LeadCard", () => {
 
   it("card inativo (esmaecido) sem nome: também só o @, sem repetir", () => {
     const markup = renderToStaticMarkup(
-      <LeadCard name={null} username="ciclana.ig" active={false} ready={false} waiting={false} countdown="0:00" onSend={() => {}} onSkip={() => {}} />
+      <LeadCard item={{ name: null, username: "ciclana.ig" }} active={false} ready={false} waiting={false} countdown="0:00" onSend={() => {}} onSkip={() => {}} />
     );
     const occurrences = markup.split("ciclana.ig").length - 1;
     expect(occurrences).toBe(1);
@@ -35,7 +35,15 @@ describe("LeadCard", () => {
 
   it("card inativo com nome: nome + @ (sem botão)", () => {
     const markup = renderToStaticMarkup(
-      <LeadCard name="Beltrano Souza" username="beltrano.ig" active={false} ready={false} waiting={false} countdown="0:00" onSend={() => {}} onSkip={() => {}} />
+      <LeadCard
+        item={{ name: "Beltrano Souza", username: "beltrano.ig" }}
+        active={false}
+        ready={false}
+        waiting={false}
+        countdown="0:00"
+        onSend={() => {}}
+        onSkip={() => {}}
+      />
     );
     expect(markup).toContain("Beltrano Souza");
     expect(markup).toContain("@beltrano.ig");
@@ -53,17 +61,7 @@ describe("Fila — até 3 cards renderizados", () => {
     const markup = renderToStaticMarkup(
       <div>
         {items.map((item, idx) => (
-          <LeadCard
-            key={item.id}
-            name={item.name}
-            username={item.username}
-            active={idx === 0}
-            ready={idx === 0}
-            waiting={false}
-            countdown="0:00"
-            onSend={() => {}}
-            onSkip={() => {}}
-          />
+          <LeadCard key={item.id} item={item} active={idx === 0} ready={idx === 0} waiting={false} countdown="0:00" onSend={() => {}} onSkip={() => {}} />
         ))}
       </div>
     );
@@ -76,17 +74,7 @@ describe("Fila — até 3 cards renderizados", () => {
     const markup = renderToStaticMarkup(
       <div>
         {items.map((item, idx) => (
-          <LeadCard
-            key={item.id}
-            name={item.name}
-            username={item.username}
-            active={idx === 0}
-            ready={idx === 0}
-            waiting={false}
-            countdown="0:00"
-            onSend={() => {}}
-            onSkip={() => {}}
-          />
+          <LeadCard key={item.id} item={item} active={idx === 0} ready={idx === 0} waiting={false} countdown="0:00" onSend={() => {}} onSkip={() => {}} />
         ))}
       </div>
     );
