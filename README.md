@@ -126,3 +126,12 @@ ambiente, e que ainda dependem de você:
   variação/randomização para evadir detecção de bot.
 - O timing adaptativo de resposta é só agendamento de envio (delay), não
   altera o conteúdo da mensagem nem tenta mascarar automação.
+- **`FOLLOWER_TOOL_ENABLED`** — interruptor da ferramenta interna "Buscar
+  seguidores" (`/crm/abordagem/seguidores`; ver `src/lib/follower-tool.ts`).
+  Ela não usa a API da Meta: só entrega um script pra rodar no navegador do
+  próprio operador, logado manualmente no instagram.com. **Mantenha esta
+  variável AUSENTE (ou desligada) enquanto o VEXO estiver em análise da
+  Meta** — com ela ausente ou diferente de `"true"` (padrão), a rota
+  responde 404 pra todo mundo, inclusive admin, não aparece link nenhum, e
+  nenhuma ação do servidor devolve o texto do script. Ligada (`"true"`),
+  só quem está logado como administrador (INTERNAL_ADMIN) acessa.

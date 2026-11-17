@@ -17,16 +17,35 @@ type PrepClinic = {
   hasMessages: boolean;
 };
 
-export function AbordagemPrepView({ clinics, window, timing }: { clinics: PrepClinic[]; window: ApproachWindow; timing: ApproachTiming }) {
+export function AbordagemPrepView({
+  clinics,
+  window,
+  timing,
+  showFollowerToolLink = false,
+}: {
+  clinics: PrepClinic[];
+  window: ApproachWindow;
+  timing: ApproachTiming;
+  showFollowerToolLink?: boolean;
+}) {
   const selectedCount = clinics.filter((c) => c.activeInQueue).length;
 
   return (
     <div className="mx-auto max-w-[520px] px-4 py-6 sm:px-0">
-      <h1 className="text-base font-semibold tracking-tight text-vexo-fg">Abordagem</h1>
-      <p className="mt-1 text-xs text-vexo-muted">
-        Preparação da fila — escolha quais contas entram agora, ajuste o limite por dia e envie a lista de leads de cada
-        clínica.
-      </p>
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <h1 className="text-base font-semibold tracking-tight text-vexo-fg">Abordagem</h1>
+          <p className="mt-1 text-xs text-vexo-muted">
+            Preparação da fila — escolha quais contas entram agora, ajuste o limite por dia e envie a lista de leads de
+            cada clínica.
+          </p>
+        </div>
+        {showFollowerToolLink && (
+          <Link href="/crm/abordagem/seguidores" className="shrink-0 whitespace-nowrap text-caption font-medium text-vexo-accent hover:underline">
+            Buscar seguidores
+          </Link>
+        )}
+      </div>
 
       <div className="mt-4 space-y-3">
         <WindowForm window={window} />
@@ -269,7 +288,11 @@ function TimingForm({ timing }: { timing: ApproachTiming }) {
   );
 }
 
-function UploadForm({ clinics }: { clinics: PrepClinic[] }) {
+// Exportado pra reaproveitar na tela "Buscar seguidores" (ver
+// SeguidoresView.tsx) — mesmo componente, nunca duplicado. Só precisa de
+// id/name de cada clínica pro <select>, por isso o tipo aceito aqui é só
+// um Pick (qualquer lista de clínicas com esses 2 campos serve).
+export function UploadForm({ clinics }: { clinics: Pick<PrepClinic, "id" | "name">[] }) {
   const [isPending, startTransition] = useTransition();
   const [result, setResult] = useState<{ added: number; discarded: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
