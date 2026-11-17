@@ -265,6 +265,31 @@ tela é afetado):
   "Pular", "Aguarde m:ss") e "Retomar conta"/"Pausada"/"Limite de hoje"/"Fila vazia" (não citados no
   pedido) continuam exatamente como estavam.
 
+### Fila de abordagem — rodada 5 (foto de perfil do Instagram no círculo da clínica)
+Levantamento no projeto inteiro (pedido explícito) encontrou só UM lugar com o círculo de iniciais
+da clínica — `AccountChip` (`FilaView.tsx`); `ClinicAvatar.tsx` (`src/components/`) é o componente
+ÚNICO novo que substitui essa implementação, pronto pra qualquer tela futura reaproveitar sem
+duplicar a lógica de foto/fallback.
+- **Foto com fallback pras iniciais**: mesmo padrão exato de `LeadAvatar.tsx` já usado no projeto —
+  `<img>` puro (nunca `next/image`: URLs do CDN do Instagram vêm de subdomínios que mudam, não dá
+  pra allowlistar um domínio fixo em `next.config.js`) com `onError` trocando pra iniciais — nunca
+  um ícone de imagem quebrada. Tamanho mantido em 48px (`h-12 w-12`, Etapa 2 da migração de design),
+  nada mudou aí. As classes de cor do estado da conta (verde/cinza/dourado/cinza escuro) passam a se
+  aplicar SÓ no fallback de iniciais (`initialsClassName`) — uma foto de verdade nunca fica tingida
+  de verde/dourado por cima.
+- **Fonte da foto**: API oficial do Instagram (Graph API, produto "Instagram API with Instagram
+  Login" já usado pra tudo mais da conexão — nenhuma permissão nova: `profile_picture_url` é um
+  campo do MESMO node `/me` que já é lido com `instagram_business_basic`, o mesmo escopo já
+  concedido pra username/id da conta). Nunca scraping nem fonte externa.
+- **URL expira — resolvido com o MESMO padrão já existente** pra foto de LEAD
+  (`Lead.profilePictureUrl`/`profilePictureFetchedAt`, `lead-profile-picture-backfill.ts`): campos
+  gêmeos em `InstagramAccount` + `clinic-profile-picture-backfill.ts`, um job a cada 10min no worker
+  que renova qualquer foto sem busca há mais de 24h (nunca uma busca única). Também preenchida na
+  hora, sem esperar o próximo ciclo, a cada reconexão OAuth bem-sucedida (a mesma chamada de `/me`
+  que já lê id/username passa a pedir `profile_picture_url` junto — zero requisição extra). Contas
+  com `needsReconnectAt` setado (token sabidamente inválido) são puladas pelo job periódico — só
+  reconectar resolve, e a reconexão já grava a foto nova na hora.
+
 ## Relatório de resultados (quinzenal/mensal) — envio automático por WhatsApp
 Nova tela, administrada pela página "Contas" (`/crm`, só admin — ver DESIGN.md/CLAUDE.md,
 `ClinicReportPanel.tsx`/`report-actions.ts`). Mesmos tokens/componentes de sempre, nenhuma cor solta:

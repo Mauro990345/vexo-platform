@@ -129,6 +129,11 @@ export async function GET(req: NextRequest) {
         // padrão exato do callback do Google Calendar.
         needsReconnectAt: null,
         needsReconnectReason: null,
+        // Mesma chamada de /me acima (exchangeInstagramCode) já leu a foto
+        // de perfil, de graça — grava na hora, sem esperar o próximo ciclo
+        // do refresh periódico (clinic-profile-picture-backfill.ts).
+        profilePictureUrl: result.profilePictureUrl,
+        profilePictureFetchedAt: new Date(),
       },
       create: {
         clinicId,
@@ -137,6 +142,8 @@ export async function GET(req: NextRequest) {
         accessTokenEnc: encryptToken(result.accessToken),
         tokenExpiresAt: result.tokenExpiresAt,
         webhookIdVerified: false,
+        profilePictureUrl: result.profilePictureUrl,
+        profilePictureFetchedAt: new Date(),
       },
     });
 

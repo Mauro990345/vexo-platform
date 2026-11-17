@@ -243,6 +243,18 @@ model InstagramAccount {
   needsReconnectAt     DateTime?
   needsReconnectReason String?   @db.Text
 
+  // Foto de perfil da PRÓPRIA conta conectada (círculo com a foto no lugar
+  // das iniciais — ver ClinicAvatar.tsx) — mesmo padrão exato de
+  // Lead.profilePictureUrl/profilePictureFetchedAt acima no schema: a URL
+  // que a Graph API devolve é assinada/temporária, então precisa de
+  // refresh periódico (clinic-profile-picture-backfill.ts, mesmo job a
+  // cada 10min do worker que já existe pra foto de lead), não só uma
+  // busca única. Também preenchida na hora, sem esperar o próximo ciclo,
+  // a cada reconexão bem-sucedida (mesma chamada de /me do OAuth,
+  // callback/route.ts já lê este campo de graça, sem requisição extra).
+  profilePictureUrl       String?
+  profilePictureFetchedAt DateTime?
+
   // Conexão SEGUNDA e OPCIONAL, separada da conexão principal acima —
   // "Login do Facebook para Empresas" (produto DIFERENTE do "Instagram API
   // with Instagram Login" usado pra tudo mais neste model), só pra habilitar

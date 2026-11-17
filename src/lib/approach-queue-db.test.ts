@@ -63,7 +63,11 @@ beforeEach(() => {
   approachQueueItemUpdateMock.mockReset().mockResolvedValue({});
   approachQueueItemCountMock.mockReset().mockResolvedValue(0);
   leadFindManyMock.mockReset().mockResolvedValue([]);
-  clinicFindUniqueMock.mockReset().mockResolvedValue({ id: "clinic-1", name: "Clínica Demo", instagramAccount: { igUsername: "clinica.demo" } });
+  clinicFindUniqueMock.mockReset().mockResolvedValue({
+    id: "clinic-1",
+    name: "Clínica Demo",
+    instagramAccount: { igUsername: "clinica.demo", profilePictureUrl: "https://scontent.cdninstagram.com/clinica.jpg" },
+  });
   approachQueueConfigUpsertMock.mockReset().mockResolvedValue(baseConfig());
   approachQueueConfigUpdateMock.mockReset().mockResolvedValue({});
   approachMessagesConfigFindUniqueMock.mockReset().mockResolvedValue({ message1: "Oi {nome}!", message2: "Fala {nome}", message3: null, message4: null, message5: null });
@@ -112,6 +116,9 @@ describe("getApproachBoardAccount — atribuição de mensagem (ver ensureApproa
     expect(account?.items[0]?.message).not.toBeNull();
     expect(["Oi Fulano!", "Fala Fulano"]).toContain(account?.items[0]?.message);
     expect(account?.items[0]?.dmLink).toContain("fulano.ig");
+    // Foto de perfil da conta (círculo da clínica, ver ClinicAvatar.tsx) —
+    // vem do InstagramAccount.profilePictureUrl, repassada no snapshot.
+    expect(account?.profilePictureUrl).toBe("https://scontent.cdninstagram.com/clinica.jpg");
     expect(approachQueueItemUpdateMock).toHaveBeenCalledWith({
       where: { id: "item-1" },
       data: { assignedMessage: expect.any(String), assignedMessageSlot: expect.any(Number) },
@@ -174,6 +181,14 @@ describe("getApproachBoardAccount — atribuição de mensagem (ver ensureApproa
 
     expect(account?.items[0]?.message).toBeNull();
     expect(account?.items[0]?.dmLink).toBeNull();
+  });
+
+  it("sem Instagram conectado (instagramAccount null) — profilePictureUrl fica null, iniciais aparecem no lugar (ClinicAvatar)", async () => {
+    clinicFindUniqueMock.mockResolvedValue({ id: "clinic-1", name: "Clínica Demo", instagramAccount: null });
+
+    const account = await getApproachBoardAccount("clinic-1", NOW);
+
+    expect(account?.profilePictureUrl).toBeNull();
   });
 });
 
