@@ -40,6 +40,11 @@
 
   /* Texto */
   --vexo-muted: 139 150 168; /* #8b96a8 — texto secundário/apagado */
+  /* Meio-termo entre --vexo-muted e --vexo-fg — ver DESIGN.md, "Fila de
+     abordagem": texto que precisa ler melhor que o apagado padrão (ex.: os
+     2 cards de prévia, link "Pausar esta conta") mas sem chegar no branco
+     do texto principal/ativo. */
+  --vexo-muted-light: 178 186 199; /* #b2bac7 */
   --vexo-fg: 241 244 248; /* #f1f4f8 — texto principal */
 
   /* Título das abas (ver Tabs.tsx) — token PRÓPRIO, fixo, que NÃO

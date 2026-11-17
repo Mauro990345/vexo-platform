@@ -233,6 +233,38 @@ mesmo bug num ajuste futuro.
   própria quando ele mesmo virar o card ativo (nunca sorteia adiantado pros 2 cards de prévia, que não
   têm botão nenhum pra precisar disso).
 
+### Fila de abordagem — rodada 4 (ajuste de tamanho/cor, sem mexer em layout/lógica)
+Pedido explícito: só tamanho de letra, tamanho de círculo e tom de cinza — mesma ordem, mesmos
+textos, mesmo comportamento. Dois tokens novos (nenhum existente mudou de valor, então nada mais na
+tela é afetado):
+- `fontSize.meta` (13px) e `fontSize.body-sm` (15px) em `tailwind.config.ts` — nomeados por PAPEL
+  (texto de apoio pequeno / texto secundário um degrau mais legível), não pela tela, pra poderem ser
+  reaproveitados em qualquer lugar que precise do mesmo degrau entre `caption` (10px) e o padrão
+  `text-sm` do Tailwind (14px).
+- `colors.vexo.mutedLight` (`--vexo-muted-light`, `#b2bac7`) — meio-termo entre `--vexo-muted`
+  (`#8b96a8`) e `--vexo-fg` (`#f1f4f8`): mais legível que o cinza apagado padrão, mas ainda
+  visivelmente mais discreto que o texto principal/ativo.
+- **Linha de contas no topo**: círculo 36px -> 48px (`h-9 w-9` -> `h-12 w-12`), iniciais 12px -> 16px
+  (`text-xs` -> `text-base`, mesma proporção de crescimento do círculo); nome da clínica 10px -> 14px
+  (`text-caption` -> `text-sm`, já existe na escala padrão do Tailwind, sem token novo); contador
+  embaixo (`m:ss`/`N/limite`) 10px -> 13px (`text-caption` -> `text-meta`), cor inalterada
+  (`text-vexo-muted`). Preenchimento do botão (`px-2.5 py-2`, antes `px-2 py-1.5`) e `gap-1.5` (antes
+  `gap-1`) cresceram na mesma proporção dos elementos internos, só o suficiente pra não apertar —
+  continua compacto, cabendo várias contas com rolagem lateral no celular.
+- **2 cards de prévia** (atrás do card ativo): 10px -> 15px (`text-caption` -> `text-body-sm`);
+  trocou o truque antigo (`opacity-50` por cima de `text-vexo-fg`/`text-vexo-muted`, que esmaecia o
+  BLOCO inteiro incluindo a borda) por cor direta — `text-vexo-mutedLight` pro nome/@ sozinho,
+  `text-vexo-muted` pro @ quando há nome junto (mesma hierarquia nome-claro/@-mais-apagado que o
+  card ativo já usa, só um degrau abaixo) — mais legível porque não há opacidade reduzindo contraste,
+  e a borda/fundo do card ficam no tom normal (não translúcidos). Padding vertical `py-2` -> `py-2.5`
+  (card um pouco mais alto, acompanhando o texto maior).
+- **Textos auxiliares** ("Não enviei · Desfazer", "Pausar esta conta", e a linha abaixo do nome da
+  conta selecionada — @ conectado ou "sem Instagram conectado"): 10px -> 13px (`text-caption` ->
+  `text-meta`) e cor `text-vexo-muted` -> `text-vexo-mutedLight`.
+- **Intocado, por pedido explícito**: o card ativo (nome/@ grande, botão azul "Enviar mensagem",
+  "Pular", "Aguarde m:ss") e "Retomar conta"/"Pausada"/"Limite de hoje"/"Fila vazia" (não citados no
+  pedido) continuam exatamente como estavam.
+
 ## Relatório de resultados (quinzenal/mensal) — envio automático por WhatsApp
 Nova tela, administrada pela página "Contas" (`/crm`, só admin — ver DESIGN.md/CLAUDE.md,
 `ClinicReportPanel.tsx`/`report-actions.ts`). Mesmos tokens/componentes de sempre, nenhuma cor solta:

@@ -20,6 +20,11 @@ const config: Config = {
           border: "rgb(var(--vexo-border) / <alpha-value>)",
           borderStrong: "rgb(var(--vexo-border-strong) / <alpha-value>)",
           muted: "rgb(var(--vexo-muted) / <alpha-value>)",
+          // Cinza mais claro que --vexo-muted, mais escuro que --vexo-fg —
+          // ver DESIGN.md, "Fila de abordagem": texto de apoio que precisa
+          // ler bem (cards de prévia, links auxiliares) mas continuar
+          // visivelmente mais discreto que o conteúdo ativo/principal.
+          mutedLight: "rgb(var(--vexo-muted-light) / <alpha-value>)",
           fg: "rgb(var(--vexo-fg) / <alpha-value>)",
           tabFg: "rgb(var(--vexo-tab-fg) / <alpha-value>)",
           // Cor do ícone de cada aba, fixa por posição — ver Tabs.tsx e o
@@ -122,6 +127,14 @@ const config: Config = {
         "sidebar-item": "13px",
         card: "11px",
         caption: "10px",
+        // Fila de abordagem (ver DESIGN.md) — texto pequeno "de apoio"
+        // (contador da conta, links auxiliares) um degrau acima de
+        // `caption`, e texto um pouco maior que o padrão `text-sm` do
+        // Tailwind pros 2 cards de prévia (mais legível que `caption` sem
+        // competir com o card ativo). Nomeados por papel, não pela tela —
+        // reaproveitáveis em qualquer lugar que precise do mesmo degrau.
+        meta: "13px",
+        "body-sm": "15px",
         // Página pública: título do hero (38px celular / 68px desktop) e
         // títulos de seção (28px / 40px), com o letter-spacing pedido.
         "pub-hero": ["2.375rem", { lineHeight: "1.06", letterSpacing: "-0.036em", fontWeight: "600" }], // 38px
