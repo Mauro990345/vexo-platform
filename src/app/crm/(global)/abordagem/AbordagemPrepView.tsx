@@ -5,6 +5,7 @@ import { useState, useTransition } from "react";
 import { Button } from "@/components/Button";
 import { Card } from "@/components/Card";
 import { toggleActiveInQueueAction, updateDailyLimitAction, uploadApproachLeadsAction, updateApproachWindowAction, updateApproachTimingAction } from "./actions";
+import { formatApproachDaysRemainingLabel, approachQueueLevel } from "@/lib/approach-queue";
 import type { ApproachWindow, ApproachTiming } from "@/lib/approach-queue-db";
 
 type PrepClinic = {
@@ -15,6 +16,16 @@ type PrepClinic = {
   activeInQueue: boolean;
   paused: boolean;
   hasMessages: boolean;
+  leadsRemaining: number;
+};
+
+// Cor do contador "N na fila · uns X dias" conforme o nível de urgência
+// (ver approachQueueLevel, approach-queue.ts) — variáveis do design
+// system de sempre, nunca uma cor nova só pra isso.
+const QUEUE_LEVEL_CLASS: Record<"normal" | "warning" | "danger", string> = {
+  normal: "text-vexo-mutedLight",
+  warning: "text-vexo-warning",
+  danger: "text-vexo-error",
 };
 
 export function AbordagemPrepView({
@@ -101,6 +112,9 @@ function ClinicRow({ clinic }: { clinic: PrepClinic }) {
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm text-vexo-fg">{clinic.name}</p>
           <p className="truncate text-caption text-vexo-muted">{clinic.igUsername ? `@${clinic.igUsername}` : "sem Instagram conectado"}</p>
+          <p className={`truncate text-meta ${QUEUE_LEVEL_CLASS[approachQueueLevel(clinic.leadsRemaining, clinic.dailyLimit)]}`}>
+            {clinic.leadsRemaining > 0 ? `${clinic.leadsRemaining} na fila · ${formatApproachDaysRemainingLabel(clinic.leadsRemaining, clinic.dailyLimit)}` : "Fila vazia"}
+          </p>
         </div>
         <DailyLimitField clinicId={clinic.id} dailyLimit={clinic.dailyLimit} />
         <Link

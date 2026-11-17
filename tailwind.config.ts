@@ -194,14 +194,6 @@ const config: Config = {
       boxShadow: {
         card: "0 1px 2px 0 rgb(0 0 0 / 0.4)",
       },
-      minWidth: {
-        // Largura mínima de um botão curto de ação principal dentro de um
-        // card compacto (ex.: "Enviar" na Fila de abordagem) — nomeado por
-        // papel, não pela tela, pra qualquer botão parecido reaproveitar.
-        // Cresce só na largura quando o texto precisa (ex.: "Fora do
-        // horário"), nunca menor que isto.
-        "cta-sm": "7.25rem", // 116px
-      },
       // Animação de entrada do gráfico "Abordagens por dia" (ver
       // ApproachChart) — cresce da esquerda pra direita ao montar, em vez
       // de aparecer com a largura final já pronta. scaleX (não width) de

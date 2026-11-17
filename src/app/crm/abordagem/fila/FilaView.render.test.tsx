@@ -19,6 +19,7 @@ function account(state: ApproachAccountState, overrides: Partial<ApproachBoardAc
     profilePictureUrl: null,
     dailyLimit: 60,
     sentToday: 3,
+    leadsRemaining: 320,
     state,
     items: [{ id: "item-1", username: "fulano.ig", name: null, message: "Oi!", dmLink: "https://ig.me/m/fulano.ig" }],
     ...overrides,
@@ -103,7 +104,7 @@ describe("ClinicQueueCard", () => {
 
   it("nome da clínica e @ longos usam truncate (uma linha só, nunca empurra o botão)", () => {
     const markup = render(account({ kind: "READY" }, { name: "Clínica Com Um Nome Bem Longo Que Não Caberia Numa Linha" }));
-    expect(markup).toMatch(/class="truncate[^"]*">Clínica Com Um Nome Bem Longo Que Não Caberia Numa Linha</);
+    expect(markup).toMatch(/class="truncate[^"]*">Clínica Com Um Nome Bem Longo Que Não Caberia Numa Linha /);
   });
 
   it("botão liberado tem área de toque ampliada (pelo menos 44px), sem mudar o desenho visual", () => {
@@ -111,8 +112,18 @@ describe("ClinicQueueCard", () => {
     expect(markup).toContain("before:min-h-11");
   });
 
-  it("botão (liberado ou desativado) tem largura mínima — cresce só na largura, nunca na altura", () => {
-    expect(render(account({ kind: "READY" }))).toContain("min-w-cta-sm");
-    expect(render(account({ kind: "OUTSIDE_HOURS" }))).toContain("min-w-cta-sm");
+  it("botão compacto (sem largura mínima) — cresce só na largura quando o texto precisa, nunca na altura", () => {
+    const ready = render(account({ kind: "READY" }));
+    const readyButton = ready.match(/<button[^>]*>Enviar<\/button>/)?.[0] ?? "";
+    expect(readyButton).not.toContain("min-w-");
+    expect(readyButton).toContain("px-5");
+    const disabledButton = render(account({ kind: "OUTSIDE_HOURS" })).match(/<button[^>]*disabled[^>]*>/)?.[0] ?? "";
+    expect(disabledButton).not.toContain("min-w-");
+  });
+
+  it("mostra o número de leads restantes logo depois do nome da clínica, em cinza claro, sem cor de aviso", () => {
+    const markup = render(account({ kind: "READY" }, { leadsRemaining: 320 }));
+    expect(markup).toMatch(/Clínica Demo.*· 320/s);
+    expect(markup).toContain("text-vexo-mutedLight");
   });
 });

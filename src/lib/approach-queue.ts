@@ -269,6 +269,38 @@ export function formatApproachPauseCountdown(msRemaining: number): string {
   return `${hours}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 }
 
+// Quantos @ ainda faltam enviar numa clínica (status QUEUED — não enviado,
+// não pulado, inclui o que está ativo no card) vira uma estimativa de
+// "pra quantos dias dá" dividindo pelo limite por dia (pedido explícito:
+// "pra saber quando reabastecer a lista"). Arredonda pra inteiro só
+// quando passa de 3 dias (ex. "uns 5 dias"); entre 1 e 3 dias mostra 1
+// casa decimal com vírgula, no singular (ex. "uns 1,5 dia", igual ao
+// exemplo pedido); abaixo de 1 dia nunca mostra fração enganosa de "quase
+// lá", só "menos de 1 dia". Fila vazia é um caso próprio (nunca "uns 0
+// dias" nem "menos de 1 dia").
+export function formatApproachDaysRemainingLabel(leadsRemaining: number, dailyLimit: number): string {
+  if (leadsRemaining <= 0) return "Fila vazia";
+  const days = leadsRemaining / dailyLimit;
+  if (days < 1) return "menos de 1 dia";
+  if (days <= 3) return `uns ${(Math.round(days * 10) / 10).toFixed(1).replace(".", ",")} dia`;
+  return `uns ${Math.round(days)} dias`;
+}
+
+// Nível de urgência pra colorir o contador (ver DESIGN.md "Preparação —
+// contador de leads restantes"): normal (cinza claro) com 2 dias ou mais
+// de sobra; aviso (amarelo) abaixo de 2 dias; perigo (vermelho) abaixo de
+// 1 dia OU fila vazia — mesmos limiares usados no texto acima, só que em
+// forma de nível pra UI escolher a cor certa sem reimplementar a conta.
+export type ApproachQueueLevel = "normal" | "warning" | "danger";
+
+export function approachQueueLevel(leadsRemaining: number, dailyLimit: number): ApproachQueueLevel {
+  if (leadsRemaining <= 0) return "danger";
+  const days = leadsRemaining / dailyLimit;
+  if (days < 1) return "danger";
+  if (days < 2) return "warning";
+  return "normal";
+}
+
 // "HH:MM"/minutos/inteiros da tela de Preparação -> validação com mensagem
 // curta, pedido explícito (mínimo <= máximo, mínimo >= 1min, lote >= 1,
 // pausa >= 0 — 0 = sem pausa). Validado tanto na UI quanto de novo no

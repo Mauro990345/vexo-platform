@@ -21,6 +21,8 @@ import {
   fillApproachMessageTemplate,
   computeApproachAccountState,
   approachAccountSortKey,
+  formatApproachDaysRemainingLabel,
+  approachQueueLevel,
 } from "./approach-queue";
 
 describe("normalizeApproachUsername", () => {
@@ -253,6 +255,41 @@ describe("validateApproachTiming", () => {
   });
   it("campo não numérico (ex.: NaN de um formulário vazio) é inválido", () => {
     expect(() => validateApproachTiming({ ...valid, waitMinMinutes: NaN })).toThrow();
+  });
+});
+
+describe("formatApproachDaysRemainingLabel", () => {
+  it("fila vazia", () => {
+    expect(formatApproachDaysRemainingLabel(0, 60)).toBe("Fila vazia");
+  });
+  it("mais de 3 dias — arredonda pra inteiro, plural 'dias'", () => {
+    expect(formatApproachDaysRemainingLabel(320, 60)).toBe("uns 5 dias"); // 5,33 -> 5
+    expect(formatApproachDaysRemainingLabel(241, 60)).toBe("uns 4 dias"); // 4,01... arredonda pra 4
+  });
+  it("entre 1 e 3 dias (inclusive) — 1 casa decimal, vírgula, singular 'dia'", () => {
+    expect(formatApproachDaysRemainingLabel(90, 60)).toBe("uns 1,5 dia");
+    expect(formatApproachDaysRemainingLabel(180, 60)).toBe("uns 3,0 dia");
+    expect(formatApproachDaysRemainingLabel(60, 60)).toBe("uns 1,0 dia");
+  });
+  it("menos de 1 dia (mas fila não vazia)", () => {
+    expect(formatApproachDaysRemainingLabel(30, 60)).toBe("menos de 1 dia");
+  });
+});
+
+describe("approachQueueLevel", () => {
+  it("fila vazia -> perigo", () => {
+    expect(approachQueueLevel(0, 60)).toBe("danger");
+  });
+  it("menos de 1 dia -> perigo", () => {
+    expect(approachQueueLevel(30, 60)).toBe("danger");
+  });
+  it("entre 1 e 2 dias (exclusive) -> aviso", () => {
+    expect(approachQueueLevel(60, 60)).toBe("warning"); // exatamente 1 dia
+    expect(approachQueueLevel(90, 60)).toBe("warning"); // 1,5 dia
+  });
+  it("2 dias ou mais -> normal", () => {
+    expect(approachQueueLevel(120, 60)).toBe("normal"); // exatamente 2 dias
+    expect(approachQueueLevel(320, 60)).toBe("normal");
   });
 });
 
