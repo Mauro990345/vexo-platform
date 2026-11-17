@@ -1,9 +1,12 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { requireInternalSession } from "@/lib/session";
 import { parseApproachTimeToMinutes, validateApproachWindow } from "@/lib/approach-queue";
+import { isFollowerToolEnabled, renderFollowerToolScript } from "@/lib/follower-tool";
 import {
   extractApproachRowsFromCsvText,
   parseApproachUsernamesTxt,
@@ -231,4 +234,46 @@ export async function setApproachPausedAction(clinicId: string, paused: boolean)
   await setApproachPaused(clinicId, paused);
   revalidatePath(QUEUE_PATH);
   return getApproachBoardAccount(clinicId, new Date());
+}
+
+// ---------------------------------------------------------------------------
+// "Buscar seguidores" (ver DESIGN.md/follower-tool.ts) — atrás do
+// interruptor FOLLOWER_TOOL_ENABLED, que PRECISA ficar desligado durante a
+// análise da Meta (ver README.md). Desligado: toda ação aqui recusa, pra
+// QUALQUER usuário (inclusive admin) — nunca devolve o texto do script.
+// Ligado: só INTERNAL_ADMIN (não STAFF, diferente de requireApproachAdmin
+// acima) — por isso um gate próprio, em vez de reaproveitar
+// requireApproachAdmin.
+async function requireFollowerToolAdmin() {
+  if (!isFollowerToolEnabled()) throw new Error("Ferramenta desativada.");
+  const session = await getServerSession(authOptions);
+  if (!session || session.user.role !== "INTERNAL_ADMIN") throw new Error("Ferramenta desativada.");
+  return session;
+}
+
+// Usada pra decidir se o link "Buscar seguidores" aparece na Preparação —
+// nunca lança erro (ao contrário de requireFollowerToolAdmin), só diz
+// sim/não, pra uma tela que também é mostrada pra STAFF poder reagir sem
+// precisar tratar exceção.
+export async function isFollowerToolAvailableAction(): Promise<boolean> {
+  if (!isFollowerToolEnabled()) return false;
+  const session = await getServerSession(authOptions);
+  return Boolean(session && session.user.role === "INTERNAL_ADMIN");
+}
+
+export async function getFollowerToolClinicsAction(): Promise<{ id: string; name: string; igUsername: string | null }[]> {
+  await requireFollowerToolAdmin();
+  const clinics = await prisma.clinic.findMany({
+    where: { active: true },
+    orderBy: { name: "asc" },
+    select: { id: true, name: true, instagramAccount: { select: { igUsername: true } } },
+  });
+  return clinics.map((c) => ({ id: c.id, name: c.name, igUsername: c.instagramAccount?.igUsername ?? null }));
+}
+
+export async function generateFollowerToolScriptAction(formData: FormData): Promise<string> {
+  await requireFollowerToolAdmin();
+  const limit = parseInt(String(formData.get("limit") ?? ""), 10);
+  const restart = formData.get("restart") === "on" || formData.get("restart") === "true";
+  return renderFollowerToolScript({ limit, restart });
 }

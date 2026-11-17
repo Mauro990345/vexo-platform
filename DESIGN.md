@@ -352,6 +352,39 @@ de lote mudou, só o limite de quantos cards aparecem e o respiro vertical de ca
   nem `overflow`; num celular pequeno que não caiba os 5 cards inteiros, a PÁGINA rola normalmente
   (comportamento padrão do navegador) — preferível a espremer os cards, pedido explícito.
 
+### Buscar seguidores (interno, `/crm/abordagem/seguidores`) — atrás de interruptor
+Ferramenta nova, SÓ interna (nunca aparece em tela pública, vídeo ou documento voltado a cliente):
+entrega um script pronto pra copiar e colar no Console do navegador do operador, autenticado
+manualmente no instagram.com na conta da própria clínica — o VEXO nunca roda nem acessa nada do
+Instagram sozinho (o navegador bloqueia a página do VEXO de ler instagram.com; é por isso que a
+leitura só pode acontecer no console da própria aba do instagram.com). Mesmo estilo compacto da
+tela de Preparação (`Card`/`Button`/`rounded-control`, nenhuma cor/tamanho/espaçamento solto).
+- **Atrás do interruptor `FOLLOWER_TOOL_ENABLED`** (`src/lib/follower-tool.ts`), que precisa ficar
+  DESLIGADO durante a análise da Meta (ver README.md) — padrão fail-closed, igual ao
+  `ADMIN_SETUP_TOKEN` da tela `/setup`. Desligada (ausente ou diferente de `"true"`): a rota
+  `/crm/abordagem/seguidores` chama `notFound()` (404) ANTES de consultar sessão — pra todo mundo,
+  inclusive admin — e nenhuma `action` do servidor (`getFollowerToolClinicsAction`/
+  `generateFollowerToolScriptAction`) devolve nada, mesmo chamada direto; sem isso, nenhum link
+  aparece em lugar nenhum (nem na Preparação, nem no menu). Ligada: só quem está logado como
+  `INTERNAL_ADMIN` acessa — nunca `INTERNAL_STAFF` (diferente de todo o resto da Fila de
+  abordagem, que libera STAFF também) — um gate próprio (`requireFollowerToolAdmin`), separado do
+  `requireApproachAdmin` que o resto da pasta usa.
+- **Link na Preparação**: "Buscar seguidores" (`text-caption`/`text-vexo-accent`) só é renderizado
+  quando o SERVIDOR confirma (`isFollowerToolAvailableAction`, chamada no `page.tsx`) que a
+  ferramenta está ligada E o usuário logado é admin — nunca uma checagem só no cliente.
+- **Conteúdo da tela, nesta ordem**: aviso curto de uso interno; seletor de clínica (mostrando o @
+  conectado, quando houver, e o aviso pra confirmar a conta logada no instagram.com); quantidade
+  por rodada (padrão 300, 50–500) + "Começar do zero"; botão "Copiar script" (usa o mesmo
+  `copyToClipboard` do resto do projeto, com o mesmo aviso "Não foi possível copiar" se falhar);
+  passo a passo numerado; cuidados (limite de rodadas/dia, erros 400/403/429, retomada automática).
+  Por fim, o MESMO componente `UploadForm` (exportado de `AbordagemPrepView.tsx`) da Preparação —
+  nunca duplicado, só importado.
+- **Script guardado como texto-modelo** no servidor (`follower-tool.ts`), com 2 placeholders
+  (`{{LIMITE}}`/`{{RECOMECAR}}`) substituídos só depois de validar `LIMITE` (inteiro, 50–500) —
+  nunca editado além disso. O texto do script só é gerado por uma `action` (nunca embutido no HTML/
+  JS da página), e essa `action` já está atrás do mesmo gate acima — com o interruptor desligado,
+  o texto do script literalmente não existe em nenhum bundle enviado ao navegador.
+
 ## Relatório de resultados (quinzenal/mensal) — envio automático por WhatsApp
 Nova tela, administrada pela página "Contas" (`/crm`, só admin — ver DESIGN.md/CLAUDE.md,
 `ClinicReportPanel.tsx`/`report-actions.ts`). Mesmos tokens/componentes de sempre, nenhuma cor solta:
