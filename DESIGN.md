@@ -209,6 +209,30 @@ classe solta nova.
   validando início < fim). Vale pra todas as clínicas (nunca por clínica). O aviso "Fora do horário"
   na Fila usa `formatApproachWindowLabel` a partir do valor salvo, nunca mais um número fixo no texto.
 
+### Fila de abordagem — rodada 3 (bug real: "Enviar mensagem" não abria o Instagram no Safari/iOS)
+Nenhuma mudança visual nesta rodada — só de mecânica interna. Documentado aqui porque é a 2ª vez que
+um comportamento específico do Safari/iOS (gesto do usuário) quebra silenciosamente uma ação que
+funciona normal no Chrome/desktop; vale a pena deixar registrado o porquê pra não reintroduzir o
+mesmo bug num ajuste futuro.
+- **Causa raiz**: o toque em "Enviar mensagem" esperava uma resposta do SERVIDOR (que sorteava a
+  mensagem) antes de copiar pra área de transferência e abrir o Instagram (`window.open`). No Safari/
+  iOS, `window.open`/clipboard só são autorizados DENTRO do mesmo "gesto do usuário" (clique/toque) —
+  um `await` de uma chamada de REDE no meio quebra esse gesto e a abertura é bloqueada silenciosamente
+  (sem erro visível; o VEXO já tinha marcado como enviado, por isso parecia "funcionar errado" em vez
+  de simplesmente falhar). `InstagramDmButton.tsx` (Reativação) nunca teve esse problema porque a
+  mensagem/link já chegam prontos nas props, sem nenhuma espera de rede entre o toque e o
+  `window.open` — só um `await` rápido (cópia pro clipboard, não uma chamada ao servidor).
+- **Correção**: a mensagem sorteada (e o link `ig.me/m/<@>` correspondente) passam a ser calculados e
+  GUARDADOS no próprio item da fila (`ApproachQueueItem.assignedMessage`/`assignedMessageSlot`) assim
+  que ele vira o card ATIVO — nunca mais no instante do toque. O board (`getApproachBoardAccount`) já
+  devolve `message`/`dmLink` prontos pro card ativo; "Enviar mensagem" primeiro copia + abre (mesma
+  ordem exata do `InstagramDmButton`) e só DEPOIS avisa o servidor pra registrar o envio
+  (`confirmApproachSend`, que não sorteia nada — só confere as travas de novo e faz o claim atômico
+  de sempre). "Desfazer" nunca apaga `assignedMessage` — é isso que garante a mesma mensagem de volta;
+  "Pular" descarta o item (e a mensagem que ele tinha) pra sempre, e o PRÓXIMO item só ganha a sua
+  própria quando ele mesmo virar o card ativo (nunca sorteia adiantado pros 2 cards de prévia, que não
+  têm botão nenhum pra precisar disso).
+
 ## Relatório de resultados (quinzenal/mensal) — envio automático por WhatsApp
 Nova tela, administrada pela página "Contas" (`/crm`, só admin — ver DESIGN.md/CLAUDE.md,
 `ClinicReportPanel.tsx`/`report-actions.ts`). Mesmos tokens/componentes de sempre, nenhuma cor solta:

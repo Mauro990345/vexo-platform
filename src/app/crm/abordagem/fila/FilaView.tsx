@@ -6,16 +6,16 @@ import { isWithinApproachHours, formatApproachCountdown, formatApproachWindowLab
 import { copyToClipboard } from "@/lib/clipboard";
 import {
   getApproachBoardAction,
-  sendApproachMessageAction,
+  confirmApproachSendAction,
   undoApproachSendAction,
   skipApproachItemAction,
   setApproachPausedAction,
-  type SendApproachMessageActionResult,
 } from "../../(global)/abordagem/actions";
-import type { ApproachBoardAccount, ApproachWindow } from "@/lib/approach-queue-db";
+import type { ApproachBoardAccount, ApproachBoardItem, ApproachWindow } from "@/lib/approach-queue-db";
 
 const POLL_INTERVAL_MS = 15_000;
 const TICK_INTERVAL_MS = 1_000;
+const NOTICE_DURATION_MS = 3_000;
 
 function initialsOf(name: string): string {
   const parts = name.trim().split(/\s+/);
@@ -39,6 +39,16 @@ export function FilaView({ initialAccounts, initialWindow }: { initialAccounts: 
   const [now, setNow] = useState(() => Date.now());
   const [isPending, startTransition] = useTransition();
   const [withinHours, setWithinHours] = useState(() => isWithinApproachHours(new Date(), initialWindow.startMinute, initialWindow.endMinute));
+  // Item com um envio em andamento (copiar/abrir já aconteceram, falta só
+  // a confirmação do servidor) — trava extra no cliente contra toque
+  // duplo, além do claim atômico que o servidor já garante.
+  const [sendingItemId, setSendingItemId] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  function showNotice(text: string) {
+    setNotice(text);
+    window.setTimeout(() => setNotice((current) => (current === text ? null : current)), NOTICE_DURATION_MS);
+  }
 
   // Tick de 1s só pra recalcular o "Aguarde m:ss" exibido — nunca refaz a
   // busca no servidor sozinho (ver poll abaixo, que é quem de fato
@@ -59,14 +69,14 @@ export function FilaView({ initialAccounts, initialWindow }: { initialAccounts: 
   // no meio do caminho.
   useEffect(() => {
     const id = window.setInterval(async () => {
-      if (isPending) return;
+      if (isPending || sendingItemId) return;
       const board = await getApproachBoardAction();
       setAccounts(board.accounts);
       setApproachWindow(board.window);
       setFetchedAtByClinic(Object.fromEntries(board.accounts.map((a) => [a.clinicId, Date.now()])));
     }, POLL_INTERVAL_MS);
     return () => window.clearInterval(id);
-  }, [isPending]);
+  }, [isPending, sendingItemId]);
 
   function patchAccount(account: ApproachBoardAccount) {
     setAccounts((prev) => prev.map((a) => (a.clinicId === account.clinicId ? account : a)));
@@ -75,14 +85,33 @@ export function FilaView({ initialAccounts, initialWindow }: { initialAccounts: 
 
   const selected = accounts.find((a) => a.clinicId === selectedClinicId) ?? null;
 
-  function handleSend(clinicId: string) {
-    startTransition(async () => {
-      const result: SendApproachMessageActionResult = await sendApproachMessageAction(clinicId);
-      if (!result.ok) return; // trava checada de novo no servidor (ex.: corrida) — botão só reflete no próximo poll
+  // UM TOQUE, nesta ordem exata (mesmo padrão de InstagramDmButton.tsx,
+  // Reativação): copia a mensagem JÁ PRONTA (veio no item, nunca sorteada
+  // aqui) e abre o Instagram ANTES de qualquer espera de rede — no Safari/
+  // iOS, window.open só é permitido no mesmo "gesto" do toque; esperar uma
+  // resposta do servidor antes bloqueia a abertura. Só DEPOIS disso (sem
+  // bloquear o que já aconteceu) o servidor é avisado pra registrar o
+  // envio de verdade — se ele recusar (corrida, limite batido no meio do
+  // caminho), desfaz só o lado do cliente (mostra aviso, não conta).
+  function handleSend(clinicId: string, item: ApproachBoardItem) {
+    if (!item.message || !item.dmLink) {
+      showNotice("Cadastre mensagens para esta clínica em Mensagens.");
+      return;
+    }
+    setSendingItemId(item.id);
+    void (async () => {
+      const copied = await copyToClipboard(item.message!);
+      if (!copied) showNotice("Não foi possível copiar — cole a mensagem na mão.");
+      window.open(item.dmLink!, "_blank", "noopener,noreferrer");
+
+      const result = await confirmApproachSendAction(clinicId, item.id);
+      setSendingItemId(null);
+      if (!result.ok) {
+        showNotice("Não deu pra registrar o envio agora — tente de novo.");
+        return;
+      }
       patchAccount(result.account);
-      await copyToClipboard(result.message);
-      window.open(result.dmLink, "_blank", "noopener,noreferrer");
-    });
+    })();
   }
 
   function handleSkip(clinicId: string, itemId: string) {
@@ -138,12 +167,15 @@ export function FilaView({ initialAccounts, initialWindow }: { initialAccounts: 
               account={selected}
               now={now}
               fetchedAt={fetchedAtByClinic[selected.clinicId] ?? now}
-              onSend={() => handleSend(selected.clinicId)}
+              sendingItemId={sendingItemId}
+              onSend={(item) => handleSend(selected.clinicId, item)}
               onSkip={(itemId) => handleSkip(selected.clinicId, itemId)}
               onUndo={() => handleUndo(selected.clinicId)}
               onPauseToggle={(paused) => handlePauseToggle(selected.clinicId, paused)}
             />
           )}
+
+          {notice && <p className="mt-2 text-caption text-vexo-muted">{notice}</p>}
         </>
       )}
     </div>
@@ -207,6 +239,7 @@ function SelectedAccountPanel({
   account,
   now,
   fetchedAt,
+  sendingItemId,
   onSend,
   onSkip,
   onUndo,
@@ -215,7 +248,8 @@ function SelectedAccountPanel({
   account: ApproachBoardAccount;
   now: number;
   fetchedAt: number;
-  onSend: () => void;
+  sendingItemId: string | null;
+  onSend: (item: ApproachBoardItem) => void;
   onSkip: (itemId: string) => void;
   onUndo: () => void;
   onPauseToggle: (paused: boolean) => void;
@@ -244,13 +278,12 @@ function SelectedAccountPanel({
           {account.items.map((item, idx) => (
             <LeadCard
               key={item.id}
-              name={item.name}
-              username={item.username}
+              item={item}
               active={idx === 0}
-              ready={idx === 0 && ready}
-              waiting={idx === 0 && effectivelyWaiting}
+              ready={idx === 0 && ready && sendingItemId !== item.id}
+              waiting={idx === 0 && (effectivelyWaiting || sendingItemId === item.id)}
               countdown={formatApproachCountdown(remaining)}
-              onSend={onSend}
+              onSend={() => onSend(item)}
               onSkip={() => onSkip(item.id)}
             />
           ))}
@@ -276,8 +309,7 @@ function SelectedAccountPanel({
 // sem repetir numa 2ª linha embaixo (bug relatado: o card duplicava o
 // mesmo @ duas vezes). Com nome, primeiro nome em destaque + @ embaixo.
 export function LeadCard({
-  name,
-  username,
+  item,
   active,
   ready,
   waiting,
@@ -285,8 +317,7 @@ export function LeadCard({
   onSend,
   onSkip,
 }: {
-  name: string | null;
-  username: string;
+  item: Pick<ApproachBoardItem, "name" | "username">;
   active: boolean;
   ready: boolean;
   waiting: boolean;
@@ -294,6 +325,8 @@ export function LeadCard({
   onSend: () => void;
   onSkip: () => void;
 }) {
+  const { name, username } = item;
+
   if (!active) {
     return (
       <div className="rounded-control border border-vexo-border bg-vexo-surface px-3 py-2 opacity-50" data-lead-card>

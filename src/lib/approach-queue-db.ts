@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { buildInstagramDmLink } from "@/lib/reactivation";
 import {
   normalizeApproachUsername,
   resolveApproachUploadRows,
@@ -180,6 +181,8 @@ export { parseApproachUsernamesTxt };
 // Board da Fila (contas + até 3 cards cada)
 // ---------------------------------------------------------------------------
 
+export type ApproachBoardItem = { id: string; username: string; name: string | null; message: string | null; dmLink: string | null };
+
 export type ApproachBoardAccount = {
   clinicId: string;
   name: string;
@@ -187,13 +190,49 @@ export type ApproachBoardAccount = {
   dailyLimit: number;
   sentToday: number;
   state: ApproachAccountState;
-  items: { id: string; username: string; name: string | null }[];
+  items: ApproachBoardItem[];
 };
 
 export async function countApproachedToday(clinicId: string, now: Date): Promise<number> {
   return prisma.approachQueueItem.count({
     where: { clinicId, status: "SENT", sentAt: { gte: startOfApproachDay(now) } },
   });
+}
+
+// Atribui (e PERSISTE) a mensagem sorteada pro item ATIVO (o primeiro da
+// fila) assim que ele aparece no board — nunca sorteada de novo depois
+// disso, nem numa atualização automática da tela nem num recarregamento
+// (bug corrigido: o toque em "Enviar mensagem" dependia de uma resposta de
+// rede pra saber a mensagem, e no Safari/iOS isso quebra o "gesto do
+// usuário" que autoriza copiar pra área de transferência e abrir outra
+// aba — a mensagem e o link precisam estar prontos ANTES do toque, ver
+// FilaView.tsx/handleSend). Idempotente: se o item já tem
+// `assignedMessage`, devolve ele tal como está, sem sortear/gravar de
+// novo — é isso que garante que "Desfazer" devolve a mesma mensagem (ela
+// nunca é apagada, só o status/sentAt/approachLogId voltam) e que um
+// "Pular" faz o PRÓXIMO item ganhar a dele só quando ele mesmo virar o
+// ativo (nunca atribui adiantado pros 2 cards de prévia, que não têm
+// botão nenhum pra precisar disso).
+async function ensureApproachItemMessageAssigned(
+  clinicId: string,
+  item: { id: string; name: string | null; assignedMessage: string | null; assignedMessageSlot: number | null }
+): Promise<{ message: string; slot: number } | null> {
+  if (item.assignedMessage) return { message: item.assignedMessage, slot: item.assignedMessageSlot! };
+
+  const [config, messagesConfig] = await Promise.all([getOrCreateApproachQueueConfig(clinicId), getApproachMessagesConfig(clinicId)]);
+  const availableSlots = resolveAvailableApproachSlots([messagesConfig?.message1, messagesConfig?.message2, messagesConfig?.message3, messagesConfig?.message4, messagesConfig?.message5]);
+  if (availableSlots.length === 0) return null;
+
+  const slot = pickNextApproachMessageSlot(availableSlots, config.lastMessageSlot);
+  const template = [messagesConfig?.message1, messagesConfig?.message2, messagesConfig?.message3, messagesConfig?.message4, messagesConfig?.message5][slot - 1]!;
+  const message = fillApproachMessageTemplate(template, item.name);
+
+  await Promise.all([
+    prisma.approachQueueItem.update({ where: { id: item.id }, data: { assignedMessage: message, assignedMessageSlot: slot } }),
+    prisma.approachQueueConfig.update({ where: { clinicId }, data: { lastMessageSlot: slot } }),
+  ]);
+
+  return { message, slot };
 }
 
 // Snapshot de UMA conta — reaproveitado tanto pelo board inteiro
@@ -207,14 +246,14 @@ export async function getApproachBoardAccount(clinicId: string, now: Date = new 
   });
   if (!clinic) return null;
 
-  const [config, sentToday, items, resolvedWindow] = await Promise.all([
+  const [config, sentToday, rawItems, resolvedWindow] = await Promise.all([
     getOrCreateApproachQueueConfig(clinicId),
     countApproachedToday(clinicId, now),
     prisma.approachQueueItem.findMany({
       where: { clinicId, status: "QUEUED" },
       orderBy: { createdAt: "asc" },
       take: 3,
-      select: { id: true, username: true, name: true },
+      select: { id: true, username: true, name: true, assignedMessage: true, assignedMessageSlot: true },
     }),
     window ? Promise.resolve(window) : getApproachWindow(),
   ]);
@@ -227,6 +266,25 @@ export async function getApproachBoardAccount(clinicId: string, now: Date = new 
     windowStartMinute: resolvedWindow.startMinute,
     windowEndMinute: resolvedWindow.endMinute,
   });
+
+  // Só o primeiro (o card ATIVO) precisa da mensagem pronta — os 2 de
+  // prévia não têm botão, atribuir pra eles agora seria sortear mensagem
+  // à toa (e, se um deles nunca chegar a ser o ativo porque foi "Pulado"
+  // antes, teria consumido um slot do rodízio sem necessidade).
+  const front = rawItems[0];
+  const assigned = front ? await ensureApproachItemMessageAssigned(clinicId, front) : null;
+
+  const items: ApproachBoardItem[] = rawItems.map((item, idx) => {
+    const message = idx === 0 ? (assigned?.message ?? null) : null;
+    return {
+      id: item.id,
+      username: item.username,
+      name: item.name,
+      message,
+      dmLink: message ? buildInstagramDmLink(item.username, message) : null,
+    };
+  });
+
   return {
     clinicId: clinic.id,
     name: clinic.name,
@@ -255,24 +313,26 @@ export async function getApproachBoard(now: Date = new Date()): Promise<{ accoun
 // Enviar / desfazer / pular
 // ---------------------------------------------------------------------------
 
-export type SendApproachResult =
-  | { ok: true; message: string; igUsername: string; itemId: string }
-  | { ok: false; reason: "outside_hours" | "paused" | "limit_reached" | "waiting" | "empty_queue" | "no_messages" };
+export type ConfirmApproachSendResult =
+  | { ok: true }
+  | { ok: false; reason: "outside_hours" | "paused" | "limit_reached" | "waiting" | "not_found" | "already_handled" };
 
-// UM TOQUE = marca enviado + sorteia a mensagem + devolve o link do
-// Instagram (montado na action, que já tem buildInstagramDmLink à mão) —
-// esta função só garante o lado do banco: estado da conta, claim atômico
-// do item (anti duplo-toque, mesmo padrão de sendReactivationWhatsAppMessage,
-// reactivation.ts), log em ApproachLog e nova espera sorteada.
-export async function sendNextApproachItem(clinicId: string, now: Date = new Date()): Promise<SendApproachResult> {
-  const [config, messagesConfig, sentToday, item, window] = await Promise.all([
+// Registra um envio que o CLIENTE já executou (copiou a mensagem e abriu o
+// Instagram ANTES de chamar isto — ver FilaView.tsx/handleSend e o
+// comentário grande em ApproachQueueItem.assignedMessage, schema.prisma).
+// Recebe o `itemId` exato que foi mostrado/tocado (nunca "o primeiro da
+// fila" de novo — evita registrar o item errado numa corrida com um Pular
+// concorrente) e só precisa: conferir de novo horário/pausa/limite/espera
+// (nunca confia só na UI, mesmo padrão de sempre no projeto) e fazer o
+// claim atômico anti duplo-toque (updateMany condicionado em status
+// QUEUED — mesmo padrão de sendReactivationWhatsAppMessage, reactivation.ts).
+// NUNCA sorteia mensagem aqui — ela já foi atribuída e persistida bem
+// antes, em ensureApproachItemMessageAssigned (board).
+export async function confirmApproachSend(clinicId: string, itemId: string, now: Date = new Date()): Promise<ConfirmApproachSendResult> {
+  const [config, sentToday, item, window] = await Promise.all([
     getOrCreateApproachQueueConfig(clinicId),
-    getApproachMessagesConfig(clinicId),
     countApproachedToday(clinicId, now),
-    prisma.approachQueueItem.findFirst({
-      where: { clinicId, status: "QUEUED" },
-      orderBy: { createdAt: "asc" },
-    }),
+    prisma.approachQueueItem.findUnique({ where: { id: itemId } }),
     getApproachWindow(),
   ]);
 
@@ -289,35 +349,29 @@ export async function sendNextApproachItem(clinicId: string, now: Date = new Dat
   if (state.kind === "PAUSED") return { ok: false, reason: "paused" };
   if (state.kind === "LIMIT_REACHED") return { ok: false, reason: "limit_reached" };
   if (state.kind === "WAITING") return { ok: false, reason: "waiting" };
-  if (!item) return { ok: false, reason: "empty_queue" };
-
-  const availableSlots = resolveAvailableApproachSlots([messagesConfig?.message1, messagesConfig?.message2, messagesConfig?.message3, messagesConfig?.message4, messagesConfig?.message5]);
-  if (availableSlots.length === 0) return { ok: false, reason: "no_messages" };
+  if (!item || item.clinicId !== clinicId) return { ok: false, reason: "not_found" };
 
   // Claim atômico — só conta a 1ª chamada concorrente pra ESTE item;
-  // double-click (ou double-tap) na mesma ação some sem efeito duplo.
+  // toque duplo (ou um Pular que chegou primeiro) vira "already_handled",
+  // nunca registrado duas vezes nem contado por engano depois de pulado.
   const claim = await prisma.approachQueueItem.updateMany({
-    where: { id: item.id, status: "QUEUED" },
+    where: { id: itemId, status: "QUEUED" },
     data: { status: "SENT", sentAt: now },
   });
-  if (claim.count === 0) return { ok: false, reason: "empty_queue" };
-
-  const slot = pickNextApproachMessageSlot(availableSlots, config.lastMessageSlot);
-  const template = [messagesConfig?.message1, messagesConfig?.message2, messagesConfig?.message3, messagesConfig?.message4, messagesConfig?.message5][slot - 1]!;
-  const message = fillApproachMessageTemplate(template, item.name);
+  if (claim.count === 0) return { ok: false, reason: "already_handled" };
 
   const todayStart = startOfApproachDay(now);
   const log = await prisma.approachLog.create({ data: { clinicId, loggedDate: todayStart, count: 1 } });
 
   await Promise.all([
-    prisma.approachQueueItem.update({ where: { id: item.id }, data: { approachLogId: log.id } }),
+    prisma.approachQueueItem.update({ where: { id: itemId }, data: { approachLogId: log.id } }),
     prisma.approachQueueConfig.update({
       where: { clinicId },
-      data: { lockedUntil: new Date(now.getTime() + randomApproachWaitMs()), lastMessageSlot: slot },
+      data: { lockedUntil: new Date(now.getTime() + randomApproachWaitMs()) },
     }),
   ]);
 
-  return { ok: true, message, igUsername: item.username, itemId: item.id };
+  return { ok: true };
 }
 
 // "Não enviei · Desfazer" — só o envio MAIS RECENTE desta clínica (sempre

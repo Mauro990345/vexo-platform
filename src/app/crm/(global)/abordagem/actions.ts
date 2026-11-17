@@ -3,7 +3,6 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireInternalSession } from "@/lib/session";
-import { buildInstagramDmLink } from "@/lib/reactivation";
 import { parseApproachTimeToMinutes, validateApproachWindow } from "@/lib/approach-queue";
 import {
   extractApproachRowsFromCsvText,
@@ -19,7 +18,7 @@ import {
   getApproachBoardAccount,
   getApproachWindow,
   setApproachWindow,
-  sendNextApproachItem,
+  confirmApproachSend,
   undoLastApproachSend,
   skipApproachItem,
   type ApproachBoardAccount,
@@ -171,24 +170,25 @@ export async function getApproachBoardAction(): Promise<ApproachBoard> {
   return getApproachBoard(new Date());
 }
 
-export type SendApproachMessageActionResult =
-  | { ok: true; message: string; dmLink: string; account: ApproachBoardAccount }
-  | { ok: false; reason: string };
+export type ConfirmApproachSendActionResult = { ok: true; account: ApproachBoardAccount } | { ok: false; reason: string };
 
-// Um toque: marca enviado no banco (sendNextApproachItem — já cuida do
-// claim atômico anti duplo-toque), monta o link ig.me/m/<@> (mesma função
-// de Reativação) e devolve o snapshot ATUALIZADO da conta, pro cliente
-// trocar o card na hora sem precisar recarregar o board inteiro. A cópia
-// pra área de transferência e o window.open acontecem no cliente (aqui não
-// tem acesso a nenhum dos dois).
-export async function sendApproachMessageAction(clinicId: string): Promise<SendApproachMessageActionResult> {
+// Chamada DEPOIS que o cliente já copiou a mensagem e abriu o Instagram
+// (ver FilaView.tsx/handleSend — a mensagem e o dmLink já vinham prontos
+// no item do board, nunca sorteados aqui; ver ensureApproachItemMessageAssigned,
+// approach-queue-db.ts). Esta action só registra o envio: confirmApproachSend
+// já cuida do claim atômico anti duplo-toque e confere de novo horário/
+// pausa/limite/espera no servidor (nunca confia só no que a tela mostrava
+// no momento do toque). Recusado (ex.: corrida com Pular, limite batido no
+// meio do caminho) -> NÃO conta como enviado, devolve o motivo; o
+// clipboard/Instagram já aconteceram de qualquer forma no cliente, mas
+// isso é esperado (é um caso raro, e o toque já tinha sido dado).
+export async function confirmApproachSendAction(clinicId: string, itemId: string): Promise<ConfirmApproachSendActionResult> {
   await requireApproachAdmin();
-  const result = await sendNextApproachItem(clinicId, new Date());
-  if (!result.ok) return { ok: false, reason: result.reason };
-
+  const result = await confirmApproachSend(clinicId, itemId, new Date());
   const account = await getApproachBoardAccount(clinicId, new Date());
   revalidatePath(QUEUE_PATH);
-  return { ok: true, message: result.message, dmLink: buildInstagramDmLink(result.igUsername, result.message), account: account! };
+  if (!result.ok) return { ok: false, reason: result.reason };
+  return { ok: true, account: account! };
 }
 
 export async function undoApproachSendAction(clinicId: string): Promise<ApproachBoardAccount | null> {

@@ -1625,9 +1625,29 @@ model ApproachQueueItem {
   status ApproachQueueItemStatus @default(QUEUED)
   sentAt DateTime?
 
-  // Linha de ApproachLog criada por ESTE envio (ver sendNextApproachItem) —
-  // null enquanto QUEUED/SKIPPED. Desfazer (undoApproachSend) apaga essa
-  // linha e volta este campo pra null junto com status->QUEUED.
+  // Mensagem já sorteada e com {nome} substituído (ver
+  // ensureApproachItemMessageAssigned, approach-queue-db.ts) — atribuída
+  // UMA VEZ, assim que o item vira o card ATIVO (o primeiro da fila),
+  // nunca sorteada de novo numa atualização automática da tela nem num
+  // recarregamento (bug corrigido: o toque em "Enviar mensagem" dependia
+  // de uma resposta de rede pra saber a mensagem, e no Safari/iOS isso
+  // quebra o "gesto do usuário" que autoriza copiar pra área de
+  // transferência e abrir outra aba — precisa estar pronta ANTES do
+  // toque). Permanece preenchida pra sempre depois de atribuída (mesmo
+  // após enviado ou desfeito) — é o que garante que "Desfazer" devolve o
+  // card com a MESMA mensagem, nunca uma nova sorteada.
+  assignedMessage     String? @db.Text
+  // Slot (1-5) correspondente a assignedMessage — guardado só pra
+  // computeApproachAccountState/ensureApproachItemMessageAssigned saber
+  // qual foi o ÚLTIMO slot atribuído (ApproachQueueConfig.lastMessageSlot
+  // passa a ser atualizado na ATRIBUIÇÃO, não mais no envio) e evitar
+  // repetir o mesmo na próxima atribuição.
+  assignedMessageSlot Int?
+
+  // Linha de ApproachLog criada por ESTE envio (ver confirmApproachSend,
+  // approach-queue-db.ts) — null enquanto QUEUED/SKIPPED. Desfazer
+  // (undoApproachSend) apaga essa linha e volta este campo pra null junto
+  // com status->QUEUED (nunca mexe em assignedMessage/assignedMessageSlot).
   approachLogId String?      @unique
   approachLog   ApproachLog? @relation(fields: [approachLogId], references: [id], onDelete: SetNull)
 
