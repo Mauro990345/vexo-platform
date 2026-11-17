@@ -48,23 +48,24 @@ describe("ClinicQueueCard", () => {
     expect(markup).toContain("@maria.ig");
   });
 
-  it("liberada (READY): botão azul 'Enviar mensagem'", () => {
+  it("liberada (READY): botão azul 'Enviar'", () => {
     const markup = render(account({ kind: "READY" }));
-    expect(markup).toContain("Enviar mensagem");
+    expect(markup).toContain(">Enviar<");
+    expect(markup).not.toContain("Enviar mensagem");
   });
 
-  it("em espera (WAITING): botão desativado com contagem e 'Não enviei · Desfazer' embaixo", () => {
+  it("em espera (WAITING): botão desativado com contagem e 'Não enviei · Desfazer' junto dos outros links", () => {
     const markup = render(account({ kind: "WAITING", msRemaining: 72_000 }));
     expect(markup).toContain("Aguarde");
     expect(markup).toContain("Não enviei · Desfazer");
-    expect(markup).not.toContain("Enviar mensagem");
+    expect(markup).not.toContain(">Enviar<");
   });
 
   it("pausa de lote (BATCH_PAUSED): botão cinza com contagem em horas, SEM o link de desfazer", () => {
     const markup = render(account({ kind: "BATCH_PAUSED", msRemaining: 2 * 3600_000 }));
     expect(markup).toContain("Pausa 2:00:00");
     expect(markup).not.toContain("Não enviei · Desfazer");
-    expect(markup).not.toContain("Enviar mensagem");
+    expect(markup).not.toContain(">Enviar<");
   });
 
   it("limite do dia atingido: botão cinza com o motivo", () => {
@@ -72,16 +73,16 @@ describe("ClinicQueueCard", () => {
     expect(markup).toContain("Limite de hoje");
   });
 
-  it("pausada manualmente: botão cinza 'Pausada' e link 'Retomar conta' em vez de 'Pausar esta conta'", () => {
+  it("pausada manualmente: botão cinza 'Pausada' e link 'Retomar conta' em vez de 'Pausar conta'", () => {
     const markup = render(account({ kind: "PAUSED" }));
     expect(markup).toContain("Pausada");
     expect(markup).toContain("Retomar conta");
-    expect(markup).not.toContain("Pausar esta conta");
+    expect(markup).not.toContain("Pausar conta");
   });
 
-  it("não pausada: mostra o link 'Pausar esta conta'", () => {
+  it("não pausada: mostra o link 'Pausar conta'", () => {
     const markup = render(account({ kind: "READY" }));
-    expect(markup).toContain("Pausar esta conta");
+    expect(markup).toContain("Pausar conta");
   });
 
   it("sempre mostra o link 'Pular', qualquer que seja o estado", () => {
@@ -92,11 +93,26 @@ describe("ClinicQueueCard", () => {
 
   it("espera já vencida (countdown zerado localmente) — botão volta a ficar liberado", () => {
     const markup = render(account({ kind: "WAITING", msRemaining: 1000 }), NOW - 5000);
-    expect(markup).toContain("Enviar mensagem");
+    expect(markup).toContain(">Enviar<");
   });
 
   it("sem lead ativo (items vazio) — não renderiza nada", () => {
     const markup = render(account({ kind: "READY" }, { items: [] }));
     expect(markup).toBe("");
+  });
+
+  it("nome da clínica e @ longos usam truncate (uma linha só, nunca empurra o botão)", () => {
+    const markup = render(account({ kind: "READY" }, { name: "Clínica Com Um Nome Bem Longo Que Não Caberia Numa Linha" }));
+    expect(markup).toMatch(/class="truncate[^"]*">Clínica Com Um Nome Bem Longo Que Não Caberia Numa Linha</);
+  });
+
+  it("botão liberado tem área de toque ampliada (pelo menos 44px), sem mudar o desenho visual", () => {
+    const markup = render(account({ kind: "READY" }));
+    expect(markup).toContain("before:min-h-11");
+  });
+
+  it("botão (liberado ou desativado) tem largura mínima — cresce só na largura, nunca na altura", () => {
+    expect(render(account({ kind: "READY" }))).toContain("min-w-cta-sm");
+    expect(render(account({ kind: "OUTSIDE_HOURS" }))).toContain("min-w-cta-sm");
   });
 });

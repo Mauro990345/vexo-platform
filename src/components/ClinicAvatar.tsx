@@ -22,10 +22,11 @@ import { useState } from "react";
 const SIZE_CLASSES = {
   // 48px — tamanho aprovado pra Fila de abordagem quando era 1 card por vez.
   lg: "h-12 w-12",
-  // 36px — versão compacta pro layout de 3 cards simultâneos (rodada 6):
-  // o círculo menor dentro do card deixa a tela caber inteira sem rolar no
-  // celular; @ do lead e botão mantêm o tamanho aprovado (ver DESIGN.md).
-  md: "h-9 w-9",
+  // 44px (rodada 8: era 36px na rodada 6/7, quando o card ainda era
+  // vertical) — o novo layout horizontal do card da Fila de abordagem
+  // (foto + texto numa linha, botão à direita) pede um círculo um pouco
+  // maior pra equilibrar a linha inteira (ver DESIGN.md).
+  md: "h-11 w-11",
 } as const;
 const TEXT_SIZE_CLASSES = {
   lg: "text-base",
