@@ -20,13 +20,16 @@ import { useState } from "react";
 // salva já pode ter expirado) — sem isso, viraria o ícone de imagem
 // quebrada do navegador em vez de cair pras iniciais.
 const SIZE_CLASSES = {
-  // 48px — tamanho pedido pra Fila de abordagem; único usado até agora,
-  // mas a tabela já existe pronta pra um tamanho novo não exigir reescrever
-  // o componente, só adicionar uma entrada aqui.
+  // 48px — tamanho aprovado pra Fila de abordagem quando era 1 card por vez.
   lg: "h-12 w-12",
+  // 36px — versão compacta pro layout de 3 cards simultâneos (rodada 6):
+  // o círculo menor dentro do card deixa a tela caber inteira sem rolar no
+  // celular; @ do lead e botão mantêm o tamanho aprovado (ver DESIGN.md).
+  md: "h-9 w-9",
 } as const;
 const TEXT_SIZE_CLASSES = {
   lg: "text-base",
+  md: "text-sm",
 } as const;
 
 export type ClinicAvatarSize = keyof typeof SIZE_CLASSES;

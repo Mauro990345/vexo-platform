@@ -16,6 +16,9 @@ const approachLogCreateMock = vi.fn();
 const approachLogDeleteMock = vi.fn();
 const approachWindowSettingsFindUniqueMock = vi.fn();
 const approachWindowSettingsUpsertMock = vi.fn();
+const approachTimingSettingsFindUniqueMock = vi.fn();
+const approachTimingSettingsUpsertMock = vi.fn();
+const clinicFindManyMock = vi.fn();
 
 vi.mock("@/lib/prisma", () => ({
   prisma: {
@@ -29,7 +32,10 @@ vi.mock("@/lib/prisma", () => ({
       count: (...args: unknown[]) => approachQueueItemCountMock(...args),
     },
     lead: { findMany: (...args: unknown[]) => leadFindManyMock(...args) },
-    clinic: { findUnique: (...args: unknown[]) => clinicFindUniqueMock(...args) },
+    clinic: {
+      findUnique: (...args: unknown[]) => clinicFindUniqueMock(...args),
+      findMany: (...args: unknown[]) => clinicFindManyMock(...args),
+    },
     approachQueueConfig: {
       upsert: (...args: unknown[]) => approachQueueConfigUpsertMock(...args),
       update: (...args: unknown[]) => approachQueueConfigUpdateMock(...args),
@@ -43,15 +49,38 @@ vi.mock("@/lib/prisma", () => ({
       findUnique: (...args: unknown[]) => approachWindowSettingsFindUniqueMock(...args),
       upsert: (...args: unknown[]) => approachWindowSettingsUpsertMock(...args),
     },
+    approachTimingSettings: {
+      findUnique: (...args: unknown[]) => approachTimingSettingsFindUniqueMock(...args),
+      upsert: (...args: unknown[]) => approachTimingSettingsUpsertMock(...args),
+    },
   },
 }));
 
-import { uploadApproachLeads, confirmApproachSend, undoLastApproachSend, skipApproachItem, setApproachWindow, getApproachBoardAccount } from "./approach-queue-db";
+import {
+  uploadApproachLeads,
+  confirmApproachSend,
+  undoLastApproachSend,
+  skipApproachItem,
+  setApproachWindow,
+  setApproachTiming,
+  getApproachBoardAccount,
+  getApproachBoard,
+} from "./approach-queue-db";
 
 const NOW = new Date("2026-01-15T14:00:00Z"); // 11h em São Paulo — dentro do horário
 
 function baseConfig(overrides: Record<string, unknown> = {}) {
-  return { clinicId: "clinic-1", dailyLimit: 60, paused: false, activeInQueue: true, lockedUntil: null, lastMessageSlot: null, ...overrides };
+  return {
+    clinicId: "clinic-1",
+    dailyLimit: 60,
+    paused: false,
+    activeInQueue: true,
+    lockedUntil: null,
+    batchSentCount: 0,
+    batchPausedUntil: null,
+    lastMessageSlot: null,
+    ...overrides,
+  };
 }
 
 beforeEach(() => {
@@ -68,6 +97,7 @@ beforeEach(() => {
     name: "Clínica Demo",
     instagramAccount: { igUsername: "clinica.demo", profilePictureUrl: "https://scontent.cdninstagram.com/clinica.jpg" },
   });
+  clinicFindManyMock.mockReset().mockResolvedValue([]);
   approachQueueConfigUpsertMock.mockReset().mockResolvedValue(baseConfig());
   approachQueueConfigUpdateMock.mockReset().mockResolvedValue({});
   approachMessagesConfigFindUniqueMock.mockReset().mockResolvedValue({ message1: "Oi {nome}!", message2: "Fala {nome}", message3: null, message4: null, message5: null });
@@ -75,6 +105,8 @@ beforeEach(() => {
   approachLogDeleteMock.mockReset().mockResolvedValue({});
   approachWindowSettingsFindUniqueMock.mockReset().mockResolvedValue(null); // sem linha salva -> padrão 7h-20h
   approachWindowSettingsUpsertMock.mockReset().mockResolvedValue({});
+  approachTimingSettingsFindUniqueMock.mockReset().mockResolvedValue(null); // sem linha salva -> padrões (1-2min, 30, 2h)
+  approachTimingSettingsUpsertMock.mockReset().mockResolvedValue({});
 });
 
 describe("uploadApproachLeads — duplicados", () => {
@@ -158,18 +190,14 @@ describe("getApproachBoardAccount — atribuição de mensagem (ver ensureApproa
     expect(approachQueueItemUpdateMock).toHaveBeenCalledTimes(1); // só a 1ª chamada gravou
   });
 
-  it("só o 1º item (ativo) ganha mensagem — os 2 de prévia ficam com message/dmLink null", async () => {
-    approachQueueItemFindManyMock.mockResolvedValue([
-      { id: "item-1", username: "um.ig", name: null, assignedMessage: null, assignedMessageSlot: null },
-      { id: "item-2", username: "dois.ig", name: null, assignedMessage: null, assignedMessageSlot: null },
-      { id: "item-3", username: "tres.ig", name: null, assignedMessage: null, assignedMessageSlot: null },
-    ]);
+  it("só 1 lead ativo por clínica (o próximo @ dela) — busca só o item da frente", async () => {
+    approachQueueItemFindManyMock.mockResolvedValue([{ id: "item-1", username: "um.ig", name: null, assignedMessage: null, assignedMessageSlot: null }]);
 
     const account = await getApproachBoardAccount("clinic-1", NOW);
 
+    expect(account?.items).toHaveLength(1);
     expect(account?.items[0]?.message).not.toBeNull();
-    expect(account?.items[1]?.message).toBeNull();
-    expect(account?.items[2]?.message).toBeNull();
+    expect(approachQueueItemFindManyMock).toHaveBeenCalledWith(expect.objectContaining({ take: 1 }));
     expect(approachQueueItemUpdateMock).toHaveBeenCalledTimes(1);
   });
 
@@ -239,9 +267,70 @@ describe("confirmApproachSend", () => {
     expect(result).toEqual({ ok: true });
     expect(approachQueueItemUpdateManyMock).toHaveBeenCalledWith({ where: { id: "item-1", status: "QUEUED" }, data: { status: "SENT", sentAt: NOW } });
     expect(approachLogCreateMock).toHaveBeenCalledWith({ data: expect.objectContaining({ clinicId: "clinic-1", count: 1 }) });
-    expect(approachQueueConfigUpdateMock).toHaveBeenCalledWith({ where: { clinicId: "clinic-1" }, data: { lockedUntil: expect.any(Date) } });
+    expect(approachQueueConfigUpdateMock).toHaveBeenCalledWith({
+      where: { clinicId: "clinic-1" },
+      data: { lockedUntil: expect.any(Date), batchSentCount: 1, batchPausedUntil: null },
+    });
     // Nenhuma chamada aqui mexe em mensagem/slot — isso já aconteceu antes, no board.
     expect(approachQueueConfigUpdateMock).not.toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ lastMessageSlot: expect.anything() }) }));
+  });
+
+  it("espera sorteada usa o intervalo configurado (timing settings), não mais fixo 3-5min", async () => {
+    approachTimingSettingsFindUniqueMock.mockResolvedValue({ id: "singleton", waitMinMinutes: 10, waitMaxMinutes: 10, batchSize: 30, batchPauseHours: 2 });
+    approachQueueItemFindUniqueMock.mockResolvedValue({ id: "item-1", clinicId: "clinic-1", username: "fulano.ig", assignedMessage: "Oi!" });
+    approachQueueItemUpdateManyMock.mockResolvedValue({ count: 1 });
+
+    await confirmApproachSend("clinic-1", "item-1", NOW);
+
+    const data = approachQueueConfigUpdateMock.mock.calls[0]![0].data;
+    expect((data.lockedUntil as Date).getTime()).toBe(NOW.getTime() + 10 * 60_000);
+  });
+
+  it("30º envio do lote dispara a pausa de lote (2h a partir de agora)", async () => {
+    approachQueueConfigUpsertMock.mockResolvedValue(baseConfig({ batchSentCount: 29 }));
+    approachQueueItemFindUniqueMock.mockResolvedValue({ id: "item-1", clinicId: "clinic-1", username: "fulano.ig", assignedMessage: "Oi!" });
+    approachQueueItemUpdateManyMock.mockResolvedValue({ count: 1 });
+
+    const result = await confirmApproachSend("clinic-1", "item-1", NOW);
+
+    expect(result).toEqual({ ok: true });
+    expect(approachQueueConfigUpdateMock).toHaveBeenCalledWith({
+      where: { clinicId: "clinic-1" },
+      data: { lockedUntil: expect.any(Date), batchSentCount: 30, batchPausedUntil: new Date(NOW.getTime() + 2 * 3600_000) },
+    });
+  });
+
+  it("em pausa de lote (batchPausedUntil no futuro) — não registra", async () => {
+    approachQueueConfigUpsertMock.mockResolvedValue(baseConfig({ batchSentCount: 30, batchPausedUntil: new Date(NOW.getTime() + 3600_000) }));
+    const result = await confirmApproachSend("clinic-1", "item-1", NOW);
+    expect(result).toEqual({ ok: false, reason: "batch_paused" });
+    expect(approachQueueItemUpdateManyMock).not.toHaveBeenCalled();
+  });
+
+  it("pausa de lote já vencida — libera e começa um lote novo do zero (conta vira 1, não 31)", async () => {
+    approachQueueConfigUpsertMock.mockResolvedValue(baseConfig({ batchSentCount: 30, batchPausedUntil: new Date(NOW.getTime() - 1000) }));
+    approachQueueItemFindUniqueMock.mockResolvedValue({ id: "item-1", clinicId: "clinic-1", username: "fulano.ig", assignedMessage: "Oi!" });
+    approachQueueItemUpdateManyMock.mockResolvedValue({ count: 1 });
+
+    const result = await confirmApproachSend("clinic-1", "item-1", NOW);
+
+    expect(result).toEqual({ ok: true });
+    expect(approachQueueConfigUpdateMock).toHaveBeenCalledWith({
+      where: { clinicId: "clinic-1" },
+      data: { lockedUntil: expect.any(Date), batchSentCount: 1, batchPausedUntil: null },
+    });
+  });
+
+  it("pausa de lote configurada com 0 horas nunca pausa, mesmo no 30º envio", async () => {
+    approachTimingSettingsFindUniqueMock.mockResolvedValue({ id: "singleton", waitMinMinutes: 1, waitMaxMinutes: 2, batchSize: 30, batchPauseHours: 0 });
+    approachQueueConfigUpsertMock.mockResolvedValue(baseConfig({ batchSentCount: 29 }));
+    approachQueueItemFindUniqueMock.mockResolvedValue({ id: "item-1", clinicId: "clinic-1", username: "fulano.ig", assignedMessage: "Oi!" });
+    approachQueueItemUpdateManyMock.mockResolvedValue({ count: 1 });
+
+    await confirmApproachSend("clinic-1", "item-1", NOW);
+
+    const data = approachQueueConfigUpdateMock.mock.calls[0]![0].data;
+    expect(data.batchPausedUntil).toBeNull();
   });
 
   it("toque duplo: claim perde na 2ª chamada (count 0) — vira already_handled, nunca conta duas vezes", async () => {
@@ -279,7 +368,44 @@ describe("undoLastApproachSend", () => {
     expect(data).not.toHaveProperty("assignedMessage");
     expect(data).not.toHaveProperty("assignedMessageSlot");
     expect(approachLogDeleteMock).toHaveBeenCalledWith({ where: { id: "log-1" } });
-    expect(approachQueueConfigUpdateMock).toHaveBeenCalledWith({ where: { clinicId: "clinic-1" }, data: { lockedUntil: null } });
+    expect(approachQueueConfigUpdateMock).toHaveBeenCalledWith({
+      where: { clinicId: "clinic-1" },
+      data: { lockedUntil: null, batchPausedUntil: null, batchSentCount: 0 },
+    });
+  });
+
+  it("desfazer comum (sem pausa) volta o contador do lote em 1", async () => {
+    approachQueueConfigUpsertMock.mockResolvedValue(baseConfig({ batchSentCount: 12 }));
+    approachQueueItemFindFirstMock.mockResolvedValue({ id: "item-1", approachLogId: "log-1" });
+
+    await undoLastApproachSend("clinic-1");
+
+    expect(approachQueueConfigUpdateMock).toHaveBeenCalledWith({
+      where: { clinicId: "clinic-1" },
+      data: { lockedUntil: null, batchPausedUntil: null, batchSentCount: 11 },
+    });
+  });
+
+  it("desfazer do envio que fechou o lote: cancela a pausa e volta o contador pra 29", async () => {
+    approachQueueConfigUpsertMock.mockResolvedValue(baseConfig({ batchSentCount: 30, batchPausedUntil: new Date(NOW.getTime() + 3600_000) }));
+    approachQueueItemFindFirstMock.mockResolvedValue({ id: "item-1", approachLogId: "log-1" });
+
+    await undoLastApproachSend("clinic-1");
+
+    expect(approachQueueConfigUpdateMock).toHaveBeenCalledWith({
+      where: { clinicId: "clinic-1" },
+      data: { lockedUntil: null, batchPausedUntil: null, batchSentCount: 29 },
+    });
+  });
+
+  it("contador nunca fica negativo (desfazer com contador já em 0)", async () => {
+    approachQueueConfigUpsertMock.mockResolvedValue(baseConfig({ batchSentCount: 0 }));
+    approachQueueItemFindFirstMock.mockResolvedValue({ id: "item-1", approachLogId: "log-1" });
+
+    await undoLastApproachSend("clinic-1");
+
+    const data = approachQueueConfigUpdateMock.mock.calls[0]![0].data;
+    expect(data.batchSentCount).toBe(0);
   });
 
   it("Desfazer + reler o board: a mesma mensagem reaparece (o item continua com assignedMessage no banco)", async () => {
@@ -327,6 +453,69 @@ describe("setApproachWindow", () => {
   it("início >= fim — rejeita sem gravar nada", async () => {
     await expect(setApproachWindow(1200, 420)).rejects.toThrow();
     expect(approachWindowSettingsUpsertMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("setApproachTiming", () => {
+  it("salva valores válidos", async () => {
+    await setApproachTiming({ waitMinMinutes: 1, waitMaxMinutes: 2, batchSize: 30, batchPauseHours: 2 });
+    expect(approachTimingSettingsUpsertMock).toHaveBeenCalledWith({
+      where: { id: "singleton" },
+      update: { waitMinMinutes: 1, waitMaxMinutes: 2, batchSize: 30, batchPauseHours: 2 },
+      create: { id: "singleton", waitMinMinutes: 1, waitMaxMinutes: 2, batchSize: 30, batchPauseHours: 2 },
+    });
+  });
+
+  it("mínimo maior que o máximo — rejeita sem gravar nada", async () => {
+    await expect(setApproachTiming({ waitMinMinutes: 5, waitMaxMinutes: 2, batchSize: 30, batchPauseHours: 2 })).rejects.toThrow();
+    expect(approachTimingSettingsUpsertMock).not.toHaveBeenCalled();
+  });
+
+  it("envios por lote menor que 1 — rejeita", async () => {
+    await expect(setApproachTiming({ waitMinMinutes: 1, waitMaxMinutes: 2, batchSize: 0, batchPauseHours: 2 })).rejects.toThrow();
+  });
+
+  it("pausa 0 é válida (0 = sem pausa)", async () => {
+    await setApproachTiming({ waitMinMinutes: 1, waitMaxMinutes: 2, batchSize: 30, batchPauseHours: 0 });
+    expect(approachTimingSettingsUpsertMock).toHaveBeenCalled();
+  });
+});
+
+describe("getApproachBoard — seleção e ordem dos 3 cards", () => {
+  it("mostra só clínicas com lead ativo, liberadas primeiro e depois por quem volta mais cedo", async () => {
+    clinicFindManyMock.mockResolvedValue([{ id: "a" }, { id: "b" }, { id: "c" }, { id: "d" }]);
+    clinicFindUniqueMock.mockImplementation(({ where }: { where: { id: string } }) =>
+      Promise.resolve({ id: where.id, name: `Clínica ${where.id}`, instagramAccount: null })
+    );
+    const configs: Record<string, ReturnType<typeof baseConfig>> = {
+      a: baseConfig({ clinicId: "a", lockedUntil: new Date(NOW.getTime() + 60_000) }), // espera 1min
+      b: baseConfig({ clinicId: "b" }), // liberada
+      c: baseConfig({ clinicId: "c", lockedUntil: new Date(NOW.getTime() + 30_000) }), // espera 30s (mais cedo que a)
+      d: baseConfig({ clinicId: "d" }), // sem lead — não deve aparecer
+    };
+    approachQueueConfigUpsertMock.mockImplementation(({ where }: { where: { clinicId: string } }) => Promise.resolve(configs[where.clinicId]));
+    approachQueueItemFindManyMock.mockImplementation(({ where }: { where: { clinicId: string } }) =>
+      Promise.resolve(where.clinicId === "d" ? [] : [{ id: `item-${where.clinicId}`, username: `${where.clinicId}.ig`, name: null, assignedMessage: "Oi!", assignedMessageSlot: 1 }])
+    );
+
+    const board = await getApproachBoard(NOW);
+
+    expect(board.accounts.map((acc) => acc.clinicId)).toEqual(["b", "c", "a"]);
+  });
+
+  it("mais de 3 clínicas qualificadas — mostra só as 3 primeiras pela ordem", async () => {
+    clinicFindManyMock.mockResolvedValue([{ id: "a" }, { id: "b" }, { id: "c" }, { id: "d" }]);
+    clinicFindUniqueMock.mockImplementation(({ where }: { where: { id: string } }) =>
+      Promise.resolve({ id: where.id, name: `Clínica ${where.id}`, instagramAccount: null })
+    );
+    approachQueueConfigUpsertMock.mockImplementation(({ where }: { where: { clinicId: string } }) => Promise.resolve(baseConfig({ clinicId: where.clinicId })));
+    approachQueueItemFindManyMock.mockImplementation(({ where }: { where: { clinicId: string } }) =>
+      Promise.resolve([{ id: `item-${where.clinicId}`, username: `${where.clinicId}.ig`, name: null, assignedMessage: "Oi!", assignedMessageSlot: 1 }])
+    );
+
+    const board = await getApproachBoard(NOW);
+
+    expect(board.accounts).toHaveLength(3);
   });
 });
 

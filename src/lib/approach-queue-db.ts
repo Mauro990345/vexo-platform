@@ -7,13 +7,19 @@ import {
   parseCsvRows,
   startOfApproachDay,
   computeApproachAccountState,
+  approachAccountSortKey,
   randomApproachWaitMs,
   resolveAvailableApproachSlots,
   pickNextApproachMessageSlot,
   fillApproachMessageTemplate,
   validateApproachWindow,
+  validateApproachTiming,
   DEFAULT_APPROACH_WINDOW_START_MINUTE,
   DEFAULT_APPROACH_WINDOW_END_MINUTE,
+  DEFAULT_APPROACH_WAIT_MIN_MINUTES,
+  DEFAULT_APPROACH_WAIT_MAX_MINUTES,
+  DEFAULT_APPROACH_BATCH_SIZE,
+  DEFAULT_APPROACH_BATCH_PAUSE_HOURS,
   type ApproachAccountState,
   type ApproachUploadRow,
 } from "@/lib/approach-queue";
@@ -38,6 +44,32 @@ export async function setApproachWindow(startMinute: number, endMinute: number):
     where: { id: "singleton" },
     update: { startMinute, endMinute },
     create: { id: "singleton", startMinute, endMinute },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Tempos (espera entre mensagens, lote e pausa) — GLOBAL, singleton (ver
+// ApproachTimingSettings, schema.prisma). Mesmo padrão do horário acima.
+// ---------------------------------------------------------------------------
+
+export type ApproachTiming = { waitMinMinutes: number; waitMaxMinutes: number; batchSize: number; batchPauseHours: number };
+
+export async function getApproachTimingSettings(): Promise<ApproachTiming> {
+  const settings = await prisma.approachTimingSettings.findUnique({ where: { id: "singleton" } });
+  return {
+    waitMinMinutes: settings?.waitMinMinutes ?? DEFAULT_APPROACH_WAIT_MIN_MINUTES,
+    waitMaxMinutes: settings?.waitMaxMinutes ?? DEFAULT_APPROACH_WAIT_MAX_MINUTES,
+    batchSize: settings?.batchSize ?? DEFAULT_APPROACH_BATCH_SIZE,
+    batchPauseHours: settings?.batchPauseHours ?? DEFAULT_APPROACH_BATCH_PAUSE_HOURS,
+  };
+}
+
+export async function setApproachTiming(timing: ApproachTiming): Promise<void> {
+  validateApproachTiming(timing);
+  await prisma.approachTimingSettings.upsert({
+    where: { id: "singleton" },
+    update: timing,
+    create: { id: "singleton", ...timing },
   });
 }
 
@@ -250,10 +282,13 @@ export async function getApproachBoardAccount(clinicId: string, now: Date = new 
   const [config, sentToday, rawItems, resolvedWindow] = await Promise.all([
     getOrCreateApproachQueueConfig(clinicId),
     countApproachedToday(clinicId, now),
+    // Cada clínica participante tem sempre só 1 lead ativo na tela (o
+    // próximo @ dela) — a fila de preparação pode ter mais itens atrás
+    // dele, mas só o da frente aparece no board (ver DESIGN.md "3 cards").
     prisma.approachQueueItem.findMany({
       where: { clinicId, status: "QUEUED" },
       orderBy: { createdAt: "asc" },
-      take: 3,
+      take: 1,
       select: { id: true, username: true, name: true, assignedMessage: true, assignedMessageSlot: true },
     }),
     window ? Promise.resolve(window) : getApproachWindow(),
@@ -264,27 +299,25 @@ export async function getApproachBoardAccount(clinicId: string, now: Date = new 
     dailyLimit: config.dailyLimit,
     sentToday,
     lockedUntil: config.lockedUntil,
+    batchPausedUntil: config.batchPausedUntil,
     windowStartMinute: resolvedWindow.startMinute,
     windowEndMinute: resolvedWindow.endMinute,
   });
 
-  // Só o primeiro (o card ATIVO) precisa da mensagem pronta — os 2 de
-  // prévia não têm botão, atribuir pra eles agora seria sortear mensagem
-  // à toa (e, se um deles nunca chegar a ser o ativo porque foi "Pulado"
-  // antes, teria consumido um slot do rodízio sem necessidade).
   const front = rawItems[0];
   const assigned = front ? await ensureApproachItemMessageAssigned(clinicId, front) : null;
 
-  const items: ApproachBoardItem[] = rawItems.map((item, idx) => {
-    const message = idx === 0 ? (assigned?.message ?? null) : null;
-    return {
-      id: item.id,
-      username: item.username,
-      name: item.name,
-      message,
-      dmLink: message ? buildInstagramDmLink(item.username, message) : null,
-    };
-  });
+  const items: ApproachBoardItem[] = front
+    ? [
+        {
+          id: front.id,
+          username: front.username,
+          name: front.name,
+          message: assigned?.message ?? null,
+          dmLink: assigned ? buildInstagramDmLink(front.username, assigned.message) : null,
+        },
+      ]
+    : [];
 
   return {
     clinicId: clinic.id,
@@ -298,6 +331,10 @@ export async function getApproachBoardAccount(clinicId: string, now: Date = new 
   };
 }
 
+// Escolhe até 3 clínicas pra mostrar na tela: só as que têm lead ativo
+// (sem isso, não há "próximo @" pra mostrar no card), liberadas primeiro,
+// depois em espera/pausa da que volta mais cedo pra mais tarde (ver
+// approachAccountSortKey, approach-queue.ts, e DESIGN.md "3 cards").
 export async function getApproachBoard(now: Date = new Date()): Promise<{ accounts: ApproachBoardAccount[]; window: ApproachWindow }> {
   const [clinics, window] = await Promise.all([
     prisma.clinic.findMany({
@@ -308,7 +345,9 @@ export async function getApproachBoard(now: Date = new Date()): Promise<{ accoun
     getApproachWindow(),
   ]);
   const accounts = await Promise.all(clinics.map((c) => getApproachBoardAccount(c.id, now, window)));
-  return { accounts: accounts.filter((a): a is ApproachBoardAccount => a !== null), window };
+  const withLead = accounts.filter((a): a is ApproachBoardAccount => a !== null && a.items.length > 0);
+  withLead.sort((a, b) => approachAccountSortKey(a.state) - approachAccountSortKey(b.state));
+  return { accounts: withLead.slice(0, 3), window };
 }
 
 // ---------------------------------------------------------------------------
@@ -317,7 +356,7 @@ export async function getApproachBoard(now: Date = new Date()): Promise<{ accoun
 
 export type ConfirmApproachSendResult =
   | { ok: true }
-  | { ok: false; reason: "outside_hours" | "paused" | "limit_reached" | "waiting" | "not_found" | "already_handled" };
+  | { ok: false; reason: "outside_hours" | "paused" | "limit_reached" | "batch_paused" | "waiting" | "not_found" | "already_handled" };
 
 // Registra um envio que o CLIENTE já executou (copiou a mensagem e abriu o
 // Instagram ANTES de chamar isto — ver FilaView.tsx/handleSend e o
@@ -331,11 +370,12 @@ export type ConfirmApproachSendResult =
 // NUNCA sorteia mensagem aqui — ela já foi atribuída e persistida bem
 // antes, em ensureApproachItemMessageAssigned (board).
 export async function confirmApproachSend(clinicId: string, itemId: string, now: Date = new Date()): Promise<ConfirmApproachSendResult> {
-  const [config, sentToday, item, window] = await Promise.all([
+  const [config, sentToday, item, window, timing] = await Promise.all([
     getOrCreateApproachQueueConfig(clinicId),
     countApproachedToday(clinicId, now),
     prisma.approachQueueItem.findUnique({ where: { id: itemId } }),
     getApproachWindow(),
+    getApproachTimingSettings(),
   ]);
 
   const state = computeApproachAccountState({
@@ -344,12 +384,14 @@ export async function confirmApproachSend(clinicId: string, itemId: string, now:
     dailyLimit: config.dailyLimit,
     sentToday,
     lockedUntil: config.lockedUntil,
+    batchPausedUntil: config.batchPausedUntil,
     windowStartMinute: window.startMinute,
     windowEndMinute: window.endMinute,
   });
   if (state.kind === "OUTSIDE_HOURS") return { ok: false, reason: "outside_hours" };
   if (state.kind === "PAUSED") return { ok: false, reason: "paused" };
   if (state.kind === "LIMIT_REACHED") return { ok: false, reason: "limit_reached" };
+  if (state.kind === "BATCH_PAUSED") return { ok: false, reason: "batch_paused" };
   if (state.kind === "WAITING") return { ok: false, reason: "waiting" };
   if (!item || item.clinicId !== clinicId) return { ok: false, reason: "not_found" };
 
@@ -365,11 +407,25 @@ export async function confirmApproachSend(clinicId: string, itemId: string, now:
   const todayStart = startOfApproachDay(now);
   const log = await prisma.approachLog.create({ data: { clinicId, loggedDate: todayStart, count: 1 } });
 
+  // Se a pausa de lote anterior já tinha vencido, este envio começa um
+  // lote novo do zero em vez de simplesmente continuar somando em cima do
+  // valor antigo (ver DESIGN.md "pausa do lote").
+  const batchExpired = config.batchPausedUntil !== null && config.batchPausedUntil.getTime() <= now.getTime();
+  const nextBatchSentCount = (batchExpired ? 0 : config.batchSentCount) + 1;
+  const nextBatchPausedUntil =
+    timing.batchPauseHours > 0 && nextBatchSentCount >= timing.batchSize
+      ? new Date(now.getTime() + timing.batchPauseHours * 3600_000)
+      : null;
+
   await Promise.all([
     prisma.approachQueueItem.update({ where: { id: itemId }, data: { approachLogId: log.id } }),
     prisma.approachQueueConfig.update({
       where: { clinicId },
-      data: { lockedUntil: new Date(now.getTime() + randomApproachWaitMs()) },
+      data: {
+        lockedUntil: new Date(now.getTime() + randomApproachWaitMs(timing.waitMinMinutes, timing.waitMaxMinutes)),
+        batchSentCount: nextBatchSentCount,
+        batchPausedUntil: nextBatchPausedUntil,
+      },
     }),
   ]);
 
@@ -384,10 +440,10 @@ export async function confirmApproachSend(clinicId: string, itemId: string, now:
 // ver comentário grande em ApproachQueueItem, schema.prisma), apaga a
 // linha de ApproachLog criada por aquele envio e libera a conta na hora.
 export async function undoLastApproachSend(clinicId: string): Promise<{ ok: boolean }> {
-  const lastSent = await prisma.approachQueueItem.findFirst({
-    where: { clinicId, status: "SENT" },
-    orderBy: { sentAt: "desc" },
-  });
+  const [config, lastSent] = await Promise.all([
+    getOrCreateApproachQueueConfig(clinicId),
+    prisma.approachQueueItem.findFirst({ where: { clinicId, status: "SENT" }, orderBy: { sentAt: "desc" } }),
+  ]);
   if (!lastSent) return { ok: false };
 
   await prisma.approachQueueItem.update({
@@ -399,7 +455,14 @@ export async function undoLastApproachSend(clinicId: string): Promise<{ ok: bool
       // já apagada por um Desfazer concorrente — ignora
     });
   }
-  await prisma.approachQueueConfig.update({ where: { clinicId }, data: { lockedUntil: null } });
+  // Regra única pra qualquer desfazer: volta o contador do lote em 1 e
+  // cancela a pausa de lote (se não havia pausa, limpar null é inofensivo)
+  // — cobre tanto o "desfazer comum" quanto o "desfazer do envio que fechou
+  // o lote" (volta pra 29 e libera na hora), ver DESIGN.md "pausa do lote".
+  await prisma.approachQueueConfig.update({
+    where: { clinicId },
+    data: { lockedUntil: null, batchPausedUntil: null, batchSentCount: Math.max(0, config.batchSentCount - 1) },
+  });
   return { ok: true };
 }
 

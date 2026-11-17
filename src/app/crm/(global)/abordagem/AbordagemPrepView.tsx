@@ -4,8 +4,8 @@ import Link from "next/link";
 import { useState, useTransition } from "react";
 import { Button } from "@/components/Button";
 import { Card } from "@/components/Card";
-import { toggleActiveInQueueAction, updateDailyLimitAction, uploadApproachLeadsAction, updateApproachWindowAction } from "./actions";
-import type { ApproachWindow } from "@/lib/approach-queue-db";
+import { toggleActiveInQueueAction, updateDailyLimitAction, uploadApproachLeadsAction, updateApproachWindowAction, updateApproachTimingAction } from "./actions";
+import type { ApproachWindow, ApproachTiming } from "@/lib/approach-queue-db";
 
 type PrepClinic = {
   id: string;
@@ -17,7 +17,7 @@ type PrepClinic = {
   hasMessages: boolean;
 };
 
-export function AbordagemPrepView({ clinics, window }: { clinics: PrepClinic[]; window: ApproachWindow }) {
+export function AbordagemPrepView({ clinics, window, timing }: { clinics: PrepClinic[]; window: ApproachWindow; timing: ApproachTiming }) {
   const selectedCount = clinics.filter((c) => c.activeInQueue).length;
 
   return (
@@ -28,8 +28,9 @@ export function AbordagemPrepView({ clinics, window }: { clinics: PrepClinic[]; 
         clínica.
       </p>
 
-      <div className="mt-4">
+      <div className="mt-4 space-y-3">
         <WindowForm window={window} />
+        <TimingForm timing={timing} />
       </div>
 
       <div className="mt-3">
@@ -195,6 +196,74 @@ function WindowForm({ window: approachWindow }: { window: ApproachWindow }) {
         </Button>
       </div>
       <p className="text-caption text-vexo-muted">Horário de São Paulo.</p>
+      {error && <p className="text-caption text-vexo-error">{error}</p>}
+    </Card>
+  );
+}
+
+// Espera entre mensagens, envios por lote e pausa após o lote — mesmo
+// padrão do "Horário permitido" acima: GLOBAL (vale pra todas as clínicas),
+// salvo no servidor, compacto e alinhado ao mesmo Card. Validação curta no
+// cliente (ver validateApproachTiming, approach-queue.ts) + o servidor
+// valida de novo (updateApproachTimingAction).
+function TimingForm({ timing }: { timing: ApproachTiming }) {
+  const [isPending, startTransition] = useTransition();
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const formData = new FormData(e.currentTarget);
+    setError(null);
+    setSaved(false);
+    startTransition(async () => {
+      try {
+        await updateApproachTimingAction(formData);
+        setSaved(true);
+        window.setTimeout(() => setSaved(false), 2000);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Não foi possível salvar os tempos.");
+      }
+    });
+  }
+
+  const fieldClass =
+    "w-16 rounded-control border border-vexo-border bg-vexo-bg px-2 py-1.5 text-xs text-vexo-fg outline-none focus:border-vexo-accent";
+  const labelClass = "mb-1 block text-caption text-vexo-muted";
+
+  return (
+    <Card as="form" onSubmit={handleSubmit} className="space-y-2">
+      <p className="text-xs font-medium text-vexo-fg">Tempos da fila</p>
+      <p className="text-caption text-vexo-muted">Vale para todas as clínicas. Não afeta esperas/pausas já em andamento.</p>
+      <div className="flex flex-wrap items-end gap-2">
+        <div>
+          <label className={labelClass} htmlFor="waitMinMinutes">
+            Espera mín. (min)
+          </label>
+          <input id="waitMinMinutes" name="waitMinMinutes" type="number" min={1} step={1} required defaultValue={timing.waitMinMinutes} className={fieldClass} />
+        </div>
+        <div>
+          <label className={labelClass} htmlFor="waitMaxMinutes">
+            Espera máx. (min)
+          </label>
+          <input id="waitMaxMinutes" name="waitMaxMinutes" type="number" min={1} step={1} required defaultValue={timing.waitMaxMinutes} className={fieldClass} />
+        </div>
+        <div>
+          <label className={labelClass} htmlFor="batchSize">
+            Envios/lote
+          </label>
+          <input id="batchSize" name="batchSize" type="number" min={1} step={1} required defaultValue={timing.batchSize} className={fieldClass} />
+        </div>
+        <div>
+          <label className={labelClass} htmlFor="batchPauseHours">
+            Pausa (horas)
+          </label>
+          <input id="batchPauseHours" name="batchPauseHours" type="number" min={0} step={1} required defaultValue={timing.batchPauseHours} className={fieldClass} />
+        </div>
+        <Button type="submit" variant="outline" size="sm" disabled={isPending}>
+          {saved ? "Salvo ✓" : "Salvar"}
+        </Button>
+      </div>
       {error && <p className="text-caption text-vexo-error">{error}</p>}
     </Card>
   );

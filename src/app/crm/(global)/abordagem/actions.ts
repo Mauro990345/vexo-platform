@@ -18,11 +18,14 @@ import {
   getApproachBoardAccount,
   getApproachWindow,
   setApproachWindow,
+  getApproachTimingSettings,
+  setApproachTiming,
   confirmApproachSend,
   undoLastApproachSend,
   skipApproachItem,
   type ApproachBoardAccount,
   type ApproachWindow,
+  type ApproachTiming,
 } from "@/lib/approach-queue-db";
 
 // Admin só, por enquanto (ver comentário grande em UserRole.APPROACH_AGENT,
@@ -155,6 +158,24 @@ export async function updateApproachWindowAction(formData: FormData) {
   const endMinute = parseApproachTimeToMinutes(String(formData.get("windowEnd") ?? ""), "Horário final");
   validateApproachWindow(startMinute, endMinute);
   await setApproachWindow(startMinute, endMinute);
+  revalidatePath(PREP_PATH);
+  revalidatePath(QUEUE_PATH);
+}
+
+// Tempos (espera entre mensagens, lote e pausa) — GLOBAL, vale pra todas as
+// clínicas (ver ApproachTimingSettings/getApproachTimingSettings, approach-queue-db.ts).
+export async function getApproachTimingAction(): Promise<ApproachTiming> {
+  await requireApproachAdmin();
+  return getApproachTimingSettings();
+}
+
+export async function updateApproachTimingAction(formData: FormData) {
+  await requireApproachAdmin();
+  const waitMinMinutes = parseInt(String(formData.get("waitMinMinutes") ?? ""), 10);
+  const waitMaxMinutes = parseInt(String(formData.get("waitMaxMinutes") ?? ""), 10);
+  const batchSize = parseInt(String(formData.get("batchSize") ?? ""), 10);
+  const batchPauseHours = parseInt(String(formData.get("batchPauseHours") ?? ""), 10);
+  await setApproachTiming({ waitMinMinutes, waitMaxMinutes, batchSize, batchPauseHours });
   revalidatePath(PREP_PATH);
   revalidatePath(QUEUE_PATH);
 }
