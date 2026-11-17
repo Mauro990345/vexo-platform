@@ -227,16 +227,26 @@ export function startOfApproachDay(now: Date): Date {
 }
 
 // ---------------------------------------------------------------------------
-// Espera aleatória (3-5 min) entre envios
+// Espera aleatória entre envios (padrão 1-2min) e pausa de lote (padrão a
+// cada 30 envios, 2h) — ambas configuráveis na tela de Preparação, ver
+// ApproachTimingSettings (singleton, mesmo padrão de ApproachWindowSettings)
 // ---------------------------------------------------------------------------
 
-export const APPROACH_WAIT_MIN_MS = 3 * 60 * 1000;
-export const APPROACH_WAIT_MAX_MS = 5 * 60 * 1000;
+export const DEFAULT_APPROACH_WAIT_MIN_MINUTES = 1;
+export const DEFAULT_APPROACH_WAIT_MAX_MINUTES = 2;
+export const DEFAULT_APPROACH_BATCH_SIZE = 30;
+export const DEFAULT_APPROACH_BATCH_PAUSE_HOURS = 2;
 
 // Sorteada de novo a cada envio (pedido explícito) — `rand` injetável só
 // pros testes (checar os limites sem depender de Math.random real).
-export function randomApproachWaitMs(rand: () => number = Math.random): number {
-  return APPROACH_WAIT_MIN_MS + Math.floor(rand() * (APPROACH_WAIT_MAX_MS - APPROACH_WAIT_MIN_MS + 1));
+export function randomApproachWaitMs(
+  waitMinMinutes: number = DEFAULT_APPROACH_WAIT_MIN_MINUTES,
+  waitMaxMinutes: number = DEFAULT_APPROACH_WAIT_MAX_MINUTES,
+  rand: () => number = Math.random
+): number {
+  const minMs = waitMinMinutes * 60_000;
+  const maxMs = waitMaxMinutes * 60_000;
+  return minMs + Math.floor(rand() * (maxMs - minMs + 1));
 }
 
 // "m:ss" pro botão "Aguarde m:ss" — nunca negativo (0:00 quando já passou,
@@ -246,6 +256,31 @@ export function formatApproachCountdown(msRemaining: number): string {
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
   return `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
+
+// "H:MM:SS" pro botão "Pausa H:MM:SS" (pausa de lote, até algumas horas —
+// formato diferente de formatApproachCountdown de propósito, pra nunca
+// mostrar um número de minutos de 3 dígitos tipo "118:00").
+export function formatApproachPauseCountdown(msRemaining: number): string {
+  const totalSeconds = Math.max(0, Math.ceil(msRemaining / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  return `${hours}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
+
+// "HH:MM"/minutos/inteiros da tela de Preparação -> validação com mensagem
+// curta, pedido explícito (mínimo <= máximo, mínimo >= 1min, lote >= 1,
+// pausa >= 0 — 0 = sem pausa). Validado tanto na UI quanto de novo no
+// servidor (updateApproachTimingAction), nunca confia só na tela.
+export function validateApproachTiming(params: { waitMinMinutes: number; waitMaxMinutes: number; batchSize: number; batchPauseHours: number }): void {
+  if (!Number.isFinite(params.waitMinMinutes) || !Number.isFinite(params.waitMaxMinutes) || !Number.isFinite(params.batchSize) || !Number.isFinite(params.batchPauseHours)) {
+    throw new Error("Preencha todos os campos com números válidos.");
+  }
+  if (params.waitMinMinutes < 1) throw new Error("A espera mínima precisa ser de pelo menos 1 minuto.");
+  if (params.waitMinMinutes > params.waitMaxMinutes) throw new Error("A espera mínima precisa ser menor ou igual à máxima.");
+  if (params.batchSize < 1) throw new Error("Envios por lote precisa ser pelo menos 1.");
+  if (params.batchPauseHours < 0) throw new Error("A pausa não pode ser negativa (0 = sem pausa).");
 }
 
 // ---------------------------------------------------------------------------
@@ -296,28 +331,65 @@ export type ApproachAccountState =
   | { kind: "OUTSIDE_HOURS" }
   | { kind: "PAUSED" }
   | { kind: "LIMIT_REACHED" }
+  | { kind: "BATCH_PAUSED"; msRemaining: number }
   | { kind: "WAITING"; msRemaining: number }
   | { kind: "READY" };
 
 // Ordem de prioridade pedida: fora do horário cobre tudo (nenhuma conta
-// libera fora de 7h-20h); dentro do horário, pausada > limite > espera >
-// liberada. `sentToday`/`dailyLimit` decidem o dourado; `lockedUntil`
-// decide o cinza-aguardando (só importa quando ainda está no futuro —
-// passado = já liberou, vira READY).
+// libera fora da janela, mesmo com uma pausa de lote já vencida — "se a
+// pausa terminar fora do horário, continua bloqueada pelo horário");
+// dentro do horário, pausada manualmente > limite do dia > pausa de lote
+// (30 envios, mais longa) > espera entre mensagens (mais curta) > liberada.
+// `lockedUntil`/`batchPausedUntil` só importam enquanto ainda no futuro —
+// passado = já liberou daquele lado específico, mas os outros gates ainda
+// se aplicam (daí a ordem: limite do dia continua valendo por cima mesmo
+// com a pausa de lote já vencida).
 export function computeApproachAccountState(params: {
   now: Date;
   paused: boolean;
   dailyLimit: number;
   sentToday: number;
   lockedUntil: Date | null;
+  batchPausedUntil: Date | null;
   windowStartMinute?: number;
   windowEndMinute?: number;
 }): ApproachAccountState {
   if (!isWithinApproachHours(params.now, params.windowStartMinute, params.windowEndMinute)) return { kind: "OUTSIDE_HOURS" };
   if (params.paused) return { kind: "PAUSED" };
   if (params.sentToday >= params.dailyLimit) return { kind: "LIMIT_REACHED" };
+  if (params.batchPausedUntil && params.batchPausedUntil.getTime() > params.now.getTime()) {
+    return { kind: "BATCH_PAUSED", msRemaining: params.batchPausedUntil.getTime() - params.now.getTime() };
+  }
   if (params.lockedUntil && params.lockedUntil.getTime() > params.now.getTime()) {
     return { kind: "WAITING", msRemaining: params.lockedUntil.getTime() - params.now.getTime() };
   }
   return { kind: "READY" };
+}
+
+// ---------------------------------------------------------------------------
+// Ordem dos cards na Fila: liberadas primeiro, depois espera/pausa da que
+// volta mais cedo pra que volta mais tarde — ver DESIGN.md
+// ---------------------------------------------------------------------------
+
+// Chave de ordenação ASCENDENTE — READY sempre primeiro (chave negativa);
+// WAITING/BATCH_PAUSED pelo próprio ms restante (naturalmente intercalados:
+// uma espera curta de 1min sempre vem antes de uma pausa de lote de 2h, sem
+// precisar tratar os dois tipos separadamente); LIMIT_REACHED/PAUSED/
+// OUTSIDE_HOURS não têm "volta às" automático previsível pra esta tela,
+// então ficam depois de qualquer espera/pausa (ordem relativa entre eles
+// não foi pedida — PAUSED manual por último, por nunca voltar sozinho).
+export function approachAccountSortKey(state: ApproachAccountState): number {
+  switch (state.kind) {
+    case "READY":
+      return -1;
+    case "WAITING":
+    case "BATCH_PAUSED":
+      return state.msRemaining;
+    case "LIMIT_REACHED":
+      return Number.MAX_SAFE_INTEGER - 2;
+    case "OUTSIDE_HOURS":
+      return Number.MAX_SAFE_INTEGER - 1;
+    case "PAUSED":
+      return Number.MAX_SAFE_INTEGER;
+  }
 }

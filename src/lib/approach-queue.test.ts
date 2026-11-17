@@ -12,12 +12,15 @@ import {
   startOfApproachDay,
   randomApproachWaitMs,
   formatApproachCountdown,
-  APPROACH_WAIT_MIN_MS,
-  APPROACH_WAIT_MAX_MS,
+  formatApproachPauseCountdown,
+  validateApproachTiming,
+  DEFAULT_APPROACH_WAIT_MIN_MINUTES,
+  DEFAULT_APPROACH_WAIT_MAX_MINUTES,
   resolveAvailableApproachSlots,
   pickNextApproachMessageSlot,
   fillApproachMessageTemplate,
   computeApproachAccountState,
+  approachAccountSortKey,
 } from "./approach-queue";
 
 describe("normalizeApproachUsername", () => {
@@ -206,20 +209,59 @@ describe("startOfApproachDay", () => {
 });
 
 describe("randomApproachWaitMs", () => {
-  it("sempre entre 3 e 5 minutos", () => {
+  it("padrão (1-2min): sempre dentro do intervalo", () => {
     for (let i = 0; i < 200; i++) {
       const ms = randomApproachWaitMs();
-      expect(ms).toBeGreaterThanOrEqual(APPROACH_WAIT_MIN_MS);
-      expect(ms).toBeLessThanOrEqual(APPROACH_WAIT_MAX_MS);
+      expect(ms).toBeGreaterThanOrEqual(DEFAULT_APPROACH_WAIT_MIN_MINUTES * 60_000);
+      expect(ms).toBeLessThanOrEqual(DEFAULT_APPROACH_WAIT_MAX_MINUTES * 60_000);
     }
   });
-  it("extremos do rand injetado batem com min/max exatos", () => {
-    expect(randomApproachWaitMs(() => 0)).toBe(APPROACH_WAIT_MIN_MS);
-    expect(randomApproachWaitMs(() => 0.999999)).toBe(APPROACH_WAIT_MAX_MS);
+  it("extremos do rand injetado batem com min/max exatos (padrão)", () => {
+    expect(randomApproachWaitMs(DEFAULT_APPROACH_WAIT_MIN_MINUTES, DEFAULT_APPROACH_WAIT_MAX_MINUTES, () => 0)).toBe(60_000);
+    expect(randomApproachWaitMs(DEFAULT_APPROACH_WAIT_MIN_MINUTES, DEFAULT_APPROACH_WAIT_MAX_MINUTES, () => 0.999999)).toBe(120_000);
+  });
+  it("intervalo configurado (ex.: 5-10min) é respeitado, nunca o padrão", () => {
+    for (let i = 0; i < 100; i++) {
+      const ms = randomApproachWaitMs(5, 10);
+      expect(ms).toBeGreaterThanOrEqual(5 * 60_000);
+      expect(ms).toBeLessThanOrEqual(10 * 60_000);
+    }
   });
   it("sorteios independentes não ficam travados num valor fixo", () => {
     const values = new Set(Array.from({ length: 20 }, () => randomApproachWaitMs()));
     expect(values.size).toBeGreaterThan(1);
+  });
+});
+
+describe("validateApproachTiming", () => {
+  const valid = { waitMinMinutes: 1, waitMaxMinutes: 2, batchSize: 30, batchPauseHours: 2 };
+  it("valores padrão são válidos", () => {
+    expect(() => validateApproachTiming(valid)).not.toThrow();
+  });
+  it("mínimo > máximo é inválido", () => {
+    expect(() => validateApproachTiming({ ...valid, waitMinMinutes: 5, waitMaxMinutes: 2 })).toThrow();
+  });
+  it("mínimo < 1 minuto é inválido", () => {
+    expect(() => validateApproachTiming({ ...valid, waitMinMinutes: 0 })).toThrow();
+  });
+  it("envios por lote < 1 é inválido", () => {
+    expect(() => validateApproachTiming({ ...valid, batchSize: 0 })).toThrow();
+  });
+  it("pausa negativa é inválida; pausa 0 (sem pausa) é válida", () => {
+    expect(() => validateApproachTiming({ ...valid, batchPauseHours: -1 })).toThrow();
+    expect(() => validateApproachTiming({ ...valid, batchPauseHours: 0 })).not.toThrow();
+  });
+  it("campo não numérico (ex.: NaN de um formulário vazio) é inválido", () => {
+    expect(() => validateApproachTiming({ ...valid, waitMinMinutes: NaN })).toThrow();
+  });
+});
+
+describe("formatApproachPauseCountdown", () => {
+  it("H:MM:SS, com horas sem zero à esquerda", () => {
+    expect(formatApproachPauseCountdown(2 * 3600_000)).toBe("2:00:00");
+    expect(formatApproachPauseCountdown(1 * 3600_000 + 48 * 60_000)).toBe("1:48:00");
+    expect(formatApproachPauseCountdown(65_000)).toBe("0:01:05");
+    expect(formatApproachPauseCountdown(0)).toBe("0:00:00");
   });
 });
 
@@ -280,39 +322,80 @@ describe("fillApproachMessageTemplate", () => {
 
 describe("computeApproachAccountState", () => {
   const INSIDE_HOURS = new Date("2026-01-15T14:00:00Z"); // 11h em São Paulo
+  const base = { paused: false, dailyLimit: 60, sentToday: 0, lockedUntil: null, batchPausedUntil: null };
 
   it("fora do horário permitido cobre tudo, mesmo sem pausa/limite/espera", () => {
     const outside = new Date("2026-01-15T03:00:00Z");
-    expect(computeApproachAccountState({ now: outside, paused: false, dailyLimit: 60, sentToday: 0, lockedUntil: null })).toEqual({ kind: "OUTSIDE_HOURS" });
+    expect(computeApproachAccountState({ ...base, now: outside })).toEqual({ kind: "OUTSIDE_HOURS" });
   });
-  it("pausada", () => {
-    expect(computeApproachAccountState({ now: INSIDE_HOURS, paused: true, dailyLimit: 60, sentToday: 0, lockedUntil: null })).toEqual({ kind: "PAUSED" });
+  it("pausada manualmente", () => {
+    expect(computeApproachAccountState({ ...base, now: INSIDE_HOURS, paused: true })).toEqual({ kind: "PAUSED" });
   });
   it("limite do dia atingido", () => {
-    expect(computeApproachAccountState({ now: INSIDE_HOURS, paused: false, dailyLimit: 10, sentToday: 10, lockedUntil: null })).toEqual({ kind: "LIMIT_REACHED" });
+    expect(computeApproachAccountState({ ...base, now: INSIDE_HOURS, dailyLimit: 10, sentToday: 10 })).toEqual({ kind: "LIMIT_REACHED" });
+  });
+  it("pausa de lote (batchPausedUntil no futuro) — devolve ms restante", () => {
+    const batchPausedUntil = new Date(INSIDE_HOURS.getTime() + 2 * 3600_000);
+    expect(computeApproachAccountState({ ...base, now: INSIDE_HOURS, batchPausedUntil })).toEqual({ kind: "BATCH_PAUSED", msRemaining: 2 * 3600_000 });
+  });
+  it("pausa de lote vencida (passado) — não bloqueia, cai pro próximo gate", () => {
+    const batchPausedUntil = new Date(INSIDE_HOURS.getTime() - 1000);
+    expect(computeApproachAccountState({ ...base, now: INSIDE_HOURS, batchPausedUntil })).toEqual({ kind: "READY" });
+  });
+  it("pausa de lote tem prioridade sobre a espera comum (as duas podem estar ativas ao mesmo tempo)", () => {
+    const batchPausedUntil = new Date(INSIDE_HOURS.getTime() + 2 * 3600_000);
+    const lockedUntil = new Date(INSIDE_HOURS.getTime() + 90_000);
+    expect(computeApproachAccountState({ ...base, now: INSIDE_HOURS, batchPausedUntil, lockedUntil })).toEqual({ kind: "BATCH_PAUSED", msRemaining: 2 * 3600_000 });
+  });
+  it("limite do dia continua valendo por cima mesmo com a pausa de lote já vencida", () => {
+    const batchPausedUntil = new Date(INSIDE_HOURS.getTime() - 1000);
+    expect(computeApproachAccountState({ ...base, now: INSIDE_HOURS, dailyLimit: 10, sentToday: 10, batchPausedUntil })).toEqual({ kind: "LIMIT_REACHED" });
   });
   it("em espera (lockedUntil no futuro) — devolve ms restante", () => {
     const lockedUntil = new Date(INSIDE_HOURS.getTime() + 90_000);
-    expect(computeApproachAccountState({ now: INSIDE_HOURS, paused: false, dailyLimit: 60, sentToday: 5, lockedUntil })).toEqual({ kind: "WAITING", msRemaining: 90_000 });
+    expect(computeApproachAccountState({ ...base, now: INSIDE_HOURS, sentToday: 5, lockedUntil })).toEqual({ kind: "WAITING", msRemaining: 90_000 });
   });
   it("lockedUntil no passado — já liberou, conta como pronta", () => {
     const lockedUntil = new Date(INSIDE_HOURS.getTime() - 1000);
-    expect(computeApproachAccountState({ now: INSIDE_HOURS, paused: false, dailyLimit: 60, sentToday: 5, lockedUntil })).toEqual({ kind: "READY" });
+    expect(computeApproachAccountState({ ...base, now: INSIDE_HOURS, sentToday: 5, lockedUntil })).toEqual({ kind: "READY" });
   });
   it("liberada (sem nenhuma trava)", () => {
-    expect(computeApproachAccountState({ now: INSIDE_HOURS, paused: false, dailyLimit: 60, sentToday: 5, lockedUntil: null })).toEqual({ kind: "READY" });
+    expect(computeApproachAccountState({ ...base, now: INSIDE_HOURS, sentToday: 5 })).toEqual({ kind: "READY" });
   });
   it("janela customizada: 11h (INSIDE_HOURS) fica fora se a janela salva for só 13h-18h", () => {
     expect(
-      computeApproachAccountState({
-        now: INSIDE_HOURS,
-        paused: false,
-        dailyLimit: 60,
-        sentToday: 0,
-        lockedUntil: null,
-        windowStartMinute: 13 * 60,
-        windowEndMinute: 18 * 60,
-      })
+      computeApproachAccountState({ ...base, now: INSIDE_HOURS, windowStartMinute: 13 * 60, windowEndMinute: 18 * 60 })
     ).toEqual({ kind: "OUTSIDE_HOURS" });
+  });
+  it("fora do horário cobre até uma pausa de lote já vencida (\"se a pausa terminar fora do horário, continua bloqueada\")", () => {
+    const outside = new Date("2026-01-15T03:00:00Z");
+    const batchPausedUntil = new Date(outside.getTime() - 1000);
+    expect(computeApproachAccountState({ ...base, now: outside, batchPausedUntil })).toEqual({ kind: "OUTSIDE_HOURS" });
+  });
+});
+
+describe("approachAccountSortKey", () => {
+  it("READY sempre primeiro (chave negativa)", () => {
+    expect(approachAccountSortKey({ kind: "READY" })).toBeLessThan(0);
+  });
+  it("espera curta (1min) vem antes de pausa de lote longa (2h), sem tratamento especial", () => {
+    const waiting = approachAccountSortKey({ kind: "WAITING", msRemaining: 60_000 });
+    const batchPaused = approachAccountSortKey({ kind: "BATCH_PAUSED", msRemaining: 2 * 3600_000 });
+    expect(waiting).toBeLessThan(batchPaused);
+  });
+  it("WAITING/BATCH_PAUSED ordenam pelo próprio ms restante (quem volta mais cedo primeiro)", () => {
+    const soon = approachAccountSortKey({ kind: "WAITING", msRemaining: 10_000 });
+    const later = approachAccountSortKey({ kind: "WAITING", msRemaining: 50_000 });
+    expect(soon).toBeLessThan(later);
+  });
+  it("LIMIT_REACHED/OUTSIDE_HOURS/PAUSED vêm depois de qualquer espera/pausa de lote", () => {
+    const batchPaused = approachAccountSortKey({ kind: "BATCH_PAUSED", msRemaining: 5 * 3600_000 }); // pausa bem longa
+    expect(approachAccountSortKey({ kind: "LIMIT_REACHED" })).toBeGreaterThan(batchPaused);
+    expect(approachAccountSortKey({ kind: "OUTSIDE_HOURS" })).toBeGreaterThan(batchPaused);
+    expect(approachAccountSortKey({ kind: "PAUSED" })).toBeGreaterThan(batchPaused);
+  });
+  it("PAUSED manual é sempre o último (nunca volta sozinho)", () => {
+    expect(approachAccountSortKey({ kind: "PAUSED" })).toBeGreaterThan(approachAccountSortKey({ kind: "LIMIT_REACHED" }));
+    expect(approachAccountSortKey({ kind: "PAUSED" })).toBeGreaterThan(approachAccountSortKey({ kind: "OUTSIDE_HOURS" }));
   });
 });

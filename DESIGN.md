@@ -290,6 +290,52 @@ duplicar a lógica de foto/fallback.
   com `needsReconnectAt` setado (token sabidamente inválido) são puladas pelo job periódico — só
   reconectar resolve, e a reconexão já grava a foto nova na hora.
 
+### Fila de abordagem — rodada 6 (3 cards de clínicas diferentes na mesma tela + pausa de lote)
+Mudança de layout: em vez de UMA clínica selecionada por vez (faixa de círculos no topo +
+card grande), a tela mostra direto até 3 `ClinicQueueCard`, um embaixo do outro — cada card já é de
+uma clínica DIFERENTE (cada clínica participante tem sempre só 1 lead ativo na tela — o próximo @
+dela), sem precisar tocar pra trocar de conta. A faixa de círculos/`AccountChip` e o
+`SelectedAccountPanel` saíram; nenhum token novo de cor foi necessário, só o novo tamanho de círculo
+abaixo.
+- **Conteúdo do card** (`rounded-block`/`p-block`/`border-vexo-border`/`bg-vexo-surface`, mesmo
+  container do card ativo de antes): `ClinicAvatar` + nome da clínica numa linha, primeiro nome
+  (se houver) + `@usuario` do lead na linha de baixo, botão por estado embaixo, e por fim 2 links
+  pequenos (`text-meta`/`text-vexo-mutedLight`) — "Pular" e "Pausar esta conta"/"Retomar conta".
+  Tamanhos de letra do `@` e do botão azul mantidos (herdados do card ativo da rodada 4); só o
+  círculo da clínica encolheu.
+- **`ClinicAvatar` ganhou o tamanho `md` (36px, `h-9 w-9`/`text-sm`)** — o `lg` (48px) de antes não
+  cabia 3 vezes empilhado sem rolar no celular; `md` é literalmente o tamanho pré-rodada-4, só
+  reaproveitado como uma opção formal do componente (nenhuma dimensão nova inventada).
+- **Botão por estado**: liberada = azul "Enviar mensagem" (igual sempre); em espera = cinza
+  desativado "Aguarde m:ss" + "Não enviei · Desfazer" embaixo (igual sempre); NOVO estado **pausa de
+  lote** = cinza desativado com contagem em HORAS, formato `h:mm:ss` (`formatApproachPauseCountdown`,
+  ex. "Pausa 1:48:00") — sem o link de Desfazer embaixo (só a espera comum tem esse link, a pausa de
+  lote não representa um envio "pendente de confirmar"); limite do dia/pausada manualmente/fora do
+  horário = cinza com o texto do motivo, como já existia. Nenhum botão desativado recebe `onClick`.
+- **Ordem dos cards decidida no SERVIDOR** (`approachAccountSortKey`, `approach-queue.ts`): liberadas
+  primeiro, depois por ordem de "quem volta mais cedo" (espera comum e pausa de lote comparadas pelo
+  mesmo `msRemaining`, sem tratamento especial — uma espera de 1min sempre vem antes de uma pausa de
+  2h). Clínicas sem nenhum lead na fila nunca entram na lista (sem lead, não há card pra mostrar).
+  Com mais de 3 clínicas qualificadas, só as 3 primeiras nessa ordem aparecem. O cliente nunca ordena
+  nada sozinho: depois de qualquer toque (enviar/pular/desfazer/pausar), ele busca o board inteiro de
+  novo no servidor — é assim que um card "desce" pra espera e o próximo "sobe" no lugar sozinho.
+- **Pausa de lote (a cada N envios, padrão 30, pausa por 2h)**: contador (`batchSentCount`) e
+  horário de término (`batchPausedUntil`) persistidos em `ApproachQueueConfig`, sobrevivem a
+  recarregar a página — mesmo padrão do `lockedUntil` da espera comum, só que em horas em vez de
+  minutos. Limite do dia e horário permitido continuam valendo por cima (checados antes da pausa de
+  lote em `computeApproachAccountState`); a meia-noite zera o contador do DIA mas nunca mexe na pausa
+  de lote em andamento — se ela terminar fora do horário permitido, o botão mostra o motivo do
+  horário, não volta sozinha. "Desfazer" sempre volta o contador do lote em 1 e cancela a pausa (regra
+  única, cobre tanto o desfazer comum quanto o do envio que fechou o lote, que volta pra 29 e libera
+  na hora). "Pular" nunca mexe no contador do lote nem no do dia.
+- **3 campos novos na tela de Preparação** (`TimingForm`, mesmo `Card` do "Horário permitido" logo
+  acima, mesmo modelo visual de `<input>`/`Button`): espera mínima/máxima em minutos (padrão 1-2),
+  envios por lote (padrão 30) e pausa após o lote em horas (padrão 0 = sem pausa). Globais (iguais
+  pra todas as clínicas, como o horário), salvos em `ApproachTimingSettings` (singleton, mesmo padrão
+  de `ApproachWindowSettings`) e validados tanto no cliente quanto no servidor
+  (`validateApproachTiming`). Mudar os valores só afeta as PRÓXIMAS esperas/pausas sorteadas — nunca
+  apaga uma espera ou pausa já em andamento.
+
 ## Relatório de resultados (quinzenal/mensal) — envio automático por WhatsApp
 Nova tela, administrada pela página "Contas" (`/crm`, só admin — ver DESIGN.md/CLAUDE.md,
 `ClinicReportPanel.tsx`/`report-actions.ts`). Mesmos tokens/componentes de sempre, nenhuma cor solta:

@@ -1583,7 +1583,40 @@ model ApproachQueueConfig {
   // approach-queue.ts). null antes do primeiro envio.
   lastMessageSlot Int?
 
+  // Pausa de lote — a cada N envios (ApproachTimingSettings.batchSize,
+  // padrão 30) a conta para por algumas horas (batchPauseHours, padrão 2),
+  // contadas a partir do envio que fechou o lote. batchSentCount conta os
+  // envios do lote ATUAL (nunca zera à meia-noite — só quando uma pausa já
+  // vencida é detectada no próximo envio, ver confirmApproachSend,
+  // approach-queue-db.ts: aí sim começa um lote novo do zero). Separado de
+  // `lockedUntil` (espera curta entre mensagens) de propósito — os dois
+  // podem estar ativos ao mesmo tempo (um envio que fecha o lote sorteia
+  // os dois no mesmo instante); computeApproachAccountState (approach-queue.ts)
+  // dá prioridade pra pausa de lote na hora de exibir, por ser sempre mais
+  // longa. Desfazer o envio que fechou o lote (undoLastApproachSend) limpa
+  // batchPausedUntil e volta batchSentCount em 1 (30->29) — ver comentário
+  // grande lá.
+  batchSentCount   Int       @default(0)
+  batchPausedUntil DateTime?
+
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Tempos da Fila — GLOBAL (vale pra todas as clínicas, mesmo padrão de
+// ApproachWindowSettings), singleton. Mudar aqui nunca apaga uma espera/
+// pausa já em andamento (lockedUntil/batchPausedUntil já são timestamps
+// absolutos, calculados no momento do envio — só o PRÓXIMO cálculo usa o
+// valor novo).
+model ApproachTimingSettings {
+  id String @id @default("singleton")
+
+  waitMinMinutes Int @default(1)
+  waitMaxMinutes Int @default(2)
+
+  batchSize       Int @default(30)
+  batchPauseHours Int @default(2)
+
   updatedAt DateTime @updatedAt
 }
 
