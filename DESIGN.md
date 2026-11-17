@@ -385,6 +385,55 @@ tela de Preparação (`Card`/`Button`/`rounded-control`, nenhuma cor/tamanho/esp
   JS da página), e essa `action` já está atrás do mesmo gate acima — com o interruptor desligado,
   o texto do script literalmente não existe em nenhum bundle enviado ao navegador.
 
+### Fila de abordagem — rodada 8 (card horizontal, botão "Enviar" à direita)
+Pedido explícito: só visual, nenhuma lógica mudou — o card vertical (foto+nome+@ numa faixa,
+botão na largura toda embaixo) virou uma ÚNICA linha horizontal, pra reduzir a altura e caber os 5
+cards (o máximo da tela) na primeira tela de um iPhone comum sem rolar. Validado com um teste real
+de layout (Playwright + Tailwind compilado, mesmo padrão de `page.layout.test.ts`) nas larguras/
+alturas do iPhone SE (375×667, a tela mais estreita ainda comum), iPhone 12/13/14 (390×844) e
+iPhone 14 Pro Max (430×932) — ver `FilaView.layout.test.tsx`.
+- **Uma linha só**: `ClinicAvatar` (esquerda) + bloco de texto (nome/@/links, `flex-1 min-w-0`) +
+  botão (direita, `shrink-0`), tudo dentro de um único `flex items-center` — o botão fica
+  centralizado verticalmente pela própria altura da linha, sem precisar de nenhum cálculo manual.
+- **`ClinicAvatar` tamanho `md`: 36px -> 44px** (`h-11 w-11`, escala padrão do Tailwind) — só
+  usado neste card; o layout horizontal pede um círculo um pouco maior pra equilibrar a linha
+  inteira com o botão do lado.
+- **Letra do nome/@ do lead**: nome continua em `text-body-sm` (15px, inalterado); o @ do lead
+  passa de `text-caption` (10px) pra `text-meta` (13px, mesmo token já usado nos links auxiliares)
+  — cor (`text-vexo-muted`) inalterada. Os links "Pular"/"Pausar conta"/"Não enviei · Desfazer"
+  continuam exatamente no mesmo tamanho/cor de sempre (`text-meta`/`text-vexo-mutedLight`) — texto
+  "Pausar esta conta" encurtado pra "Pausar conta" (só o texto; "Retomar conta" não muda). As 2 ou 3
+  linhas de texto (nome, @, links) ficam dentro do MESMO bloco à esquerda, ao lado do círculo —
+  nunca mais embaixo do card inteiro.
+- **Botão "Enviar"** (era "Enviar mensagem"): mesmo azul (`bg-vexo-accent`) e mesmo `rounded-control`
+  de sempre, só que agora curto e à direita, não mais na largura toda. `px-8` (32px, escala padrão
+  do Tailwind) de cada lado e `text-body-sm` (15px) — a combinação dá a altura visual pedida
+  (~38px) só com o padding normal do texto, sem precisar fixar uma altura em pixel (é por isso que
+  o botão também "nunca cresce em altura": a altura é sempre `padding + altura da linha de texto`,
+  constante; só a LARGURA cresce quando o texto do motivo é mais longo, ex. "Fora do horário").
+  Largura mínima nova: `minWidth["cta-sm"]` (116px, `tailwind.config.ts`) — nomeado por papel
+  ("largura mínima de um botão curto de ação principal"), reaproveitável em qualquer botão parecido
+  fora da Fila.
+- **Área de toque do botão ampliada pra >= 44px de altura SEM mudar o desenho visual** (~38px) —
+  técnica nova, documentada aqui pra não ser redescoberta: um `::before` absoluto, com
+  `min-h-11` (44px, escala padrão) e `top-1/2 -translate-y-1/2` (centralizado na vertical,
+  independente da altura visual real do botão) e `inset-x-0` (largura igual à do próprio botão).
+  Sem conteúdo visível (`content-['']`, sem cor de fundo) — e, como pseudo-elemento, um toque nele
+  ainda dispara o clique do botão (borbulha pro elemento pai), então a área tocável cresce de
+  verdade, só que invisível. Os links pequenos (Pular/Pausar conta/Desfazer) usam um truque mais
+  simples pro mesmo fim: `padding` pequeno + `margin` negativa igual (`-mx-1 -my-1 px-1 py-1`) — a
+  área de toque cresce um pouco sem deslocar visualmente o texto nem encostar um link no outro.
+- **Padding do card**: horizontal continua `px-block` (14px, inalterado); vertical
+  (`spacing["block-y"]`, `tailwind.config.ts`) passou de 10px (rodada 7) pra 12px — o layout
+  horizontal tem mais ar vertical de sobra que o antigo card em coluna, então o padding pôde
+  crescer um pouco mesmo com o card mais baixo no total. Espaço ENTRE os cards (`space-y-2`, 8px)
+  inalterado, por pedido explícito ("o mesmo que existe hoje").
+- **Faixa do topo mais compacta**: o container da página perdeu um pouco de padding vertical
+  (`py-4` -> `py-2`) e a margem entre o título e os cards encolheu (`mt-3` -> `mt-2`) — nenhuma
+  cor/tamanho de letra mudou, só espaçamento, pra sobrar altura pros 5 cards caberem.
+- **Nome/@ longos**: continuam com `truncate` (uma linha, "…", nunca quebram o card nem empurram o
+  botão) — já existia, só mudou de posição (agora dentro da linha horizontal).
+
 ## Relatório de resultados (quinzenal/mensal) — envio automático por WhatsApp
 Nova tela, administrada pela página "Contas" (`/crm`, só admin — ver DESIGN.md/CLAUDE.md,
 `ClinicReportPanel.tsx`/`report-actions.ts`). Mesmos tokens/componentes de sempre, nenhuma cor solta:

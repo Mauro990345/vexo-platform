@@ -133,11 +133,11 @@ export function FilaView({ initialAccounts, initialWindow }: { initialAccounts: 
   }
 
   return (
-    <div className="mx-auto max-w-[520px] px-4 py-4 sm:px-0">
+    <div className="mx-auto max-w-[520px] px-4 py-2 sm:px-0">
       <Link href="/crm/abordagem" className="text-caption text-vexo-muted hover:text-vexo-accent">
         ← Preparação
       </Link>
-      <h1 className="mt-1 text-base font-semibold tracking-tight text-vexo-fg">Abordagem</h1>
+      <h1 className="text-base font-semibold tracking-tight text-vexo-fg">Abordagem</h1>
 
       {!withinHours ? (
         <p className="mt-4 rounded-block bg-vexo-surface p-block text-center text-sm text-vexo-muted">
@@ -145,7 +145,7 @@ export function FilaView({ initialAccounts, initialWindow }: { initialAccounts: 
         </p>
       ) : (
         <>
-          <div className="mt-3 space-y-2">
+          <div className="mt-2 space-y-2">
             {accounts.map((account) => (
               <ClinicQueueCard
                 key={account.clinicId}
@@ -214,58 +214,70 @@ export function ClinicQueueCard({
 
   const { name, username } = item;
 
+  // Área de toque maior que o desenho visual do botão (pedido explícito:
+  // "pelo menos 44px de altura, sem mudar o desenho") — um ::before
+  // absoluto, centralizado verticalmente, com no mínimo `min-h-11` (44px,
+  // escala padrão do Tailwind) e a largura toda do botão. Só aumenta a
+  // área que recebe o toque; o fundo azul/cinza visível continua do
+  // tamanho normal (padding da própria label). Mesmo truque reaproveitável
+  // em qualquer botão pequeno demais pro próprio desenho.
+  const tapTargetClass = "relative before:absolute before:inset-x-0 before:top-1/2 before:min-h-11 before:-translate-y-1/2 before:content-['']";
+
+  // Links pequenos (Pular/Pausar conta/Desfazer) — mesmo truque de área de
+  // toque, só que mais discreto (padding pequeno + margem negativa igual,
+  // pra não deslocar o texto visualmente nem encostar um link no outro).
+  const smallLinkClass = "-mx-1 -my-1 px-1 py-1 text-meta text-vexo-mutedLight hover:text-vexo-accent";
+
   return (
-    <div className="rounded-block border border-vexo-border bg-vexo-surface px-block py-block-y" data-clinic-queue-card>
-      <div className="flex items-center gap-2.5">
-        <ClinicAvatar name={account.name} profilePictureUrl={account.profilePictureUrl} size="md" />
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-body-sm font-medium text-vexo-fg">{account.name}</p>
-          {name ? (
-            <p className="truncate text-caption text-vexo-muted">
-              {firstNameOnly(name)} · @{username}
-            </p>
+    <div className="flex items-center gap-2.5 rounded-block border border-vexo-border bg-vexo-surface px-block py-block-y" data-clinic-queue-card>
+      <ClinicAvatar name={account.name} profilePictureUrl={account.profilePictureUrl} size="md" />
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-body-sm font-medium text-vexo-fg">{account.name}</p>
+        {name ? (
+          <p className="truncate text-meta text-vexo-muted">
+            {firstNameOnly(name)} · @{username}
+          </p>
+        ) : (
+          <p className="truncate text-meta text-vexo-muted">@{username}</p>
+        )}
+        <div className="flex flex-wrap items-center gap-x-3">
+          <button type="button" onClick={() => onSkip(item.id)} className={smallLinkClass}>
+            Pular
+          </button>
+          {account.state.kind === "PAUSED" ? (
+            <button type="button" onClick={() => onPauseToggle(false)} className={smallLinkClass}>
+              Retomar conta
+            </button>
           ) : (
-            <p className="truncate text-caption text-vexo-muted">@{username}</p>
+            <button type="button" onClick={() => onPauseToggle(true)} className={smallLinkClass}>
+              Pausar conta
+            </button>
+          )}
+          {effectivelyWaiting && (
+            <button type="button" onClick={onUndo} className={smallLinkClass}>
+              Não enviei · Desfazer
+            </button>
           )}
         </div>
       </div>
 
-      <div className="mt-2.5 flex items-center gap-2">
-        {ready ? (
-          <button
-            type="button"
-            onClick={() => onSend(item)}
-            className="flex-1 rounded-control bg-vexo-accent px-control-x py-2 text-sm font-medium text-vexo-accentFg transition hover:opacity-90"
-          >
-            Enviar mensagem
-          </button>
-        ) : (
-          <button type="button" disabled className="flex-1 cursor-not-allowed rounded-control bg-vexo-surface2 px-control-x py-2 text-sm font-medium text-vexo-muted">
-            {reasonLabel ?? (effectivelyBatchPaused ? `Pausa ${formatApproachPauseCountdown(remaining)}` : `Aguarde ${formatApproachCountdown(remaining)}`)}
-          </button>
-        )}
-      </div>
-
-      {effectivelyWaiting && (
-        <button type="button" onClick={onUndo} className="mt-1.5 block text-meta text-vexo-mutedLight hover:text-vexo-accent">
-          Não enviei · Desfazer
+      {ready ? (
+        <button
+          type="button"
+          onClick={() => onSend(item)}
+          className={`min-w-cta-sm shrink-0 whitespace-nowrap rounded-control bg-vexo-accent px-8 py-2 text-center text-body-sm font-medium text-vexo-accentFg transition hover:opacity-90 ${tapTargetClass}`}
+        >
+          Enviar
+        </button>
+      ) : (
+        <button
+          type="button"
+          disabled
+          className="min-w-cta-sm shrink-0 cursor-not-allowed whitespace-nowrap rounded-control bg-vexo-surface2 px-8 py-2 text-center text-body-sm font-medium text-vexo-muted"
+        >
+          {reasonLabel ?? (effectivelyBatchPaused ? `Pausa ${formatApproachPauseCountdown(remaining)}` : `Aguarde ${formatApproachCountdown(remaining)}`)}
         </button>
       )}
-
-      <div className="mt-1.5 flex items-center gap-3">
-        <button type="button" onClick={() => onSkip(item.id)} className="text-meta text-vexo-mutedLight hover:text-vexo-accent">
-          Pular
-        </button>
-        {account.state.kind === "PAUSED" ? (
-          <button type="button" onClick={() => onPauseToggle(false)} className="text-meta text-vexo-mutedLight hover:text-vexo-accent">
-            Retomar conta
-          </button>
-        ) : (
-          <button type="button" onClick={() => onPauseToggle(true)} className="text-meta text-vexo-mutedLight hover:text-vexo-accent">
-            Pausar esta conta
-          </button>
-        )}
-      </div>
     </div>
   );
 }

@@ -185,10 +185,22 @@ const config: Config = {
         // 4 lados pra quem já usa) — nomeado por papel ("altura um pouco
         // mais enxuta"), não pela tela, pra qualquer card que precise
         // caber mais itens na vertical sem mexer no respiro horizontal.
-        "block-y": "0.625rem", // 10px
+        // 12px (rodada 8 do card da Fila de abordagem — era 10px na rodada
+        // 7, quando o card ainda tinha o botão na largura toda; o layout
+        // horizontal novo tem mais ar vertical de sobra, então o padding
+        // pôde crescer um pouco mesmo com o card mais baixo no total).
+        "block-y": "0.75rem",
       },
       boxShadow: {
         card: "0 1px 2px 0 rgb(0 0 0 / 0.4)",
+      },
+      minWidth: {
+        // Largura mínima de um botão curto de ação principal dentro de um
+        // card compacto (ex.: "Enviar" na Fila de abordagem) — nomeado por
+        // papel, não pela tela, pra qualquer botão parecido reaproveitar.
+        // Cresce só na largura quando o texto precisa (ex.: "Fora do
+        // horário"), nunca menor que isto.
+        "cta-sm": "7.25rem", // 116px
       },
       // Animação de entrada do gráfico "Abordagens por dia" (ver
       // ApproachChart) — cresce da esquerda pra direita ao montar, em vez
