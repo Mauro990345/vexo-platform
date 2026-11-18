@@ -81,7 +81,6 @@ export function AppShell({
           <span className="h-6 w-6 shrink-0 rounded-lg bg-vexo-accent" />
           <div className="min-w-0">
             <p className="text-xs font-semibold leading-none tracking-tight">VEXO</p>
-            <p className="mt-1 truncate text-caption leading-none text-vexo-muted">M8 Growth</p>
           </div>
         </Link>
 

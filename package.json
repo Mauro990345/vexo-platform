@@ -2,7 +2,7 @@
   "name": "vexo-platform",
   "version": "0.1.0",
   "private": true,
-  "description": "VEXO — plataforma de social selling automatizado da M8 Growth",
+  "description": "VEXO — plataforma de social selling automatizado",
   "scripts": {
     "dev": "next dev",
     "build": "next build",

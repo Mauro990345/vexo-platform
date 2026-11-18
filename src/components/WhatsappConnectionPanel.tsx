@@ -29,7 +29,7 @@ const POLL_INTERVAL_MS = 3_000;
 
 // Painel de conexão do WhatsApp (pareamento por QR code) — usado pelo CRM
 // interno (/crm/clinicas/[id]/whatsapp). Conectar canais é responsabilidade
-// da M8 Growth, não da clínica, então não existe mais versão disso no
+// da equipe VEXO, não da clínica, então não existe mais versão disso no
 // painel do cliente.
 //
 // "use client" (pedido explícito, bug real investigado): a tela antiga era

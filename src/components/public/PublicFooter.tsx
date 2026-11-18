@@ -24,7 +24,7 @@ const COLUMNS: Array<{ title: string; links: Array<{ href: string; label: string
   },
   {
     title: "Contato",
-    links: [LEGAL_INFO.emails.contact, LEGAL_INFO.emails.support, LEGAL_INFO.emails.privacy].map((e) => ({ href: `mailto:${e}`, label: e })),
+    links: [LEGAL_INFO.emails.contact, LEGAL_INFO.emails.support].map((e) => ({ href: `mailto:${e}`, label: e })),
   },
 ];
 

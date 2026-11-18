@@ -13,7 +13,7 @@ export const metadata: Metadata = {
 // NÃO tem endpoint de callback de exclusão da Meta: o pedido é feito por
 // e-mail e atendido manualmente — esta página descreve exatamente isso.
 export default function DataDeletionPage() {
-  const privacy = LEGAL_INFO.emails.privacy;
+  const contact = LEGAL_INFO.emails.contact;
   return (
     <LegalPage
       title="Exclusão de dados"
@@ -27,7 +27,7 @@ export default function DataDeletionPage() {
       <LegalSection title="Como pedir, passo a passo">
         <ol className="list-decimal space-y-2 pl-5 marker:text-vexo-pubMuted">
           <li>
-            Envie um e-mail para <MailLink email={privacy} subject="Exclusão de dados" /> com o assunto{" "}
+            Envie um e-mail para <MailLink email={contact} subject="Exclusão de dados" /> com o assunto{" "}
             <strong className="font-medium text-vexo-pubFg">“Exclusão de dados”</strong>.
           </li>
           <li>

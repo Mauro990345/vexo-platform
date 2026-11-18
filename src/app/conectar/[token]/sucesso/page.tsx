@@ -26,7 +26,6 @@ export default async function ConectarSucessoPage({ params }: { params: { token:
         <div className="mb-10 text-center">
           <div className="mx-auto mb-3 h-10 w-10 rounded-xl bg-vexo-accent" />
           <h1 className="text-2xl font-semibold tracking-tight">VEXO</h1>
-          <p className="mt-1 text-sm text-vexo-muted">M8 Growth</p>
         </div>
 
         <div className="rounded-2xl border border-vexo-border bg-vexo-surface p-6 text-center shadow-xl">

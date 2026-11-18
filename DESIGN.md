@@ -826,6 +826,21 @@ Nova tela, administrada pela página "Contas" (`/crm`, só admin — ver DESIGN.
   campo que já existia e já era escrito hoje (`FollowUpLog.respondedAt`), só uma agregação nova em
   cima dele — ver `report-metrics.ts`.
 
+### Preparação pra análise da Meta — razão social/CNPJ reais, sem "M8 Growth", sem privacidade@
+A marca pública é só VEXO (VEXO IA); o nome legal é Mauro da Silva — nenhuma tela mostra "M8
+Growth" em lugar nenhum (removido, não só escondido): a linha de subtítulo que aparecia sozinha
+embaixo do nome "VEXO" (barra lateral do CRM, páginas públicas de auto-conexão/sucesso/briefing)
+foi tirada de vez, sem deixar um espaço vazio no lugar (nenhum tamanho/espaçamento mudou — só a
+linha de texto saiu). Onde o texto pedia um link novo "ao M8 Growth", passou a pedir "ao VEXO".
+- **Razão social/CNPJ preenchidos** em `src/lib/legal-info.ts` (`companyName`/`cnpj`) — antes
+  ficavam vazios de propósito (sem CNPJ ainda). O rodapé público e as 3 páginas legais passam a
+  mostrar "70.193.804 MAURO DA SILVA · CNPJ 70.193.804/0001-30" (`formatCompanyLine`, já existia,
+  só não tinha dado pra mostrar ainda).
+- **`privacidade@vexoia.com.br` nunca existiu de verdade** — removido de `LEGAL_INFO.emails` (que
+  agora só tem `contact`/`support`) e de todo lugar que apontava pra ele (rodapé, `/privacidade`
+  como "Encarregado (DPO)" e no texto dos seus direitos, `/exclusao-de-dados` como e-mail do
+  pedido). Nesses 3 lugares, `contato@vexoia.com.br` assume o papel.
+
 ## Página pública (vexoia.com.br) — landing e páginas legais
 Rotas públicas, sem login: `/` (landing), `/privacidade`, `/termos` (e `/termos-de-uso`, mesmo
 conteúdo, rota antiga mantida) e `/exclusao-de-dados`. O login fica em `/entrar` (mesmo formulário de

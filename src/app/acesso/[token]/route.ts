@@ -57,7 +57,7 @@ export async function GET(_req: NextRequest, { params }: { params: { token: stri
     return NextResponse.redirect(`${appUrl}/login`);
   }
 
-  // Quem já está logado como equipe interna (M8 Growth) no mesmo
+  // Quem já está logado como equipe interna (VEXO) no mesmo
   // navegador não tem a sessão dela sobrescrita por este link — sem essa
   // checagem, o cookie abaixo troca o login da pessoa (INTERNAL_ADMIN/
   // STAFF) pelo do cliente (CLIENT) sem nenhum aviso, e ela "perde" o
