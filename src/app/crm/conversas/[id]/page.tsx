@@ -6,6 +6,7 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { AppointmentStatusBadge } from "@/components/AppointmentStatusBadge";
 import { normalizeBrazilianWhatsappNumber } from "@/lib/whatsapp";
 import { setConversationStatus, sendHumanReply } from "../../clinicas/actions";
+import { ConversationMessages } from "@/components/ConversationMessages";
 
 export const dynamic = "force-dynamic";
 
@@ -66,40 +67,19 @@ export default async function ConversationDetailPage({ params }: { params: { id:
         )}
 
         <div className="space-y-3 rounded-2xl border border-vexo-border bg-vexo-surface p-4">
-          {conversation.messages.map((m) => (
-            <div key={m.id} className={`flex ${m.direction === "INBOUND" ? "justify-start" : "justify-end"}`}>
-              <div
-                className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm ${
-                  m.direction === "INBOUND"
-                    ? "bg-vexo-bg text-vexo-fg"
-                    : m.sender === "HUMAN"
-                      ? "bg-vexo-warning/20 text-vexo-fg"
-                      : "bg-vexo-accent text-vexo-accentFg"
-                }`}
-              >
-                {m.mediaUrl ? (
-                  <p className="italic opacity-80">{m.content}</p>
-                ) : (
-                  <p>{m.content}</p>
-                )}
-                <p className="mt-1 text-caption opacity-60">
-                  {m.sender === "AI" ? "IA" : m.sender === "HUMAN" ? "Humano" : m.sender === "SYSTEM" ? "Sistema" : "Lead"} ·{" "}
-                  {(m.sentAt ?? m.createdAt).toLocaleString("pt-BR", {
-                    day: "2-digit",
-                    month: "2-digit",
-                    hour: "2-digit",
-                    minute: "2-digit",
-                    // Sem isso, usa o fuso do servidor (UTC), não o de Brasília.
-                    timeZone: "America/Sao_Paulo",
-                  })}
-                  {m.status === "PENDING" ? " · agendada" : m.status === "FAILED" ? " · falhou" : ""}
-                </p>
-              </div>
-            </div>
-          ))}
-          {conversation.messages.length === 0 && (
-            <p className="text-sm text-vexo-muted">Nenhuma mensagem ainda.</p>
-          )}
+          <ConversationMessages
+            conversationId={conversation.id}
+            initialMessages={conversation.messages.map((m) => ({
+              id: m.id,
+              direction: m.direction,
+              sender: m.sender,
+              content: m.content,
+              mediaUrl: m.mediaUrl,
+              status: m.status,
+              sentAt: m.sentAt?.toISOString() ?? null,
+              createdAt: m.createdAt.toISOString(),
+            }))}
+          />
         </div>
 
         <form action={sendHumanReply.bind(null, conversation.id)} className="mt-3 flex gap-2">
