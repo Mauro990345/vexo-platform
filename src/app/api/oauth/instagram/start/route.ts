@@ -5,7 +5,7 @@ import { isInternal } from "@/lib/session";
 import { buildInstagramOAuthUrl } from "@/lib/instagram";
 import { signOAuthState } from "@/lib/oauth-state";
 
-// Apenas a equipe interna (M8 Growth) inicia a conexão OAuth de uma clínica —
+// Apenas a equipe interna (VEXO) inicia a conexão OAuth de uma clínica —
 // a clínica em si não tem acesso a nenhuma configuração do sistema.
 
 export async function GET(req: NextRequest) {

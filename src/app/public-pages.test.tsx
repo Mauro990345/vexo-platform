@@ -51,12 +51,11 @@ describe("páginas públicas — renderizam sem login e sem consultar sessão/ba
       expect(getServerSessionMock).not.toHaveBeenCalled();
     });
 
-    it(`${route}: sem placeholder, sem "M8 Growth" e sem razão social/CNPJ enquanto vazios`, () => {
+    it(`${route}: sem placeholder, sem "M8 Growth", e com a razão social/CNPJ exatas`, () => {
       const html = renderToStaticMarkup(<Page />);
       expect(html).not.toContain("[PREENCHER]");
       expect(html).not.toContain("M8 Growth");
-      expect(html).not.toMatch(/CNPJ/);
-      expect(html).not.toMatch(/raz[ãa]o social/i);
+      expect(html).toContain("70.193.804 MAURO DA SILVA · CNPJ 70.193.804/0001-30");
     });
   }
 
@@ -68,10 +67,12 @@ describe("páginas públicas — renderizam sem login e sem consultar sessão/ba
     expect(html).toContain("O VEXO IA não é afiliado, patrocinado nem endossado pela Meta.");
   });
 
-  it("encarregado (DPO) é privacidade@vexoia.com.br na política e na exclusão", () => {
-    expect(renderToStaticMarkup(<PrivacyPage />)).toContain("mailto:privacidade@vexoia.com.br");
+  it("encarregado (DPO) é contato@vexoia.com.br na política e na exclusão — não existe privacidade@", () => {
+    expect(renderToStaticMarkup(<PrivacyPage />)).toContain("mailto:contato@vexoia.com.br");
     const del = renderToStaticMarkup(<DeletionPage />);
-    expect(del).toContain("mailto:privacidade@vexoia.com.br?subject=Exclus%C3%A3o%20de%20dados");
+    expect(del).toContain("mailto:contato@vexoia.com.br?subject=Exclus%C3%A3o%20de%20dados");
+    expect(renderToStaticMarkup(<PrivacyPage />)).not.toContain("privacidade@vexoia.com.br");
+    expect(del).not.toContain("privacidade@vexoia.com.br");
   });
 });
 
@@ -80,7 +81,7 @@ describe("rodapé — todo link aponta pra uma rota/âncora que existe", () => {
     const html = renderToStaticMarkup(<HomePage />);
     const footer = html.slice(html.indexOf("<footer"));
     const hrefs = [...footer.matchAll(/href="([^"]+)"/g)].map((m) => m[1]!);
-    expect(hrefs.length).toBeGreaterThanOrEqual(10);
+    expect(hrefs.length).toBeGreaterThanOrEqual(9);
     for (const href of hrefs) {
       if (href.startsWith("mailto:")) {
         expect(Object.values(LEGAL_INFO.emails)).toContain(href.slice(7));
@@ -95,20 +96,24 @@ describe("rodapé — todo link aponta pra uma rota/âncora que existe", () => {
   });
 });
 
-describe("legal-info — razão social/CNPJ só aparecem quando preenchidos", () => {
-  it("hoje vazios: nada é exibido", () => {
-    expect(LEGAL_INFO.companyName).toBe("");
-    expect(LEGAL_INFO.cnpj).toBe("");
-    expect(hasCompanyRegistration()).toBe(false);
-    expect(formatCompanyLine()).toBeNull();
+describe("legal-info — razão social/CNPJ", () => {
+  it("preenchidos com os dados reais: 70.193.804 MAURO DA SILVA · CNPJ 70.193.804/0001-30", () => {
+    expect(LEGAL_INFO.companyName).toBe("70.193.804 MAURO DA SILVA");
+    expect(LEGAL_INFO.cnpj).toBe("70.193.804/0001-30");
+    expect(hasCompanyRegistration()).toBe(true);
+    expect(formatCompanyLine()).toBe("70.193.804 MAURO DA SILVA · CNPJ 70.193.804/0001-30");
   });
-  it("preenchidos: vira a linha do rodapé", () => {
+  it("preenchidos (caso genérico): vira a linha do rodapé", () => {
     expect(formatCompanyLine({ companyName: "VEXO IA Tecnologia Ltda.", cnpj: "00.000.000/0001-00" })).toBe(
       "VEXO IA Tecnologia Ltda. · CNPJ 00.000.000/0001-00"
     );
   });
   it("só um dos dois preenchido: continua oculto", () => {
     expect(formatCompanyLine({ companyName: "X Ltda.", cnpj: "" })).toBeNull();
+  });
+  it("os dois vazios: nada é exibido", () => {
+    expect(hasCompanyRegistration({ companyName: "", cnpj: "" })).toBe(false);
+    expect(formatCompanyLine({ companyName: "", cnpj: "" })).toBeNull();
   });
 });
 

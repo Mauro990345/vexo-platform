@@ -15,7 +15,7 @@ datasource db {
 // ---------------------------------------------------------------------------
 
 enum UserRole {
-  INTERNAL_ADMIN // Mauro / equipe M8 Growth — acesso total ao CRM
+  INTERNAL_ADMIN // Mauro / equipe VEXO — acesso total ao CRM
   INTERNAL_STAFF // secretária/atendente interna — acesso ao CRM
   CLIENT // login da clínica — painel somente leitura
   // Reservado pro futuro: pessoa contratada que só vê a Fila de abordagem

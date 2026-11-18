@@ -1,6 +1,6 @@
 # VEXO
 
-Plataforma proprietária da **M8 Growth** para social selling automatizado em
+Plataforma proprietária do **VEXO IA** para social selling automatizado em
 clínicas de saúde (dermatologistas, dentistas, medicina estética e afins).
 Substitui o uso do GoHighLevel. Ver a especificação completa do produto na
 descrição do projeto — este README cobre a implementação técnica.

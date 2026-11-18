@@ -11,7 +11,6 @@ function Shell({ children }: { children: ReactNode }) {
         <div className="mb-8 text-center">
           <div className="mx-auto mb-3 h-10 w-10 rounded-xl bg-vexo-accent" />
           <h1 className="text-2xl font-semibold tracking-tight">VEXO</h1>
-          <p className="mt-1 text-sm text-vexo-muted">M8 Growth</p>
         </div>
         <div className="rounded-2xl border border-vexo-border bg-vexo-surface p-6 shadow-xl">{children}</div>
       </div>
@@ -44,7 +43,7 @@ export default async function BriefingPage({ params }: { params: { token: string
       <Shell>
         <div className="text-center">
           <h2 className="text-base font-semibold">Link inválido ou expirado</h2>
-          <p className="mt-2 text-sm text-vexo-muted">Peça um novo link de briefing ao M8 Growth.</p>
+          <p className="mt-2 text-sm text-vexo-muted">Peça um novo link de briefing ao VEXO.</p>
         </div>
       </Shell>
     );

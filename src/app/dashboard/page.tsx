@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 // números informativos + a lista de agendamentos com o botão de
 // não-comparecimento. Nada de Pipeline/Kanban (fica só no CRM interno) e
 // nada de gerenciar conexões (WhatsApp/Instagram/Google Calendar são
-// responsabilidade da M8 Growth, não da clínica) — por isso não tem mais
+// responsabilidade da equipe VEXO, não da clínica) — por isso não tem mais
 // sidebar nenhuma: não sobrou mais de uma página pra navegar entre.
 //
 // O corpo da tela mora em ClientPanelView (@/components/ClientPanelView),

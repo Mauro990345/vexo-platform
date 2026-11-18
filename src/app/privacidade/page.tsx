@@ -17,7 +17,7 @@ export const metadata: Metadata = {
 // prazo, sem callback de exclusão da Meta (pedido por e-mail).
 export default function PrivacyPolicyPage() {
   const companyLine = formatCompanyLine();
-  const privacy = LEGAL_INFO.emails.privacy;
+  const contact = LEGAL_INFO.emails.contact;
   return (
     <LegalPage
       title="Política de privacidade"
@@ -35,7 +35,7 @@ export default function PrivacyPolicyPage() {
         </p>
         {companyLine && <p>Responsável: {companyLine}.</p>}
         <p>
-          Encarregado pelo tratamento de dados (DPO): <MailLink email={privacy} />.
+          Encarregado pelo tratamento de dados (DPO): <MailLink email={contact} />.
         </p>
         <p>
           Em relação aos dados das pessoas que conversam com uma clínica, a <strong className="font-medium text-vexo-pubFg">clínica é a
@@ -140,7 +140,7 @@ export default function PrivacyPolicyPage() {
       <LegalSection title="9. Seus direitos">
         <p>
           Você pode pedir: confirmação de que tratamos seus dados, acesso, correção, anonimização ou exclusão, portabilidade,
-          informação sobre compartilhamento e revogação do consentimento. Escreva para <MailLink email={privacy} />. Se você
+          informação sobre compartilhamento e revogação do consentimento. Escreva para <MailLink email={contact} />. Se você
           conversou com uma clínica, informe o seu nome de usuário do Instagram (ou telefone) e o nome da clínica. Respondemos em
           até 15 dias. Para exclusão, veja o passo a passo em{" "}
           <Link href="/exclusao-de-dados" className={LEGAL_LINK_CLASS}>
