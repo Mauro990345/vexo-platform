@@ -1023,3 +1023,51 @@ que a tela Configurações sobrescreve. Nunca "M8 Growth" nessas páginas.
       `overflow-hidden` de nenhum ancestral, e com a margem até a borda direita do box igual à
       margem das bolhas da esquerda até a borda esquerda (ambas vêm do mesmo padding simétrico do
       `.pub-after`).
+
+## Conexões (`/crm/clinicas/[id]/conexoes`) — tela limpa pro vídeo de revisão da Meta
+
+- **Só 3 cards (Instagram, Google Calendar, WhatsApp), sempre lado a lado, inclusive no celular**:
+  `grid grid-cols-3 gap-2` sem nenhum breakpoint que empilhe — decisão deliberada, não um
+  descuido de responsividade. No celular (~358px úteis depois do `px-4` do `AppShell`) cada card
+  fica com ~114px: só cabe com tipografia e espaçamento compactos (ver abaixo), então o card
+  nunca tenta imitar o layout largo de desktop.
+- **Cada card é uma coluna vertical só** (`flex flex-col`), nunca status+botão lado a lado:
+  ícone+nome → 1 frase curta (`text-card`, a mesma via nome) → status (bolinha + texto) → 1 botão
+  centralizado. Empilhar verticalmente é o que sobra de margem pra não cortar/quebrar feio nos
+  ~114px do celular — a tentativa horizontal (como era antes) não cabia.
+- **Tokens, nunca valor cru**: tamanho de fonte do corpo do card é `text-card` (11px, definido em
+  `tailwind.config.ts`), nunca `text-[11px]` escrito direto na tela — mesmo texto pequeno, mas
+  pelo token nomeado, pra continuar valendo a regra do topo deste arquivo.
+- **Reconectar substitui o botão normal, nunca aparece junto com "Desconectar"**: sessão
+  expirada (`needsReconnectAt`) é tratada como estado exclusivo do card — ou mostra
+  "Reconectar" (novo OAuth), ou mostra o botão padrão do estado conectado/não-conectado, nunca os
+  dois ao mesmo tempo.
+- **Excluído da tela** (e do código que só existia pra isso, ver commit desta rodada): a conexão
+  OPCIONAL de Business Discovery (foto de perfil do lead — superada desde antes por
+  `getInstagramProfilePicture`, que já é o mecanismo automático ativo), a correção manual do ID
+  do webhook do Instagram, os botões de diagnóstico "Ver campos inscritos"/"Reativar webhook", o
+  link "Ver status" no topo, e a descrição longa do cabeçalho (ficou só o título "Conexões"). O
+  que o fluxo automático usa (inscrição do webhook ao conectar, identificação da clínica pelo
+  `igUserId` do evento, `needsReconnect`) continua intacto — só a interface manual de apoio saiu.
+- **Mantido fora da lista dos 3 cards**: o bloco "Onboarding remoto do cliente" (gera link pro
+  cliente conectar Instagram+Google Calendar sem acesso ao CRM) — é uma ferramenta diferente,
+  não um 4º card de canal, e não estava na lista do que devia sair da tela.
+
+## Conversa (`/crm/conversas/[id]`) — atualização automática, sem gatilho visível
+
+- **Mensagens novas entram sozinhas, a cada ~3.5s, sem recarregar a página**: a lista de
+  mensagens é um Client Component (`ConversationMessages`) que faz polling leve — busca só o que
+  é mais novo que a última mensagem já exibida (nunca a conversa inteira), via
+  `/api/conversas/[id]/mensagens?afterCreatedAt=...&afterId=...`. Visual idêntico ao de antes
+  (mesma marcação dos balões) — só a origem dos dados virou dinâmica.
+- **Nunca pula a rolagem de quem está lendo mensagens antigas**: só rola pro fim quando o
+  operador já estava a ≤64px do fim da página no momento em que a mensagem nova chega
+  (`isNearBottom`, ver `src/lib/conversation-polling.ts`); lendo mais acima, a tela não se move.
+- **Pausa com a aba escondida, retoma ao voltar** (com uma busca imediata, sem esperar o próximo
+  tick) — nunca gasta uma chamada de rede com o operador numa aba diferente.
+- **Nunca duas buscas em paralelo**: uma trava simples (`isFetchingRef`) ignora o tick do
+  `setInterval` se a busca anterior ainda não voltou.
+- **A lógica de decisão (quando buscar, qual cursor usar, o que já é conhecido, se está perto do
+  fim) é pura e vive separada do componente**, em `src/lib/conversation-polling.ts` — testada
+  direto por unidade (`conversation-polling.test.ts`), sem precisar de DOM/jsdom (este repo só
+  tem infra de teste em Node puro).

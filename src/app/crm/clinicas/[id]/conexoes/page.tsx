@@ -9,14 +9,7 @@ import { ConnectOAuthButton } from "@/components/ConnectOAuthButton";
 import { RefreshOnFocus } from "@/components/RefreshOnFocus";
 import { ConnectionLinkButton } from "@/components/ConnectionLinkButton";
 import { ConnectionBundleButton } from "@/components/ConnectionBundleButton";
-import {
-  disconnectGoogleCalendarAction,
-  disconnectInstagramAction,
-  resubscribeInstagramWebhookAction,
-  checkInstagramWebhookSubscriptionAction,
-  setInstagramWebhookIdAction,
-  disconnectBusinessDiscoveryAction,
-} from "../../actions";
+import { disconnectGoogleCalendarAction, disconnectInstagramAction } from "../../actions";
 
 export const dynamic = "force-dynamic";
 
@@ -34,19 +27,20 @@ const WHATSAPP_STATUS_DOT: Record<WhatsappConnectionState, string> = {
   unknown: "bg-vexo-muted",
 };
 
-// Card compacto no formato de referência (grid 3 colunas): ícone+nome em
-// cima, descrição no meio, status + botão na mesma linha embaixo. O card
-// em si não é clicável — só o botão.
+// Card compacto, SEMPRE 3 colunas lado a lado (inclusive no celular — grid
+// de largura fixa, sem empilhar em telas estreitas, pedido explícito pro
+// vídeo de revisão da Meta): ícone+nome, 1 frase curta, status (bolinha +
+// texto) e 1 botão só, tudo numa coluna vertical (nunca lado a lado com o
+// botão — é o que garante caber nos ~110px de largura de cada card no
+// celular, sem cortar nem quebrar feio). O card em si não é clicável — só
+// o botão.
 //
 // 3 estados por canal (Instagram e Google Calendar, os dois com
 // disconnectAction): não conectado sem link → "Conectar" (gera e copia o
 // link, ver ConnectionLinkButton); não conectado com link pendente →
 // "Cancelar" (mesmo componente); conectado → SÓ "Desconectar", nunca os
-// dois juntos — "Gerenciar" foi removido de propósito, tinha dois botões
-// fazendo parecer que existia mais de uma ação possível quando só tem uma.
-// WhatsApp fica fora desse padrão: sem disconnectAction, continua com
-// "Gerenciar" navegando pra tela própria (QR code), que é uma ação
-// diferente (gerenciar =/= desconectar por lá).
+// dois juntos. WhatsApp fica fora desse padrão: sem disconnectAction,
+// continua com "Gerenciar" navegando pra tela própria (QR code).
 function ConnectionCard({
   icon,
   iconBg,
@@ -59,7 +53,7 @@ function ConnectionCard({
   openInNewTab,
   disconnectAction,
   notConnectedAction,
-  connectedExtraAction,
+  reconnectAction,
 }: {
   icon: React.ReactNode;
   iconBg: string;
@@ -78,70 +72,68 @@ function ConnectionCard({
   // por Instagram e Google Calendar (ver ConnectionLinkButton). Ausente
   // pro WhatsApp, que continua com o link/botão de sempre.
   notConnectedAction?: React.ReactNode;
-  // Ação extra ao lado de "Desconectar", só quando conectado — hoje só o
-  // Instagram usa (botão "Reativar webhook", ver resubscribeInstagramWebhookAction).
-  connectedExtraAction?: React.ReactNode;
+  // Token vencido/sessão expirada (ver instagramNeedsReconnect/
+  // googleNeedsReconnect, abaixo) — "Desconectar" sozinho não resolve nada
+  // (só apaga a linha, sem gerar OAuth novo); precisa do mesmo fluxo de
+  // "Conectar" de novo, no lugar do "Desconectar" (nunca os dois juntos).
+  reconnectAction?: React.ReactNode;
 }) {
   return (
-    <div className="flex flex-col gap-2 rounded-xl border border-vexo-border bg-vexo-surface p-3.5">
-      <div className="flex items-center gap-2.5">
-        <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${iconBg} text-white`}>
+    <div className="flex min-w-0 flex-col gap-1.5 rounded-xl border border-vexo-border bg-vexo-surface p-2.5">
+      <div className="flex min-w-0 items-center gap-1.5">
+        <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-lg ${iconBg} text-white`}>
           {icon}
         </span>
-        <p className="text-sm font-bold">{name}</p>
+        {/* Sem truncate: "Google Calendar" não cabe inteiro na largura do
+            card no celular — melhor quebrar em 2 linhas (nome completo
+            visível) do que cortar com reticências. */}
+        <p className="min-w-0 text-xs font-bold leading-tight">{name}</p>
       </div>
 
-      <p className="text-xs text-vexo-muted">{description}</p>
+      <p className="text-card leading-snug text-vexo-muted">{description}</p>
 
-      {/* Status (inclui o @usuário conectado) e botão principal na mesma
-          linha — nunca disputam espaço com as ações extras de diagnóstico
-          (connectedExtraAction), que ficam na linha de baixo, com quebra
-          própria: informação básica (qual conta está conectada) sempre
-          visível, mesmo com várias ferramentas de diagnóstico acumuladas. */}
-      <div className="mt-auto flex flex-col gap-1.5 pt-1">
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex min-w-0 items-center gap-1.5 text-card text-vexo-muted">
-            <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${statusDot}`} />
-            <span className="truncate">{statusLabel}</span>
-          </div>
-          <div className="flex shrink-0 items-center gap-1.5">
-            {connected ? (
-              disconnectAction ? (
-                <form action={disconnectAction}>
-                  <button
-                    type="submit"
-                    className="rounded-lg border border-vexo-error/40 px-2.5 py-1 text-card font-medium text-vexo-error hover:bg-vexo-error/10"
-                  >
-                    Desconectar
-                  </button>
-                </form>
-              ) : openInNewTab ? (
-                <ConnectOAuthButton href={href} label="Gerenciar" />
-              ) : (
-                <Link
-                  href={href}
-                  className="rounded-lg border border-vexo-accent px-2.5 py-1 text-card font-medium text-vexo-accent hover:bg-vexo-accent/10"
-                >
-                  Gerenciar
-                </Link>
-              )
-            ) : notConnectedAction ? (
-              notConnectedAction
-            ) : openInNewTab ? (
-              <ConnectOAuthButton href={href} label="Conectar" />
-            ) : (
-              <Link
-                href={href}
-                className="rounded-lg border border-vexo-accent px-2.5 py-1 text-card font-medium text-vexo-accent hover:bg-vexo-accent/10"
-              >
-                Conectar
-              </Link>
-            )}
-          </div>
-        </div>
-        {connected && connectedExtraAction && (
-          <div className="flex flex-wrap items-center justify-end gap-1.5">{connectedExtraAction}</div>
-        )}
+      <div className="mt-auto flex items-center gap-1 pt-1 text-card text-vexo-muted">
+        <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${statusDot}`} />
+        <span className="truncate">{statusLabel}</span>
+      </div>
+
+      <div className="flex justify-center pt-0.5">
+        {reconnectAction
+          ? reconnectAction
+          : connected
+            ? disconnectAction
+              ? (
+                  <form action={disconnectAction}>
+                    <button
+                      type="submit"
+                      className="rounded-lg border border-vexo-error/40 px-2 py-1 text-card font-medium text-vexo-error hover:bg-vexo-error/10"
+                    >
+                      Desconectar
+                    </button>
+                  </form>
+                )
+              : openInNewTab
+                ? <ConnectOAuthButton href={href} label="Gerenciar" />
+                : (
+                    <Link
+                      href={href}
+                      className="rounded-lg border border-vexo-accent px-2 py-1 text-card font-medium text-vexo-accent hover:bg-vexo-accent/10"
+                    >
+                      Gerenciar
+                    </Link>
+                  )
+            : notConnectedAction
+              ? notConnectedAction
+              : openInNewTab
+                ? <ConnectOAuthButton href={href} label="Conectar" />
+                : (
+                    <Link
+                      href={href}
+                      className="rounded-lg border border-vexo-accent px-2 py-1 text-card font-medium text-vexo-accent hover:bg-vexo-accent/10"
+                    >
+                      Conectar
+                    </Link>
+                  )}
       </div>
     </div>
   );
@@ -150,7 +142,6 @@ function ConnectionCard({
 const CHANNEL_NAMES: Record<string, string> = {
   instagram: "Instagram",
   "google-calendar": "Google Calendar",
-  "business-discovery": "Business Discovery",
 };
 
 export default async function ClinicConexoesPage({
@@ -158,7 +149,7 @@ export default async function ClinicConexoesPage({
   searchParams,
 }: {
   params: { id: string };
-  searchParams: { status?: string; channel?: string; reason?: string; fields?: string; idFixed?: string };
+  searchParams: { status?: string; channel?: string; reason?: string };
 }) {
   await requireInternalSession();
 
@@ -184,7 +175,6 @@ export default async function ClinicConexoesPage({
   // reconectar de novo (novo OAuth) limpa isto. Mesmo padrão exato do
   // Google Calendar (googleNeedsReconnect, abaixo).
   const instagramNeedsReconnect = Boolean(clinic.instagramAccount?.needsReconnectAt);
-  const businessDiscoveryConnected = Boolean(clinic.instagramAccount?.businessDiscoveryAccessTokenEnc);
   const googleConnected = Boolean(clinic.googleCalendarAccount);
   // invalid_grant detectado em qualquer chamada ao Google (ver
   // markGoogleCalendarNeedsReconnect, src/lib/google-calendar.ts) — a
@@ -228,27 +218,7 @@ export default async function ClinicConexoesPage({
     <div className="space-y-3">
       <RefreshOnFocus />
 
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h1 className="text-base font-semibold tracking-tight">Conexões</h1>
-          <p className="mt-0.5 text-xs text-vexo-muted">
-            Canais desta clínica, organizados num só lugar. O status atualiza sozinho conforme cada
-            canal conecta ou cai.
-          </p>
-        </div>
-        {/* Diagnóstico temporário (sem acesso a logs do Railway) — ver
-            WebhookLog no schema e /api/webhooks/instagram/route.ts, e
-            dispatch-status/page.tsx pro envio de mensagens. Aponta pra aba
-            "Status" desta clínica (clinicas/[id]/status/page.tsx), que
-            reúne as duas coisas já filtradas por ela, em vez de linkar
-            direto pras páginas globais (todas as clínicas juntas). */}
-        <Link
-          href={`/crm/clinicas/${clinic.id}/status`}
-          className="shrink-0 whitespace-nowrap text-card text-vexo-muted underline hover:text-vexo-fg"
-        >
-          Ver status (webhook + envio de mensagens)
-        </Link>
-      </div>
+      <h1 className="text-base font-semibold tracking-tight">Conexões</h1>
 
       {searchParams.status === "erro" && (
         <p className="rounded-lg border border-vexo-error/30 bg-vexo-error/10 p-2 text-xs text-vexo-error">
@@ -276,33 +246,6 @@ export default async function ClinicConexoesPage({
         </p>
       )}
 
-      {searchParams.status === "webhook-ok" && (
-        <p className="rounded-lg border border-vexo-success/30 bg-vexo-success/10 p-2 text-xs text-vexo-success">
-          Webhook reativado — o Instagram foi reinscrito e deve voltar a entregar mensagens novas.
-          {searchParams.idFixed && (
-            <>
-              {" "}
-              Também corrigido o ID salvo dessa conta, que estava desatualizado e nunca batia com o
-              que o webhook manda de verdade: <strong>{searchParams.idFixed}</strong>.
-            </>
-          )}
-        </p>
-      )}
-
-      {searchParams.status === "webhook-fields" && (
-        <p className="rounded-lg border border-vexo-border bg-vexo-surface p-2 text-xs text-vexo-fg">
-          {/* Resposta de verdade da Meta pros campos inscritos AGORA — não
-              confundir com "o subscribe retornou sucesso" (ver
-              checkInstagramWebhookSubscriptionAction em ../../actions.ts):
-              já aconteceu de o POST de subscribe devolver 200 sem
-              "messages" acabar na lista de verdade. */}
-          Campos inscritos no webhook desta conta: <strong>{searchParams.fields}</strong>
-          {!searchParams.fields?.includes("messages") && (
-            <span className="text-vexo-error"> — &quot;messages&quot; não está na lista, por isso nada chega.</span>
-          )}
-        </p>
-      )}
-
       {!bothChannelsConnected && (
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-vexo-border bg-vexo-surface p-3.5">
           <div>
@@ -316,30 +259,24 @@ export default async function ClinicConexoesPage({
         </div>
       )}
 
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-3 gap-2">
         <ConnectionCard
-          icon={<WhatsAppGlyphIcon className="h-7 w-7" />}
+          icon={<WhatsAppGlyphIcon className="h-5 w-5" />}
           iconBg=""
           name="WhatsApp"
-          description="Notifica a secretária quando um lead precisa de atendimento humano."
+          description="Avisa a secretária sobre atendimento humano."
           connected={whatsappStatus === "open"}
           statusLabel={WHATSAPP_STATUS_LABELS[whatsappStatus]}
           statusDot={WHATSAPP_STATUS_DOT[whatsappStatus]}
           href={`${base}/whatsapp`}
         />
         <ConnectionCard
-          icon={<InstagramGlyphIcon className="h-7 w-7" />}
+          icon={<InstagramGlyphIcon className="h-5 w-5" />}
           iconBg=""
           name="Instagram"
-          description="Captura no Direct e leva a conversa pra IA."
+          description="Responde o Direct com a IA."
           connected={instagramConnected}
-          statusLabel={
-            instagramNeedsReconnect
-              ? "Reconexão necessária"
-              : instagramConnected
-                ? `Conectado · @${clinic.instagramAccount!.igUsername ?? "conectado"}`
-                : "Não conectado"
-          }
+          statusLabel={instagramNeedsReconnect ? "Reconexão necessária" : instagramConnected ? "Conectado" : "Não conectado"}
           statusDot={instagramNeedsReconnect ? "bg-vexo-warning" : instagramConnected ? "bg-vexo-success" : "bg-vexo-muted"}
           href={`/api/oauth/instagram/start?clinicId=${clinic.id}`}
           openInNewTab
@@ -347,50 +284,19 @@ export default async function ClinicConexoesPage({
           notConnectedAction={
             <ConnectionLinkButton clinicId={clinic.id} channel="instagram" pendingToken={pendingInstagramLink?.token ?? null} />
           }
-          connectedExtraAction={
-            <>
-              {/* Token vencido/sessão expirada (ver instagramNeedsReconnect
-                  acima) — "Desconectar" sozinho não resolve nada (só apaga
-                  a linha, sem gerar OAuth novo); precisa do mesmo fluxo de
-                  "Conectar" de novo. Mesmo padrão exato do card do Google
-                  Calendar mais abaixo. */}
-              {instagramNeedsReconnect && (
-                <ConnectOAuthButton href={`/api/oauth/instagram/start?clinicId=${clinic.id}`} label="Reconectar" />
-              )}
-              <form action={checkInstagramWebhookSubscriptionAction.bind(null, clinic.id)}>
-                <button
-                  type="submit"
-                  title="Consulta na Meta quais campos estão realmente inscritos pra essa conta agora — o subscribe pode retornar sucesso sem 'messages' entrar na lista de verdade."
-                  className="rounded-lg border border-vexo-border px-2.5 py-1 text-card font-medium text-vexo-muted hover:bg-vexo-border/30"
-                >
-                  Ver campos inscritos
-                </button>
-              </form>
-              <form action={resubscribeInstagramWebhookAction.bind(null, clinic.id)}>
-                <button
-                  type="submit"
-                  title="Reinscreve esta conta no webhook de mensagens — use se o Instagram conectou mas nenhuma mensagem chega no VEXO."
-                  className="rounded-lg border border-vexo-border px-2.5 py-1 text-card font-medium text-vexo-muted hover:bg-vexo-border/30"
-                >
-                  Reativar webhook
-                </button>
-              </form>
-            </>
+          reconnectAction={
+            instagramNeedsReconnect ? (
+              <ConnectOAuthButton href={`/api/oauth/instagram/start?clinicId=${clinic.id}`} label="Reconectar" />
+            ) : undefined
           }
         />
         <ConnectionCard
-          icon={<Calendar className="h-3.5 w-3.5" strokeWidth={2} />}
+          icon={<Calendar className="h-3 w-3" strokeWidth={2} />}
           iconBg="bg-blue-500"
           name="Google Calendar"
-          description="IA consulta horários livres e cria os agendamentos."
+          description="Agenda consultas automaticamente pela IA."
           connected={googleConnected}
-          statusLabel={
-            googleNeedsReconnect
-              ? "Reconexão necessária"
-              : googleConnected
-                ? `Conectado · ${clinic.googleCalendarAccount!.googleAccountEmail}`
-                : "Não conectado"
-          }
+          statusLabel={googleNeedsReconnect ? "Reconexão necessária" : googleConnected ? "Conectado" : "Não conectado"}
           statusDot={googleNeedsReconnect ? "bg-vexo-warning" : googleConnected ? "bg-vexo-success" : "bg-vexo-muted"}
           href={`/api/oauth/google-calendar/start?clinicId=${clinic.id}`}
           openInNewTab
@@ -398,96 +304,13 @@ export default async function ClinicConexoesPage({
           notConnectedAction={
             <ConnectionLinkButton clinicId={clinic.id} channel="google-calendar" pendingToken={pendingGoogleLink?.token ?? null} />
           }
-          connectedExtraAction={
-            // O token morreu de verdade (invalid_grant) — "Desconectar"
-            // sozinho não resolve nada (só apaga a linha, sem gerar um
-            // OAuth novo); precisa do mesmo fluxo de "Conectar" de novo,
-            // mesmo com connected=true (ver comentário em googleNeedsReconnect,
-            // acima). Mesmo mecanismo já usado pelos botões de diagnóstico
-            // do Instagram (ConnectionCard.connectedExtraAction).
+          reconnectAction={
             googleNeedsReconnect ? (
-              <ConnectOAuthButton
-                href={`/api/oauth/google-calendar/start?clinicId=${clinic.id}`}
-                label="Reconectar"
-              />
+              <ConnectOAuthButton href={`/api/oauth/google-calendar/start?clinicId=${clinic.id}`} label="Reconectar" />
             ) : undefined
           }
         />
       </div>
-
-      {instagramConnected && (
-        <div className="rounded-xl border border-vexo-border bg-vexo-surface p-3.5 text-xs">
-          <p className="font-semibold text-vexo-fg">Foto de perfil dos leads (Business Discovery, opcional)</p>
-          <p className="mt-1 text-vexo-muted">
-            Conexão SEPARADA da principal acima, via Login do Facebook (não Instagram) — é o único
-            jeito que a Meta oferece pra buscar a foto de perfil de um lead a partir do @ dele. Nunca
-            afeta o envio/recebimento de mensagem, que continua 100% pela conexão principal. Só
-            funciona pra leads com conta Business/Creator (não perfil pessoal comum) — restrição da
-            própria Meta. Precisa de uma Página do Facebook vinculada a esta conta do Instagram
-            (Meta Business Suite {"> "}Configurações {"> "}Contas vinculadas).
-          </p>
-          {businessDiscoveryConnected ? (
-            <div className="mt-2 flex flex-wrap items-center gap-2">
-              <span className="flex items-center gap-1.5 text-card text-vexo-muted">
-                <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-vexo-success" />
-                Conectado
-              </span>
-              <form action={disconnectBusinessDiscoveryAction.bind(null, clinic.id)}>
-                <button
-                  type="submit"
-                  className="rounded-lg border border-vexo-error/40 px-2.5 py-1 text-card font-medium text-vexo-error hover:bg-vexo-error/10"
-                >
-                  Desconectar
-                </button>
-              </form>
-            </div>
-          ) : (
-            <div className="mt-2">
-              <ConnectOAuthButton
-                href={`/api/oauth/business-discovery/start?clinicId=${clinic.id}`}
-                label="Conectar Business Discovery"
-              />
-            </div>
-          )}
-        </div>
-      )}
-
-      {instagramConnected && (
-        <div className="rounded-xl border border-vexo-border bg-vexo-surface p-3.5 text-xs">
-          <p className="font-semibold text-vexo-fg">Corrigir ID do webhook do Instagram (avançado)</p>
-          <p className="mt-1 text-vexo-muted">
-            Nenhum endpoint de OAuth desse produto devolve o mesmo ID que a Meta manda de verdade
-            nos eventos de webhook (entry.id/recipient.id) — o único jeito confiável de saber esse
-            valor é vendo um evento real chegar. Se{" "}
-            <Link href="/crm/webhook-logs" className="underline hover:text-vexo-fg">
-              Logs do webhook
-            </Link>{" "}
-            mostrar um &quot;Nenhuma InstagramAccount encontrada pra igUserId=...&quot;, cole aqui o
-            ID que aparece nessa mensagem (só números).
-          </p>
-          <form
-            action={setInstagramWebhookIdAction.bind(null, clinic.id)}
-            className="mt-2 flex flex-wrap items-center gap-2"
-          >
-            <input
-              type="text"
-              name="igUserId"
-              inputMode="numeric"
-              pattern="\d+"
-              required
-              placeholder="Ex: 17841429744434753"
-              defaultValue={clinic.instagramAccount!.igUserId}
-              className="w-56 rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5 text-card outline-none focus:border-vexo-accent"
-            />
-            <button
-              type="submit"
-              className="rounded-lg border border-vexo-accent px-2.5 py-1 font-medium text-vexo-accent hover:bg-vexo-accent/10"
-            >
-              Salvar ID
-            </button>
-          </form>
-        </div>
-      )}
     </div>
   );
 }
