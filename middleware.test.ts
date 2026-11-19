@@ -69,4 +69,18 @@ describe("middleware — gate do login Revisor", () => {
     const res = await middleware(req("/api/conversas/conv-xyz/mensagens"));
     expect(res.headers.get("x-middleware-next")).toBe("1");
   });
+
+  it("REVIEWER em /api/clinicas/[id]/pipeline da PRÓPRIA clínica: passa direto (polling do Pipeline)", async () => {
+    getTokenMock.mockResolvedValueOnce({ role: "REVIEWER", clinicId: "demo-1" });
+    const res = await middleware(req("/api/clinicas/demo-1/pipeline"));
+    expect(res.headers.get("x-middleware-next")).toBe("1");
+  });
+
+  it("REVIEWER em /api/clinicas/[id]/pipeline de OUTRA clínica: 404 em JSON", async () => {
+    getTokenMock.mockResolvedValueOnce({ role: "REVIEWER", clinicId: "demo-1" });
+    const res = await middleware(req("/api/clinicas/outra-clinica/pipeline"));
+    expect(res.status).toBe(404);
+    const body = await res.json();
+    expect(body).toEqual({ error: "not_found" });
+  });
 });
