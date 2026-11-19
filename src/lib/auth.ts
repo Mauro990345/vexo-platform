@@ -34,6 +34,12 @@ export const authOptions: NextAuthOptions = {
         const valid = await bcrypt.compare(credentials.password, user.passwordHash);
         if (!valid) return null;
 
+        // Login desativado (ver User.active) — pensado pro login Revisor,
+        // vale pra qualquer usuário. Quem já está logado perde o acesso na
+        // próxima requisição por outro caminho (ver requireSession,
+        // session.ts); aqui é só o bloqueio na hora de entrar.
+        if (!user.active) return null;
+
         if (user.role === "CLIENT" && user.clinicId) {
           const clinic = await prisma.clinic.findUnique({ where: { id: user.clinicId } });
           if (!clinic?.active) return null; // acesso revogado quando contrato encerra

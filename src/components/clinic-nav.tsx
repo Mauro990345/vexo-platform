@@ -79,3 +79,25 @@ export function buildClinicNavGroups(clinicId: string): NavGroup[] {
     },
   ];
 }
+
+// Sidebar do login Revisor (ver UserRole.REVIEWER/DESIGN.md) — só os 3
+// itens que ele pode ver, nada mais. Lista FIXA de propósito (não um
+// filtro de buildClinicNavGroups): não depende de manter as duas listas
+// "sincronizadas" por acidente — qualquer item novo em buildClinicNavGroups
+// não aparece aqui a menos que seja adicionado explicitamente, reforçando
+// a regra "negar por padrão" também na sidebar (a página em si já nega por
+// requireInternalOrReviewerSession; isto aqui é só não oferecer o link).
+export function buildReviewerNavGroups(clinicId: string): NavGroup[] {
+  const base = `/crm/clinicas/${clinicId}`;
+
+  return [
+    {
+      label: "Operação",
+      items: [
+        { href: `${base}/conexoes`, label: "Conexões", icon: <Link2 className="h-3.5 w-3.5 shrink-0" strokeWidth={2} /> },
+        { href: `${base}/painel`, label: "Painel", icon: <LayoutDashboard className="h-3.5 w-3.5 shrink-0" strokeWidth={2} /> },
+        { href: base, label: "Pipeline", icon: <Columns3 className="h-3.5 w-3.5 shrink-0" strokeWidth={2} /> },
+      ],
+    },
+  ];
+}

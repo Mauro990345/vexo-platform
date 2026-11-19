@@ -89,6 +89,7 @@ export async function ClientPanelView({
   standalone = true,
   headerAction,
   bonusHref,
+  readOnly,
 }: {
   clinicId: string;
   week?: string;
@@ -123,6 +124,12 @@ export async function ClientPanelView({
   // só aparecem com o interruptor da conta ligado
   // (Clinic.fullFaceBonusEnabled); desligado, nada aparece.
   bonusHref?: string;
+  // Login Revisor (ver UserRole.REVIEWER) — some os botões de ação da
+  // Reativação/Não compareceu/Retorno (nunca os dados em si). Só
+  // clinicas/[id]/painel/page.tsx passa true; /dashboard (CLIENT) e
+  // /crm/painel-cliente/[id] (preview do admin) continuam sem passar nada
+  // (undefined = false), comportamento 100% inalterado.
+  readOnly?: boolean;
 }) {
   const now = new Date();
   const todayStart = startOfDay(now);
@@ -279,6 +286,7 @@ export async function ClientPanelView({
           noShowSendWhatsappAction={noShowCardSendWhatsappAction}
           hotLeadToggleAction={hotLeadCardSentAction}
           neverScheduledToggleAction={neverScheduledCardSentAction}
+          readOnly={readOnly}
           rightColumn={
             <PanelAppointmentsColumn
               upcoming={upcoming}
@@ -288,6 +296,7 @@ export async function ClientPanelView({
               availableReturnPeriods={availableReturnPeriods}
               noShowAction={noShowAction}
               returnPeriodAction={returnPeriodAction}
+              readOnly={readOnly}
             />
           }
         />

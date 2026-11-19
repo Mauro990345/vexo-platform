@@ -13,8 +13,14 @@ import { chromium, type Browser } from "playwright";
 
 const PROJECT_ROOT = path.resolve(__dirname, "../../../../../..");
 
+// Mutável pelo próprio teste (ver describe "Revisor" abaixo) — var (não
+// let/const) pro vi.mock hoisted enxergar a reatribuição feita depois.
+// eslint-disable-next-line no-var
+var mockSessionRole = "INTERNAL_ADMIN";
+
 vi.mock("@/lib/session", () => ({
   requireInternalSession: vi.fn(async () => ({ user: { role: "INTERNAL_ADMIN" } })),
+  requireInternalOrReviewerSession: vi.fn(async () => ({ user: { role: mockSessionRole, clinicId: "clinic-1" } })),
 }));
 
 vi.mock("@/lib/whatsapp-connection", () => ({
@@ -215,6 +221,64 @@ describe("Conexões — rótulo de status mais longo (Reconexão necessária) n�
       const bodyText = await page.evaluate(() => document.body.innerText);
       expect(bodyText).toContain("Reconexão necessária");
       expect(bodyText).not.toContain("Reconexão n...");
+
+      await page.close();
+    });
+  }
+});
+
+// Requisito 7 (App Review da Meta): tela de Conexões sob o login Revisor —
+// somente leitura (sem nenhum botão de ação) e sem rolagem horizontal, nas
+// 2 larguras pedidas (390px celular, 1366px notebook).
+describe("Conexões — Revisor (somente leitura)", () => {
+  let browser: Browser;
+  let compiledCss: string;
+  let html: string;
+
+  beforeAll(async () => {
+    const tmpDir = mkdtempSync(path.join(tmpdir(), "vexo-conexoes-revisor-"));
+    const outCssPath = path.join(tmpDir, "compiled.css");
+    execFileSync("npx", ["tailwindcss", "-i", "./src/app/globals.css", "-o", outCssPath, "--minify"], {
+      cwd: PROJECT_ROOT,
+      stdio: "pipe",
+    });
+    compiledCss = readFileSync(outCssPath, "utf8");
+    browser = await chromium.launch({ executablePath: process.env.PLAYWRIGHT_CHROMIUM_PATH || "/opt/pw-browsers/chromium" });
+
+    mockInstagramAccount = null;
+    mockSessionRole = "REVIEWER";
+    html = await renderConexoesHtml(compiledCss);
+  }, 60_000);
+
+  afterAll(async () => {
+    mockSessionRole = "INTERNAL_ADMIN";
+    await browser?.close();
+  });
+
+  for (const width of [MOBILE_WIDTH, DESKTOP_WIDTH]) {
+    it(`${width}px: sem rolagem horizontal da página`, async () => {
+      const page = await browser.newPage({ viewport: { width, height: 900 } });
+      await page.setContent(html);
+      await page.waitForTimeout(30);
+
+      const scrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
+      const clientWidth = await page.evaluate(() => document.documentElement.clientWidth);
+      expect(scrollWidth, `${width}px: scrollWidth (${scrollWidth}) > clientWidth (${clientWidth})`).toBeLessThanOrEqual(
+        clientWidth
+      );
+
+      await page.close();
+    });
+
+    it(`${width}px: nenhum botão de ação aparece (Desconectar/Conectar/Reconectar/Cancelar)`, async () => {
+      const page = await browser.newPage({ viewport: { width, height: 900 } });
+      await page.setContent(html);
+      await page.waitForTimeout(30);
+
+      const bodyText = await page.evaluate(() => document.body.innerText);
+      for (const forbidden of ["Desconectar", "Conectar", "Reconectar", "Cancelar"]) {
+        expect(bodyText, `texto proibido "${forbidden}" apareceu na tela do Revisor`).not.toContain(forbidden);
+      }
 
       await page.close();
     });

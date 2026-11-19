@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { requireInternalOrReviewerSession } from "@/lib/session";
 import { ClientPanelView } from "@/components/ClientPanelView";
 import { ClientAccessModal } from "@/components/ClientAccessModal";
 import {
@@ -39,6 +40,9 @@ export default async function ClinicPainelPage({
   params: { id: string };
   searchParams: { week?: string };
 }) {
+  const session = await requireInternalOrReviewerSession(params.id);
+  const isReviewer = session.user.role === "REVIEWER";
+
   const clinic = await prisma.clinic.findUniqueOrThrow({
     where: { id: params.id },
     select: { clientPanelLink: { select: { token: true } } },
@@ -66,7 +70,8 @@ export default async function ClinicPainelPage({
       hotLeadCardSentAction={toggleHotLeadCardSentAction}
       neverScheduledCardSentAction={toggleNeverScheduledCardSentAction}
       standalone={false}
-      headerAction={<ClientAccessModal clinicId={params.id} initialLink={initialLink} />}
+      headerAction={isReviewer ? undefined : <ClientAccessModal clinicId={params.id} initialLink={initialLink} />}
+      readOnly={isReviewer}
     />
   );
 }

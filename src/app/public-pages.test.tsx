@@ -14,6 +14,13 @@ vi.mock("next/navigation", () => ({
 }));
 vi.mock("next-auth/react", () => ({ signIn: vi.fn() }));
 vi.mock("@/lib/auth", () => ({ authOptions: {} }));
+// requireSession (session.ts) agora confere User.active no banco a cada
+// chamada (ver pedido do login Revisor) — sem este mock, EntrarPage e
+// requireInternalSession bateriam no Prisma de verdade (sem DATABASE_URL
+// neste teste). `active: true` cobre os usuários ativos testados aqui.
+vi.mock("@/lib/prisma", () => ({
+  prisma: { user: { findUnique: vi.fn(async () => ({ active: true })) } },
+}));
 
 const { default: HomePage } = await import("./page");
 const { default: PrivacyPage } = await import("./privacidade/page");

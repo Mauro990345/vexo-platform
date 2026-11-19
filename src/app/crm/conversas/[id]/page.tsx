@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import { prisma } from "@/lib/prisma";
+import { requireInternalOrReviewerSession } from "@/lib/session";
 import { StatusBadge } from "@/components/StatusBadge";
 import { AppointmentStatusBadge } from "@/components/AppointmentStatusBadge";
 import { normalizeBrazilianWhatsappNumber } from "@/lib/whatsapp";
@@ -26,6 +27,14 @@ export default async function ConversationDetailPage({ params }: { params: { id:
   });
 
   if (!conversation) notFound();
+
+  // Só depois de saber a clínica da conversa dá pra checar se o Revisor
+  // pode vê-la (só da clínica dele) — mensagens/lead já foram carregados
+  // acima, mas nada disso chega na resposta se notFound() disparar aqui:
+  // o Next.js descarta a árvore inteira (layout incluído) e serve o 404
+  // padrão, sem vazar nada da conversa de outra clínica.
+  const session = await requireInternalOrReviewerSession(conversation.clinicId);
+  const isReviewer = session.user.role === "REVIEWER";
 
   const appointment = conversation.appointments[0];
   // Sidebar já tem um "← Contas" pra voltar pro CRM global (ver
@@ -54,7 +63,7 @@ export default async function ConversationDetailPage({ params }: { params: { id:
           <StatusBadge status={conversation.status} />
         </div>
 
-        {conversation.status === "NEEDS_HUMAN" && (
+        {!isReviewer && conversation.status === "NEEDS_HUMAN" && (
           <div className="mb-2 rounded-block border border-vexo-error/30 bg-vexo-error/10 p-2.5 text-xs text-vexo-error">
             <p className="font-medium">Precisa de atenção humana</p>
             <p className="mt-1 text-vexo-error/80">{conversation.needsHumanReason}</p>
@@ -82,16 +91,18 @@ export default async function ConversationDetailPage({ params }: { params: { id:
           />
         </div>
 
-        <form action={sendHumanReply.bind(null, conversation.id)} className="mt-2 flex gap-1.5">
-          <input
-            name="content"
-            placeholder="Responder manualmente (uso da secretária/Mauro)..."
-            className="min-w-0 flex-1 rounded-control border border-vexo-border bg-vexo-surface px-2.5 py-1.5 text-card outline-none focus:border-vexo-accent"
-          />
-          <button className="shrink-0 rounded-control bg-vexo-accent px-3 py-1.5 text-card font-medium text-vexo-accentFg hover:opacity-90">
-            Enviar
-          </button>
-        </form>
+        {!isReviewer && (
+          <form action={sendHumanReply.bind(null, conversation.id)} className="mt-2 flex gap-1.5">
+            <input
+              name="content"
+              placeholder="Responder manualmente (uso da secretária/Mauro)..."
+              className="min-w-0 flex-1 rounded-control border border-vexo-border bg-vexo-surface px-2.5 py-1.5 text-card outline-none focus:border-vexo-accent"
+            />
+            <button className="shrink-0 rounded-control bg-vexo-accent px-3 py-1.5 text-card font-medium text-vexo-accentFg hover:opacity-90">
+              Enviar
+            </button>
+          </form>
+        )}
       </div>
 
       <aside className="space-y-2">
@@ -147,13 +158,15 @@ export default async function ConversationDetailPage({ params }: { params: { id:
           </div>
         )}
 
-        <div>
-          <form action={setConversationStatus.bind(null, conversation.id, "LOST")}>
-            <button className="w-full rounded-control border border-vexo-accent px-2.5 py-1 text-card text-vexo-accent hover:bg-vexo-accent/10">
-              Marcar como perdido
-            </button>
-          </form>
-        </div>
+        {!isReviewer && (
+          <div>
+            <form action={setConversationStatus.bind(null, conversation.id, "LOST")}>
+              <button className="w-full rounded-control border border-vexo-accent px-2.5 py-1 text-card text-vexo-accent hover:bg-vexo-accent/10">
+                Marcar como perdido
+              </button>
+            </form>
+          </div>
+        )}
       </aside>
     </div>
   );

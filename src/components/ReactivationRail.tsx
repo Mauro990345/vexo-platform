@@ -108,6 +108,11 @@ export type ReactivationRailProps = {
   // nada (pedido explícito: "se não houver nenhuma enviada no período, não
   // mostrar a linha").
   returnMetric?: { sent: number; returned: number };
+  // Login Revisor (ver UserRole.REVIEWER) — some só o botão de ação de
+  // cada card (WhatsApp/Instagram/"Desfazer"), nunca o card em si. Bloqueio
+  // de verdade continua no servidor (as actions passadas aqui já exigem
+  // requireInternalSession, que barra o Revisor).
+  readOnly?: boolean;
 };
 
 export function ReactivationRail({
@@ -119,6 +124,7 @@ export function ReactivationRail({
   hotLeadToggleAction = toggleHotLeadCardSentClientAction,
   neverScheduledToggleAction = toggleNeverScheduledCardSentClientAction,
   returnMetric,
+  readOnly,
 }: ReactivationRailProps) {
   const [localCards, setLocalCards] = useState(cards);
   useEffect(() => setLocalCards(cards), [cards]);
@@ -336,7 +342,7 @@ export function ReactivationRail({
             <p className="min-w-0 flex-1 truncate text-caption text-vexo-muted">{card.reasonShort}</p>
           </div>
         </div>
-        {actionNode}
+        {!readOnly && actionNode}
       </div>
     );
   }

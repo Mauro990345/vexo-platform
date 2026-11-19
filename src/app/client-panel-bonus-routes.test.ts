@@ -13,6 +13,7 @@ import { describe, it, expect, vi } from "vitest";
 vi.mock("@/lib/session", () => ({
   requireClientSession: vi.fn(async () => ({ user: { clinicId: "clinic-1" } })),
   requireInternalSession: vi.fn(async () => ({ user: { role: "ADMIN" } })),
+  requireInternalOrReviewerSession: vi.fn(async () => ({ user: { role: "INTERNAL_ADMIN" } })),
 }));
 
 vi.mock("@/lib/prisma", () => ({

@@ -11,8 +11,26 @@ import { prisma } from "@/lib/prisma";
 // sobre mensagens do mesmo lote empatadas em createdAt).
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
   const session = await getServerSession(authOptions);
-  if (!session || (session.user.role !== "INTERNAL_ADMIN" && session.user.role !== "INTERNAL_STAFF")) {
+  const isInternalUser = session?.user.role === "INTERNAL_ADMIN" || session?.user.role === "INTERNAL_STAFF";
+  const isReviewerUser = session?.user.role === "REVIEWER";
+  if (!session || (!isInternalUser && !isReviewerUser)) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
+
+  // Login Revisor (ver UserRole.REVIEWER): esta rota é liberada por
+  // pathname pro middleware (não dá pra saber a clínica só pelo :id da
+  // conversa), então o dono de verdade é checado aqui — mesma regra das
+  // páginas liberadas (requireInternalOrReviewerSession, session.ts): só
+  // conversa da PRÓPRIA clínica do Revisor, 404 (nunca 401, pra não
+  // revelar que a conversa existe) em qualquer outro caso.
+  if (isReviewerUser) {
+    const conversation = await prisma.conversation.findUnique({
+      where: { id: params.id },
+      select: { clinicId: true },
+    });
+    if (!conversation || conversation.clinicId !== session.user.clinicId) {
+      return NextResponse.json({ error: "not_found" }, { status: 404 });
+    }
   }
 
   const afterCreatedAtRaw = request.nextUrl.searchParams.get("afterCreatedAt");
