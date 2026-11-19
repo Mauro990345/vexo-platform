@@ -13,13 +13,17 @@
 //                                         página/rota — aqui não dá pra
 //                                         saber a clínica só pelo path)
 //   /api/conversas/<qualquer id>/mensagens (mesmo motivo acima)
-// Qualquer outra coisa sob /crm ou /api/conversas é negada.
+//   /api/clinicas/<clinicId>/pipeline   (busca do polling do Pipeline —
+//                                         aqui o :id JÁ é o clinicId, dono
+//                                         checado direto por igualdade)
+// Qualquer outra coisa sob /crm ou /api é negada.
 export function isReviewerAllowedPath(pathname: string, clinicId: string): boolean {
   if (!clinicId) return false;
 
   if (pathname === `/crm/clinicas/${clinicId}`) return true;
   if (pathname === `/crm/clinicas/${clinicId}/conexoes`) return true;
   if (pathname === `/crm/clinicas/${clinicId}/painel`) return true;
+  if (pathname === `/api/clinicas/${clinicId}/pipeline`) return true;
 
   if (/^\/crm\/conversas\/[^/]+$/.test(pathname)) return true;
   if (/^\/api\/conversas\/[^/]+\/mensagens$/.test(pathname)) return true;

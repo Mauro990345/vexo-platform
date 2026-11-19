@@ -19,6 +19,7 @@ const ALLOWED_PATTERNS = new Set([
   "/crm/clinicas/[id]/painel",
   "/crm/conversas/[id]",
   "/api/conversas/[id]/mensagens",
+  "/api/clinicas/[id]/pipeline",
 ]);
 
 // Converte caminho de arquivo (já sem "src/app" nem o nome do arquivo) em
@@ -95,10 +96,11 @@ describe("reviewer-access — varredura de TODAS as páginas/rotas existentes", 
   // Rotas com :id (clinicas/[id], clinicas/[id]/conexoes, clinicas/[id]/painel)
   // só valem pra PRÓPRIA clínica do Revisor — de outra clínica, negadas
   // mesmo sendo o mesmo tipo de página.
-  it("clinicas/[id], /conexoes e /painel de OUTRA clínica são negados", () => {
+  it("clinicas/[id], /conexoes, /painel e a API do pipeline de OUTRA clínica são negados", () => {
     expect(isReviewerAllowedPath(`/crm/clinicas/${OTHER_CLINIC_ID}`, DEMO_CLINIC_ID)).toBe(false);
     expect(isReviewerAllowedPath(`/crm/clinicas/${OTHER_CLINIC_ID}/conexoes`, DEMO_CLINIC_ID)).toBe(false);
     expect(isReviewerAllowedPath(`/crm/clinicas/${OTHER_CLINIC_ID}/painel`, DEMO_CLINIC_ID)).toBe(false);
+    expect(isReviewerAllowedPath(`/api/clinicas/${OTHER_CLINIC_ID}/pipeline`, DEMO_CLINIC_ID)).toBe(false);
   });
 
   it("sem clinicId (usuário sem clínica associada) nunca libera nada", () => {

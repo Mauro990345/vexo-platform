@@ -1197,3 +1197,47 @@ real, e sem dar acesso a nada que não seja a Clínica Demo VEXO.
   (Ativo/Desativado), botão Ativar/Desativar, e "Gerar nova senha" (cria o login na primeira vez,
   se ainda não existir) — a senha em texto aparece só uma vez, na própria tela, nunca gravada
   (nem em log, nem em teste).
+
+## Pipeline (`/crm/clinicas/[id]`) — atualização automática, mesma técnica da conversa
+
+Mesmo problema que a tela de conversa já tinha resolvido antes (ver seção "Conversa" acima):
+card novo ou card que muda de coluna só aparecia depois de um F5, o que entrega visivelmente que
+a página foi recarregada — crítico pro vídeo do App Review da Meta, que mostra o Pipeline
+recebendo uma mensagem nova em tempo real.
+
+- **Mesma técnica da conversa, reaproveitada, não reinventada**: o board inteiro (faixa de
+  métricas + colunas) virou um Client Component (`PipelineBoard.tsx`) que busca um retrato novo a
+  cada ~3.5s enquanto a aba estiver visível — `shouldPoll` é literalmente **reexportado e
+  reaproveitado** de `conversation-polling.ts` (nunca duplicado): nunca dispara com a aba
+  escondida, nunca duas buscas em paralelo (`isFetchingRef`), pausa e retoma (com uma busca
+  imediata) no `visibilitychange`. A diferença pro polling da conversa é só o FORMATO do dado: lá
+  é incremental (só mensagens novas); aqui é um retrato inteiro do board por vez, porque qualquer
+  card pode ter mudado de coluna, não só "ter mais itens".
+- **Sem re-renderizar à toa**: o retrato buscado é comparado campo a campo com o que já está na
+  tela (`snapshotsEqual`, `pipeline-polling.ts`) — sem nenhuma mudança real (card novo/mudou de
+  coluna/contador/horário), o estado do React nem troca, então nada pisca e nada tremula. Card
+  novo ou que mudou de coluna entra direto no lugar certo (chave estável `key={conv.id}`, sem
+  nenhuma classe de animação/transição nova) — sem recarregar a página, a rolagem vertical da
+  página e a rolagem horizontal própria do board (`overflow-x-auto`) nunca são tocadas.
+- **Nunca interrompe uma interação em andamento**: enquanto o botão do mouse estiver apertado
+  (ex: arrastando a rolagem horizontal das colunas) ou houver texto selecionado na tela (ex:
+  copiando o nome de um lead), uma atualização pendente é guardada (`resolvePipelineUpdate`) e só
+  aplicada quando a interação termina — nunca desfaz o que o operador está fazendo. (O Pipeline
+  não tem arrastar-card-entre-colunas/drag-and-drop hoje — é só links somente leitura — mas a
+  mesma guarda já cobre esse caso se um dia existir.)
+- **Busca leve, fonte única**: a consulta ao banco (`getPipelineSnapshot`, `pipeline-data.ts`) usa
+  `select` (só os campos que o card realmente mostra — nome, @, foto, status, última mensagem,
+  data do agendamento — nunca o objeto inteiro) e é a MESMA função chamada tanto na primeira
+  carga da página quanto em cada busca do polling, pela nova rota `GET
+  /api/clinicas/[id]/pipeline` — nunca duas versões divergentes da mesma lógica.
+- **Vale pra Admin, Equipe e Revisor, sem dar nenhuma ação nova a ele**: a nova rota de API exige
+  login (401 sem sessão) e, pro Revisor, só devolve dados da PRÓPRIA clínica (404 de qualquer
+  outra, nunca revela nada) — é GET, somente leitura, igual a `/api/conversas/[id]/mensagens`.
+  Adicionada explicitamente à lista fixa do Revisor (`reviewer-access.ts`,
+  `/api/clinicas/<clinicId>/pipeline`) mantendo a regra "negar por padrão" — o Pipeline já não
+  tinha nenhum botão de ação (só links), então a atualização automática não abre nenhuma porta de
+  escrita pra ele.
+- **Responsivo**: validado em 390px e 1366px via Playwright (Tailwind compilado) em
+  `clinicas/[id]/page.layout.test.ts` — sem rolagem horizontal da página (a rolagem horizontal
+  PRÓPRIA do board, pra ver as 6 colunas num celular, é esperada e já existia antes desta
+  mudança).
