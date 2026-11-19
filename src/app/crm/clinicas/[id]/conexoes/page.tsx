@@ -9,7 +9,7 @@ import { ConnectOAuthButton } from "@/components/ConnectOAuthButton";
 import { RefreshOnFocus } from "@/components/RefreshOnFocus";
 import { ConnectionLinkButton } from "@/components/ConnectionLinkButton";
 import { ConnectionBundleButton } from "@/components/ConnectionBundleButton";
-import { disconnectGoogleCalendarAction, disconnectInstagramAction } from "../../actions";
+import { disconnectGoogleCalendarAction, disconnectInstagramAction, disconnectWhatsappAction } from "../../actions";
 
 export const dynamic = "force-dynamic";
 
@@ -29,18 +29,19 @@ const WHATSAPP_STATUS_DOT: Record<WhatsappConnectionState, string> = {
 
 // Card compacto, SEMPRE 3 colunas lado a lado (inclusive no celular — grid
 // de largura fixa, sem empilhar em telas estreitas, pedido explícito pro
-// vídeo de revisão da Meta): ícone+nome, 1 frase curta, status (bolinha +
-// texto) e 1 botão só, tudo numa coluna vertical (nunca lado a lado com o
-// botão — é o que garante caber nos ~110px de largura de cada card no
-// celular, sem cortar nem quebrar feio). O card em si não é clicável — só
-// o botão.
+// vídeo de revisão da Meta): ícone+nome, 1 frase curta, e por fim uma linha
+// só com o status (bolinha + texto) à ESQUERDA e o botão à DIREITA — nunca
+// o botão centralizado embaixo (era a versão antiga, "chapada"). Mesmo
+// acabamento dos cards do Painel do cliente: `rounded-control` (8px),
+// borda `vexo-border` bem sutil, fundo `vexo-surface` (ver
+// PanelAppointmentsColumn.tsx). O card em si não é clicável — só o botão.
 //
-// 3 estados por canal (Instagram e Google Calendar, os dois com
-// disconnectAction): não conectado sem link → "Conectar" (gera e copia o
-// link, ver ConnectionLinkButton); não conectado com link pendente →
-// "Cancelar" (mesmo componente); conectado → SÓ "Desconectar", nunca os
-// dois juntos. WhatsApp fica fora desse padrão: sem disconnectAction,
-// continua com "Gerenciar" navegando pra tela própria (QR code).
+// 3 estados, os 3 canais no MESMO padrão (Instagram, Google Calendar e
+// WhatsApp, os três com disconnectAction): não conectado sem link →
+// "Conectar"; não conectado com link pendente → "Cancelar" (Instagram/
+// Google, via ConnectionLinkButton — WhatsApp não tem link, só leva pra
+// tela própria do QR code); conectado → SÓ "Desconectar", nunca os dois
+// juntos.
 function ConnectionCard({
   icon,
   iconBg,
@@ -50,7 +51,6 @@ function ConnectionCard({
   statusLabel,
   statusDot,
   href,
-  openInNewTab,
   disconnectAction,
   notConnectedAction,
   reconnectAction,
@@ -62,15 +62,15 @@ function ConnectionCard({
   connected: boolean;
   statusLabel: string;
   statusDot: string;
+  // Usado só pelo botão "Conectar" padrão (sem notConnectedAction) — hoje
+  // só o caso do WhatsApp, que leva direto pra tela própria do QR code.
   href: string;
-  openInNewTab?: boolean;
-  // Quando presente, define os canais com desconexão pelo VEXO (Instagram,
-  // Google Calendar) — conectado mostra SÓ "Desconectar", nunca "Gerenciar"
-  // junto. Ausente (WhatsApp) mantém o "Gerenciar" de sempre.
-  disconnectAction?: () => Promise<void>;
+  // Os 3 canais desconectam pelo VEXO (nunca mais "Gerenciar") — conectado
+  // mostra SEMPRE "Desconectar", nunca os dois juntos.
+  disconnectAction: () => Promise<void>;
   // Substitui o botão padrão de "Conectar" só quando não conectado — usado
-  // por Instagram e Google Calendar (ver ConnectionLinkButton). Ausente
-  // pro WhatsApp, que continua com o link/botão de sempre.
+  // por Instagram e Google Calendar (ver ConnectionLinkButton). Ausente pro
+  // WhatsApp, que continua com o link direto pra tela do QR code.
   notConnectedAction?: React.ReactNode;
   // Token vencido/sessão expirada (ver instagramNeedsReconnect/
   // googleNeedsReconnect, abaixo) — "Desconectar" sozinho não resolve nada
@@ -79,9 +79,9 @@ function ConnectionCard({
   reconnectAction?: React.ReactNode;
 }) {
   return (
-    <div className="flex min-w-0 flex-col gap-1.5 rounded-xl border border-vexo-border bg-vexo-surface p-2.5">
+    <div className="flex min-w-0 flex-col gap-1.5 rounded-control border border-vexo-border bg-vexo-surface p-2.5">
       <div className="flex min-w-0 items-center gap-1.5">
-        <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-lg ${iconBg} text-white`}>
+        <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-control ${iconBg} text-white`}>
           {icon}
         </span>
         {/* Sem truncate: "Google Calendar" não cabe inteiro na largura do
@@ -92,48 +92,45 @@ function ConnectionCard({
 
       <p className="text-card leading-snug text-vexo-muted">{description}</p>
 
-      <div className="mt-auto flex items-center gap-1 pt-1 text-card text-vexo-muted">
-        <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${statusDot}`} />
-        <span className="truncate">{statusLabel}</span>
-      </div>
+      {/* Indicador à esquerda, botão à direita, na MESMA linha — card baixo
+          e compacto, nunca o botão centralizado embaixo. `flex-wrap` +
+          `ml-auto` no botão: nos canais com texto curto (Instagram,
+          WhatsApp conectados) sempre cabe tudo numa linha só; nos combos
+          mais largos ("Não conectado"/"Reconexão necessária" + botão, no
+          celular) o botão desce pra uma 2ª linha, ainda encostado na
+          direita. Sem truncate no status — nunca esconde nem corta o
+          texto, só deixa o rótulo quebrar linha quando precisar. */}
+      <div className="mt-auto flex flex-wrap items-center gap-x-1.5 gap-y-1 pt-1">
+        <div className="flex min-w-0 max-w-full items-center gap-1 text-card text-vexo-muted">
+          <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${statusDot}`} />
+          <span className="min-w-0">{statusLabel}</span>
+        </div>
 
-      <div className="flex justify-center pt-0.5">
-        {reconnectAction
-          ? reconnectAction
-          : connected
-            ? disconnectAction
+        <div className="ml-auto shrink-0">
+          {reconnectAction
+            ? reconnectAction
+            : connected
               ? (
                   <form action={disconnectAction}>
                     <button
                       type="submit"
-                      className="rounded-lg border border-vexo-error/40 px-2 py-1 text-card font-medium text-vexo-error hover:bg-vexo-error/10"
+                      className="rounded-control border border-vexo-error/40 px-1.5 py-1 text-card font-medium text-vexo-error hover:bg-vexo-error/10"
                     >
                       Desconectar
                     </button>
                   </form>
                 )
-              : openInNewTab
-                ? <ConnectOAuthButton href={href} label="Gerenciar" />
+              : notConnectedAction
+                ? notConnectedAction
                 : (
                     <Link
                       href={href}
-                      className="rounded-lg border border-vexo-accent px-2 py-1 text-card font-medium text-vexo-accent hover:bg-vexo-accent/10"
-                    >
-                      Gerenciar
-                    </Link>
-                  )
-            : notConnectedAction
-              ? notConnectedAction
-              : openInNewTab
-                ? <ConnectOAuthButton href={href} label="Conectar" />
-                : (
-                    <Link
-                      href={href}
-                      className="rounded-lg border border-vexo-accent px-2 py-1 text-card font-medium text-vexo-accent hover:bg-vexo-accent/10"
+                      className="rounded-control border border-vexo-accent px-1.5 py-1 text-card font-medium text-vexo-accent hover:bg-vexo-accent/10"
                     >
                       Conectar
                     </Link>
                   )}
+        </div>
       </div>
     </div>
   );
@@ -269,6 +266,7 @@ export default async function ClinicConexoesPage({
           statusLabel={WHATSAPP_STATUS_LABELS[whatsappStatus]}
           statusDot={WHATSAPP_STATUS_DOT[whatsappStatus]}
           href={`${base}/whatsapp`}
+          disconnectAction={disconnectWhatsappAction.bind(null, clinic.id)}
         />
         <ConnectionCard
           icon={<InstagramGlyphIcon className="h-5 w-5" />}
@@ -279,7 +277,6 @@ export default async function ClinicConexoesPage({
           statusLabel={instagramNeedsReconnect ? "Reconexão necessária" : instagramConnected ? "Conectado" : "Não conectado"}
           statusDot={instagramNeedsReconnect ? "bg-vexo-warning" : instagramConnected ? "bg-vexo-success" : "bg-vexo-muted"}
           href={`/api/oauth/instagram/start?clinicId=${clinic.id}`}
-          openInNewTab
           disconnectAction={disconnectInstagramAction.bind(null, clinic.id)}
           notConnectedAction={
             <ConnectionLinkButton clinicId={clinic.id} channel="instagram" pendingToken={pendingInstagramLink?.token ?? null} />
@@ -299,7 +296,6 @@ export default async function ClinicConexoesPage({
           statusLabel={googleNeedsReconnect ? "Reconexão necessária" : googleConnected ? "Conectado" : "Não conectado"}
           statusDot={googleNeedsReconnect ? "bg-vexo-warning" : googleConnected ? "bg-vexo-success" : "bg-vexo-muted"}
           href={`/api/oauth/google-calendar/start?clinicId=${clinic.id}`}
-          openInNewTab
           disconnectAction={disconnectGoogleCalendarAction.bind(null, clinic.id)}
           notConnectedAction={
             <ConnectionLinkButton clinicId={clinic.id} channel="google-calendar" pendingToken={pendingGoogleLink?.token ?? null} />

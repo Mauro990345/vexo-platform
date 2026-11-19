@@ -853,6 +853,10 @@ export async function disconnectWhatsappAction(clinicId: string) {
   await requireInternalSession();
   await disconnectWhatsapp(clinicId);
   revalidatePath(`/crm/clinicas/${clinicId}/whatsapp`);
+  // Usada também pelo botão "Desconectar" do card de WhatsApp em Conexões
+  // (ver conexoes/page.tsx) — mesmo padrão de revalidação do Instagram/
+  // Google Calendar, que já revalidam essa rota.
+  revalidatePath(`/crm/clinicas/${clinicId}/conexoes`);
   revalidatePath(`/crm/clinicas/${clinicId}`);
   revalidatePath("/crm");
 }
