@@ -106,7 +106,7 @@ export function ConnectionLinkButton({
           type="button"
           onClick={handleCancel}
           disabled={pending}
-          className="rounded-lg border border-vexo-error/40 px-2.5 py-1 text-card font-medium text-vexo-error hover:bg-vexo-error/10 disabled:opacity-50"
+          className="shrink-0 rounded-control border border-vexo-error/40 px-1.5 py-1 text-card font-medium text-vexo-error hover:bg-vexo-error/10 disabled:opacity-50"
         >
           Cancelar
         </button>
@@ -115,7 +115,7 @@ export function ConnectionLinkButton({
           type="button"
           onClick={handleConnect}
           disabled={pending}
-          className="rounded-lg border border-vexo-accent px-2.5 py-1 text-card font-medium text-vexo-accent hover:bg-vexo-accent/10 disabled:opacity-50"
+          className="shrink-0 rounded-control border border-vexo-accent px-1.5 py-1 text-card font-medium text-vexo-accent hover:bg-vexo-accent/10 disabled:opacity-50"
         >
           Conectar
         </button>

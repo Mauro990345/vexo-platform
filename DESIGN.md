@@ -1031,10 +1031,6 @@ que a tela Configurações sobrescreve. Nunca "M8 Growth" nessas páginas.
   descuido de responsividade. No celular (~358px úteis depois do `px-4` do `AppShell`) cada card
   fica com ~114px: só cabe com tipografia e espaçamento compactos (ver abaixo), então o card
   nunca tenta imitar o layout largo de desktop.
-- **Cada card é uma coluna vertical só** (`flex flex-col`), nunca status+botão lado a lado:
-  ícone+nome → 1 frase curta (`text-card`, a mesma via nome) → status (bolinha + texto) → 1 botão
-  centralizado. Empilhar verticalmente é o que sobra de margem pra não cortar/quebrar feio nos
-  ~114px do celular — a tentativa horizontal (como era antes) não cabia.
 - **Tokens, nunca valor cru**: tamanho de fonte do corpo do card é `text-card` (11px, definido em
   `tailwind.config.ts`), nunca `text-[11px]` escrito direto na tela — mesmo texto pequeno, mas
   pelo token nomeado, pra continuar valendo a regra do topo deste arquivo.
@@ -1052,6 +1048,35 @@ que a tela Configurações sobrescreve. Nunca "M8 Growth" nessas páginas.
 - **Mantido fora da lista dos 3 cards**: o bloco "Onboarding remoto do cliente" (gera link pro
   cliente conectar Instagram+Google Calendar sem acesso ao CRM) — é uma ferramenta diferente,
   não um 4º card de canal, e não estava na lista do que devia sair da tela.
+
+### Conexões — rodada 2 (botão no canto direito, acabamento do Painel, WhatsApp no mesmo padrão)
+
+- **Botão no canto direito, na MESMA linha do indicador de status** (indicador à esquerda, botão
+  à direita) — substituiu a versão anterior (botão centralizado embaixo, "chapada"). Linha
+  `flex flex-wrap items-center gap-x-1.5 gap-y-1` + `ml-auto` no botão: nos 2 canais com texto
+  curto (ex: "Conectado" + "Desconectar") sempre cabe tudo numa linha só; só no combo mais largo
+  ("Não conectado"/"Reconexão necessária" + botão, no celular) o botão desce pra uma 2ª linha,
+  ainda encostado na direita — nunca corta nem esconde o texto do status. Decisão importante aqui:
+  o rótulo de status NUNCA leva `truncate` — a 1ª tentativa usava `truncate` e ele encolhia até
+  sumir (texto invisível) quando não sobrava espaço nenhum pro botão ao lado; a correção foi tirar
+  o `truncate` e deixar o rótulo quebrar linha normalmente quando precisar (`min-w-0` no
+  container, sem forçar uma única linha) — testado e fixado em
+  `page.layout.test.ts` (describe "rótulo de status mais longo").
+- **Acabamento igual aos cards do Painel do cliente**: `rounded-control` (8px — mesmo token usado
+  em `PanelAppointmentsColumn.tsx`/`ReactivationRail.tsx`), borda `border-vexo-border` bem sutil,
+  fundo `bg-vexo-surface` — troca do antigo `rounded-xl` (block, 12px, "cartão" de conteúdo maior)
+  por `rounded-control` (control, 8px — papel de item/linha compacta, que é o que estes 3 cards
+  são). Botões internos (`Conectar`/`Desconectar`/`Cancelar`/`Reconectar`, incluindo
+  `ConnectOAuthButton`/`ConnectionLinkButton`) seguem o mesmo `rounded-control`, com padding
+  reduzido (`px-1.5` em vez de `px-2.5`) pra caber ao lado do status na mesma linha.
+- **WhatsApp entra no MESMO padrão de desconexão que Instagram e Google Calendar** — antes era o
+  único canal fora do padrão ("Gerenciar" sempre, navegando pra tela do QR code mesmo já
+  conectado). Agora: conectado → "Desconectar" (mesma aparência e ação real de desconectar já
+  usada em `/whatsapp`, só chamada também daqui); não conectado → "Conectar", leva direto pra
+  `/whatsapp` (onde fica o QR code). O botão "Gerenciar" não existe mais em lugar nenhum da tela —
+  como os 3 canais passaram a desconectar sempre pelo VEXO, a ramificação de código que só existia
+  pra exibir "Gerenciar" (conectado sem `disconnectAction`) virou código morto e foi removida
+  junto (prop `openInNewTab` do `ConnectionCard` também saiu, sem mais nenhum uso).
 
 ## Conversa (`/crm/conversas/[id]`) — atualização automática, sem gatilho visível
 
@@ -1071,3 +1096,28 @@ que a tela Configurações sobrescreve. Nunca "M8 Growth" nessas páginas.
   fim) é pura e vive separada do componente**, em `src/lib/conversation-polling.ts` — testada
   direto por unidade (`conversation-polling.test.ts`), sem precisar de DOM/jsdom (este repo só
   tem infra de teste em Node puro).
+
+### Conversa — rodada 2 (escala compacta, mesma densidade do Painel do cliente)
+
+- **Toda a tela ficou um degrau menor**, igualando a densidade já usada no Painel do cliente —
+  comportamento (atualização automática a cada ~3.5s, sem piscar/recarregar/pular rolagem) e
+  cores continuam exatamente como estavam, só a escala visual mudou:
+  - Balão de mensagem: `rounded-block` (12px, era `rounded-2xl`/16px) + `px-2.5 py-1.5` (era
+    `px-3 py-2`) + `text-xs` (era `text-sm`) + `max-w-[65%]` (era `max-w-[80%]` — balão nunca
+    ocupa quase a tela inteira).
+  - Container da conversa: `rounded-block` + `p-2.5` (era `rounded-2xl p-4`); espaço entre
+    balões `space-y-1.5` (era `space-y-3`).
+  - Título (nome do lead): `text-sm` (era `text-lg`); badge "Em conversa" (`StatusBadge`) não
+    mudou — já era compacto.
+  - Cartões do aside (Lead, Agendamento): `rounded-block p-2.5 text-xs` (era `rounded-2xl p-4
+    text-sm`); coluna do aside em si mais estreita, `220px` (era `280px`).
+  - Botões e campo de resposta manual: `rounded-control`, `text-card`, padding reduzido
+    (`px-2.5 py-1.5`/`px-3 py-1.5`, eram `px-3 py-2`/`px-4 py-2`).
+  - Margens da página: `gap-3` entre coluna principal e aside (era `gap-6`), `mb-2`/`mt-2` entre
+    blocos (eram `mb-4`/`mt-3`) — menos espaço vazio em volta, sem cortar nada.
+- **Nada de `rounded-2xl`/`rounded-xl` crus**: todos os raios da tela agora vêm de
+  `rounded-control`/`rounded-block` (os 2 tokens de raio já existentes em `tailwind.config.ts`),
+  nunca um valor do Tailwind puro escrito direto.
+- **Responsivo**: validado em 390px e 1366px via Playwright (Tailwind compilado) em
+  `page.layout.test.ts` — sem rolagem horizontal, nenhum balão estourando a própria caixa, balão
+  nunca passando de ~70% da largura útil da conversa, aside ≤240px no notebook.

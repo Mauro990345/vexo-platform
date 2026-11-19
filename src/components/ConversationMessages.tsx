@@ -36,7 +36,7 @@ function MessageBubble({ m }: { m: MessageDTO }) {
   return (
     <div className={`flex ${m.direction === "INBOUND" ? "justify-start" : "justify-end"}`}>
       <div
-        className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm ${
+        className={`max-w-[65%] rounded-block px-2.5 py-1.5 text-xs ${
           m.direction === "INBOUND"
             ? "bg-vexo-bg text-vexo-fg"
             : m.sender === "HUMAN"
@@ -45,7 +45,7 @@ function MessageBubble({ m }: { m: MessageDTO }) {
         }`}
       >
         {m.mediaUrl ? <p className="italic opacity-80">{m.content}</p> : <p>{m.content}</p>}
-        <p className="mt-1 text-caption opacity-60">
+        <p className="mt-0.5 text-caption opacity-60">
           {m.sender === "AI" ? "IA" : m.sender === "HUMAN" ? "Humano" : m.sender === "SYSTEM" ? "Sistema" : "Lead"} ·{" "}
           {formatMessageTime(m.sentAt ?? m.createdAt)}
           {m.status === "PENDING" ? " · agendada" : m.status === "FAILED" ? " · falhou" : ""}
@@ -143,7 +143,7 @@ export function ConversationMessages({
       {messages.map((m) => (
         <MessageBubble key={m.id} m={m} />
       ))}
-      {messages.length === 0 && <p className="text-sm text-vexo-muted">Nenhuma mensagem ainda.</p>}
+      {messages.length === 0 && <p className="text-xs text-vexo-muted">Nenhuma mensagem ainda.</p>}
     </>
   );
 }
