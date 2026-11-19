@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { Calendar } from "lucide-react";
 import { InstagramGlyphIcon, WhatsAppGlyphIcon } from "@/components/BrandIcons";
 import { prisma } from "@/lib/prisma";
-import { requireInternalSession } from "@/lib/session";
+import { requireInternalOrReviewerSession } from "@/lib/session";
 import { refreshWhatsappStatus, type WhatsappConnectionState } from "@/lib/whatsapp-connection";
 import { ConnectOAuthButton } from "@/components/ConnectOAuthButton";
 import { RefreshOnFocus } from "@/components/RefreshOnFocus";
@@ -54,6 +54,7 @@ function ConnectionCard({
   disconnectAction,
   notConnectedAction,
   reconnectAction,
+  readOnly,
 }: {
   icon: React.ReactNode;
   iconBg: string;
@@ -77,6 +78,11 @@ function ConnectionCard({
   // (só apaga a linha, sem gerar OAuth novo); precisa do mesmo fluxo de
   // "Conectar" de novo, no lugar do "Desconectar" (nunca os dois juntos).
   reconnectAction?: React.ReactNode;
+  // Login Revisor (ver UserRole.REVIEWER) — somente leitura: nenhum botão
+  // de ação, só o status. O bloqueio de verdade é no servidor (as 3
+  // actions continuam atrás de requireInternalSession, que barra o
+  // Revisor) — isto aqui é só não oferecer o botão pra começo de conversa.
+  readOnly?: boolean;
 }) {
   return (
     <div className="flex min-w-0 flex-col gap-1.5 rounded-control border border-vexo-border bg-vexo-surface p-2.5">
@@ -107,7 +113,7 @@ function ConnectionCard({
         </div>
 
         <div className="ml-auto shrink-0">
-          {reconnectAction
+          {readOnly ? null : reconnectAction
             ? reconnectAction
             : connected
               ? (
@@ -148,7 +154,8 @@ export default async function ClinicConexoesPage({
   params: { id: string };
   searchParams: { status?: string; channel?: string; reason?: string };
 }) {
-  await requireInternalSession();
+  const session = await requireInternalOrReviewerSession(params.id);
+  const readOnly = session.user.role === "REVIEWER";
 
   const clinic = await prisma.clinic.findUnique({
     where: { id: params.id },
@@ -243,7 +250,7 @@ export default async function ClinicConexoesPage({
         </p>
       )}
 
-      {!bothChannelsConnected && (
+      {!readOnly && !bothChannelsConnected && (
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-vexo-border bg-vexo-surface p-3.5">
           <div>
             <p className="text-sm font-semibold">Onboarding remoto do cliente</p>
@@ -267,6 +274,7 @@ export default async function ClinicConexoesPage({
           statusDot={WHATSAPP_STATUS_DOT[whatsappStatus]}
           href={`${base}/whatsapp`}
           disconnectAction={disconnectWhatsappAction.bind(null, clinic.id)}
+          readOnly={readOnly}
         />
         <ConnectionCard
           icon={<InstagramGlyphIcon className="h-5 w-5" />}
@@ -286,6 +294,7 @@ export default async function ClinicConexoesPage({
               <ConnectOAuthButton href={`/api/oauth/instagram/start?clinicId=${clinic.id}`} label="Reconectar" />
             ) : undefined
           }
+          readOnly={readOnly}
         />
         <ConnectionCard
           icon={<Calendar className="h-3 w-3" strokeWidth={2} />}
@@ -305,6 +314,7 @@ export default async function ClinicConexoesPage({
               <ConnectOAuthButton href={`/api/oauth/google-calendar/start?clinicId=${clinic.id}`} label="Reconectar" />
             ) : undefined
           }
+          readOnly={readOnly}
         />
       </div>
     </div>

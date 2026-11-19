@@ -18,6 +18,14 @@ vi.mock("@/lib/session", () => ({
   requireInternalSession: vi.fn(async () => ({ user: { role: "INTERNAL_ADMIN" } })),
 }));
 
+vi.mock("next-auth", () => ({
+  getServerSession: vi.fn(async () => ({ user: { role: "INTERNAL_ADMIN", name: "Admin" } })),
+}));
+vi.mock("@/lib/auth", () => ({ authOptions: {} }));
+vi.mock("./reviewer-actions", () => ({
+  getReviewerLoginStatus: vi.fn(async () => ({ exists: false, email: "revisor@vexoia.com.br", active: false })),
+}));
+
 vi.mock("@/lib/prisma", () => ({
   prisma: {
     clinic: {
@@ -108,4 +116,53 @@ describe("Contas — lista com botão Relatório, sem rolagem horizontal", () =>
 
     await page.close();
   });
+});
+
+// Requisito 7 (App Review da Meta): seção "Login de revisão" (ver
+// ReviewerLoginSection.tsx), visível só pro Admin, não estoura a largura
+// nem gera rolagem horizontal, nas 2 larguras pedidas (390px celular,
+// 1366px notebook).
+describe("Contas — seção 'Login de revisão' (Admin), sem rolagem horizontal", () => {
+  let browser: Browser;
+  let compiledCss: string;
+  let html: string;
+
+  beforeAll(async () => {
+    const tmpDir = mkdtempSync(path.join(tmpdir(), "vexo-contas-revisor-"));
+    const outCssPath = path.join(tmpDir, "compiled.css");
+    execFileSync("npx", ["tailwindcss", "-i", "./src/app/globals.css", "-o", outCssPath, "--minify"], { cwd: PROJECT_ROOT, stdio: "pipe" });
+    compiledCss = readFileSync(outCssPath, "utf8");
+    browser = await chromium.launch({ executablePath: process.env.PLAYWRIGHT_CHROMIUM_PATH || "/opt/pw-browsers/chromium" });
+
+    const { getReviewerLoginStatus } = await import("./reviewer-actions");
+    vi.mocked(getReviewerLoginStatus).mockResolvedValueOnce({ exists: true, email: "revisor@vexoia.com.br", active: true });
+
+    const { default: ClinicsOverviewPage } = await import("./page");
+    const element = await ClinicsOverviewPage({ searchParams: {} });
+    const markup = renderToStaticMarkup(createElement("div", null, element));
+    html = `<!DOCTYPE html><html class="dark"><head><meta charset="utf-8"><style>${compiledCss}</style></head><body class="bg-vexo-bg text-vexo-fg antialiased"><main class="px-4 py-6">${markup}</main></body></html>`;
+  }, 60_000);
+
+  afterAll(async () => {
+    await browser?.close();
+  });
+
+  it("a seção aparece (e-mail do login visível)", () => {
+    expect(html).toContain("revisor@vexoia.com.br");
+    expect(html).toContain("Login de revisão");
+  });
+
+  for (const width of [390, 1366]) {
+    it(`${width}px: sem rolagem horizontal da página com a seção "Login de revisão" renderizada`, async () => {
+      const page = await browser.newPage({ viewport: { width, height: 900 } });
+      await page.setContent(html);
+      await page.waitForTimeout(30);
+
+      const scrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
+      const clientWidth = await page.evaluate(() => document.documentElement.clientWidth);
+      expect(scrollWidth, `${width}px: scrollWidth (${scrollWidth}) > clientWidth (${clientWidth})`).toBeLessThanOrEqual(clientWidth);
+
+      await page.close();
+    });
+  }
 });

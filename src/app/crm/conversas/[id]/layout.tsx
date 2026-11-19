@@ -5,7 +5,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { AppShell } from "@/components/AppShell";
-import { buildClinicNavGroups } from "@/components/clinic-nav";
+import { buildClinicNavGroups, buildReviewerNavGroups } from "@/components/clinic-nav";
 
 // Abrir uma conversa continua "dentro" do contexto da clínica dela — mesma
 // sidebar de clinicas/[id]/layout.tsx, resolvendo a clínica a partir da
@@ -18,6 +18,8 @@ export default async function ConversationLayout({
   params: { id: string };
 }) {
   const session = await getServerSession(authOptions);
+  const role = session?.user.role;
+  const reviewer = role === "REVIEWER";
 
   const conversation = await prisma.conversation.findUnique({
     where: { id: params.id },
@@ -27,15 +29,21 @@ export default async function ConversationLayout({
 
   return (
     <AppShell
-      userLabel={`${session?.user.name} · ${session?.user.role === "INTERNAL_ADMIN" ? "Admin" : "Equipe"}`}
-      navGroups={buildClinicNavGroups(conversation.clinicId)}
+      userLabel={`${session?.user.name} · ${role === "INTERNAL_ADMIN" ? "Admin" : reviewer ? "Revisor" : "Equipe"}`}
+      navGroups={reviewer ? buildReviewerNavGroups(conversation.clinicId) : buildClinicNavGroups(conversation.clinicId)}
       contextHeader={
         <div className="rounded-lg bg-vexo-surface2 px-2 py-1.5">
-          <Link href="/crm" className="flex items-center gap-1 text-card text-vexo-muted hover:text-vexo-fg">
-            <ChevronLeft className="h-3 w-3 shrink-0" strokeWidth={2} />
-            Contas
-          </Link>
-          <p className="mt-0.5 truncate text-xs font-medium">{conversation.clinic.name}</p>
+          {reviewer ? (
+            <p className="truncate text-xs font-medium">{conversation.clinic.name}</p>
+          ) : (
+            <>
+              <Link href="/crm" className="flex items-center gap-1 text-card text-vexo-muted hover:text-vexo-fg">
+                <ChevronLeft className="h-3 w-3 shrink-0" strokeWidth={2} />
+                Contas
+              </Link>
+              <p className="mt-0.5 truncate text-xs font-medium">{conversation.clinic.name}</p>
+            </>
+          )}
         </div>
       }
     >

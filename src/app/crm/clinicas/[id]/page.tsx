@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { requireInternalOrReviewerSession } from "@/lib/session";
 import { startOfDay, addDays } from "@/lib/metrics";
 import { leadDisplayParts } from "@/lib/lead-display";
 import { LeadAvatar } from "@/components/LeadAvatar";
@@ -93,6 +94,8 @@ function formatDateTime(date: Date): string {
 }
 
 export default async function ClinicPipelinePage({ params }: { params: { id: string } }) {
+  await requireInternalOrReviewerSession(params.id);
+
   const clinicId = params.id;
   const todayStart = startOfDay(new Date());
   const periodStart = addDays(todayStart, -6);

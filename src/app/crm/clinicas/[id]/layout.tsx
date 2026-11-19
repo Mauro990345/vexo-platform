@@ -5,7 +5,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { AppShell } from "@/components/AppShell";
-import { buildClinicNavGroups } from "@/components/clinic-nav";
+import { buildClinicNavGroups, buildReviewerNavGroups } from "@/components/clinic-nav";
 
 // Sidebar de UMA clínica específica — troca completamente em relação ao
 // CRM global (ver crm/(global)/layout.tsx): Pipeline, Follow-up, WhatsApp,
@@ -20,6 +20,8 @@ export default async function ClinicLayout({
   params: { id: string };
 }) {
   const session = await getServerSession(authOptions);
+  const role = session?.user.role;
+  const reviewer = role === "REVIEWER";
 
   const clinic = await prisma.clinic.findUnique({
     where: { id: params.id },
@@ -29,15 +31,23 @@ export default async function ClinicLayout({
 
   return (
     <AppShell
-      userLabel={`${session?.user.name} · ${session?.user.role === "INTERNAL_ADMIN" ? "Admin" : "Equipe"}`}
-      navGroups={buildClinicNavGroups(clinic.id)}
+      userLabel={`${session?.user.name} · ${role === "INTERNAL_ADMIN" ? "Admin" : reviewer ? "Revisor" : "Equipe"}`}
+      navGroups={reviewer ? buildReviewerNavGroups(clinic.id) : buildClinicNavGroups(clinic.id)}
+      // Revisor nunca vê o link "Contas" (só tem uma clínica, sem seletor
+      // nem volta pra lista geral — ver DESIGN.md) nem o "←", só o nome.
       contextHeader={
         <div className="rounded-lg bg-vexo-surface2 px-2 py-1.5">
-          <Link href="/crm" className="flex items-center gap-1 text-card text-vexo-muted hover:text-vexo-fg">
-            <ChevronLeft className="h-3 w-3 shrink-0" strokeWidth={2} />
-            Contas
-          </Link>
-          <p className="mt-0.5 truncate text-xs font-medium">{clinic.name}</p>
+          {reviewer ? (
+            <p className="truncate text-xs font-medium">{clinic.name}</p>
+          ) : (
+            <>
+              <Link href="/crm" className="flex items-center gap-1 text-card text-vexo-muted hover:text-vexo-fg">
+                <ChevronLeft className="h-3 w-3 shrink-0" strokeWidth={2} />
+                Contas
+              </Link>
+              <p className="mt-0.5 truncate text-xs font-medium">{clinic.name}</p>
+            </>
+          )}
         </div>
       }
     >

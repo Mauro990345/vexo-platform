@@ -1,7 +1,11 @@
 import Link from "next/link";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { ClinicSearchList } from "@/components/ClinicSearchList";
+import { ReviewerLoginSection } from "@/components/ReviewerLoginSection";
 import { getClinicReportRowSummaries } from "@/app/crm/clinicas/report-actions";
+import { getReviewerLoginStatus } from "./reviewer-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +17,9 @@ export default async function ClinicsOverviewPage({
 }: {
   searchParams: { oauthError?: string };
 }) {
+  const session = await getServerSession(authOptions);
+  const isAdmin = session?.user.role === "INTERNAL_ADMIN";
+
   const clinics = await prisma.clinic.findMany({
     orderBy: { name: "asc" },
     select: { id: true, name: true, active: true },
@@ -23,6 +30,11 @@ export default async function ClinicsOverviewPage({
   // getClinicReportRowSummaries, report-actions.ts).
   const reportSummaries = await getClinicReportRowSummaries(clinics.map((c) => c.id));
   const clinicsWithReport = clinics.map((c) => ({ ...c, reportNextSendDateLabel: reportSummaries[c.id]?.nextSendDateLabel ?? null }));
+
+  // Só Admin gerencia o login Revisor (ver UserRole.REVIEWER) — Equipe nem
+  // consulta o status dele (requireAdminSession, dentro de
+  // getReviewerLoginStatus, já barraria mesmo assim).
+  const reviewerStatus = isAdmin ? await getReviewerLoginStatus() : null;
 
   return (
     <div>
@@ -49,6 +61,8 @@ export default async function ClinicsOverviewPage({
       )}
 
       <ClinicSearchList clinics={clinicsWithReport} />
+
+      {reviewerStatus && <ReviewerLoginSection initialStatus={reviewerStatus} />}
     </div>
   );
 }

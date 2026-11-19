@@ -1153,3 +1153,47 @@ que a tela Configurações sobrescreve. Nunca "M8 Growth" nessas páginas.
 - **Responsivo**: validado em 390px e 1366px via Playwright (Tailwind compilado) em
   `page.layout.test.ts` — sem rolagem horizontal, nenhum balão estourando a própria caixa, balão
   nunca passando de ~70% da largura útil da conversa, aside ≤240px no notebook.
+
+## Login "Revisor" (App Review da Meta) — somente leitura, lista fixa de telas
+
+Papel novo de usuário (`UserRole.REVIEWER`) pensado só pra entregar um acesso de demonstração
+pra equipe de revisão do App Review da Meta — sem reaproveitar o login de nenhum cliente/clínica
+real, e sem dar acesso a nada que não seja a Clínica Demo VEXO.
+
+- **Regra "negar por padrão"**: o Revisor só enxerga 4 rotas, numa lista fixa no código
+  (`src/lib/reviewer-access.ts`, função `isReviewerAllowedPath`) — Conexões, Painel e Pipeline da
+  Clínica Demo, e a tela/API de uma conversa (só se ela for da própria clínica). Qualquer outra
+  rota de `/crm` ou `/api` responde como se nunca tivesse existido (`notFound()` nas páginas,
+  JSON 404 nas rotas de API) — nunca um redirect, que revelaria que a rota existe. Uma rota nova
+  que ninguém adicione à lista fica automaticamente bloqueada (coberto por teste que varre todo
+  `src/app/crm` e `src/app/api`, ver `reviewer-access.test.ts`).
+- **2 camadas de bloqueio, sem espalhar `if (role === "REVIEWER")` pelo código**: `middleware.ts`
+  (edge, só lê o JWT) nega por caminho/URL antes de qualquer página renderizar — cobre inclusive
+  páginas que não têm checagem de sessão própria (herdam do layout). `requireInternalSession()`
+  (`src/lib/session.ts`) passou a responder 404 pro Revisor em qualquer lugar que ainda a chame
+  direto — ou seja, toda ação de escrita existente (`clinicas/actions.ts`) já fica bloqueada sem
+  precisar de nenhuma exceção nova. Só as 4 telas liberadas usam a função nova
+  `requireInternalOrReviewerSession(clinicId)`, que deixa passar Admin/Equipe (qualquer clínica,
+  como sempre) ou o Revisor (só se for a clínica dele).
+- **Somente leitura em todo canto**: nas 4 telas liberadas, todo botão que muda algum dado
+  (Desconectar/Conectar, Retorno, Não compareceu, mandar mensagem, marcar como perdido, devolver
+  pra IA, "Criar painel"/acesso do cliente) fica escondido via uma prop `readOnly` passada a
+  partir da própria página — nunca omitindo a prop da action (vários componentes têm uma action
+  padrão de fallback que aponta pra uma ação de cliente real; só esconder o botão de verdade
+  evita cair nesse fallback por engano). No servidor, a mesma ação, chamada direto por fora da
+  tela, já rejeita (404) porque usa `requireInternalSession`, que bloqueia o Revisor — a interface
+  escondendo o botão é reforço visual, não o bloqueio real.
+- **Menu e identidade**: a barra lateral do Revisor mostra só Conexões/Painel/Pipeline (sem
+  "Contas", sem seletor de clínica — `buildReviewerNavGroups`, `clinic-nav.tsx`), e o rodapé
+  mostra "Revisor" em vez de "Admin"/"Equipe". Depois do login, vai direto pras Conexões da
+  Clínica Demo (`/entrar`).
+- **Ativar/desativar sem prazo automático**: `User.active` (booleano, default `true` — sem
+  mudança nenhuma pro comportamento de Admin/Equipe/Cliente já existentes) é checado em toda
+  requisição (`requireSession`), não só no login — desativar o Revisor tira o acesso dele na
+  próxima ação, mesmo que já estivesse logado.
+- **Seção "Login de revisão" em Contas (só Admin)**: bloco compacto no fim da página `/crm`
+  (`ReviewerLoginSection.tsx`), mesmos tokens das outras seções da página (`rounded-block`,
+  `p-block`, `text-card`/`text-caption`, `bg-vexo-surface`). Mostra e-mail + estado
+  (Ativo/Desativado), botão Ativar/Desativar, e "Gerar nova senha" (cria o login na primeira vez,
+  se ainda não existir) — a senha em texto aparece só uma vez, na própria tela, nunca gravada
+  (nem em log, nem em teste).

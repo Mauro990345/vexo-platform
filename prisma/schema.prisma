@@ -25,6 +25,12 @@ enum UserRole {
   // existe só pra não misturar com os outros papéis quando essa pessoa for
   // contratada de verdade.
   APPROACH_AGENT
+  // Login "Revisor" entregue à Meta no App Review — somente leitura, só
+  // enxerga a Clínica Demo VEXO (clinicId fixo, ver DEMO_CLINIC_ID em
+  // src/lib/demo-clinic.ts) e só 4 rotas (Conexões/Painel/Pipeline/uma
+  // conversa), ver requireInternalOrReviewerSession e middleware.ts. Toda
+  // outra rota do CRM responde 404 pra este papel — negar por padrão.
+  REVIEWER
 }
 
 model Clinic {
@@ -161,6 +167,14 @@ model User {
   passwordHash String
   name         String
   role         UserRole
+
+  // Liga/desliga o login sem apagar o usuário — pensado pro login Revisor
+  // (ver UserRole.REVIEWER), que o Mauro ativa/desativa à mão, mas vale
+  // pra qualquer usuário. Checado em TODA requisição autenticada (ver
+  // requireSession, src/lib/session.ts), não só no login: desativar tira o
+  // acesso na próxima requisição, mesmo de quem já está logado. Default
+  // true preserva 100% o comportamento de toda linha já existente.
+  active Boolean @default(true)
 
   // Nulo para usuários internos (acesso a todas as clínicas)
   clinicId String?

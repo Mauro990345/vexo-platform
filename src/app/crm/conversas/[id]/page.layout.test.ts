@@ -18,6 +18,15 @@ vi.mock("../../clinicas/actions", () => ({
   sendHumanReply: vi.fn(async () => {}),
 }));
 
+// Mutável pelo próprio teste (ver describe "Revisor" abaixo) — var (não
+// let/const) pro vi.mock hoisted enxergar a reatribuição feita depois.
+// eslint-disable-next-line no-var
+var mockSessionRole = "INTERNAL_ADMIN";
+
+vi.mock("@/lib/session", () => ({
+  requireInternalOrReviewerSession: vi.fn(async () => ({ user: { role: mockSessionRole, clinicId: "clinic-1" } })),
+}));
+
 vi.mock("@/lib/prisma", () => ({
   prisma: {
     conversation: {
@@ -147,5 +156,59 @@ describe("Conversa — tela compacta, sem rolagem horizontal", () => {
     expect(asideWidth).toBeLessThanOrEqual(240);
 
     await page.close();
+  });
+});
+
+// Requisito 7 (App Review da Meta): tela de Conversa sob o login Revisor —
+// somente leitura (sem formulário de resposta, sem "Marcar como perdido",
+// sem "Devolver para a IA") e sem rolagem horizontal, nas 2 larguras
+// pedidas (390px celular, 1366px notebook).
+describe("Conversa — Revisor (somente leitura)", () => {
+  let browser: Browser;
+  let compiledCss: string;
+  let html: string;
+
+  beforeAll(async () => {
+    const tmpDir = mkdtempSync(path.join(tmpdir(), "vexo-conversa-revisor-"));
+    const outCssPath = path.join(tmpDir, "compiled.css");
+    execFileSync("npx", ["tailwindcss", "-i", "./src/app/globals.css", "-o", outCssPath, "--minify"], {
+      cwd: PROJECT_ROOT,
+      stdio: "pipe",
+    });
+    compiledCss = readFileSync(outCssPath, "utf8");
+    browser = await chromium.launch({ executablePath: process.env.PLAYWRIGHT_CHROMIUM_PATH || "/opt/pw-browsers/chromium" });
+
+    mockSessionRole = "REVIEWER";
+    const { default: ConversationDetailPage } = await import("./page");
+    const element = await ConversationDetailPage({ params: { id: "conv-1" } });
+    const markup = renderToStaticMarkup(createElement("div", null, element));
+    html = `<!DOCTYPE html><html class="dark"><head><meta charset="utf-8"><style>${compiledCss}</style></head><body class="bg-vexo-bg text-vexo-fg antialiased"><main class="px-4 py-6 sm:px-8 sm:py-8"><div class="mx-auto max-w-6xl">${markup}</div></main></body></html>`;
+  }, 60_000);
+
+  afterAll(async () => {
+    mockSessionRole = "INTERNAL_ADMIN";
+    await browser?.close();
+  });
+
+  for (const width of [MOBILE_WIDTH, DESKTOP_WIDTH]) {
+    it(`${width}px: sem rolagem horizontal da página`, async () => {
+      const page = await browser.newPage({ viewport: { width, height: 900 } });
+      await page.setContent(html);
+      await page.waitForTimeout(30);
+
+      const scrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
+      const clientWidth = await page.evaluate(() => document.documentElement.clientWidth);
+      expect(scrollWidth, `${width}px: scrollWidth (${scrollWidth}) > clientWidth (${clientWidth})`).toBeLessThanOrEqual(
+        clientWidth
+      );
+
+      await page.close();
+    });
+  }
+
+  it("sem formulário de resposta nem botão de marcar como perdido/devolver pra IA", () => {
+    expect(html).not.toContain("Devolver para a IA");
+    expect(html).not.toContain("Marcar como perdido");
+    expect(html).not.toContain("Responder manualmente");
   });
 });

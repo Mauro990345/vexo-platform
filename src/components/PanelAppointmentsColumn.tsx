@@ -56,6 +56,7 @@ export function PanelAppointmentsColumn({
   availableReturnPeriods,
   noShowAction,
   returnPeriodAction,
+  readOnly,
 }: {
   upcoming: PanelAppointmentItem[];
   awaitingResponse: PanelAppointmentItem[];
@@ -64,6 +65,9 @@ export function PanelAppointmentsColumn({
   availableReturnPeriods: number[];
   noShowAction?: (appointmentId: string, status: "COMPLETED" | "NO_SHOW") => Promise<unknown>;
   returnPeriodAction?: RetornoAction;
+  // Login Revisor (ver UserRole.REVIEWER) — some "Retorno"/"Não
+  // compareceu", nunca o resto da linha (nome, status, telefone).
+  readOnly?: boolean;
 }) {
   const [historyOpen, setHistoryOpen] = useState(false);
 
@@ -121,10 +125,10 @@ export function PanelAppointmentsColumn({
         {/* Ações sempre visíveis, empilhadas (pedido explícito — "Não
             compareceu" não fica mais escondido num menu). */}
         <div className="flex shrink-0 flex-col items-end gap-1.5">
-          {showRetorno && (
+          {!readOnly && showRetorno && (
             <RetornoButton appointmentId={a.id} availablePeriods={availableReturnPeriods} returnPeriodDays={a.returnPeriodDays} locked={a.locked} action={returnPeriodAction} />
           )}
-          {showNoShow && <NoShowButton appointmentId={a.id} status={a.status} action={noShowAction} />}
+          {!readOnly && showNoShow && <NoShowButton appointmentId={a.id} status={a.status} action={noShowAction} />}
         </div>
       </div>
     );
