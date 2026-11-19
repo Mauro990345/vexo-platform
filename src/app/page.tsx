@@ -512,13 +512,19 @@ export default function HomePage() {
               que leva ao cartão), com boa parte ficando visível nas margens
               ao lado do cartão no desktop e acima dele no celular. Cor:
               --pub-watermark (branco) a 4% — só um pouco mais clara que o
-              degradê de fundo, nunca sólida. Largura não controlada (cresce
-              livre, centrada) — o que sobrar do bloco corta ela, nunca o
-              contrário, então não gera rolagem horizontal em celular. */}
+              degradê de fundo, nunca sólida. Tamanho fluido (`.pub-watermark-
+              fluid`, globals.css) — escala com a largura do PRÓPRIO bloco
+              (`cqw`, container definido em `.pub-cta-band`), não da viewport:
+              ~85-100% da largura do bloco em qualquer celular, sem mudar nada
+              no notebook (ver comentário da classe). Largura do texto em si
+              não controlada (cresce livre, centrada) — o que sobrar do bloco
+              corta ela (de propósito, estilo "espiando" pelas bordas
+              arredondadas), nunca o contrário, então não gera rolagem
+              horizontal em celular nem aumenta a altura do bloco. */}
           <div className="relative">
             <p
               aria-hidden="true"
-              className="pointer-events-none absolute inset-x-0 bottom-0 -z-10 translate-y-1/2 select-none whitespace-nowrap text-center text-pub-watermark leading-none text-vexo-pubWatermark/[0.04] md:text-pub-watermark-lg"
+              className="pub-watermark-fluid pointer-events-none absolute inset-x-0 bottom-0 -z-10 translate-y-1/2 select-none whitespace-nowrap text-center leading-none text-vexo-pubWatermark/[0.04]"
             >
               VEXO
             </p>

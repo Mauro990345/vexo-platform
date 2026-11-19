@@ -943,10 +943,8 @@ que a tela Configurações sobrescreve. Nunca "M8 Growth" nessas páginas.
     app inteiro, não só da página pública) e `sitemap.ts` não duplicam esse texto, por isso não
     mudaram.
   - **Marca d'água "VEXO" no bloco de contato**: `<p aria-hidden>` dentro de `.pub-cta-band`,
-    decorativa — `pointer-events-none select-none`, nunca disputa leitura/clique. Tamanho em dois
-    tokens novos da escala de fonte (`pub-watermark` 104px celular / `pub-watermark-lg` 320px
-    desktop, peso 700, tracking -0.03em — mesmo padrão de nomeação do `pub-hero`/`pub-hero-lg`).
-    Cor: token novo `pubWatermark` (`--pub-watermark`, branco puro) usado a 4% de opacidade
+    decorativa — `pointer-events-none select-none`, nunca disputa leitura/clique. Cor: token
+    `pubWatermark` (`--pub-watermark`, branco puro) usado a 4% de opacidade
     (`text-vexo-pubWatermark/[0.04]`) — "só um pouco mais clara que o fundo", nunca sólida; se
     precisar ajustar a intensidade depois, mexer só nesse número de opacidade no uso, não na
     variável. Ancorada ao rodapé do GRUPO título/subtítulo/botão (não ao rodapé da faixa inteira):
@@ -959,7 +957,41 @@ que a tela Configurações sobrescreve. Nunca "M8 Growth" nessas páginas.
     só `relative` (sem `z-index` próprio) não cria um novo contexto de empilhamento, e um
     `z-index` negativo do filho "escapa" pra trás do PRÓPRIO degradê de fundo do bloco, ficando
     100% invisível (armadilha real, encontrada só testando com captura de tela — visualmente
-    idêntico a "não renderizou nada").
+    idêntico a "não renderizou nada"). Tamanho: ver "rodada 2" logo abaixo — não são mais 2 tokens
+    fixos de fonte, viraram um tamanho fluido.
+
+### Marca d'água "VEXO" — rodada 2 (tamanho fluido, proporcional à largura do bloco)
+
+- **Problema da versão original**: só 2 tamanhos fixos (`pub-watermark` 104px / `pub-watermark-lg`
+  320px, trocados no breakpoint `md`, 768px) — no celular a palavra ficava pequena e desproporcional
+  ao bloco (só ~78% da largura dele, variando bastante entre celulares de tamanhos diferentes), e
+  exatamente em 768px havia um salto brusco de tamanho (104→320px de uma vez).
+- **Correção: tamanho fluido via Container Query units (`cqw`)**, não mais tokens fixos nem `vw` —
+  escala com a largura REAL do próprio bloco `.pub-cta-band` (que tem `container-type: inline-size`
+  próprio), não com a largura da viewport. Isso importa porque o bloco tem `max-w-[1040px]`: usar
+  `vw` continuaria crescendo acima de telas de 1040px+, mudando o tamanho no notebook (proibido).
+  `cqw`, por sua vez, acompanha a largura do BLOCO, que trava em 1040px — então o tamanho também
+  trava sozinho, sem precisar de nenhum breakpoint manual.
+- **Fórmula** (`.pub-watermark-fluid`, `globals.css`): `clamp(6.5rem, calc(32.26px + 28.7745cqw), 20rem)`
+  — uma reta (técnica padrão de "fluid typography", 2 pontos calibrados) limitada por `clamp()`.
+  Os 2 pontos usados pra calibrar a reta: no menor celular testado (390px de tela → ~358px de
+  bloco), a palavra ocupa ~93% da largura do bloco (pedido: "em torno de 85% a 100%"); na largura
+  em que o bloco já bate no próprio limite (`max-w-[1040px]`), o tamanho bate EXATAMENTE nos 320px
+  de antes — notebook e telas largas ficam pixel-idênticos ao que já era. `clamp()` usa os 2
+  tamanhos antigos como piso/teto (nunca menor que 104px, nunca maior que 320px) — os tokens
+  `pub-watermark`/`pub-watermark-lg` em si foram removidos do `tailwind.config.ts` (sem mais
+  nenhum uso depois da troca pra `cqw`), mas os valores continuam vivendo como piso/teto do
+  `clamp()`. Peso (700) e tracking (-0.03em) continuam na mesma classe CSS, já que não dependem
+  do tamanho.
+- **Fallback sem Container Queries**: a classe declara `font-size: 6.5rem;` ANTES do `clamp()`
+  com `cqw` — um navegador sem suporte a Container Queries não reconhece a unidade `cqw` e descarta
+  a 2ª declaração inteira (valor inválido), mantendo o tamanho fixo de celular de antes. Nunca fica
+  sem marca d'água nenhuma por falta de suporte.
+- **Testado em 390/768/1366px** (`page.watermark.layout.test.ts`, Playwright com Tailwind
+  compilado): ~93% da largura do bloco em 390px, ~85% em 768px, e em 1366px o `font-size`
+  computado é exatamente 320px (e a largura real do texto, medida via `Range.getBoundingClientRect`,
+  é a mesma de antes) — sem rolagem horizontal em nenhuma das 3 larguras. Confirmado também por
+  captura de tela real nas 3 larguras.
   - **Antes/Depois — equilíbrio de altura no desktop**: o box "Antes" (chips) ficava bem mais baixo
     que o "Depois" (conversa de exemplo), com vazio embaixo. Correção meio a meio:
     - **Chips novos**: "Prospecção fria", "Leads desqualificados", "Agenda com buracos", "Pacientes

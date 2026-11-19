@@ -141,11 +141,6 @@ const config: Config = {
         "pub-hero-lg": ["4.25rem", { lineHeight: "1.02", letterSpacing: "-0.036em", fontWeight: "600" }], // 68px
         "pub-h2": ["1.75rem", { lineHeight: "1.12", letterSpacing: "-0.03em", fontWeight: "600" }],
         "pub-h2-lg": ["2.5rem", { lineHeight: "1.08", letterSpacing: "-0.034em", fontWeight: "600" }],
-        // Marca d'água "VEXO" do bloco de contato (6.5rem celular / 15rem
-        // desktop) — bem maior que o hero de propósito, pra cobrir boa
-        // parte da largura do bloco mesmo só com a metade de cima visível.
-        "pub-watermark": ["6.5rem", { lineHeight: "1", letterSpacing: "-0.03em", fontWeight: "700" }], // 104px
-        "pub-watermark-lg": ["20rem", { lineHeight: "1", letterSpacing: "-0.03em", fontWeight: "700" }], // 320px
         // Relatório (ver DESIGN.md): número dos boxes e frase de abertura.
         "report-value": ["1.5rem", { lineHeight: "1" }], // 24px
         "report-value-lg": ["1.625rem", { lineHeight: "1" }], // 26px (a partir de sm)

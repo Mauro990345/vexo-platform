@@ -278,9 +278,51 @@
   .pub-bubble-ai {
     background-image: linear-gradient(135deg, rgb(var(--pub-button)), rgb(var(--pub-cta-2)));
   }
-  /* Faixa final de contato. */
+  /* Faixa final de contato. container-type: inline-size — habilita as
+     unidades `cqw` usadas por .pub-watermark-fluid logo abaixo: a marca
+     d'água precisa escalar com a largura REAL deste bloco (que tem
+     max-w-[1040px] próprio, ver page.tsx), não com a largura da viewport
+     (`vw` continuaria crescendo acima de 1040px de largura de tela, o que
+     mudaria o tamanho no notebook — proibido pelo pedido). */
   .pub-cta-band {
     background-image: linear-gradient(135deg, rgb(var(--pub-cta-1)) 0%, rgb(var(--pub-cta-2)) 55%, rgb(var(--pub-cta-3)) 100%);
+    container-type: inline-size;
+  }
+  /* Marca d'água "VEXO" do bloco de contato — tamanho FLUIDO (escala com a
+     largura do próprio bloco, via `cqw`), não mais um valor fixo por
+     celular/desktop (`text-pub-watermark`/`md:text-pub-watermark-lg`,
+     versão anterior). Motivo: com 2 tamanhos fixos só, a troca no
+     breakpoint `md` (768px) era um salto brusco — e abaixo dele a palavra
+     ficava pequena e desproporcional ao bloco em larguras de celular bem
+     diferentes entre si (390 vs 414px, por exemplo).
+     Calibrado por 2 pontos, igual técnica de "fluid typography" (reta
+     A + B·cqw, só então limitada por clamp()):
+       - no MENOR celular testado (390px de tela -> ~358px de bloco, ~318px
+         de área útil dentro do padding `px-5` do bloco), a palavra ocupa
+         ~93% da largura do BLOCO (pedido: "em torno de 85% a 100%").
+       - na largura em que o bloco já bate no próprio limite (`max-w-
+         [1040px]`, ~1000px de área útil), o tamanho bate exatamente nos
+         320px (20rem) de antes — não muda nada no notebook/telas largas,
+         pedido explícito.
+     Os coeficientes (32.26px, 28.7745·cqw) saem desse par de pontos; não
+     são arbitrários, mas também não precisam ser recalculados à mão se o
+     texto ou a fonte mudar — é só medir a largura real de "VEXO" de novo
+     (ver script de medição usado nesta rodada) e resolver o sistema linear
+     de novo. `clamp()` usa os 2 tamanhos antigos como piso/teto: nunca
+     menor que o antigo tamanho de celular (6.5rem), nunca maior que o
+     antigo tamanho de desktop (20rem, igual ao antigo `text-pub-watermark-lg`
+     — token removido do tailwind.config.ts junto com `text-pub-watermark`,
+     sem mais nenhum uso depois desta mudança).
+     Linha 1 (font-size fixo) é o FALLBACK pra navegador sem suporte a
+     Container Queries — nesse caso a 2ª declaração (com `cqw`, unidade que
+     ele não reconhece) é descartada inteira pelo parser CSS, e o valor
+     fixo da linha 1 continua valendo (mesmo comportamento que já existia
+     pro celular antes desta mudança). */
+  .pub-watermark-fluid {
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    font-size: 6.5rem;
+    font-size: clamp(6.5rem, calc(32.26px + 28.7745cqw), 20rem);
   }
   /* Ícone "+" do FAQ gira 45° quando a pergunta está aberta. */
   .pub-faq[open] .pub-faq-plus {
