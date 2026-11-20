@@ -8,6 +8,7 @@ import { AppointmentStatusBadge } from "@/components/AppointmentStatusBadge";
 import { normalizeBrazilianWhatsappNumber } from "@/lib/whatsapp";
 import { setConversationStatus, sendHumanReply } from "../../clinicas/actions";
 import { ConversationMessages } from "@/components/ConversationMessages";
+import { messageVisibleAt, compareByVisibleAt } from "@/lib/message-visibility";
 
 export const dynamic = "force-dynamic";
 
@@ -17,11 +18,12 @@ export default async function ConversationDetailPage({ params }: { params: { id:
     include: {
       lead: true,
       clinic: true,
-      // Desempate por id — mensagens do mesmo lote do lead (ou do mesmo
-      // $transaction de resposta da IA) têm createdAt empatado (ver
-      // resolveBatchTimestamps, message-batch-timestamps.ts); sem isso o
-      // painel podia exibir duas mensagens do mesmo lote fora da ordem real.
-      messages: { orderBy: [{ createdAt: "asc" }, { id: "asc" }] },
+      // PENDING/SENDING nunca aparecem (ver message-visibility.ts): a
+      // resposta da IA só entra na conversa depois de SAIR de verdade, não
+      // quando é gravada (minutos antes, por causa do atraso adaptativo).
+      // orderBy aqui é só uma base estável pra sair do banco — a ordem
+      // REAL (por visibleAt, não createdAt) é recalculada abaixo.
+      messages: { where: { status: { in: ["SENT", "FAILED"] } }, orderBy: [{ createdAt: "asc" }, { id: "asc" }] },
       appointments: { orderBy: { scheduledAt: "desc" }, take: 1 },
     },
   });
@@ -78,16 +80,17 @@ export default async function ConversationDetailPage({ params }: { params: { id:
         <div className="space-y-1.5 rounded-block border border-vexo-border bg-vexo-surface p-2.5">
           <ConversationMessages
             conversationId={conversation.id}
-            initialMessages={conversation.messages.map((m) => ({
-              id: m.id,
-              direction: m.direction,
-              sender: m.sender,
-              content: m.content,
-              mediaUrl: m.mediaUrl,
-              status: m.status,
-              sentAt: m.sentAt?.toISOString() ?? null,
-              createdAt: m.createdAt.toISOString(),
-            }))}
+            initialMessages={[...conversation.messages]
+              .sort((a, b) => compareByVisibleAt({ id: a.id, visibleAt: messageVisibleAt(a) }, { id: b.id, visibleAt: messageVisibleAt(b) }))
+              .map((m) => ({
+                id: m.id,
+                direction: m.direction,
+                sender: m.sender,
+                content: m.content,
+                mediaUrl: m.mediaUrl,
+                status: m.status as "SENT" | "FAILED",
+                visibleAt: messageVisibleAt(m).toISOString(),
+              }))}
           />
         </div>
 
