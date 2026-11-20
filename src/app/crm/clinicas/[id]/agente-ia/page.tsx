@@ -13,6 +13,7 @@ import { updateAiSettings, updateFollowUpWindow } from "@/app/crm/(global)/follo
 import { PromptTextarea } from "@/components/PromptTextarea";
 import { ConfirmSubmitButton } from "@/components/ConfirmSubmitButton";
 import { Tabs } from "@/components/Tabs";
+import { AttendanceVideoSettings } from "@/components/AttendanceVideoSettings";
 
 export const dynamic = "force-dynamic";
 
@@ -104,62 +105,34 @@ export default async function ClinicAiAgentPage({ params }: { params: { id: stri
                       Configurações auxiliares
                     </h3>
 
-                    <div>
-                      <label className="mb-1 block text-xs text-vexo-muted" htmlFor="confirmationVideoFile">
-                        Vídeo de confirmação de agendamento (reforça comparecimento)
-                      </label>
-                      {clinic.confirmationVideoUrl && (
-                        <div className="mb-1.5 flex items-center justify-between gap-2 rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5">
-                          <a
-                            href={clinic.confirmationVideoUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="min-w-0 truncate text-xs text-vexo-accent hover:underline"
-                          >
-                            Ver vídeo atual
-                          </a>
-                          <label className="flex shrink-0 items-center gap-1 text-card text-vexo-muted">
-                            <input type="checkbox" name="removeConfirmationVideo" className="rounded border-vexo-border" />
-                            Remover
-                          </label>
-                        </div>
-                      )}
-                      <input type="hidden" name="currentConfirmationVideoUrl" value={clinic.confirmationVideoUrl ?? ""} />
-                      <input
-                        id="confirmationVideoFile"
-                        name="confirmationVideoFile"
-                        type="file"
-                        accept="video/*"
-                        className="block w-full text-xs text-vexo-muted file:mr-2 file:rounded-lg file:border file:border-vexo-border file:bg-vexo-bg file:px-2.5 file:py-1.5 file:text-xs file:text-vexo-fg hover:file:border-vexo-accent"
-                      />
-                      <p className="mt-1 text-caption text-vexo-muted">
-                        {clinic.confirmationVideoUrl ? "Escolher um novo arquivo substitui o atual. " : ""}
-                        MP4, MOV ou WEBM — até 25MB. Enviado automaticamente pelo Instagram assim que um
-                        agendamento é confirmado na conversa — não é preciso disparar manualmente.
-                      </p>
-                    </div>
+                    <p className="text-caption text-vexo-muted">
+                      Cada item abaixo tem sua própria caixinha "Enviar" — desmarcado, a sequência
+                      pula pra o próximo item marcado, mantendo a mesma ordem (apresentação, vídeo,
+                      cafezinho, final).
+                    </p>
+
+                    <AttendanceVideoSettings
+                      currentVideoUrl={clinic.confirmationVideoUrl}
+                      videoEnabledDefault={clinic.confirmationVideoEnabled}
+                      introEnabledDefault={clinic.confirmationVideoCaptionEnabled}
+                      introCaptionDefault={clinic.confirmationVideoCaption ?? ""}
+                    />
 
                     <div>
-                      <label className="mb-1 block text-xs text-vexo-muted" htmlFor="confirmationVideoCaption">
-                        Frase que acompanha o vídeo de confirmação
-                      </label>
-                      <input
-                        id="confirmationVideoCaption"
-                        name="confirmationVideoCaption"
-                        defaultValue={clinic.confirmationVideoCaption ?? ""}
-                        placeholder="Ex: Vou te mandar um vídeo rápido mostrando como é o nosso atendimento 🙂"
-                        className="w-full rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5 text-xs outline-none focus:border-vexo-accent"
-                      />
-                      <p className="mt-1 text-caption text-vexo-muted">
-                        Mandada como mensagem de texto separada, logo antes do vídeo (o Instagram não
-                        deixa combinar texto e vídeo numa mensagem só). Vazio usa a frase padrão acima.
-                      </p>
-                    </div>
-
-                    <div>
-                      <label className="mb-1 block text-xs text-vexo-muted" htmlFor="attendanceTipMessage">
-                        Mensagem do "cafezinho" (depois do vídeo)
-                      </label>
+                      <div className="mb-1 flex items-center justify-between gap-2">
+                        <label className="text-xs text-vexo-muted" htmlFor="attendanceTipMessage">
+                          Mensagem do "cafezinho"
+                        </label>
+                        <label className="flex shrink-0 items-center gap-1 text-card text-vexo-muted">
+                          <input
+                            type="checkbox"
+                            name="attendanceTipEnabled"
+                            defaultChecked={clinic.attendanceTipEnabled}
+                            className="rounded border-vexo-border"
+                          />
+                          Enviar
+                        </label>
+                      </div>
                       <input
                         id="attendanceTipMessage"
                         name="attendanceTipMessage"
@@ -168,15 +141,27 @@ export default async function ClinicAiAgentPage({ params }: { params: { id: stri
                         className="w-full rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5 text-xs outline-none focus:border-vexo-accent"
                       />
                       <p className="mt-1 text-caption text-vexo-muted">
-                        Enviada 10 segundos depois do vídeo de confirmação, sempre nessa ordem — a IA não escreve
-                        mais esse texto sozinha. Vazio usa a frase padrão acima.
+                        Enviada 10 segundos depois do item anterior que de fato saiu, sem relação com
+                        o vídeo — a IA não escreve mais esse texto sozinha. Vazio usa a frase padrão
+                        acima.
                       </p>
                     </div>
 
                     <div>
-                      <label className="mb-1 block text-xs text-vexo-muted" htmlFor="attendanceFinalMessage">
-                        Mensagem final (depois do cafezinho)
-                      </label>
+                      <div className="mb-1 flex items-center justify-between gap-2">
+                        <label className="text-xs text-vexo-muted" htmlFor="attendanceFinalMessage">
+                          Mensagem final
+                        </label>
+                        <label className="flex shrink-0 items-center gap-1 text-card text-vexo-muted">
+                          <input
+                            type="checkbox"
+                            name="attendanceFinalEnabled"
+                            defaultChecked={clinic.attendanceFinalEnabled}
+                            className="rounded border-vexo-border"
+                          />
+                          Enviar
+                        </label>
+                      </div>
                       <input
                         id="attendanceFinalMessage"
                         name="attendanceFinalMessage"
@@ -185,8 +170,9 @@ export default async function ClinicAiAgentPage({ params }: { params: { id: stri
                         className="w-full rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5 text-xs outline-none focus:border-vexo-accent"
                       />
                       <p className="mt-1 text-caption text-vexo-muted">
-                        Enviada 10 segundos depois do cafezinho, encerrando a sequência — a IA não escreve mais
-                        despedida nenhuma quando o lead confirma presença, pra não duplicar esta mensagem. Use{" "}
+                        Enviada 10 segundos depois do item anterior que de fato saiu, encerrando a
+                        sequência — sem relação com o vídeo. Marcada, a IA não escreve mais despedida
+                        nenhuma quando o lead confirma presença, pra não duplicar esta mensagem. Use{" "}
                         <code>{"{{dia}}"}</code> onde quiser o dia calculado automaticamente ("amanhã", "hoje" ou
                         o dia da semana, ex. "sexta"). Vazio usa a frase padrão acima.
                       </p>

@@ -1275,3 +1275,52 @@ recebendo uma mensagem nova em tempo real.
   `clinicas/[id]/page.layout.test.ts` — sem rolagem horizontal da página (a rolagem horizontal
   PRÓPRIA do board, pra ver as 6 colunas num celular, é esperada e já existia antes desta
   mudança).
+
+## Agente de IA — sequência de confirmação de presença: caixinha "Enviar" por item
+
+Problema real: a sequência inteira (apresentação, vídeo, cafezinho, mensagem final) dependia só
+de `Clinic.confirmationVideoUrl` existir — sem vídeo cadastrado, nada saía, nem a mensagem final
+(que confirma a presença e não tem relação nenhuma com o vídeo). Agora cada um dos 4 itens tem
+sua própria caixinha "Enviar", na aba "Prompt de conversação da IA" > "Configurações auxiliares"
+(`/crm/clinicas/[id]/agente-ia`).
+
+- **4 colunas booleanas novas em `Clinic`** (`confirmationVideoCaptionEnabled`,
+  `confirmationVideoEnabled`, `attendanceTipEnabled`, `attendanceFinalEnabled`), cada uma ao lado
+  do rótulo do item que ela controla, usando o mesmo `<label className="flex items-center gap-1
+  text-card text-vexo-muted">` já usado pela caixinha "Remover" do vídeo — nenhum componente novo
+  pros 2 itens sem dependência (cafezinho, final); só o vídeo + a frase que o acompanha
+  precisaram de um Client Component (`AttendanceVideoSettings.tsx`) pela interatividade abaixo.
+- **Ordem inalterada, item desmarcado é pulado**: apresentação -> vídeo -> cafezinho -> final,
+  sempre nessa ordem relativa — só os itens marcados entram na sequência de verdade (ver
+  `buildAttendanceSequenceItems`, `conversation-pipeline.ts`). Os 10s entre itens continuam
+  ancorados no envio real (`sentAt`) do item anterior que de fato saiu, nunca mudando por causa
+  de um item pulado no meio (`ATTENDANCE_ITEM_DELAY_MS`, fixo por item, não por par).
+- **2 regras de dependência, impostas na tela E no servidor** (nunca só uma das duas):
+  - A frase que acompanha o vídeo só pode ficar marcada se o vídeo também estiver — a caixinha
+    dela vem desabilitada (`disabled`) sempre que a do vídeo estiver desmarcada.
+  - O vídeo só pode ficar marcado se houver arquivo de verdade — a caixinha dele vem desabilitada
+    sem nenhum arquivo (nem salvo, nem escolhido agora no input). Escolher um arquivo habilita a
+    caixinha; marcar "Remover" (apaga o arquivo, ação separada que continua existindo) desabilita
+    e desmarca as duas (vídeo e frase) na hora, sem precisar recarregar a página.
+  - A validação do servidor (`updateAiAgentSettings`, `clinicas/actions.ts`) repete as 2 regras
+    sempre, nunca confiando só na tela.
+- **Com tudo desmarcado, a sequência não dispara** (`fireAttendanceConfirmationSequence` devolve
+  `false` antes de reivindicar qualquer coisa) — mesmo texto de ajuda de cada item já avisa isso
+  (curto, em português simples, sem jargão).
+- **Despedida da IA condicionada só à mensagem final**: a instrução interna que impede a IA de se
+  despedir sozinha (pra não duplicar a frase final do código) só é injetada quando a mensagem
+  final está marcada E a sequência vai disparar neste turno (`shouldSuppressAiFarewell`,
+  `conversation-pipeline.ts`) — nunca em `Clinic.aiSystemPrompt` nem no prompt padrão. Com a
+  final desmarcada, a IA se despede normalmente, mesmo que vídeo/cafezinho ainda disparem.
+- **Clínica já existente preserva o comportamento de hoje** (migration
+  `20261120000000_attendance_sequence_item_toggles`): as 4 caixinhas nascem `true` (comportamento
+  de sequência completa) pra quem JÁ TEM vídeo cadastrado; `false` nas 4 pra quem NÃO tem (hoje
+  nada saía, e não viraria cafezinho/final saindo sozinhos sem ninguém decidir isso). Clínica
+  nova nasce com as 4 `true`. Nenhuma coluna existente apagada.
+- **Pipeline/conteúdo das mensagens, sem nenhuma relação com o vídeo**: `maybeSendWhatsappConfirmation`
+  e `maybeSendInstagramConfirmationCard` (confirmação IMEDIATA do agendamento, por WhatsApp/
+  Instagram) nunca dependeram de `confirmationVideoUrl` — continuam disparando exatamente como
+  sempre, independente das 4 caixinhas novas (que só afetam a sequência de confirmação de
+  PRESENÇA, bem mais tarde no fluxo).
+- **Responsivo**: validado em 390/414px e 1366px via Playwright (Tailwind compilado) em
+  `agente-ia/page.layout.test.ts` — sem rolagem horizontal em nenhuma das 4 abas.

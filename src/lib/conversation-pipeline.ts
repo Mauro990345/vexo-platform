@@ -375,12 +375,104 @@ function resolveAttendanceFinalMessage(clinicTemplate: string | null | undefined
   return template.replaceAll("{{dia}}", describeAppointmentDay(scheduledAt, now));
 }
 
-// Carregado no campo Message.pendingAttendanceStep (JSON) — descreve o
-// PRÓXIMO elo da cadeia de confirmação de presença e tudo que ele precisa
-// pra ser criado, mais o que os elos SEGUINTES vão precisar (appointmentId/
-// scheduledAtMs/finalText viajam por toda a cadeia, não só pro elo
-// imediatamente seguinte). Ver dispatch.ts — só é consumido depois de
-// confirmar o SENT do elo atual.
+// Os 4 itens da sequência de confirmação de presença, SEMPRE nesta ordem
+// (um item desmarcado é pulado — a ordem relativa dos que restam nunca
+// muda): apresentação (frase antes do vídeo) -> vídeo -> cafezinho ->
+// final. "intro" só pode aparecer junto de "video" (ver
+// buildAttendanceSequenceItems, abaixo — a frase diz "vou te mandar um
+// vídeo", não faz sentido sem ele).
+export type AttendanceStepKind = "video" | "tip" | "final";
+export type AttendanceSequenceItem = "intro" | AttendanceStepKind;
+
+// Delay (ms) entre o ENVIO REAL (sentAt, confirmado por dispatchOneMessage)
+// do item anterior que de fato saiu e a criação deste item — fixo por
+// item, não por par de itens adjacentes: pular um item no meio não muda o
+// delay de quem vem depois (ver ATTENDANCE_TIP_DELAY_AFTER_VIDEO_MS/
+// ATTENDANCE_FINAL_DELAY_AFTER_TIP_MS, acima — os "10s entre mensagens"
+// do pedido original). "video" só usa este valor quando vem depois de
+// "intro" na mesma cadeia (dispatch.ts) — quando é o PRIMEIRO item ativo
+// da sequência inteira (intro desmarcada/sem vídeo-habilitado), usa
+// ATTENDANCE_VIDEO_INTRO_DELAY_MS em vez disso (ver
+// fireAttendanceConfirmationSequence), o mesmo delay de entrada que
+// qualquer item usaria se fosse o primeiro.
+export const ATTENDANCE_ITEM_DELAY_MS: Record<AttendanceStepKind, number> = {
+  video: ATTENDANCE_VIDEO_DELAY_AFTER_INTRO_MS,
+  tip: ATTENDANCE_TIP_DELAY_AFTER_VIDEO_MS,
+  final: ATTENDANCE_FINAL_DELAY_AFTER_TIP_MS,
+};
+
+// Monta a lista ORDENADA dos itens que vão sair de verdade, já aplicando
+// as 2 regras de dependência do vídeo: "video" só entra se a caixinha
+// estiver marcada E houver arquivo de verdade (hasVideoFile — mesmo sem
+// isso já devendo estar garantido por quem salva a configuração, checado
+// de novo aqui, defensivo); "intro" só entra se "video" também entrar
+// (nunca manda a frase "vou te mandar um vídeo" sem o vídeo). Lista vazia
+// = nenhum item ativo = a sequência não dispara (ver
+// fireAttendanceConfirmationSequence).
+export function buildAttendanceSequenceItems(
+  flags: { introEnabled: boolean; videoEnabled: boolean; tipEnabled: boolean; finalEnabled: boolean },
+  hasVideoFile: boolean
+): AttendanceSequenceItem[] {
+  const videoIncluded = flags.videoEnabled && hasVideoFile;
+  const introIncluded = flags.introEnabled && videoIncluded;
+
+  const items: AttendanceSequenceItem[] = [];
+  if (introIncluded) items.push("intro");
+  if (videoIncluded) items.push("video");
+  if (flags.tipEnabled) items.push("tip");
+  if (flags.finalEnabled) items.push("final");
+  return items;
+}
+
+// Decide se a IA deve ser instruída a NÃO se despedir neste turno (ver
+// attendanceConfirmedContext, handleInboundInstagramMessage) — só quando a
+// sequência de confirmação de presença vai disparar no fim deste mesmo
+// turno (decision === "NAO_REMARCA") E a mensagem FINAL dela está
+// marcada pra sair. Com a final desmarcada, nenhuma frase de encerramento
+// sai pelo código (mesmo que vídeo/cafezinho disparem), então a IA
+// precisa se despedir normalmente — nunca fica sem despedida nenhuma.
+export function shouldSuppressAiFarewell(
+  decision: AttendanceReplyDecision | undefined,
+  flags: { introEnabled: boolean; videoEnabled: boolean; tipEnabled: boolean; finalEnabled: boolean },
+  hasVideoFile: boolean
+): boolean {
+  if (decision !== "NAO_REMARCA") return false;
+  return buildAttendanceSequenceItems(flags, hasVideoFile).includes("final");
+}
+
+// Conteúdo de texto de um item da sequência — "video" não tem texto
+// próprio (vai como mídia pura, ver mediaUrl no caller); os outros 3 usam
+// o texto já resolvido (com o default aplicado quando o campo da clínica
+// está vazio, ou "{{dia}}" substituído no caso da mensagem final).
+export function attendanceItemContent(
+  kind: AttendanceSequenceItem,
+  // introText opcional — nunca usado fora de fireAttendanceConfirmationSequence
+  // (o único lugar onde "intro" pode ser o kind), já que "intro" nunca
+  // aparece em PendingAttendanceStep.remaining (ver comentário no tipo).
+  texts: { introText?: string; tipText: string; finalText: string }
+): string {
+  switch (kind) {
+    case "intro":
+      return texts.introText ?? "";
+    case "video":
+      return "[vídeo de confirmação de agendamento]";
+    case "tip":
+      return texts.tipText;
+    case "final":
+      return texts.finalText;
+  }
+}
+
+// Carregado no campo Message.pendingAttendanceStep (JSON) — descreve os
+// itens AINDA PENDENTES da sequência de confirmação de presença (o
+// primeiro de `remaining` é o próximo a ser criado) e tudo que eles vão
+// precisar (appointmentId/scheduledAtMs/mediaUrl/tipText/finalText viajam
+// por toda a cadeia, resolvidos uma única vez em
+// fireAttendanceConfirmationSequence). Ver dispatch.ts — só é consumido
+// depois de confirmar o SENT do item atual. `remaining` nunca inclui
+// "intro" (só pode ser o PRIMEIRO item da sequência inteira, sempre
+// criado direto em fireAttendanceConfirmationSequence, nunca através
+// desta cadeia).
 //
 // "resultPhoto" (abaixo) é um elo de um fluxo TOTALMENTE diferente —
 // legenda cadastrada -> foto de resultado (ver send_result_photo,
@@ -390,11 +482,17 @@ function resolveAttendanceFinalMessage(clinicTemplate: string | null | undefined
 // precisar de uma coluna nova (sem migration): o problema é idêntico —
 // a foto só pode ser CRIADA depois que a legenda foi confirmada SENT, e
 // precisa saber rápido depois disso, sem esperar o próximo ciclo do cron.
-// Nunca altera o comportamento dos outros elos (video/tip/final).
+// Nunca altera o comportamento da sequência de presença.
 export type PendingAttendanceStep =
-  | { next: "video"; mediaUrl: string; tipText: string; finalText: string; appointmentId: string; scheduledAtMs: number }
-  | { next: "tip"; tipText: string; finalText: string; appointmentId: string; scheduledAtMs: number }
-  | { next: "final"; finalText: string; appointmentId: string; scheduledAtMs: number }
+  | {
+      next: "attendance";
+      remaining: AttendanceStepKind[];
+      mediaUrl: string | null;
+      tipText: string;
+      finalText: string;
+      appointmentId: string;
+      scheduledAtMs: number;
+    }
   | { next: "resultPhoto"; mediaUrl: string };
 
 export function encodePendingAttendanceStep(step: PendingAttendanceStep): string {
@@ -412,7 +510,8 @@ export function decodePendingAttendanceStep(raw: string): PendingAttendanceStep 
     if (
       parsed &&
       typeof parsed === "object" &&
-      (parsed.next === "video" || parsed.next === "tip" || parsed.next === "final" || parsed.next === "resultPhoto")
+      ((parsed.next === "attendance" && Array.isArray(parsed.remaining) && parsed.remaining.length > 0) ||
+        parsed.next === "resultPhoto")
     ) {
       return parsed as PendingAttendanceStep;
     }
@@ -1531,24 +1630,39 @@ export async function handleInboundInstagramMessage(
   });
 
   // Só existe quando pendingAttendanceCheck (acima, calculado ANTES desta
-  // chamada) classificou a resposta deste turno como NAO_REMARCA — ou seja,
-  // a sequência de confirmação de presença (apresentação + vídeo +
-  // cafezinho + frase final) vai disparar no fim deste mesmo turno (ver
-  // applyAttendanceReplyDecision, mais abaixo). Pedido explícito: a IA não
-  // pode mais escrever sua própria despedida nesse caso, pra não duplicar
-  // a frase final que o código já vai mandar. Ajuste só de instrução
-  // interna (este bloco) — nunca em Clinic.aiSystemPrompt nem no prompt
-  // padrão; e não descarta reply.text (ver decisão grande nesta mesma
-  // investigação) — a IA continua respondendo normalmente a qualquer outra
-  // coisa que o lead tenha dito junto da confirmação, só sem a despedida.
+  // chamada) classificou a resposta deste turno como NAO_REMARCA (ou seja,
+  // a sequência de confirmação de presença vai disparar no fim deste
+  // mesmo turno, ver applyAttendanceReplyDecision, mais abaixo) E a
+  // mensagem FINAL dessa sequência está marcada pra sair (ver
+  // Clinic.attendanceFinalEnabled/buildAttendanceSequenceItems — com ela
+  // desmarcada, a sequência pode disparar só com vídeo/cafezinho, ou nem
+  // disparar, mas nenhum dos dois casos manda nenhuma frase de
+  // encerramento, então a IA tem que se despedir normalmente). Pedido
+  // explícito: a IA não pode escrever sua própria despedida só quando o
+  // código VAI mandar a frase final, pra não duplicar. Ajuste só de
+  // instrução interna (este bloco) — nunca em Clinic.aiSystemPrompt nem no
+  // prompt padrão; e não descarta reply.text (ver decisão grande nesta
+  // mesma investigação) — a IA continua respondendo normalmente a
+  // qualquer outra coisa que o lead tenha dito junto da confirmação, só
+  // sem a despedida.
+  const attendanceSequenceWillFire = shouldSuppressAiFarewell(
+    pendingAttendanceCheck?.decision,
+    {
+      introEnabled: clinic.confirmationVideoCaptionEnabled,
+      videoEnabled: clinic.confirmationVideoEnabled,
+      tipEnabled: clinic.attendanceTipEnabled,
+      finalEnabled: clinic.attendanceFinalEnabled,
+    },
+    Boolean(clinic.confirmationVideoUrl)
+  );
   const attendanceConfirmedContext =
-    pendingAttendanceCheck?.decision === "NAO_REMARCA"
+    attendanceSequenceWillFire
       ? `[O lead acabou de confirmar presença. Responda de forma breve e natural (ex.: ` +
         `agradecendo, confirmando que anotou) — mas NÃO inclua nenhuma despedida ou frase de ` +
         `encerramento (ex.: "até amanhã", "até mais", "nos vemos", "até sexta"): o sistema vai ` +
-        `enviar uma mensagem de encerramento separada automaticamente, junto do vídeo ` +
-        `institucional. Se o lead tiver dito mais alguma coisa junto da confirmação (uma ` +
-        `pergunta, um aviso — ex.: "vou chegar atrasada"), responda essa parte normalmente.]`
+        `enviar uma mensagem de encerramento separada automaticamente. Se o lead tiver dito mais ` +
+        `alguma coisa junto da confirmação (uma pergunta, um aviso — ex.: "vou chegar atrasada"), ` +
+        `responda essa parte normalmente.]`
       : null;
 
   // Só existe quando wantsHumanWithClinicWhatsapp (calculado bem acima,
@@ -2434,14 +2548,26 @@ export async function fireAttendanceConfirmationSequence(params: {
     // ainda faz sentido mandar "até [dia]".
     prisma.appointment.findUnique({ where: { id: params.appointmentId }, select: { scheduledAt: true } }),
   ]);
-  // Sem vídeo configurado ou sem WhatsApp do lead ainda — não é erro, só
-  // significa "ainda não é a hora"; a próxima chamada (job de 1h seguinte,
-  // ou uma nova resposta do lead) tenta de novo. De propósito ANTES da
-  // reivindicação abaixo — nada é marcado como "já enviado" se não havia
-  // o que enviar de verdade.
-  if (!clinic?.confirmationVideoUrl) return false;
   if (!conversation?.lead.phone) return false;
   if (!appointment) return false; // defensivo — appointmentId sempre vem de uma query que já filtra agendamento existente
+  if (!clinic) return false;
+
+  // Nenhum item marcado pra enviar (ou vídeo marcado mas sem arquivo —
+  // checado de novo aqui, defensivo) — não é erro, só significa "nada pra
+  // fazer agora"; a próxima chamada (job de 1h seguinte, ou uma nova
+  // resposta do lead) tenta de novo, caso a configuração mude nesse meio-
+  // tempo. De propósito ANTES da reivindicação abaixo — nada é marcado
+  // como "já enviado" se não havia o que enviar de verdade.
+  const items = buildAttendanceSequenceItems(
+    {
+      introEnabled: clinic.confirmationVideoCaptionEnabled,
+      videoEnabled: clinic.confirmationVideoEnabled,
+      tipEnabled: clinic.attendanceTipEnabled,
+      finalEnabled: clinic.attendanceFinalEnabled,
+    },
+    Boolean(clinic.confirmationVideoUrl)
+  );
+  if (items.length === 0) return false;
 
   const claim = await prisma.appointment.updateMany({
     where: { id: params.appointmentId, confirmationVideoSentAt: null },
@@ -2487,35 +2613,49 @@ export async function fireAttendanceConfirmationSequence(params: {
   });
   const afterScheduledFor = new Date(Math.max(Date.now(), latestPendingOutbound?.scheduledFor?.getTime() ?? 0));
 
-  const introAt = new Date(afterScheduledFor.getTime() + ATTENDANCE_VIDEO_INTRO_DELAY_MS);
+  // Entrada da sequência — mesmo delay pro primeiro item ativo, qualquer
+  // que seja (antes, só valia pra "intro", que era sempre obrigatória;
+  // agora o primeiro item pode ser video/tip/final se os anteriores
+  // estiverem desmarcados).
+  const firstItemAt = new Date(afterScheduledFor.getTime() + ATTENDANCE_VIDEO_INTRO_DELAY_MS);
   const introText = clinic.confirmationVideoCaption?.trim() || DEFAULT_CONFIRMATION_VIDEO_CAPTION;
   const tipText = clinic.attendanceTipMessage?.trim() || DEFAULT_ATTENDANCE_TIP_MESSAGE;
   const finalText = resolveAttendanceFinalMessage(clinic.attendanceFinalMessage, appointment.scheduledAt, new Date());
 
-  // Só a apresentação é criada aqui — vídeo, cafezinho e frase final são
-  // criados em CADEIA, cada um só depois que dispatch.ts confirma o SENT
-  // do anterior (ver PendingAttendanceStep, no topo do arquivo, e o
-  // comentário grande em ATTENDANCE_VIDEO_DELAY_AFTER_INTRO_MS). O que o
-  // vídeo vai precisar (mediaUrl) e tudo que os elos seguintes vão
-  // precisar (tipText/finalText/appointmentId/scheduledAtMs) já viaja
-  // resolvido daqui — nenhum elo mais adiante recalcula nada por conta
-  // própria, só repassa.
+  // Só o PRIMEIRO item ativo é criado aqui — os seguintes são criados em
+  // CADEIA, cada um só depois que dispatch.ts confirma o SENT do anterior
+  // (ver PendingAttendanceStep, no topo do arquivo, e o comentário grande
+  // em ATTENDANCE_VIDEO_DELAY_AFTER_INTRO_MS). O que os itens seguintes
+  // vão precisar (mediaUrl/tipText/finalText/appointmentId/scheduledAtMs)
+  // já viaja resolvido daqui — nenhum item mais adiante recalcula nada
+  // por conta própria, só repassa.
+  // items.length > 0 já garantido acima (return false antes) — firstItem
+  // nunca é undefined. "intro" só pode ser o primeiro item (garantido por
+  // buildAttendanceSequenceItems) — o resto da lista nunca a contém.
+  const [firstItemOrUndefined, ...rest] = items;
+  const firstItem = firstItemOrUndefined!;
+  const remaining = rest as AttendanceStepKind[];
   await prisma.message.create({
     data: {
       conversationId: params.conversationId,
       direction: "OUTBOUND",
       sender: "SYSTEM",
-      content: introText,
+      content: attendanceItemContent(firstItem, { introText, tipText, finalText }),
+      mediaUrl: firstItem === "video" ? clinic.confirmationVideoUrl : null,
       status: "PENDING",
-      scheduledFor: introAt,
-      pendingAttendanceStep: encodePendingAttendanceStep({
-        next: "video",
-        mediaUrl: clinic.confirmationVideoUrl,
-        tipText,
-        finalText,
-        appointmentId: params.appointmentId,
-        scheduledAtMs: appointment.scheduledAt.getTime(),
-      }),
+      scheduledFor: firstItemAt,
+      pendingAttendanceStep:
+        remaining.length > 0
+          ? encodePendingAttendanceStep({
+              next: "attendance",
+              remaining,
+              mediaUrl: clinic.confirmationVideoUrl,
+              tipText,
+              finalText,
+              appointmentId: params.appointmentId,
+              scheduledAtMs: appointment.scheduledAt.getTime(),
+            })
+          : null,
     },
   });
   return true;

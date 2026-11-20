@@ -101,6 +101,9 @@ import {
   buildInstagramConfirmationCardSubtitle,
   INSTAGRAM_CONFIRMATION_CARD_ENABLED,
   buildHistoryBackfillRows,
+  buildAttendanceSequenceItems,
+  attendanceItemContent,
+  shouldSuppressAiFarewell,
 } from "@/lib/conversation-pipeline";
 
 // Bug real corrigido (ver comentário grande em buildAvailabilityCheck):
@@ -648,6 +651,82 @@ describe("INSTAGRAM_CONFIRMATION_CARD_ENABLED", () => {
 // rápido mas entrega de forma assíncrona; um elo de texto puro agendado num
 // relógio cego podia chegar antes do elo anterior).
 //
+describe("buildAttendanceSequenceItems", () => {
+  const ALL_ENABLED = { introEnabled: true, videoEnabled: true, tipEnabled: true, finalEnabled: true };
+
+  it("todas marcadas, com arquivo: os 4 itens, na ordem", () => {
+    expect(buildAttendanceSequenceItems(ALL_ENABLED, true)).toEqual(["intro", "video", "tip", "final"]);
+  });
+
+  it("vídeo desmarcado: a apresentação não entra, mesmo marcada (depende do vídeo)", () => {
+    expect(buildAttendanceSequenceItems({ ...ALL_ENABLED, videoEnabled: false }, true)).toEqual(["tip", "final"]);
+  });
+
+  it("vídeo marcado mas SEM arquivo: nem vídeo nem apresentação entram", () => {
+    expect(buildAttendanceSequenceItems(ALL_ENABLED, false)).toEqual(["tip", "final"]);
+  });
+
+  it("apresentação desmarcada, vídeo marcado: só o vídeo entra (sem a frase antes dele)", () => {
+    expect(buildAttendanceSequenceItems({ ...ALL_ENABLED, introEnabled: false }, true)).toEqual([
+      "video",
+      "tip",
+      "final",
+    ]);
+  });
+
+  it("só a mensagem final marcada", () => {
+    expect(
+      buildAttendanceSequenceItems({ introEnabled: false, videoEnabled: false, tipEnabled: false, finalEnabled: true }, true)
+    ).toEqual(["final"]);
+  });
+
+  it("tudo desmarcado: lista vazia", () => {
+    expect(
+      buildAttendanceSequenceItems({ introEnabled: false, videoEnabled: false, tipEnabled: false, finalEnabled: false }, true)
+    ).toEqual([]);
+  });
+});
+
+describe("attendanceItemContent", () => {
+  const TEXTS = { introText: "intro", tipText: "tip", finalText: "final" };
+
+  it("cada kind devolve o texto certo, exceto 'video' (sem texto próprio)", () => {
+    expect(attendanceItemContent("intro", TEXTS)).toBe("intro");
+    expect(attendanceItemContent("video", TEXTS)).toBe("[vídeo de confirmação de agendamento]");
+    expect(attendanceItemContent("tip", TEXTS)).toBe("tip");
+    expect(attendanceItemContent("final", TEXTS)).toBe("final");
+  });
+});
+
+// A IA só é instruída a não se despedir quando a sequência de confirmação
+// de presença VAI disparar neste turno (decision === "NAO_REMARCA") E a
+// mensagem final dela está marcada — com a final desmarcada, nenhuma
+// frase de encerramento sai pelo código (mesmo que vídeo/cafezinho
+// disparem), então a IA precisa se despedir normalmente.
+describe("shouldSuppressAiFarewell", () => {
+  const ALL_ENABLED = { introEnabled: true, videoEnabled: true, tipEnabled: true, finalEnabled: true };
+
+  it("NAO_REMARCA + final marcada: true (suprime a despedida da IA)", () => {
+    expect(shouldSuppressAiFarewell("NAO_REMARCA", ALL_ENABLED, true)).toBe(true);
+  });
+
+  it("NAO_REMARCA + final DESMARCADA: false (IA se despede normalmente)", () => {
+    expect(shouldSuppressAiFarewell("NAO_REMARCA", { ...ALL_ENABLED, finalEnabled: false }, true)).toBe(false);
+  });
+
+  it("REMARCA: false, mesmo com a final marcada (sequência não dispara pra REMARCA)", () => {
+    expect(shouldSuppressAiFarewell("REMARCA", ALL_ENABLED, true)).toBe(false);
+  });
+
+  it("DUVIDA: false", () => {
+    expect(shouldSuppressAiFarewell("DUVIDA", ALL_ENABLED, true)).toBe(false);
+  });
+
+  it("sem decisão nenhuma (undefined — nenhuma pergunta de presença pendente): false", () => {
+    expect(shouldSuppressAiFarewell(undefined, ALL_ENABLED, true)).toBe(false);
+  });
+});
+
 // afterScheduledFor não é parâmetro — a função busca a referência direto no
 // banco (última Message OUTBOUND ainda PENDING da conversa), nunca menor
 // que "agora" (Math.max). Corrige o bug de confirmação+apresentação do
@@ -658,6 +737,10 @@ describe("fireAttendanceConfirmationSequence", () => {
     confirmationVideoCaption: null,
     attendanceTipMessage: null,
     attendanceFinalMessage: null,
+    confirmationVideoCaptionEnabled: true,
+    confirmationVideoEnabled: true,
+    attendanceTipEnabled: true,
+    attendanceFinalEnabled: true,
   };
   const CONVERSATION_OK = { lead: { phone: "21998223038" } };
   // "amanhã" em relação aos horários de "agora" usados nos testes (sempre
@@ -716,7 +799,8 @@ describe("fireAttendanceConfirmationSequence", () => {
 
     const step = decodeIntroStep(introCall);
     expect(step).toEqual({
-      next: "video",
+      next: "attendance",
+      remaining: ["video", "tip", "final"],
       mediaUrl: "https://cdn/video.mp4",
       tipText: "Se puder, chegue uns 15 minutinhos antes, teremos um cafezinho te esperando.",
       finalText: "Perfeito, até amanhã.",
@@ -812,19 +896,173 @@ describe("fireAttendanceConfirmationSequence", () => {
     expect(step.finalText).toBe("Perfeito, até quinta.");
   });
 
-  it("clínica sem vídeo configurado: não reivindica nem manda nada (tenta de novo depois)", async () => {
-    clinicFindUniqueMock.mockResolvedValue({ ...CLINIC_OK, confirmationVideoUrl: null });
-    conversationFindUniqueMock.mockResolvedValue(CONVERSATION_OK);
-
-    const sent = await fireAttendanceConfirmationSequence({
-      appointmentId: "appt-1",
-      clinicId: "clinic-1",
-      conversationId: "conv-1",
+  // Caixinha "Enviar" individual por item (ver buildAttendanceSequenceItems)
+  // — item desmarcado é PULADO, a sequência segue pro próximo marcado.
+  describe("caixinhas individuais (item desmarcado é pulado)", () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date("2026-10-07T12:00:00.000Z")); // mesmo "agora" usado no resto do describe — agendamento (APPOINTMENT_OK) é "amanhã"
+    });
+    afterEach(() => {
+      vi.useRealTimers();
     });
 
-    expect(sent).toBe(false);
-    expect(appointmentUpdateManyMock).not.toHaveBeenCalled();
-    expect(messageCreateMock).not.toHaveBeenCalled();
+    it("todas marcadas: comportamento atual — apresentação + vídeo encadeados (igual ao teste de cima)", async () => {
+      clinicFindUniqueMock.mockResolvedValue(CLINIC_OK);
+      conversationFindUniqueMock.mockResolvedValue(CONVERSATION_OK);
+
+      const sent = await fireAttendanceConfirmationSequence({
+        appointmentId: "appt-1",
+        clinicId: "clinic-1",
+        conversationId: "conv-1",
+      });
+
+      expect(sent).toBe(true);
+      const introCall = messageCreateMock.mock.calls[0]![0].data;
+      expect(introCall.content).toBe("Vou te mandar um vídeo rápido mostrando como é o nosso atendimento 🙂");
+      expect(decodeIntroStep(introCall).remaining).toEqual(["video", "tip", "final"]);
+    });
+
+    it("só a mensagem final marcada: ela sai direto (primeiro e único item), sem apresentação/vídeo/cafezinho", async () => {
+      clinicFindUniqueMock.mockResolvedValue({
+        ...CLINIC_OK,
+        confirmationVideoCaptionEnabled: false,
+        confirmationVideoEnabled: false,
+        attendanceTipEnabled: false,
+        attendanceFinalEnabled: true,
+      });
+      conversationFindUniqueMock.mockResolvedValue(CONVERSATION_OK);
+
+      const sent = await fireAttendanceConfirmationSequence({
+        appointmentId: "appt-1",
+        clinicId: "clinic-1",
+        conversationId: "conv-1",
+      });
+
+      expect(sent).toBe(true);
+      expect(messageCreateMock).toHaveBeenCalledTimes(1);
+      const call = messageCreateMock.mock.calls[0]![0].data;
+      expect(call.content).toBe("Perfeito, até amanhã.");
+      expect(call.mediaUrl).toBeNull();
+      expect(call.pendingAttendanceStep).toBeNull(); // último (e único) item, sem cadeia
+    });
+
+    it("cafezinho + final marcados (vídeo e apresentação desmarcados): cafezinho sai primeiro, encadeando a final", async () => {
+      clinicFindUniqueMock.mockResolvedValue({
+        ...CLINIC_OK,
+        confirmationVideoCaptionEnabled: false,
+        confirmationVideoEnabled: false,
+        attendanceTipEnabled: true,
+        attendanceFinalEnabled: true,
+      });
+      conversationFindUniqueMock.mockResolvedValue(CONVERSATION_OK);
+
+      const sent = await fireAttendanceConfirmationSequence({
+        appointmentId: "appt-1",
+        clinicId: "clinic-1",
+        conversationId: "conv-1",
+      });
+
+      expect(sent).toBe(true);
+      const call = messageCreateMock.mock.calls[0]![0].data;
+      expect(call.content).toBe("Se puder, chegue uns 15 minutinhos antes, teremos um cafezinho te esperando.");
+      expect(decodeIntroStep(call)).toEqual({
+        next: "attendance",
+        remaining: ["final"],
+        mediaUrl: "https://cdn/video.mp4",
+        tipText: "Se puder, chegue uns 15 minutinhos antes, teremos um cafezinho te esperando.",
+        finalText: "Perfeito, até amanhã.",
+        appointmentId: "appt-1",
+        scheduledAtMs: APPOINTMENT_OK.scheduledAt.getTime(),
+      });
+    });
+
+    it("vídeo desmarcado: a frase de apresentação não sai (ela só existe pra anunciar o vídeo) — cafezinho vira o primeiro item", async () => {
+      clinicFindUniqueMock.mockResolvedValue({
+        ...CLINIC_OK,
+        confirmationVideoCaptionEnabled: true, // marcada, mas sem efeito — depende do vídeo
+        confirmationVideoEnabled: false,
+        attendanceTipEnabled: true,
+        attendanceFinalEnabled: true,
+      });
+      conversationFindUniqueMock.mockResolvedValue(CONVERSATION_OK);
+
+      await fireAttendanceConfirmationSequence({
+        appointmentId: "appt-1",
+        clinicId: "clinic-1",
+        conversationId: "conv-1",
+      });
+
+      const call = messageCreateMock.mock.calls[0]![0].data;
+      expect(call.content).not.toBe("Vou te mandar um vídeo rápido mostrando como é o nosso atendimento 🙂");
+      expect(call.content).toBe("Se puder, chegue uns 15 minutinhos antes, teremos um cafezinho te esperando.");
+    });
+
+    it("tudo desmarcado: a sequência não dispara (nem reivindica, nem cria nada)", async () => {
+      clinicFindUniqueMock.mockResolvedValue({
+        ...CLINIC_OK,
+        confirmationVideoCaptionEnabled: false,
+        confirmationVideoEnabled: false,
+        attendanceTipEnabled: false,
+        attendanceFinalEnabled: false,
+      });
+      conversationFindUniqueMock.mockResolvedValue(CONVERSATION_OK);
+
+      const sent = await fireAttendanceConfirmationSequence({
+        appointmentId: "appt-1",
+        clinicId: "clinic-1",
+        conversationId: "conv-1",
+      });
+
+      expect(sent).toBe(false);
+      expect(appointmentUpdateManyMock).not.toHaveBeenCalled();
+      expect(messageCreateMock).not.toHaveBeenCalled();
+    });
+
+    it("vídeo marcado mas SEM arquivo (confirmationVideoUrl nulo): bloqueado — vídeo e apresentação não entram, mesmo marcados", async () => {
+      clinicFindUniqueMock.mockResolvedValue({
+        ...CLINIC_OK,
+        confirmationVideoUrl: null,
+        confirmationVideoCaptionEnabled: true,
+        confirmationVideoEnabled: true,
+        attendanceTipEnabled: true,
+        attendanceFinalEnabled: true,
+      });
+      conversationFindUniqueMock.mockResolvedValue(CONVERSATION_OK);
+
+      await fireAttendanceConfirmationSequence({
+        appointmentId: "appt-1",
+        clinicId: "clinic-1",
+        conversationId: "conv-1",
+      });
+
+      const call = messageCreateMock.mock.calls[0]![0].data;
+      // cafezinho é o primeiro item de verdade — vídeo/apresentação nunca
+      // entraram por falta de arquivo, mesmo com as 2 caixinhas marcadas.
+      expect(call.content).toBe("Se puder, chegue uns 15 minutinhos antes, teremos um cafezinho te esperando.");
+      expect(call.mediaUrl).toBeNull();
+    });
+
+    it("clínica sem vídeo configurado E as 4 caixinhas desmarcadas (migration de clínica já existente): não dispara nada", async () => {
+      clinicFindUniqueMock.mockResolvedValue({
+        ...CLINIC_OK,
+        confirmationVideoUrl: null,
+        confirmationVideoCaptionEnabled: false,
+        confirmationVideoEnabled: false,
+        attendanceTipEnabled: false,
+        attendanceFinalEnabled: false,
+      });
+      conversationFindUniqueMock.mockResolvedValue(CONVERSATION_OK);
+
+      const sent = await fireAttendanceConfirmationSequence({
+        appointmentId: "appt-1",
+        clinicId: "clinic-1",
+        conversationId: "conv-1",
+      });
+
+      expect(sent).toBe(false);
+      expect(messageCreateMock).not.toHaveBeenCalled();
+    });
   });
 
   it("lead ainda sem WhatsApp: não reivindica nem manda nada (tenta de novo depois)", async () => {
@@ -934,6 +1172,10 @@ describe("applyAttendanceReplyDecision", () => {
     confirmationVideoCaption: null,
     attendanceTipMessage: null,
     attendanceFinalMessage: null,
+    confirmationVideoCaptionEnabled: true,
+    confirmationVideoEnabled: true,
+    attendanceTipEnabled: true,
+    attendanceFinalEnabled: true,
   };
   const CONVERSATION_OK = { lead: { phone: "21998223038" } };
 
@@ -1000,6 +1242,10 @@ describe("checkPendingAttendanceReply + applyAttendanceReplyDecision (reaproveit
     confirmationVideoCaption: null,
     attendanceTipMessage: null,
     attendanceFinalMessage: null,
+    confirmationVideoCaptionEnabled: true,
+    confirmationVideoEnabled: true,
+    attendanceTipEnabled: true,
+    attendanceFinalEnabled: true,
   };
   const CONVERSATION_OK = { lead: { phone: "21998223038" } };
 
@@ -1066,6 +1312,10 @@ describe("processAttendanceConfirmationTimeouts", () => {
     confirmationVideoCaption: null,
     attendanceTipMessage: null,
     attendanceFinalMessage: null,
+    confirmationVideoCaptionEnabled: true,
+    confirmationVideoEnabled: true,
+    attendanceTipEnabled: true,
+    attendanceFinalEnabled: true,
   };
   const CONVERSATION_OK = { lead: { phone: "21998223038" } };
   // Segunda-feira 12:00 UTC = 09:00 em Brasília — dentro da janela padrão (08h-18h, seg-sex).
