@@ -13,14 +13,47 @@
 // Instagram — ruim pro vídeo de revisão da Meta.
 export type MessageStatus = "PENDING" | "SENDING" | "SENT" | "FAILED";
 
-const HIDDEN_STATUSES: ReadonlySet<MessageStatus> = new Set(["PENDING", "SENDING"]);
+// Único array que define quais status aparecem na conversa — tanto
+// isMessageVisible (abaixo) quanto os `where` do Prisma na carga inicial
+// (conversas/[id]/page.tsx) e no polling (/api/conversas/[id]/mensagens)
+// usam ESTE MESMO array, nunca um literal duplicado em cada lugar: assim
+// os dois nunca divergem com o tempo (pedido explícito).
+export const VISIBLE_MESSAGE_STATUSES: readonly MessageStatus[] = ["SENT", "FAILED"];
 
 // PENDING (ainda esperando o horário do atraso adaptativo) e SENDING
 // (despacho em andamento, ver claimMessage em dispatch.ts) nunca aparecem
 // — nem na carga inicial, nem no polling. SENT aparece normalmente. FAILED
 // continua aparecendo, com a marca "· falhou" que já existia.
 export function isMessageVisible(status: MessageStatus): boolean {
-  return !HIDDEN_STATUSES.has(status);
+  return (VISIBLE_MESSAGE_STATUSES as readonly string[]).includes(status);
+}
+
+export type MessageChannel = "INSTAGRAM" | "WHATSAPP";
+
+// Mesma ideia do array de status acima, agora pro CANAL — hoje só
+// INSTAGRAM aparece na conversa. WHATSAPP (a confirmação imediata de
+// agendamento, formatAppointmentConfirmationMessage/isAppointmentConfirmation,
+// e qualquer outro aviso que um dia saia por fora do Instagram) nunca
+// aparece aqui, pra nenhum perfil (admin, equipe, Revisor) — bug real
+// reportado: a bolha da confirmação por WhatsApp aparecia colada na
+// pergunta de presença da IA, como se fosse parte da MESMA conversa do
+// Instagram, inclusive mostrando "· falhou" quando o envio por WhatsApp
+// falhava. O lead não precisa (nem deveria) ver por onde a clínica
+// confirmou o agendamento.
+//
+// NÃO apaga nem altera a Message em si — envio, status e motivo de falha
+// continuam gravados exatamente como hoje; a tela Status da clínica
+// (crm/clinicas/[id]/status/page.tsx) lê Message SEM filtrar por canal de
+// propósito, pra continuar mostrando falhas de WhatsApp.
+//
+// Os lembretes de véspera (reminders.ts) já são sempre channel=INSTAGRAM
+// hoje (regra de produto: "WhatsApp da clínica serve só pra confirmação
+// de agendamento, nunca pra lembrete") — nunca ficam escondidos por essa
+// regra, mesmo que uma mensagem futura descreva o contrário.
+export const VISIBLE_MESSAGE_CHANNELS: readonly MessageChannel[] = ["INSTAGRAM"];
+
+export function isMessageChannelVisible(channel: MessageChannel): boolean {
+  return (VISIBLE_MESSAGE_CHANNELS as readonly string[]).includes(channel);
 }
 
 export type VisibilityInput = {

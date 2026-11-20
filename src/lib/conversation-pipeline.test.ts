@@ -104,6 +104,7 @@ import {
   buildAttendanceSequenceItems,
   attendanceItemContent,
   shouldSuppressAiFarewell,
+  buildAttendanceConfirmedContext,
 } from "@/lib/conversation-pipeline";
 
 // Bug real corrigido (ver comentário grande em buildAvailabilityCheck):
@@ -724,6 +725,50 @@ describe("shouldSuppressAiFarewell", () => {
 
   it("sem decisão nenhuma (undefined — nenhuma pergunta de presença pendente): false", () => {
     expect(shouldSuppressAiFarewell(undefined, ALL_ENABLED, true)).toBe(false);
+  });
+});
+
+// Bug real corrigido: com a sequência de confirmação de presença
+// desligada (ex.: todas as caixinhas da PR #252 desmarcadas), a IA nunca
+// ficava sabendo que o lead tinha acabado de confirmar presença ("sim,
+// claro.") e respondia qualquer coisa sem sentido ("Por nada."). Agora
+// SEMPRE existe um aviso quando decision === "NAO_REMARCA" — a única
+// coisa que muda é se ele permite despedida ou não, dependendo de
+// shouldSuppressAiFarewell (mesma condição, nunca uma segunda detecção).
+describe("buildAttendanceConfirmedContext", () => {
+  const ALL_ENABLED = { introEnabled: true, videoEnabled: true, tipEnabled: true, finalEnabled: true };
+  const ALL_DISABLED = { introEnabled: false, videoEnabled: false, tipEnabled: false, finalEnabled: false };
+
+  it("NAO_REMARCA + sequência vai mandar a frase final: aviso SEM despedida (evita duplicar)", () => {
+    const context = buildAttendanceConfirmedContext("NAO_REMARCA", ALL_ENABLED, true);
+    expect(context).toContain("NÃO inclua nenhuma despedida");
+    expect(context).toContain("confirmar presença");
+  });
+
+  it("NAO_REMARCA + sequência DESLIGADA (todas as caixinhas desmarcadas): aviso novo, PERMITINDO despedida", () => {
+    const context = buildAttendanceConfirmedContext("NAO_REMARCA", ALL_DISABLED, false);
+    expect(context).not.toBeNull();
+    expect(context).not.toContain("NÃO inclua nenhuma despedida");
+    expect(context).toContain("pode se despedir normalmente");
+    expect(context).toContain("Não pergunte de novo se ele vai");
+  });
+
+  it("NAO_REMARCA + só a caixinha final desmarcada (sem vídeo cadastrado): aviso novo, PERMITINDO despedida — mesmo caso do bug reportado", () => {
+    const context = buildAttendanceConfirmedContext("NAO_REMARCA", { ...ALL_ENABLED, finalEnabled: false }, false);
+    expect(context).not.toContain("NÃO inclua nenhuma despedida");
+    expect(context).toContain("pode se despedir normalmente");
+  });
+
+  it("REMARCA: null (lead não confirmou presença neste turno)", () => {
+    expect(buildAttendanceConfirmedContext("REMARCA", ALL_ENABLED, true)).toBeNull();
+  });
+
+  it("DUVIDA: null", () => {
+    expect(buildAttendanceConfirmedContext("DUVIDA", ALL_ENABLED, true)).toBeNull();
+  });
+
+  it("sem decisão nenhuma (undefined): null", () => {
+    expect(buildAttendanceConfirmedContext(undefined, ALL_ENABLED, true)).toBeNull();
   });
 });
 

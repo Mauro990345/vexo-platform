@@ -1,6 +1,9 @@
 import { describe, it, expect } from "vitest";
 import {
   isMessageVisible,
+  isMessageChannelVisible,
+  VISIBLE_MESSAGE_STATUSES,
+  VISIBLE_MESSAGE_CHANNELS,
   messageVisibleAt,
   compareByVisibleAt,
   isAfterVisibleCursor,
@@ -16,6 +19,27 @@ describe("isMessageVisible", () => {
   it("SENT e FAILED são visíveis", () => {
     expect(isMessageVisible("SENT")).toBe(true);
     expect(isMessageVisible("FAILED")).toBe(true);
+  });
+});
+
+// Bug real reportado: a confirmação imediata de agendamento por WhatsApp
+// (formatAppointmentConfirmationMessage, Message.channel="WHATSAPP")
+// aparecia na conversa do Instagram como se fosse uma bolha do Instagram,
+// colada na pergunta de presença da IA — inclusive mostrando "· falhou"
+// quando o envio por WhatsApp falhava. O lead não precisa ver por onde a
+// confirmação foi enviada.
+describe("isMessageChannelVisible / VISIBLE_MESSAGE_CHANNELS", () => {
+  it("INSTAGRAM é visível na conversa", () => {
+    expect(isMessageChannelVisible("INSTAGRAM")).toBe(true);
+  });
+
+  it("WHATSAPP nunca é visível na conversa (confirmação de agendamento, lembretes futuros etc.)", () => {
+    expect(isMessageChannelVisible("WHATSAPP")).toBe(false);
+  });
+
+  it("VISIBLE_MESSAGE_STATUSES/VISIBLE_MESSAGE_CHANNELS são os mesmos arrays usados pelos `where` do Prisma (page.tsx e polling) — nunca haverá dois literais divergindo", () => {
+    expect(VISIBLE_MESSAGE_STATUSES).toEqual(["SENT", "FAILED"]);
+    expect(VISIBLE_MESSAGE_CHANNELS).toEqual(["INSTAGRAM"]);
   });
 });
 

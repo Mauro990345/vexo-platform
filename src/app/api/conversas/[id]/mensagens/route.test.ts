@@ -85,6 +85,37 @@ describe("GET /api/conversas/[id]/mensagens", () => {
     expect(args.where.status).toEqual({ in: ["SENT", "FAILED"] });
   });
 
+  // Bug real reportado: a confirmação de agendamento por WhatsApp
+  // (formatAppointmentConfirmationMessage, Message.channel="WHATSAPP")
+  // aparecia colada na conversa do Instagram, como se fosse uma bolha
+  // dela — inclusive mostrando "· falhou" quando o envio por WhatsApp
+  // falhava. Filtrado ANTES da query rodar: uma mensagem de WhatsApp
+  // nunca chega a ser candidata, então nunca pode mover o cursor
+  // (afterVisibleAt) nem aparecer no polling.
+  it("query ao banco já restringe por channel IN (INSTAGRAM) — nunca pede WHATSAPP", async () => {
+    findManyMock.mockResolvedValue([]);
+    await GET(req("conv-1", new Date(0).toISOString(), "zzzzzzzz"), { params: { id: "conv-1" } });
+    const args = findManyMock.mock.calls[0]![0] as { where: { channel: { in: string[] } } };
+    expect(args.where.channel).toEqual({ in: ["INSTAGRAM"] });
+  });
+
+  // Como a mensagem de WhatsApp nunca é candidata (teste acima), o cliente
+  // nunca avança o cursor por causa dela — uma mensagem do Instagram que
+  // chegar DEPOIS continua aparecendo normalmente no próximo polling,
+  // usando o MESMO cursor de antes (nunca "preso" esperando por uma
+  // mensagem de WhatsApp que nunca vai ser devolvida).
+  it("mensagem do Instagram chegando depois de uma confirmação por WhatsApp (que nunca é candidata) ainda aparece normalmente", async () => {
+    findManyMock.mockResolvedValue([
+      baseMessage({ id: "msg-ig-depois", direction: "INBOUND", sender: "LEAD", createdAt: new Date("2026-01-01T10:05:00.000Z") }),
+    ]);
+    const res = await GET(req("conv-1", new Date("2026-01-01T10:00:00.000Z").toISOString(), "cursor-id"), {
+      params: { id: "conv-1" },
+    });
+    const body = await res.json();
+    expect(body.messages).toHaveLength(1);
+    expect(body.messages[0].id).toBe("msg-ig-depois");
+  });
+
   it("FAILED continua aparecendo, com visibleAt = updatedAt (sentAt nulo)", async () => {
     findManyMock.mockResolvedValue([
       baseMessage({ status: "FAILED", sentAt: null, updatedAt: new Date("2026-01-01T10:11:00.000Z") }),

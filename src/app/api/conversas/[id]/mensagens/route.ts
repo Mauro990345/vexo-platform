@@ -2,7 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { messageVisibleAt, selectMessagesAfterCursor } from "@/lib/message-visibility";
+import {
+  messageVisibleAt,
+  selectMessagesAfterCursor,
+  VISIBLE_MESSAGE_STATUSES,
+  VISIBLE_MESSAGE_CHANNELS,
+} from "@/lib/message-visibility";
 
 // Busca leve usada pelo polling da tela de conversa (ConversationMessages,
 // a cada 3-4s): só as mensagens MAIS NOVAS que o último par
@@ -57,7 +62,12 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
   const candidates = await prisma.message.findMany({
     where: {
       conversationId: params.id,
-      status: { in: ["SENT", "FAILED"] },
+      status: { in: [...VISIBLE_MESSAGE_STATUSES] },
+      // channel WHATSAPP (confirmação de agendamento) nunca aparece na
+      // conversa — nem na carga inicial (ver conversas/[id]/page.tsx),
+      // nem aqui no polling. Nunca pode mover o cursor (afterVisibleAt):
+      // filtrado ANTES da query rodar, nem chega a ser candidato.
+      channel: { in: [...VISIBLE_MESSAGE_CHANNELS] },
       OR: [
         { direction: "INBOUND", createdAt: { gt: afterVisibleAt } },
         { direction: "OUTBOUND", sentAt: { gt: afterVisibleAt } },
