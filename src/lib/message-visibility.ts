@@ -34,10 +34,30 @@ export type VisibilityInput = {
 // createdAt) que decide a ordem na tela e o cursor do polling.
 //
 // Mensagens de ENTRADA (do lead) são visíveis desde que chegam: createdAt
-// já é esse instante, tanto numa mensagem em tempo real quanto numa linha
-// recuperada pelo backfill de histórico (ver buildHistoryBackfillRows/
-// resolveBatchTimestamps — createdAt ali é sempre o horário REAL em que o
-// lead escreveu no Instagram, nunca o horário em que o backfill rodou).
+// já é esse instante — mas o QUE esse instante representa depende de como
+// a linha foi gravada, e os dois casos abaixo são INTENCIONALMENTE
+// diferentes (ver recordInboundInstagramMessage/buildHistoryBackfillRows,
+// conversation-pipeline.ts):
+//
+// - Mensagem em TEMPO REAL (webhook -> recordInboundInstagramMessage):
+//   createdAt é OMITIDO na escrita de propósito, deixando o Postgres
+//   atribuir @default(now()) no instante exato da gravação — nunca o
+//   timestamp que a Meta reportou no evento. Bug real corrigido: uma
+//   mensagem atrasada na própria entrega da Meta podia chegar com um
+//   timestamp reportado MENOR que o cursor atual da tela (ex.: a IA já
+//   tinha respondido, com sentAt mais recente, nesse intervalo) — se
+//   createdAt fosse esse timestamp reportado, a mensagem nunca apareceria
+//   pro polling (sempre "antes" do cursor), só depois de recarregar a
+//   página. Com createdAt = instante real da gravação, isso nunca acontece:
+//   toda mensagem viva é sempre "mais nova" que qualquer cursor já visto.
+//
+// - Mensagem de BACKFILL (buildHistoryBackfillRows/resolveBatchTimestamps,
+//   dentro de handleInboundInstagramMessage): createdAt continua sendo o
+//   horário REAL em que o lead escreveu no Instagram, nunca o horário em
+//   que o backfill rodou — de propósito, ao contrário do caso acima: é
+//   histórico, o lead não está esperando ela aparecer "agora" na tela, e
+//   usar o horário real é o que mantém a ordem cronológica correta entre
+//   mensagens antigas (inclusive misturadas com outras já existentes).
 //
 // Mensagens de SAÍDA (IA/humano/sistema) só ficam visíveis quando saem de
 // verdade: sentAt — preenchido no MESMO instante em que dispatchOneMessage
