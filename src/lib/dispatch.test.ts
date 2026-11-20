@@ -81,6 +81,8 @@ vi.mock("@/lib/conversation-pipeline", async () => {
     ATTENDANCE_VIDEO_DELAY_AFTER_INTRO_MS: actual.ATTENDANCE_VIDEO_DELAY_AFTER_INTRO_MS,
     ATTENDANCE_TIP_DELAY_AFTER_VIDEO_MS: actual.ATTENDANCE_TIP_DELAY_AFTER_VIDEO_MS,
     ATTENDANCE_FINAL_DELAY_AFTER_TIP_MS: actual.ATTENDANCE_FINAL_DELAY_AFTER_TIP_MS,
+    ATTENDANCE_ITEM_DELAY_MS: actual.ATTENDANCE_ITEM_DELAY_MS,
+    attendanceItemContent: actual.attendanceItemContent,
     RESULT_PHOTO_DELAY_AFTER_CAPTION_MS: actual.RESULT_PHOTO_DELAY_AFTER_CAPTION_MS,
     encodePendingAttendanceStep: actual.encodePendingAttendanceStep,
     decodePendingAttendanceStep: actual.decodePendingAttendanceStep,
@@ -136,55 +138,62 @@ function buildMessage(overrides: Partial<Record<string, unknown>> = {}) {
   };
 }
 
-// Apresentação ("vou te mandar um vídeo rápido...") — primeiro elo da
-// cadeia, criado por fireAttendanceConfirmationSequence. Ao ser enviada,
-// cria a Message do vídeo de verdade (próximo elo: "video").
-function buildIntroMessage(step: Partial<PendingAttendanceStep & { next: "video" }> = {}) {
+// Apresentação ("vou te mandar um vídeo rápido...") — primeiro item da
+// sequência, criado por fireAttendanceConfirmationSequence. Ao ser
+// enviada, cria a Message do vídeo de verdade (próximo item: "video",
+// com "tip"/"final" ainda pendentes depois dele).
+function buildIntroMessage(overrides: Partial<{ next: "attendance"; remaining: ("video" | "tip" | "final")[] }> = {}) {
   return buildMessage({
     id: "msg-intro-1",
     content: "Vou te mandar um vídeo rápido mostrando como é o nosso atendimento 🙂",
     pendingAttendanceStep: encodePendingAttendanceStep({
-      next: "video",
+      next: "attendance",
+      remaining: ["video", "tip", "final"],
       mediaUrl: "https://cdn/video.mp4",
       tipText: TIP_TEXT,
       finalText: FINAL_TEXT,
       appointmentId: APPOINTMENT_ID,
       scheduledAtMs: SCHEDULED_AT_MS,
-      ...step,
+      ...overrides,
     } as PendingAttendanceStep),
   });
 }
 
-// Vídeo de confirmação — segundo elo. Ao ser enviado, cria o cafezinho
-// (próximo elo: "tip").
-function buildVideoMessage(step: Partial<PendingAttendanceStep & { next: "tip" }> = {}) {
+// Vídeo de confirmação — segundo item. Ao ser enviado, cria o cafezinho
+// (próximo item: "tip", com "final" ainda pendente depois dele).
+function buildVideoMessage(overrides: Partial<{ next: "attendance"; remaining: ("tip" | "final")[] }> = {}) {
   return buildMessage({
     id: "msg-video-1",
     content: "[vídeo de confirmação de agendamento]",
     mediaUrl: "/uploads/video.mp4",
     pendingAttendanceStep: encodePendingAttendanceStep({
-      next: "tip",
+      next: "attendance",
+      remaining: ["tip", "final"],
+      mediaUrl: "https://cdn/video.mp4",
       tipText: TIP_TEXT,
       finalText: FINAL_TEXT,
       appointmentId: APPOINTMENT_ID,
       scheduledAtMs: SCHEDULED_AT_MS,
-      ...step,
+      ...overrides,
     } as PendingAttendanceStep),
   });
 }
 
-// Cafezinho — terceiro elo. Ao ser enviado, cria a frase final (último
-// elo, sem pendingAttendanceStep).
-function buildTipMessage(step: Partial<PendingAttendanceStep & { next: "final" }> = {}) {
+// Cafezinho — terceiro item. Ao ser enviado, cria a frase final (último
+// item, sem pendingAttendanceStep).
+function buildTipMessage(overrides: Partial<{ next: "attendance"; remaining: ("final")[] }> = {}) {
   return buildMessage({
     id: "msg-tip-1",
     content: TIP_TEXT,
     pendingAttendanceStep: encodePendingAttendanceStep({
-      next: "final",
+      next: "attendance",
+      remaining: ["final"],
+      mediaUrl: null,
+      tipText: TIP_TEXT,
       finalText: FINAL_TEXT,
       appointmentId: APPOINTMENT_ID,
       scheduledAtMs: SCHEDULED_AT_MS,
-      ...step,
+      ...overrides,
     } as PendingAttendanceStep),
   });
 }
@@ -280,7 +289,9 @@ describe("dispatchDueMessages — cadeia de confirmação de presença (apresent
 
     const nextStep = JSON.parse(createCall.data.pendingAttendanceStep);
     expect(nextStep).toEqual({
-      next: "tip",
+      next: "attendance",
+      remaining: ["tip", "final"],
+      mediaUrl: "https://cdn/video.mp4",
       tipText: TIP_TEXT,
       finalText: FINAL_TEXT,
       appointmentId: APPOINTMENT_ID,
@@ -323,7 +334,10 @@ describe("dispatchDueMessages — cadeia de confirmação de presença (apresent
 
     const nextStep = JSON.parse(createCall.data.pendingAttendanceStep);
     expect(nextStep).toEqual({
-      next: "final",
+      next: "attendance",
+      remaining: ["final"],
+      mediaUrl: "https://cdn/video.mp4",
+      tipText: TIP_TEXT,
       finalText: FINAL_TEXT,
       appointmentId: APPOINTMENT_ID,
       scheduledAtMs: SCHEDULED_AT_MS,
@@ -348,7 +362,7 @@ describe("dispatchDueMessages — cadeia de confirmação de presença (apresent
     const createCall = messageCreateMock.mock.calls[0]![0];
     expect(createCall.data.content).toBe(FINAL_TEXT);
     expect(createCall.data.status).toBe("PENDING");
-    expect(createCall.data.pendingAttendanceStep).toBeUndefined();
+    expect(createCall.data.pendingAttendanceStep).toBeNull();
 
     const sentAt: Date = messageUpdateMock.mock.calls[0]![0].data.sentAt;
     expect(createCall.data.scheduledFor.getTime()).toBe(sentAt.getTime() + ATTENDANCE_FINAL_DELAY_AFTER_TIP_MS);

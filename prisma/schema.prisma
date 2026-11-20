@@ -122,6 +122,50 @@ model Clinic {
   // DEFAULT_ATTENDANCE_FINAL_MESSAGE em conversation-pipeline.ts).
   attendanceFinalMessage String? @db.Text
 
+  // Caixinha "Enviar" individual por item da sequência de confirmação de
+  // presença (ver DESIGN.md, fireAttendanceConfirmationSequence e
+  // buildAttendanceSequenceItems em conversation-pipeline.ts) — item
+  // desmarcado é PULADO, a sequência segue pro próximo marcado, na mesma
+  // ordem de sempre (apresentação -> vídeo -> cafezinho -> final). Antes,
+  // a sequência inteira dependia só de confirmationVideoUrl existir; a
+  // mensagem final (confirmação do agendamento) não tem relação com o
+  // vídeo e não devia ficar presa a ele.
+  //
+  // confirmationVideoCaptionEnabled: a frase que acompanha o vídeo (ver
+  // confirmationVideoCaption acima) — só pode estar true se
+  // confirmationVideoEnabled também estiver (ela diz "vou te mandar um
+  // vídeo"; validado em updateAiAgentSettings, src/app/crm/clinicas/
+  // actions.ts).
+  confirmationVideoCaptionEnabled Boolean @default(true)
+
+  // O vídeo em si (confirmationVideoUrl acima). Só pode estar true se
+  // houver arquivo enviado — validado em updateAiAgentSettings; se o
+  // arquivo for removido, esta caixinha (e
+  // confirmationVideoCaptionEnabled) são desmarcadas automaticamente,
+  // sem apagar texto nenhum configurado.
+  confirmationVideoEnabled Boolean @default(true)
+
+  // A mensagem do "cafezinho" (attendanceTipMessage acima) — sem relação
+  // com o vídeo, pode estar true mesmo com o vídeo desmarcado/sem
+  // arquivo.
+  attendanceTipEnabled Boolean @default(true)
+
+  // A mensagem final (attendanceFinalMessage acima, "Perfeito, até
+  // {{dia}}.") — sem relação com o vídeo. Controla também se a IA se
+  // despede sozinha no turno (ver attendanceConfirmedContext,
+  // conversation-pipeline.ts): com esta marcada e a sequência indo
+  // disparar, a IA é instruída a não se despedir (pra não duplicar);
+  // desmarcada, a IA se despede normalmente.
+  attendanceFinalEnabled Boolean @default(true)
+
+  // Migration 20261120000000 (ver prisma/migrations/): clínica que JÁ
+  // existia e tinha confirmationVideoUrl preenchido ganhou as 4 acima
+  // como true (= exatamente o comportamento de antes, sequência
+  // completa); clínica já existente SEM vídeo ganhou as 4 como false (=
+  // também o comportamento de antes, nada saía) — nunca passou a
+  // disparar cafezinho/final sozinhos sem ninguém ter decidido isso.
+  // Clínica nova (default acima) nasce com as 4 true.
+
   // Delay de resposta da IA quando o lead está em silêncio há até 1h (ver
   // computeAdaptiveDelaySeconds em src/lib/scheduler.ts) — por clínica,
   // não global: cada uma pode querer um tom de "primeira resposta"

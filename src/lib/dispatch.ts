@@ -4,9 +4,8 @@ import { sendWhatsappMessage } from "@/lib/whatsapp";
 import { toPublicUploadUrl } from "@/lib/uploads";
 import { withRetry, RetryableError } from "@/lib/retry";
 import {
-  ATTENDANCE_VIDEO_DELAY_AFTER_INTRO_MS,
-  ATTENDANCE_TIP_DELAY_AFTER_VIDEO_MS,
-  ATTENDANCE_FINAL_DELAY_AFTER_TIP_MS,
+  ATTENDANCE_ITEM_DELAY_MS,
+  attendanceItemContent,
   RESULT_PHOTO_DELAY_AFTER_CAPTION_MS,
   decodePendingAttendanceStep,
   encodePendingAttendanceStep,
@@ -476,51 +475,6 @@ async function dispatchOneMessage(
       });
       if (!conversation || conversation.status === "NEEDS_HUMAN" || conversation.status === "LOST") return null;
 
-      if (step.next === "video") {
-        const created = await tx.message.create({
-          data: {
-            conversationId: message.conversationId,
-            direction: "OUTBOUND",
-            sender: "SYSTEM",
-            content: "[vídeo de confirmação de agendamento]",
-            mediaUrl: step.mediaUrl,
-            status: "PENDING",
-            scheduledFor: new Date(now.getTime() + ATTENDANCE_VIDEO_DELAY_AFTER_INTRO_MS),
-            pendingAttendanceStep: encodePendingAttendanceStep({
-              next: "tip",
-              tipText: step.tipText,
-              finalText: step.finalText,
-              appointmentId: step.appointmentId,
-              scheduledAtMs: step.scheduledAtMs,
-            }),
-          },
-        });
-        // Reaproveita a relação já carregada (mesma conversa) em vez de
-        // uma query/include nova — lead/clínica/conta do Instagram não
-        // mudam entre um elo e o próximo.
-        return { message: { ...created, conversation: message.conversation }, delayMs: ATTENDANCE_VIDEO_DELAY_AFTER_INTRO_MS };
-      }
-
-      if (step.next === "tip") {
-        const created = await tx.message.create({
-          data: {
-            conversationId: message.conversationId,
-            direction: "OUTBOUND",
-            sender: "SYSTEM",
-            content: step.tipText,
-            status: "PENDING",
-            scheduledFor: new Date(now.getTime() + ATTENDANCE_TIP_DELAY_AFTER_VIDEO_MS),
-            pendingAttendanceStep: encodePendingAttendanceStep({
-              next: "final",
-              finalText: step.finalText,
-              appointmentId: step.appointmentId,
-              scheduledAtMs: step.scheduledAtMs,
-            }),
-          },
-        });
-        return { message: { ...created, conversation: message.conversation }, delayMs: ATTENDANCE_TIP_DELAY_AFTER_VIDEO_MS };
-      }
-
       // Elo de um fluxo TOTALMENTE diferente (legenda cadastrada -> foto
       // de resultado, ver send_result_photo/PendingAttendanceStep
       // "resultPhoto", conversation-pipeline.ts) — reaproveita só o
@@ -544,34 +498,67 @@ async function dispatchOneMessage(
         return { message: { ...created, conversation: message.conversation }, delayMs: RESULT_PHOTO_DELAY_AFTER_CAPTION_MS };
       }
 
-      // step.next === "final" — último elo: confere, além da conversa
-      // (já feito acima), que o agendamento ainda existe, continua
-      // SCHEDULED/CONFIRMED (não foi cancelado) e que o horário não
-      // mudou desde que a apresentação foi criada (scheduledAtMs,
-      // capturado em fireAttendanceConfirmationSequence) — remarcado
-      // nesse meio-tempo faria "até [dia]" sair com o dia errado, então
-      // a frase final simplesmente não é criada nesse caso.
-      const appointment = await tx.appointment.findUnique({
-        where: { id: step.appointmentId },
-        select: { status: true, scheduledAt: true },
-      });
-      if (!appointment) return null;
-      if (appointment.status !== "SCHEDULED" && appointment.status !== "CONFIRMED") return null;
-      if (appointment.scheduledAt.getTime() !== step.scheduledAtMs) return null;
+      // step.next === "attendance" — sequência de confirmação de presença
+      // (ver buildAttendanceSequenceItems/ATTENDANCE_ITEM_DELAY_MS,
+      // conversation-pipeline.ts): `remaining` é a lista dos itens AINDA
+      // pendentes (vídeo/cafezinho/final), já pulando quem está
+      // desmarcado na configuração da clínica — o primeiro item da lista
+      // é o que este bloco cria agora; o resto (se houver) vira o
+      // pendingAttendanceStep do item recém-criado, pra continuar a
+      // cadeia depois que ELE for confirmado SENT. O delay até este item
+      // é fixo por item (ATTENDANCE_ITEM_DELAY_MS), nunca por par — pular
+      // um item no meio não muda o delay de quem vem depois.
+      // decodePendingAttendanceStep só aceita next:"attendance" com
+      // remaining não-vazio — kind nunca é undefined aqui.
+      const [kindOrUndefined, ...rest] = step.remaining;
+      const kind = kindOrUndefined!;
 
+      // "final" precisa do mesmo check de sempre, onde quer que caia na
+      // cadeia (pode ser o único item, ou vir depois do vídeo/cafezinho):
+      // só cria a frase final se o agendamento ainda existir, continuar
+      // SCHEDULED/CONFIRMED (não foi cancelado) e o horário não tiver
+      // mudado desde que a sequência começou (scheduledAtMs, capturado em
+      // fireAttendanceConfirmationSequence) — remarcado nesse meio-tempo
+      // faria "até [dia]" sair com o dia errado, então a frase final
+      // simplesmente não é criada nesse caso.
+      if (kind === "final") {
+        const appointment = await tx.appointment.findUnique({
+          where: { id: step.appointmentId },
+          select: { status: true, scheduledAt: true },
+        });
+        if (!appointment) return null;
+        if (appointment.status !== "SCHEDULED" && appointment.status !== "CONFIRMED") return null;
+        if (appointment.scheduledAt.getTime() !== step.scheduledAtMs) return null;
+      }
+
+      const delayMs = ATTENDANCE_ITEM_DELAY_MS[kind];
       const created = await tx.message.create({
         data: {
           conversationId: message.conversationId,
           direction: "OUTBOUND",
           sender: "SYSTEM",
-          content: step.finalText,
+          content: attendanceItemContent(kind, { tipText: step.tipText, finalText: step.finalText }),
+          mediaUrl: kind === "video" ? step.mediaUrl : undefined,
           status: "PENDING",
-          scheduledFor: new Date(now.getTime() + ATTENDANCE_FINAL_DELAY_AFTER_TIP_MS),
+          scheduledFor: new Date(now.getTime() + delayMs),
+          pendingAttendanceStep:
+            rest.length > 0
+              ? encodePendingAttendanceStep({
+                  next: "attendance",
+                  remaining: rest,
+                  mediaUrl: step.mediaUrl,
+                  tipText: step.tipText,
+                  finalText: step.finalText,
+                  appointmentId: step.appointmentId,
+                  scheduledAtMs: step.scheduledAtMs,
+                })
+              : null,
         },
       });
-      // Último elo — sem pendingAttendanceStep, então nada mais a
-      // despachar antecipadamente depois deste.
-      return { message: { ...created, conversation: message.conversation }, delayMs: ATTENDANCE_FINAL_DELAY_AFTER_TIP_MS };
+      // Reaproveita a relação já carregada (mesma conversa) em vez de uma
+      // query/include nova — lead/clínica/conta do Instagram não mudam
+      // entre um item e o próximo.
+      return { message: { ...created, conversation: message.conversation }, delayMs };
     });
 
     return { status: "sent", nextChainLink };

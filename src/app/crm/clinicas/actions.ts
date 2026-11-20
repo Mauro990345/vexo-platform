@@ -208,9 +208,33 @@ export async function updateAiAgentSettings(clinicId: string, formData: FormData
     confirmationVideoUrl = null;
   }
 
+  // Caixinha "Enviar" individual por item da sequência de confirmação de
+  // presença (ver DESIGN.md, buildAttendanceSequenceItems em
+  // conversation-pipeline.ts) — validado aqui de novo (a tela já desabilita
+  // a caixinha nesses 2 casos, mas nunca é a única linha de defesa):
+  // o vídeo só pode ficar marcado se existir um arquivo de verdade DEPOIS
+  // desta mesma gravação (confirmationVideoUrl recém-calculado acima, não
+  // o valor antigo); a frase de apresentação só pode ficar marcada se o
+  // vídeo também estiver. Arquivo removido nesta mesma submissão força as
+  // duas pra false, sem apagar nenhum texto configurado.
+  const confirmationVideoEnabled = formData.get("confirmationVideoEnabled") === "on" && Boolean(confirmationVideoUrl);
+  const confirmationVideoCaptionEnabled = formData.get("confirmationVideoCaptionEnabled") === "on" && confirmationVideoEnabled;
+  const attendanceTipEnabled = formData.get("attendanceTipEnabled") === "on";
+  const attendanceFinalEnabled = formData.get("attendanceFinalEnabled") === "on";
+
   await prisma.clinic.update({
     where: { id: clinicId },
-    data: { aiSystemPrompt, confirmationVideoUrl, confirmationVideoCaption, attendanceTipMessage, attendanceFinalMessage },
+    data: {
+      aiSystemPrompt,
+      confirmationVideoUrl,
+      confirmationVideoCaption,
+      attendanceTipMessage,
+      attendanceFinalMessage,
+      confirmationVideoEnabled,
+      confirmationVideoCaptionEnabled,
+      attendanceTipEnabled,
+      attendanceFinalEnabled,
+    },
   });
 
   revalidatePath(`/crm/clinicas/${clinicId}/agente-ia`);
