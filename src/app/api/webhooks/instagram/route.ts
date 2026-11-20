@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyWebhookSignature, requestThreadControl } from "@/lib/instagram";
-import { handleInboundInstagramMessage } from "@/lib/conversation-pipeline";
+import { handleInboundInstagramMessage, recordInboundInstagramMessage, type RecordedInboundMessage } from "@/lib/conversation-pipeline";
 import { withConversationLock } from "@/lib/conversation-lock";
 import { bufferForDebounce } from "@/lib/inbound-debounce";
 import { decryptToken } from "@/lib/crypto";
@@ -10,19 +10,17 @@ import { transcribeAudioFromUrl } from "@/lib/speech-to-text";
 // Webhook do Instagram Messaging (Meta). GET = handshake de verificação;
 // POST = eventos de mensagem recebida.
 
-type BufferedInboundMessage = {
-  text: string;
-  igMessageId?: string;
-  timestamp: Date;
-  // Da requisição que originou ESTA mensagem específica — usado só se o
-  // processamento do lote inteiro (mais abaixo) falhar, pra gravar o erro
-  // em algum WebhookLog visível em /crm/webhook-logs. Quando um lote junta
-  // mensagens de mais de uma requisição (debounce agrupou), usa o
-  // webhookLogId da ÚLTIMA — é o estado mais atual, e escrever em todas
-  // não trazia valor diagnóstico real o bastante pra justificar a
-  // complexidade extra.
-  webhookLogId?: string;
-};
+// A mensagem já foi gravada no banco (ver recordInboundInstagramMessage,
+// chamada no loop principal mais abaixo, ANTES deste tipo entrar em jogo)
+// — o que entra no buffer de debounce agora é só o RESULTADO dessa
+// gravação, nunca mais o texto cru. webhookLogId: da requisição que
+// originou ESTA mensagem específica — usado só se o processamento do lote
+// inteiro (mais abaixo) falhar, pra gravar o erro em algum WebhookLog
+// visível em /crm/webhook-logs. Quando um lote junta mensagens de mais de
+// uma requisição (debounce agrupou), usa o webhookLogId da ÚLTIMA — é o
+// estado mais atual, e escrever em todas não trazia valor diagnóstico
+// real o bastante pra justificar a complexidade extra.
+type BufferedInboundMessage = RecordedInboundMessage & { webhookLogId?: string };
 
 // Processa de fato um lote de mensagens do MESMO lead já agrupado pelo
 // debounce (ver bufferForDebounce/inbound-debounce.ts) — chamado de forma
@@ -36,17 +34,33 @@ type BufferedInboundMessage = {
 async function flushInboundBatch(igUserId: string, leadIgScopedId: string, messages: BufferedInboundMessage[]) {
   const lastWebhookLogId = messages[messages.length - 1]?.webhookLogId;
   try {
+    // clinicId/conversationId são os MESMOS em toda mensagem do lote —
+    // todas vêm do mesmo lead (mesma chave de debounce), e
+    // recordInboundInstagramMessage já resolveu (ou criou) uma única
+    // Conversation pra ele antes de qualquer uma destas mensagens ser
+    // bufferizada. Lido da primeira só por conveniência.
+    const first = messages[0]!;
+
     // Serializa por clínica+lead — ver comentário grande em
     // src/lib/conversation-lock.ts pro bug real que isso corrige
     // (agendamento confirmado seguido de "não está mais disponível",
     // e vídeo de confirmação em dobro — as duas causadas pela mesma
     // corrida entre duas mensagens do lead processadas ao mesmo tempo).
+    // recordInboundInstagramMessage (chamada antes, no webhook) já usa a
+    // MESMA chave pra serializar a GRAVAÇÃO das mensagens — este lock
+    // aqui é pra serializar o PROCESSAMENTO DA IA (classificação, geração
+    // de resposta, agendamento) do lote inteiro, uma preocupação
+    // diferente, que continua precisando do lock mesmo com a gravação já
+    // feita.
     await withConversationLock(`${igUserId}:${leadIgScopedId}`, () =>
       handleInboundInstagramMessage(
         {
           igUserId,
           leadIgScopedId,
-          messages: messages.map((m) => ({ text: m.text, igMessageId: m.igMessageId, timestamp: m.timestamp })),
+          leadIgUsername: first.leadIgUsername,
+          clinicId: first.clinicId,
+          conversationId: first.conversationId,
+          messages,
         },
         lastWebhookLogId
       )
@@ -401,31 +415,52 @@ export async function POST(req: NextRequest) {
       }
 
       // Guarda numa const própria (não só `resolvedText`) — o TypeScript
-      // não carrega a checagem de narrowing acima pra dentro da closure
-      // passada a bufferForDebounce logo abaixo, já que ela pode em
-      // teoria rodar mais tarde; capturar o valor aqui, já sabidamente
-      // uma string, resolve isso sem precisar de non-null assertion.
+      // não carrega a checagem de narrowing acima pra dentro de uma
+      // chamada que pode em teoria rodar mais tarde; capturar o valor
+      // aqui, já sabidamente uma string, resolve isso sem precisar de
+      // non-null assertion.
       const leadText = resolvedText;
 
+      // GRAVA a mensagem no banco AGORA, antes de qualquer debounce —
+      // ver comentário grande de recordInboundInstagramMessage
+      // (conversation-pipeline.ts) pro bug real que isso corrige (o lead
+      // mandava "oi" e a mensagem dele só existia no CRM 15-20s depois,
+      // quando o debounce estourava — pior ainda no vídeo de review do
+      // Meta, onde a resposta da IA aparecia sozinha, sem a pergunta que
+      // a originou). Awaited (síncrono com esta requisição) — é rápido (só
+      // alguns INSERTs) e é exatamente o ponto que faz a mensagem aparecer
+      // no CRM sem esperar nada. null = conta não encontrada (auto-
+      // correção de ID já tentada lá dentro, motivo já gravado no
+      // WebhookLog por ela mesma) — nada mais a fazer por este evento.
+      const recorded = await recordInboundInstagramMessage(
+        {
+          igUserId: event.recipient.id,
+          leadIgScopedId: event.sender.id,
+          text: leadText,
+          igMessageId: inbound.mid,
+          timestamp: new Date(event.timestamp),
+        },
+        webhookLog?.id
+      );
+      if (!recorded) continue;
+
       // Agrupa com qualquer outra mensagem do MESMO lead chegando em
-      // sequência rápida, em vez de processar cada uma na hora — bug real
-      // reportado: o lead mandou "Oi" e, poucos segundos depois, "Ainda
-      // não pensei nisso"; cada mensagem virava sua própria chamada a
-      // handleInboundInstagramMessage, então a IA respondia "Oi" isolado,
-      // como só um cumprimento solto, ANTES de sequer ter visto a segunda
-      // mensagem. Ver src/lib/inbound-debounce.ts pro mecanismo completo.
+      // sequência rápida, em vez de disparar a IA pra cada uma na hora —
+      // bug real reportado: o lead mandou "Oi" e, poucos segundos depois,
+      // "Ainda não pensei nisso"; cada mensagem virava sua própria
+      // chamada a handleInboundInstagramMessage, então a IA respondia
+      // "Oi" isolado, como só um cumprimento solto, ANTES de sequer ter
+      // visto a segunda mensagem. Ver src/lib/inbound-debounce.ts pro
+      // mecanismo completo — a mensagem em si (acima) já foi gravada e já
+      // aparece no CRM; só o PROCESSAMENTO DA IA pro lote inteiro espera
+      // o debounce fechar.
       //
       // Não é `await`ado de propósito: bufferForDebounce só arma um timer
       // (síncrono, instantâneo) — o processamento de fato só acontece
       // quando esse timer disparar, bem depois da resposta HTTP deste
       // webhook já ter voltado pra Meta. Erros do processamento em si são
       // tratados dentro de flushInboundBatch, nunca aqui.
-      const bufferedMessage: BufferedInboundMessage = {
-        text: leadText,
-        igMessageId: inbound.mid,
-        timestamp: new Date(event.timestamp),
-        webhookLogId: webhookLog?.id,
-      };
+      const bufferedMessage: BufferedInboundMessage = { ...recorded, webhookLogId: webhookLog?.id };
       bufferForDebounce(`${event.recipient.id}:${event.sender.id}`, bufferedMessage, (messages) => {
         flushInboundBatch(event.recipient.id, event.sender.id, messages).catch((err) =>
           console.error("[vexo] Falha inesperada ao agendar processamento do lote:", err)

@@ -56,6 +56,7 @@ import { findMostRecentAttendedAppointment, buildReturningPatientContext } from 
 import { findMostRecentNoShowAppointment, buildNoShowReplyContext, buildColdLeadReengagementContext } from "@/lib/card-reply-context";
 import { parseBrazilLocalDateTime, formatAsBrazilLocalDateTime, startOfBrazilDay } from "@/lib/timezone";
 import { resolveBatchTimestamps } from "@/lib/message-batch-timestamps";
+import { withConversationLock } from "@/lib/conversation-lock";
 
 export { toChatHistory } from "@/lib/chat-history";
 
@@ -92,7 +93,7 @@ export function resolveClinicWhatsappLink(clientWhatsappNumber: string | null | 
   return validation.valid ? validation.e164 : null;
 }
 
-// Peça pura do backfill de histórico (ver bloco isNewConversation em
+// Peça pura do backfill de histórico (ver bloco de backfill em
 // handleInboundInstagramMessage, não testável direto) — recebe o que
 // getInstagramConversationHistory devolveu e monta as linhas de Message
 // pra createMany, já excluindo o que está no lote atual do webhook
@@ -521,10 +522,40 @@ export function decodePendingAttendanceStep(raw: string): PendingAttendanceStep 
   return null;
 }
 
+// Resultado de recordInboundInstagramMessage (abaixo) — uma mensagem do
+// lead JÁ GRAVADA no banco, assim que o webhook chega (sem esperar o
+// debounce). sentAt já é o horário real resolvido (ver
+// resolveBatchTimestamps) — a mesma Message, nunca recalculado de novo.
+export type RecordedInboundMessage = {
+  id: string;
+  conversationId: string;
+  clinicId: string;
+  igUserId: string;
+  leadIgScopedId: string;
+  leadIgUsername?: string;
+  text: string;
+  igMessageId?: string;
+  sentAt: Date;
+  // true só quando ESTA mensagem, no instante em que foi gravada, reengajou
+  // a conversa (voltou de FOLLOW_UP, ou ficou calada mais que o limiar de
+  // silêncio — mesmo cálculo que já existia em handleInboundInstagramMessage,
+  // agora feito por mensagem em vez de por lote, porque cada mensagem grava
+  // e atualiza a Conversation no instante em que chega, não mais todas
+  // juntas no fim do debounce). Sempre false pra uma mensagem redescoberta
+  // via reentrega (ver recordInboundInstagramMessage) — reentrega nunca
+  // reengaja de novo algo que já tinha sido tratado na gravação original.
+  // Quem usa isto pro LOTE inteiro (handleInboundInstagramMessage) lê o
+  // valor da PRIMEIRA mensagem do lote — é a mesma semântica de antes
+  // (reengaged calculado uma vez, no início do lote).
+  reengaged: boolean;
+};
+
 export type InboundInstagramEvent = {
   igUserId: string; // ID da conta profissional do Instagram da clínica (destinatária)
   leadIgScopedId: string;
   leadIgUsername?: string;
+  clinicId: string;
+  conversationId: string;
   // Em ordem cronológica, sempre com pelo menos 1 item. Mais de 1 quando o
   // debounce (ver src/lib/inbound-debounce.ts) agrupa mensagens do MESMO
   // lead chegando em sequência rápida — bug real reportado: o lead mandou
@@ -532,12 +563,12 @@ export type InboundInstagramEvent = {
   // mensagem virava sua PRÓPRIA chamada desta função, a IA respondia "Oi"
   // isoladamente (um cumprimento solto) antes de sequer ter visto a
   // segunda mensagem, em vez de responder as duas juntas com o contexto
-  // completo. Cada mensagem do lote ainda vira sua PRÓPRIA linha em
-  // Message (preserva o igMessageId de cada uma pra proteção de
-  // reentrega, e mostra no CRM exatamente o que o lead mandou, como
-  // mandou) — só a geração da resposta da IA que passa a considerar o
-  // lote inteiro de uma vez, não mensagem por mensagem.
-  messages: { text: string; igMessageId?: string; timestamp: Date }[];
+  // completo. Só a geração da resposta da IA considera o lote inteiro de
+  // uma vez, não mensagem por mensagem — cada mensagem em si JÁ FOI
+  // GRAVADA (ver recordInboundInstagramMessage, chamada no webhook, antes
+  // do debounce) com seu próprio igMessageId (proteção de reentrega) e já
+  // aparece no CRM assim que chega, sem esperar o lote fechar.
+  messages: RecordedInboundMessage[];
 };
 
 // Fronteira entre a IA (que só fala em horário de Brasília, sem nenhuma
@@ -694,6 +725,309 @@ export function isSlotFreeIgnoringOwnAppointment(params: {
   });
 }
 
+// Prisma não expõe sua classe de erro de violação de constraint única por
+// import direto neste arquivo (nenhum outro ponto do código faz isso, ver
+// grep por P2002 — não há precedente), então duck-typing no `code` basta:
+// é o formato documentado de PrismaClientKnownRequestError, estável entre
+// versões.
+function isUniqueConstraintViolation(err: unknown): boolean {
+  return typeof err === "object" && err !== null && (err as { code?: string }).code === "P2002";
+}
+
+// Grava UMA mensagem do lead no banco ASSIM QUE o webhook chega, sem
+// esperar o debounce (ver LEAD_DEBOUNCE_WINDOW_MS, inbound-debounce.ts).
+//
+// Bug real corrigido: antes desta função existir, a mensagem do lead só
+// virava uma linha no banco quando o debounce estourava (15s de silêncio,
+// até 30s sob carga contínua — ver MAX_DEBOUNCE_TOTAL_WAIT_MS) — então ela
+// literalmente não existia ainda no CRM por esse tempo todo. Isso aparecia
+// mal no vídeo de review do Meta: o lead manda "oi" e a tela não mostra
+// nada por 15-20s, até a resposta da IA aparecer sozinha, sem a pergunta
+// que a originou. Agora cada mensagem aparece no CRM no instante em que
+// chega. O debounce continua existindo, só não decide mais SE a mensagem
+// é gravada — só decide QUANDO a IA processa o lote inteiro de uma vez
+// (ver handleInboundInstagramMessage, chamada só depois que o debounce
+// fecha, lendo do banco as mensagens que esta função já gravou — nunca
+// grava elas de novo).
+//
+// Idempotência contra reentrega da Meta (webhook duplicado — documentado,
+// acontece de verdade) ou contra duas requisições quase simultâneas da
+// mesma mensagem: igMessageId é @unique no schema (ver model Message,
+// prisma/schema.prisma). Duas camadas: 1) um findFirst ANTES de criar, já
+// DENTRO do lock por lead (evita a maior parte dos casos sem gastar uma
+// violação de constraint); 2) um catch do código P2002 (violação de
+// unique) ao redor da escrita em si, como rede de segurança final contra
+// uma corrida genuína entre dois processos — sem isso, a checagem do item
+// 1 sozinha teria uma janela TOCTOU entre o findFirst e o create/$transaction.
+// Em qualquer dos dois casos, devolve os dados da mensagem JÁ existente —
+// nunca lança, nunca duplica.
+//
+// withConversationLock pela MESMA chave que route.ts usa pra serializar o
+// processamento do lote no debounce (`${igUserId}:${leadIgScopedId}`) —
+// evita duas mensagens quase simultâneas do MESMO lead criando duas
+// Conversation (ou dois Lead) em paralelo na primeira mensagem de um lead
+// novo, e serializa os updates de Conversation (lastLeadMessageAt/status)
+// entre mensagens consecutivas do mesmo lote.
+export async function recordInboundInstagramMessage(
+  params: {
+    igUserId: string;
+    leadIgScopedId: string;
+    leadIgUsername?: string;
+    text: string;
+    igMessageId?: string;
+    timestamp: Date;
+  },
+  // Mesmo motivo de sempre (ver handleInboundInstagramMessage, abaixo):
+  // só pra gravar de volta o motivo do descarte em WebhookLog quando a
+  // conta não é encontrada.
+  webhookLogId?: string
+): Promise<RecordedInboundMessage | null> {
+  return withConversationLock(`${params.igUserId}:${params.leadIgScopedId}`, async () => {
+    let igAccount = await prisma.instagramAccount.findFirst({
+      where: { igUserId: params.igUserId },
+      include: { clinic: true },
+    });
+
+    if (!igAccount) {
+      // Auto-correção — mesma lógica e mesmo motivo de
+      // handleInboundInstagramMessage (ver comentário grande lá, mantido
+      // intacto): só corrige sozinho quando existe EXATAMENTE uma conta
+      // ainda não confirmada.
+      const unverified = await prisma.instagramAccount.findMany({
+        where: { webhookIdVerified: false },
+        include: { clinic: true },
+      });
+
+      const [onlyUnverified] = unverified;
+      if (unverified.length === 1 && onlyUnverified) {
+        const previousId = onlyUnverified.igUserId;
+        igAccount = await prisma.instagramAccount.update({
+          where: { id: onlyUnverified.id },
+          data: { igUserId: params.igUserId, webhookIdVerified: true },
+          include: { clinic: true },
+        });
+        const reason =
+          `ID do webhook corrigido automaticamente pra clínica "${igAccount.clinic.name}": ` +
+          `${previousId} → ${params.igUserId} (primeiro evento real confirmou o valor).`;
+        console.warn(`[vexo] ${reason}`);
+        if (webhookLogId) {
+          await prisma.webhookLog
+            .update({ where: { id: webhookLogId }, data: { matchFailureReason: reason } })
+            .catch((err) => console.error("[vexo] Falha ao gravar correção automática de ID no WebhookLog:", err));
+        }
+      } else {
+        const knownAccounts = await prisma.instagramAccount.findMany({
+          select: { igUserId: true, igUsername: true },
+        });
+        const reason =
+          `Nenhuma InstagramAccount encontrada pra igUserId="${params.igUserId}" (vindo do webhook) — ` +
+          `${unverified.length === 0 ? "nenhuma" : unverified.length} conta(s) não confirmada(s), auto-correção pulada ` +
+          `por ambiguidade. Contas conhecidas no banco: ${
+            knownAccounts.length
+              ? knownAccounts.map((a) => `${a.igUsername ?? "?"}=${a.igUserId}`).join(", ")
+              : "(nenhuma)"
+          }.`;
+        console.warn(`[vexo] ${reason}`);
+        if (webhookLogId) {
+          await prisma.webhookLog
+            .update({ where: { id: webhookLogId }, data: { matchFailureReason: reason } })
+            .catch((err) => console.error("[vexo] Falha ao gravar motivo do descarte no WebhookLog:", err));
+        }
+        return null;
+      }
+    }
+    const clinic = igAccount.clinic;
+
+    // Camada 1 de idempotência (ver comentário grande da função) — se já
+    // existe, devolve o que já foi gravado em vez de tentar de novo.
+    if (params.igMessageId) {
+      const existing = await prisma.message.findFirst({
+        where: { igMessageId: params.igMessageId },
+        select: { id: true, conversationId: true, content: true, sentAt: true, createdAt: true },
+      });
+      if (existing) {
+        return {
+          id: existing.id,
+          conversationId: existing.conversationId,
+          clinicId: clinic.id,
+          igUserId: params.igUserId,
+          leadIgScopedId: params.leadIgScopedId,
+          leadIgUsername: params.leadIgUsername,
+          text: existing.content,
+          igMessageId: params.igMessageId,
+          sentAt: existing.sentAt ?? existing.createdAt,
+          reengaged: false,
+        };
+      }
+    }
+
+    const lead = await prisma.lead.upsert({
+      where: { clinicId_igScopedId: { clinicId: clinic.id, igScopedId: params.leadIgScopedId } },
+      update: { igUsername: params.leadIgUsername ?? undefined },
+      create: {
+        clinicId: clinic.id,
+        igScopedId: params.leadIgScopedId,
+        igUsername: params.leadIgUsername,
+      },
+    });
+
+    let conversation = await prisma.conversation.findFirst({
+      where: {
+        leadId: lead.id,
+        status: { in: ["NEW", "IN_CONVERSATION", "SCHEDULED", "FOLLOW_UP", "NEEDS_HUMAN"] },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+    if (!conversation) {
+      conversation = await prisma.conversation.create({
+        data: { clinicId: clinic.id, leadId: lead.id, status: "NEW" },
+      });
+    }
+
+    // sentAt: horário real resolvido do Instagram (clamp se ausente/
+    // implausível — ver resolveBatchTimestamps, chamada aqui com um único
+    // item porque cada mensagem agora é gravada sozinha, uma por vez,
+    // nunca mais em lote).
+    //
+    // createdAt (coluna) é OMITIDO de propósito ao criar a Message abaixo
+    // — é o cerne da correção do bug do cursor (ver comentário grande em
+    // message-visibility.ts): deixa o Postgres atribuir @default(now())
+    // no INSTANTE REAL da gravação, nunca o timestamp que a Meta reportou
+    // (que pode chegar atrasado por uma entrega lenta da própria Meta).
+    // messageVisibleAt() já trata INBOUND.createdAt como "o instante em
+    // que a mensagem ficou visível pro atendente" — com isso, esse
+    // instante é, de verdade, sempre "agora", nunca um horário passado que
+    // o cursor de polling da tela já tinha deixado atrás. Mensagens de
+    // BACKFILL (buildHistoryBackfillRows, chamadas de dentro de
+    // handleInboundInstagramMessage, nunca daqui) continuam de propósito
+    // com o createdAt histórico real — não são "live", o lead não está
+    // esperando elas aparecerem agora.
+    const sentAt = resolveBatchTimestamps([params.timestamp])[0]!.sentAt;
+    const messageData = {
+      conversationId: conversation.id,
+      direction: "INBOUND" as const,
+      sender: "LEAD" as const,
+      content: params.text,
+      igMessageId: params.igMessageId,
+      sentAt,
+    };
+
+    // Conversa já escalonada pra humano: grava normalmente (pedido
+    // explícito — hoje isso já valia via createMany, aqui é só uma
+    // mensagem por vez), mas sem nenhum dos efeitos de reengajamento
+    // abaixo (que só fazem sentido pra conversa ativa na IA).
+    if (conversation.status === "NEEDS_HUMAN") {
+      let message;
+      try {
+        message = await prisma.message.create({ data: messageData });
+      } catch (err) {
+        if (isUniqueConstraintViolation(err) && params.igMessageId) {
+          const raced = await prisma.message.findFirst({ where: { igMessageId: params.igMessageId } });
+          if (raced) {
+            return {
+              id: raced.id,
+              conversationId: raced.conversationId,
+              clinicId: clinic.id,
+              igUserId: params.igUserId,
+              leadIgScopedId: params.leadIgScopedId,
+              leadIgUsername: params.leadIgUsername,
+              text: raced.content,
+              igMessageId: params.igMessageId,
+              sentAt: raced.sentAt ?? raced.createdAt,
+              reengaged: false,
+            };
+          }
+        }
+        throw err;
+      }
+      return {
+        id: message.id,
+        conversationId: conversation.id,
+        clinicId: clinic.id,
+        igUserId: params.igUserId,
+        leadIgScopedId: params.leadIgScopedId,
+        leadIgUsername: params.leadIgUsername,
+        text: params.text,
+        igMessageId: params.igMessageId,
+        sentAt,
+        reengaged: false,
+      };
+    }
+
+    // Reengajamento (mesmo cálculo que já existia antes, só que agora por
+    // MENSAGEM em vez de por lote — ver comentário grande do campo
+    // `reengaged` em RecordedInboundMessage, acima). silenceHours: mesmo
+    // limiar que dispara o follow-up automático (getSilenceHours,
+    // follow-up.ts), pra não ter dois números diferentes definindo
+    // "esfriou".
+    const reopeningFromFollowUp = conversation.status === "FOLLOW_UP";
+    const silenceHours = await getSilenceHours();
+    const wentSilent =
+      Boolean(conversation.lastLeadMessageAt) &&
+      sentAt.getTime() - conversation.lastLeadMessageAt!.getTime() > silenceHours * 60 * 60 * 1000;
+    const reengaged = reopeningFromFollowUp || wentSilent;
+
+    const activeConversationId = conversation.id;
+    const activeConversationStatus = conversation.status;
+    let createdMessage: { id: string };
+    try {
+      const [created] = await prisma.$transaction([
+        prisma.message.create({ data: messageData }),
+        prisma.conversation.update({
+          where: { id: activeConversationId },
+          data: {
+            lastLeadMessageAt: sentAt,
+            lastMessageAt: sentAt,
+            status: activeConversationStatus === "NEW" || reopeningFromFollowUp ? "IN_CONVERSATION" : activeConversationStatus,
+            ...(reengaged ? { resultPhotoSentAt: sentAt } : {}),
+          },
+        }),
+      ]);
+      createdMessage = created;
+    } catch (err) {
+      if (isUniqueConstraintViolation(err) && params.igMessageId) {
+        const raced = await prisma.message.findFirst({ where: { igMessageId: params.igMessageId } });
+        if (raced) {
+          return {
+            id: raced.id,
+            conversationId: raced.conversationId,
+            clinicId: clinic.id,
+            igUserId: params.igUserId,
+            leadIgScopedId: params.leadIgScopedId,
+            leadIgUsername: params.leadIgUsername,
+            text: raced.content,
+            igMessageId: params.igMessageId,
+            sentAt: raced.sentAt ?? raced.createdAt,
+            reengaged: false,
+          };
+        }
+      }
+      throw err;
+    }
+
+    // Lead respondeu durante uma sequência de follow-up ativa: fecha o(s)
+    // log(s) aberto(s) e cancela qualquer mensagem de follow-up já
+    // enfileirada (mas ainda não enviada) — mesmo efeito de sempre, só que
+    // agora disparado na gravação imediata em vez de no fim do lote.
+    if (reopeningFromFollowUp) {
+      await cancelPendingFollowUp(activeConversationId, sentAt);
+    }
+
+    return {
+      id: createdMessage.id,
+      conversationId: activeConversationId,
+      clinicId: clinic.id,
+      igUserId: params.igUserId,
+      leadIgScopedId: params.leadIgScopedId,
+      leadIgUsername: params.leadIgUsername,
+      text: params.text,
+      igMessageId: params.igMessageId,
+      sentAt,
+      reengaged,
+    };
+  });
+}
+
 export async function handleInboundInstagramMessage(
   event: InboundInstagramEvent,
   // ID da linha em WebhookLog dessa requisição (ver
@@ -713,99 +1047,44 @@ export async function handleInboundInstagramMessage(
   // o lead observa.
   const pipelineStartedAt = Date.now();
 
-  // Resolve timestamp ausente/inválido/muito fora do horário atual (cai pro
-  // horário atual) e garante ordem estritamente crescente dentro do lote
-  // mesmo quando duas mensagens vêm com o MESMO timestamp (a Meta só reporta
-  // em segundos) — ver comentário grande em resolveBatchTimestamps,
-  // message-batch-timestamps.ts, pro bug real que isso corrige (createdAt
-  // empatado dentro da mesma transação, ORDER BY sem desempate, histórico
-  // mesclado fora de ordem pro modelo). Calculado UMA vez aqui, no topo, e
-  // reaproveitado em TUDO que precisaria do timestamp cru do Instagram
-  // daqui pra baixo (marcar lastLeadMessageAt, checar silêncio, janela do
-  // loop guard, leadResponseTimeSeconds etc.) — nunca lido de novo direto
-  // de event.messages[...].timestamp nesta função. firstResolvedAt: quando
-  // o lead começou a responder, sem inflar leadResponseTimeSeconds pelo
-  // tempo que o debounce esperou por possíveis mensagens seguintes.
-  // lastResolvedAt: a mais recente do lote, por ser o timestamp mais
-  // próximo de "agora".
-  const resolvedBatchTimestamps = resolveBatchTimestamps(event.messages.map((m) => m.timestamp));
-  const firstResolvedAt = resolvedBatchTimestamps[0]!.sentAt;
-  const lastResolvedAt = resolvedBatchTimestamps[resolvedBatchTimestamps.length - 1]!.sentAt;
+  // Cada mensagem do lote já foi gravada no banco por
+  // recordInboundInstagramMessage (chamada no webhook, antes do debounce —
+  // ver comentário grande dela e do tipo RecordedInboundMessage) — esta
+  // função só LÊ o que já existe, nunca grava a mensagem do lead de novo.
+  // Desduplica por id como rede de segurança final contra uma corrida rara
+  // (duas requisições quase simultâneas da mesma reentrega, cada uma
+  // passando pela checagem de idempotência de recordInboundInstagramMessage
+  // antes da outra terminar de escrever — ver comentário grande da função):
+  // sem isso, a MESMA Message apareceria duas vezes neste array, inflando
+  // leadBatchText e potencialmente mudando firstResolvedAt/lastResolvedAt.
+  const dedupedMessages = Array.from(new Map(event.messages.map((m) => [m.id, m])).values());
+  const firstResolvedAt = dedupedMessages[0]!.sentAt;
+  const lastResolvedAt = dedupedMessages[dedupedMessages.length - 1]!.sentAt;
 
-  let igAccount = await prisma.instagramAccount.findFirst({
-    where: { igUserId: event.igUserId },
+  const igAccount = await prisma.instagramAccount.findUnique({
+    where: { clinicId: event.clinicId },
     include: { clinic: true },
   });
-
   if (!igAccount) {
-    // Auto-correção (era o botão manual "Corrigir ID do webhook") —
-    // nenhum endpoint de OAuth desse produto devolve de antemão o ID que
-    // a Meta manda de verdade nos eventos de webhook (ver comentário
-    // grande em exchangeInstagramCode, src/lib/instagram.ts), então o
-    // primeiro evento real de uma conta recém-conectada SEMPRE bate aqui.
-    // Sem essa correção automática, isso exigia alguém abrir
-    // /crm/webhook-logs, copiar o ID reportado e colar manualmente em
-    // Conexões antes da primeira mensagem real ser respondida — pra toda
-    // clínica nova, sempre. Só corrige sozinho quando existe EXATAMENTE
-    // UMA conta ainda não confirmada (webhookIdVerified=false) — se houver
-    // mais de uma (duas clínicas conectadas em sequência antes de
-    // qualquer uma receber sua primeira mensagem real), a ambiguidade cai
-    // pro fluxo manual de sempre, pra nunca arriscar corrigir a conta
-    // errada.
-    const unverified = await prisma.instagramAccount.findMany({
-      where: { webhookIdVerified: false },
-      include: { clinic: true },
-    });
-
-    const [onlyUnverified] = unverified;
-    if (unverified.length === 1 && onlyUnverified) {
-      const previousId = onlyUnverified.igUserId;
-      igAccount = await prisma.instagramAccount.update({
-        where: { id: onlyUnverified.id },
-        data: { igUserId: event.igUserId, webhookIdVerified: true },
-        include: { clinic: true },
-      });
-      const reason =
-        `ID do webhook corrigido automaticamente pra clínica "${igAccount.clinic.name}": ` +
-        `${previousId} → ${event.igUserId} (primeiro evento real confirmou o valor).`;
-      console.warn(`[vexo] ${reason}`);
-      if (webhookLogId) {
-        await prisma.webhookLog
-          .update({ where: { id: webhookLogId }, data: { matchFailureReason: reason } })
-          .catch((err) => console.error("[vexo] Falha ao gravar correção automática de ID no WebhookLog:", err));
-      }
-    } else {
-      const knownAccounts = await prisma.instagramAccount.findMany({
-        select: { igUserId: true, igUsername: true },
-      });
-      const reason =
-        `Nenhuma InstagramAccount encontrada pra igUserId="${event.igUserId}" (vindo do webhook) — ` +
-        `${unverified.length === 0 ? "nenhuma" : unverified.length} conta(s) não confirmada(s), auto-correção pulada ` +
-        `por ambiguidade. Contas conhecidas no banco: ${
-          knownAccounts.length
-            ? knownAccounts.map((a) => `${a.igUsername ?? "?"}=${a.igUserId}`).join(", ")
-            : "(nenhuma)"
-        }.`;
-      console.warn(`[vexo] ${reason}`);
-      if (webhookLogId) {
-        await prisma.webhookLog
-          .update({ where: { id: webhookLogId }, data: { matchFailureReason: reason } })
-          .catch((err) => console.error("[vexo] Falha ao gravar motivo do descarte no WebhookLog:", err));
-      }
-      return;
-    }
+    // Não deveria acontecer — recordInboundInstagramMessage já resolveu
+    // (ou criou) esta mesma conta pra conseguir gravar as mensagens do
+    // lote. Mantido como rede de segurança (ex.: conta desconectada entre
+    // a gravação e o debounce fechar) em vez de assumir que isto é
+    // impossível.
+    console.error(`[vexo] InstagramAccount não encontrada pra clinicId=${event.clinicId} (já tinha sido resolvida ao gravar as mensagens) — abortando processamento da IA.`);
+    return;
   }
   const clinic = igAccount.clinic;
 
-  const lead = await prisma.lead.upsert({
+  const lead = await prisma.lead.findUnique({
     where: { clinicId_igScopedId: { clinicId: clinic.id, igScopedId: event.leadIgScopedId } },
-    update: { igUsername: event.leadIgUsername ?? undefined },
-    create: {
-      clinicId: clinic.id,
-      igScopedId: event.leadIgScopedId,
-      igUsername: event.leadIgUsername,
-    },
   });
+  if (!lead) {
+    // Mesmo racional do igAccount acima: recordInboundInstagramMessage já
+    // fez o upsert deste lead pra gravar as mensagens do lote.
+    console.error(`[vexo] Lead não encontrado pra clinicId=${clinic.id} igScopedId=${event.leadIgScopedId} (já tinha sido resolvido ao gravar as mensagens) — abortando processamento da IA.`);
+    return;
+  }
 
   // O payload do webhook (event.sender.id) NUNCA traz nome/username do
   // lead — só o ID opaco (ver leadIgUsername acima, que na prática nunca
@@ -940,20 +1219,15 @@ export async function handleInboundInstagramMessage(
     }
   }
 
-  let conversation = await prisma.conversation.findFirst({
-    where: {
-      leadId: lead.id,
-      status: { in: ["NEW", "IN_CONVERSATION", "SCHEDULED", "FOLLOW_UP", "NEEDS_HUMAN"] },
-    },
-    orderBy: { createdAt: "desc" },
-  });
-
-  let isNewConversation = false;
+  // A Conversation (nova ou já existente) já foi resolvida/criada por
+  // recordInboundInstagramMessage ao gravar a primeira mensagem deste
+  // lote — mesmo id pra todas as mensagens do mesmo lead dentro de um
+  // lote (ver RecordedInboundMessage/InboundInstagramEvent). Busca direta
+  // por id em vez de repetir a busca por leadId+status.
+  const conversation = await prisma.conversation.findUnique({ where: { id: event.conversationId } });
   if (!conversation) {
-    conversation = await prisma.conversation.create({
-      data: { clinicId: clinic.id, leadId: lead.id, status: "NEW" },
-    });
-    isNewConversation = true;
+    console.error(`[vexo] Conversation ${event.conversationId} não encontrada (já tinha sido resolvida ao gravar as mensagens) — abortando processamento da IA.`);
+    return;
   }
 
   // Backfill do histórico ANTERIOR da conversa no Instagram (pedido
@@ -983,7 +1257,7 @@ export async function handleInboundInstagramMessage(
   {
     try {
       const historyItems = await getInstagramConversationHistory(decryptToken(igAccount.accessTokenEnc), igAccount.igUserId, lead.igScopedId);
-      const currentBatchIds = new Set(event.messages.map((m) => m.igMessageId).filter((id): id is string => Boolean(id)));
+      const currentBatchIds = new Set(dedupedMessages.map((m) => m.igMessageId).filter((id): id is string => Boolean(id)));
       const toBackfill = buildHistoryBackfillRows(historyItems, currentBatchIds, conversation.id);
       if (toBackfill.length > 0) {
         const result = await prisma.message.createMany({ data: toBackfill, skipDuplicates: true });
@@ -992,10 +1266,7 @@ export async function handleInboundInstagramMessage(
             `(${toBackfill.length - result.count} ignorada(s) por já existir, via igMessageId).`
         );
       } else if (historyItems.length === 0) {
-        console.log(
-          `[vexo:history-backfill] Nenhum histórico anterior pra gravar — conversation=${conversation.id} lead=${lead.id} ` +
-            `(${isNewConversation ? "primeira conversa deste lead" : "conversa já existente"}).`
-        );
+        console.log(`[vexo:history-backfill] Nenhum histórico anterior pra gravar — conversation=${conversation.id} lead=${lead.id}.`);
       }
     } catch (err) {
       // Mesma rede de segurança do resto desta função (nome/username/foto
@@ -1005,92 +1276,34 @@ export async function handleInboundInstagramMessage(
     }
   }
 
-  // Conversa já escalonada para humano: a IA não retoma sozinha.
+  // Conversa já escalonada para humano: a IA não retoma sozinha. As
+  // mensagens deste lote já foram gravadas por recordInboundInstagramMessage
+  // (inclusive pra uma conversa NEEDS_HUMAN — ver comentário grande dela);
+  // aqui só falta não disparar a classificação/resposta automática.
   if (conversation.status === "NEEDS_HUMAN") {
-    // Captura o id numa const antes do closure do .map() — mesmo motivo de
-    // sempre: `conversation` é `let` (pode ser null antes do bloco acima),
-    // e o TypeScript não carrega o narrowing pra dentro de uma closure.
-    const needsHumanConversationId = conversation.id;
-    await prisma.message.createMany({
-      data: event.messages.map((m, index) => ({
-        conversationId: needsHumanConversationId,
-        direction: "INBOUND" as const,
-        sender: "LEAD" as const,
-        content: m.text,
-        igMessageId: m.igMessageId,
-        sentAt: resolvedBatchTimestamps[index]!.sentAt,
-        createdAt: resolvedBatchTimestamps[index]!.createdAt,
-      })),
-    });
     return;
   }
 
-  const reopeningFromFollowUp = conversation.status === "FOLLOW_UP";
+  // Reengajamento (lead esfriou — voltou de FOLLOW_UP ou ficou calado mais
+  // que o limiar de silêncio — e voltou a interagir) já foi CALCULADO e
+  // APLICADO por recordInboundInstagramMessage no instante em que a
+  // PRIMEIRA mensagem deste lote foi gravada (lastLeadMessageAt/status/
+  // resultPhotoSentAt — ver o campo `reengaged` em RecordedInboundMessage
+  // pro porquê de ler da primeira mensagem, não recalcular aqui): usar o
+  // `conversation` relido agora (já com esses campos atualizados) em vez
+  // de recalcular evita um resultado diferente por essa mensagem já ter
+  // mudado o próprio lastLeadMessageAt que o cálculo usaria como entrada.
+  const reengaged = dedupedMessages[0]!.reengaged;
 
-  // Reengajamento: o lead esfriou (entrou numa sequência de follow-up, OU
-  // simplesmente ficou calado por mais tempo que o limiar de silêncio —
-  // mesmo limiar que dispara o follow-up automático, ver silenceHours em
-  // follow-up.ts, pra não ter dois números diferentes definindo "esfriou")
-  // e voltou a interagir. Isso encerra o "fôlego" anterior da conversa —
-  // resultPhotoSentAt passa a marcar o INÍCIO do fôlego atual (não mais
-  // "já enviei uma foto" — ver canSendResultPhoto/resultPhotoBreathStart,
-  // mais abaixo), liberando a contagem do limite de fotos de resultado pra
-  // recomeçar do zero neste novo fôlego, já que o limite só vale dentro do
-  // mesmo fôlego, não pra vida inteira da conversa.
-  const silenceHours = await getSilenceHours();
-  const wentSilent =
-    Boolean(conversation.lastLeadMessageAt) &&
-    firstResolvedAt.getTime() - conversation.lastLeadMessageAt!.getTime() > silenceHours * 60 * 60 * 1000;
-  const reengaged = reopeningFromFollowUp || wentSilent;
-
-  // Desempate por id (ver resolveBatchTimestamps acima) — ties de createdAt
-  // continuam possíveis entre mensagens de TURNOS diferentes desta mesma
-  // conversa (duas escritas bem próximas podem cair no mesmo instante de
-  // now() do Postgres), não só dentro de um lote do lead. id é gerado no
-  // processo Node (cuid) na mesma ordem de criação, então serve como
-  // desempate estável.
+  // Desempate por id (ver resolveBatchTimestamps, message-batch-timestamps.ts)
+  // — ties de createdAt continuam possíveis entre mensagens de TURNOS
+  // diferentes desta mesma conversa (duas escritas bem próximas podem cair
+  // no mesmo instante de now() do Postgres). id é gerado no processo Node
+  // (cuid) na mesma ordem de criação, então serve como desempate estável.
   const previousAiMessage = await prisma.message.findFirst({
     where: { conversationId: conversation.id, sender: "AI", direction: "OUTBOUND" },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
   });
-
-  // Mesmo motivo de sempre pra capturar numa const antes dos closures do
-  // .map() abaixo — `conversation` é `let` e o TypeScript não carrega o
-  // narrowing (já non-null aqui) pra dentro de uma função aninhada.
-  const activeConversationId = conversation.id;
-  await prisma.$transaction([
-    ...event.messages.map((m, index) =>
-      prisma.message.create({
-        data: {
-          conversationId: activeConversationId,
-          direction: "INBOUND",
-          sender: "LEAD",
-          content: m.text,
-          igMessageId: m.igMessageId,
-          sentAt: resolvedBatchTimestamps[index]!.sentAt,
-          createdAt: resolvedBatchTimestamps[index]!.createdAt,
-        },
-      })
-    ),
-    prisma.conversation.update({
-      where: { id: activeConversationId },
-      data: {
-        lastLeadMessageAt: lastResolvedAt,
-        lastMessageAt: lastResolvedAt,
-        status: conversation.status === "NEW" || reopeningFromFollowUp ? "IN_CONVERSATION" : conversation.status,
-        ...(reengaged ? { resultPhotoSentAt: firstResolvedAt } : {}),
-      },
-    }),
-  ]);
-
-  // Lead respondeu durante uma sequência de follow-up ativa: fecha o(s) log(s)
-  // aberto(s) e cancela qualquer mensagem de follow-up já enfileirada (mas
-  // ainda não enviada de fato) — sem isso, um passo que o worker já tinha
-  // colocado na fila segundos antes ainda sairia mesmo com o lead já tendo
-  // respondido.
-  if (reopeningFromFollowUp) {
-    await cancelPendingFollowUp(conversation.id, lastResolvedAt);
-  }
 
   // Proteção contra loop automático: sem isso, se o "lead" do outro lado
   // for na verdade outra conta comercial (a própria, ou qualquer bot
@@ -1132,11 +1345,6 @@ export async function handleInboundInstagramMessage(
   // Escalonamento compartilhado pelas duas proteções de loop abaixo (contagem
   // e estagnação) — mesmo efeito nos dois casos: pausa a conversa pra revisão
   // humana e avisa a clínica por WhatsApp, só muda o texto do motivo.
-  //
-  // Recebe conversationId em vez de fechar sobre `conversation` (que é `let`
-  // e pode ser `null` antes do bloco acima) — dentro de uma closure como
-  // esta o TypeScript não carrega a checagem de nulo já feita, então captura
-  // o id já validado numa const logo abaixo em vez disso.
   const conversationId = conversation.id;
   async function escalateToHuman(reason: string): Promise<void> {
     await prisma.conversation.update({
@@ -1418,12 +1626,13 @@ export async function handleInboundInstagramMessage(
   // Início do fôlego atual pra contar o limite de fotos de resultado (ver
   // MAX_IMAGES_PER_CONVERSATION, result-photo-message.ts) — null quando a
   // conversa nunca reengajou ainda (conta desde o início dela mesma, só
-  // existiu um fôlego até agora). `conversation.resultPhotoSentAt` em
-  // memória está desatualizado se reengajou NESTE turno (a escrita que o
-  // reseta é a $transaction acima, que não atualiza o objeto local — mesmo
-  // motivo de sempre, ver reengaged) — por isso o `reengaged ?
-  // firstResolvedAt` explícito, igual ao resto do arquivo faz pra esse
-  // mesmo problema.
+  // existiu um fôlego até agora). `conversation.resultPhotoSentAt` já vem
+  // ATUALIZADO aqui (lido fresco do banco, depois de
+  // recordInboundInstagramMessage já ter gravado o reset no reengajamento
+  // desta mensagem — ver comentário grande dela) — o `reengaged ?
+  // firstResolvedAt` é redundante com esse valor por construção (quando
+  // reengaged, firstResolvedAt É o sentAt que foi gravado ali), mantido
+  // explícito só por clareza/robustez, não por necessidade.
   const resultPhotoBreathStart = reengaged ? firstResolvedAt : conversation.resultPhotoSentAt;
   const resultPhotosSentThisBreath = await prisma.message.findMany({
     where: {
@@ -1460,7 +1669,7 @@ export async function handleInboundInstagramMessage(
   // mantém a regra (nunca manda pra quem só disse "oi"), mas deixa de
   // tratar como "lead frio" um lote que já cita um procedimento CADASTRADO
   // — ver textMentionsRegisteredCategory, result-photo-message.ts.
-  const leadBatchText = event.messages.map((m) => m.text).join("\n");
+  const leadBatchText = dedupedMessages.map((m) => m.text).join("\n");
   const batchMentionsRegisteredProcedure = textMentionsRegisteredCategory(
     leadBatchText,
     clinicResultPhotos.map((p) => p.category)
@@ -1604,9 +1813,9 @@ export async function handleInboundInstagramMessage(
   // mesmo quando a conversa antiga foi marcada "Perdido" e esta aqui é
   // uma Conversation NOVA (ver a busca por status lá no topo desta
   // função) — o vínculo que sobra é só o Lead. Reaproveita `reengaged`
-  // (calculado bem acima, reopeningFromFollowUp || wentSilent) — mesmo
-  // sinal já usado pra decidir reengajamento em outro lugar, sem duplicar
-  // lógica nova de "o lead voltou depois de um intervalo". Ver
+  // (lido da primeira mensagem do lote, ver comentário grande acima) —
+  // mesmo sinal já usado pra decidir reengajamento em outro lugar, sem
+  // duplicar lógica nova de "o lead voltou depois de um intervalo". Ver
   // returning-patient-context.ts pro porquê e pros critérios exatos de
   // "já foi atendido".
   const leadPastAppointments = await prisma.appointment.findMany({
@@ -2285,7 +2494,7 @@ export async function handleInboundInstagramMessage(
       // gate de scheduleAppointment, acima, pro bug real que motivou isso
       // nunca poder confiar em Lead.phone bruto (entre conversas/contas).
       prisma.conversation.update({
-        where: { id: activeConversationId },
+        where: { id: conversation.id },
         data: { leadPhoneConfirmedAt: new Date() },
       }),
     ]);

@@ -103,3 +103,32 @@ describe("selectMessagesAfterCursor — caso do cursor (mensagem criada ANTES do
     expect(result).toEqual([first, second]);
   });
 });
+
+// O bug real do lado de ENTRADA que esta mudança resolve (ver comentário
+// grande em messageVisibleAt, acima, e recordInboundInstagramMessage em
+// conversation-pipeline.ts): a Meta pode demorar pra entregar um webhook —
+// o timestamp QUE ELA REPORTA (sentAt) pode ser mais antigo que o cursor
+// atual da tela, mesmo que a mensagem só tenha sido gravada no VEXO agora.
+// Com createdAt = instante REAL da gravação (nunca o timestamp reportado,
+// pra mensagem AO VIVO — ver recordInboundInstagramMessage), a mensagem
+// aparece no próximo polling mesmo assim — sem isso (se createdAt fosse o
+// timestamp reportado pela Meta), ela ficaria escondida até a página ser
+// recarregada, exatamente o mesmo bug de cursor já corrigido do lado de
+// SAÍDA, acima.
+describe("messageVisibleAt + selectMessagesAfterCursor — caso do cursor do lado de ENTRADA (mensagem do lead entregue atrasada pela Meta)", () => {
+  it("mensagem do lead com sentAt (reportado pela Meta) ANTERIOR ao cursor, mas gravada (createdAt) DEPOIS: aparece no polling", () => {
+    const cursorAt = new Date("2026-01-01T10:00:05.000Z"); // cursor avançou com a resposta da IA, sentAt=10:00:05
+    const metaReportedSentAt = new Date("2026-01-01T10:00:00.000Z"); // Meta demorou a entregar; timestamp reportado é ANTES do cursor
+    const realWriteInstant = new Date("2026-01-01T10:00:08.000Z"); // mas só chegou (e foi gravada) depois
+
+    const visibleAt = messageVisibleAt({
+      direction: "INBOUND",
+      sentAt: metaReportedSentAt,
+      createdAt: realWriteInstant,
+      updatedAt: realWriteInstant,
+    });
+
+    const result = selectMessagesAfterCursor([{ id: "msg-lead", visibleAt }], cursorAt, "cursor-id");
+    expect(result).toEqual([{ id: "msg-lead", visibleAt: realWriteInstant }]);
+  });
+});

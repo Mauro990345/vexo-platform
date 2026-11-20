@@ -13,12 +13,27 @@
 // nenhum item novo é que o lote acumulado até ali dispara o callback, UMA
 // vez, com todos os itens em ordem de chegada. Em memória, por processo —
 // mesma limitação já documentada em conversation-lock.ts: não sobrevive a
-// um crash/redeploy no meio da janela (o item já foi perdido daqui, mas
-// ver uso em route.ts — cada mensagem do Instagram é gravada no banco
-// ANTES de entrar neste buffer, então o pior caso é a resposta da IA
-// atrasar até a próxima mensagem do lead, nunca o texto dele se perder) e
-// não escala pra múltiplas réplicas do serviço web sem virar uma fila
-// distribuída (ex.: Redis) no lugar deste.
+// um crash/redeploy no meio da janela. Isso já NÃO significa perder o
+// texto do lead: ver recordInboundInstagramMessage (chamada em route.ts,
+// ANTES de qualquer item entrar neste buffer, awaited na própria
+// requisição do webhook) — cada mensagem do Instagram já está gravada no
+// banco, e já visível no CRM, antes mesmo de chegar aqui. O que SIM se
+// perde num crash no meio da janela é só o AGRUPAMENTO (o item some deste
+// Map em memória) — o pior caso passa a ser o lote nunca fechar e a IA
+// nunca processar (nem responder) aquelas mensagens, nunca o lead ficar
+// sem ver sua própria mensagem aparecer no CRM. NÃO HÁ hoje nenhuma
+// varredura/retry que detecte e retome uma conversa assim, parada pra
+// sempre sem resposta (procurado em src/worker/index.ts — só existem crons
+// de follow-up por SILÊNCIO do lead, situação contrária: aqui o lead FALOU
+// e não foi respondido). O que já existia ANTES desta mudança (não é
+// regressão) e mitiga parcialmente: a PRÓXIMA mensagem do mesmo lead, se
+// vier, dispara handleInboundInstagramMessage de novo, que relê o
+// histórico INTEIRO do banco (toda mensagem já gravada, inclusive a que
+// ficou sem resposta) — a IA tende a responder as duas juntas nesse caso.
+// Mas se o lead nunca mandar outra mensagem, a conversa fica sem resposta
+// pra sempre, sem nenhum alerta. Também não escala pra múltiplas
+// réplicas do serviço web sem virar uma fila distribuída (ex.: Redis) no
+// lugar deste.
 //
 // Bug real reportado: duas mensagens do lead mandadas com ~4s de
 // intervalo (bem dentro da janela) mesmo assim geraram DUAS respostas
