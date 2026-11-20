@@ -2,13 +2,24 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { messageVisibleAt, selectMessagesAfterCursor } from "@/lib/message-visibility";
 
 // Busca leve usada pelo polling da tela de conversa (ConversationMessages,
 // a cada 3-4s): só as mensagens MAIS NOVAS que o último par
-// (afterCreatedAt, afterId) que o cliente já tem — nunca a conversa
-// inteira. O desempate por id replica exatamente o orderBy [createdAt asc,
-// id asc] usado na primeira carga (ver comentário em conversas/[id]/page.tsx
-// sobre mensagens do mesmo lote empatadas em createdAt).
+// (afterVisibleAt, afterId) que o cliente já tem — nunca a conversa
+// inteira. PENDING/SENDING nunca são devolvidas (a resposta da IA só
+// aparece depois de enviada de verdade, ver message-visibility.ts).
+//
+// O cursor é pelo instante em que a mensagem FICOU VISÍVEL (sentAt pra
+// saída, createdAt pra entrada), não createdAt puro — uma resposta criada
+// PENDING minutos atrás (antes do cursor atual já ter avançado por causa
+// de uma mensagem do lead nesse meio-tempo) só fica visível quando sai de
+// verdade, e precisa continuar aparecendo nesse momento, não só num F5.
+// A query abaixo já restringe pelas colunas reais de cada caso (sentAt
+// pras de saída, updatedAt pras que falharam sem nunca ter saído,
+// createdAt pras de entrada) — filtro exato (com o desempate por id) é
+// refeito em memória sobre esse conjunto já pequeno, nunca a conversa
+// inteira.
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
   const session = await getServerSession(authOptions);
   const isInternalUser = session?.user.role === "INTERNAL_ADMIN" || session?.user.role === "INTERNAL_STAFF";
@@ -33,23 +44,44 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     }
   }
 
-  const afterCreatedAtRaw = request.nextUrl.searchParams.get("afterCreatedAt");
+  const afterVisibleAtRaw = request.nextUrl.searchParams.get("afterVisibleAt");
   const afterId = request.nextUrl.searchParams.get("afterId");
-  if (!afterCreatedAtRaw || !afterId) {
-    return NextResponse.json({ error: "afterCreatedAt e afterId são obrigatórios" }, { status: 400 });
+  if (!afterVisibleAtRaw || !afterId) {
+    return NextResponse.json({ error: "afterVisibleAt e afterId são obrigatórios" }, { status: 400 });
   }
-  const afterCreatedAt = new Date(afterCreatedAtRaw);
-  if (Number.isNaN(afterCreatedAt.getTime())) {
-    return NextResponse.json({ error: "afterCreatedAt inválido" }, { status: 400 });
+  const afterVisibleAt = new Date(afterVisibleAtRaw);
+  if (Number.isNaN(afterVisibleAt.getTime())) {
+    return NextResponse.json({ error: "afterVisibleAt inválido" }, { status: 400 });
   }
 
-  const messages = await prisma.message.findMany({
+  const candidates = await prisma.message.findMany({
     where: {
       conversationId: params.id,
-      OR: [{ createdAt: { gt: afterCreatedAt } }, { createdAt: afterCreatedAt, id: { gt: afterId } }],
+      status: { in: ["SENT", "FAILED"] },
+      OR: [
+        { direction: "INBOUND", createdAt: { gt: afterVisibleAt } },
+        { direction: "OUTBOUND", sentAt: { gt: afterVisibleAt } },
+        { direction: "OUTBOUND", sentAt: null, updatedAt: { gt: afterVisibleAt } },
+      ],
     },
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
   });
 
-  return NextResponse.json({ messages });
+  const fresh = selectMessagesAfterCursor(
+    candidates.map((m) => ({ ...m, visibleAt: messageVisibleAt(m) })),
+    afterVisibleAt,
+    afterId
+  );
+
+  return NextResponse.json({
+    messages: fresh.map((m) => ({
+      id: m.id,
+      direction: m.direction,
+      sender: m.sender,
+      content: m.content,
+      mediaUrl: m.mediaUrl,
+      status: m.status,
+      visibleAt: m.visibleAt.toISOString(),
+    })),
+  });
 }

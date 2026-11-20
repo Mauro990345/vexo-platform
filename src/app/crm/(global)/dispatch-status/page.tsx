@@ -12,13 +12,15 @@ export const dynamic = "force-dynamic";
 // próprio no Railway, ver README > Deploy) — não dentro do processo web.
 // Se esse serviço não existir, estiver com o start command errado, ou
 // tiver caído, TODA mensagem da IA fica presa em PENDING pra sempre: ela
-// aparece salva normalmente na tela da conversa (rótulo "· agendada"),
-// mas nunca sai de fato pro Instagram, sem nenhum erro em lugar nenhum —
-// dispatchDueMessages nem chega a rodar pra tentar e falhar. Essa página
-// dá pra confirmar isso pela própria interface do VEXO: mensagem PENDING
-// com scheduledFor bem no passado é sinal direto de worker parado (ele
-// roda a cada 15s; passar disso por uma margem confortável não é
-// atraso normal, é o processo não estar rodando).
+// NUNCA aparece na tela da conversa (ver message-visibility.ts — PENDING/
+// SENDING ficam escondidas lá, de propósito, pra não mostrar uma resposta
+// antes dela ter saído de verdade pro Instagram) e nunca sai de fato, sem
+// nenhum erro em lugar nenhum — dispatchDueMessages nem chega a rodar pra
+// tentar e falhar. Esta página do Status é o único jeito de ver isso pela
+// própria interface do VEXO: mensagem PENDING com scheduledFor bem no
+// passado é sinal direto de worker parado (ele roda a cada 15s; passar
+// disso por uma margem confortável não é atraso normal, é o processo não
+// estar rodando).
 const STUCK_THRESHOLD_MS = 2 * 60 * 1000; // 2 minutos de folga sobre o ciclo de 15s do worker
 
 export default async function DispatchStatusPage() {

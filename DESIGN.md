@@ -1115,7 +1115,7 @@ que a tela Configurações sobrescreve. Nunca "M8 Growth" nessas páginas.
 - **Mensagens novas entram sozinhas, a cada ~3.5s, sem recarregar a página**: a lista de
   mensagens é um Client Component (`ConversationMessages`) que faz polling leve — busca só o que
   é mais novo que a última mensagem já exibida (nunca a conversa inteira), via
-  `/api/conversas/[id]/mensagens?afterCreatedAt=...&afterId=...`. Visual idêntico ao de antes
+  `/api/conversas/[id]/mensagens?afterVisibleAt=...&afterId=...`. Visual idêntico ao de antes
   (mesma marcação dos balões) — só a origem dos dados virou dinâmica.
 - **Nunca pula a rolagem de quem está lendo mensagens antigas**: só rola pro fim quando o
   operador já estava a ≤64px do fim da página no momento em que a mensagem nova chega
@@ -1153,6 +1153,40 @@ que a tela Configurações sobrescreve. Nunca "M8 Growth" nessas páginas.
 - **Responsivo**: validado em 390px e 1366px via Playwright (Tailwind compilado) em
   `page.layout.test.ts` — sem rolagem horizontal, nenhum balão estourando a própria caixa, balão
   nunca passando de ~70% da largura útil da conversa, aside ≤240px no notebook.
+
+### Conversa — rodada 3 (a resposta da IA só aparece depois de enviada de verdade)
+
+Problema real: a resposta da IA é gravada como PENDING (esperando o atraso adaptativo, 5-60s) e
+JÁ aparecia na conversa na hora, com a marca "· agendada" — só saindo de fato pro Instagram minutos
+depois, quando o cron de despacho roda. No vídeo de revisão da Meta isso parece dessincronizado
+(a mensagem "chega" no VEXO antes de chegar no Instagram do lead). O atraso em si não mudou — só
+quando a mensagem passa a APARECER.
+
+- **A marca "· agendada" foi removida de verdade** (não escondida por CSS) — junto de todo campo/
+  tipo que só existia por causa dela (`MessageDTO.status` não inclui mais `"PENDING"`/`"SENDING"`,
+  `MessageDTO.sentAt`/`createdAt` separados viraram um único `visibleAt`).
+- **PENDING e SENDING nunca aparecem** — nem na carga inicial (`conversas/[id]/page.tsx`), nem no
+  polling (`/api/conversas/[id]/mensagens`): os dois filtram `status IN (SENT, FAILED)` na própria
+  query ao banco. SENT aparece normalmente; FAILED continua aparecendo, com "· falhou". Mensagens
+  do lead (entrada) continuam aparecendo na hora, sem nenhuma mudança. Vale pra Admin, Equipe e
+  Revisor — sem regra especial por papel.
+- **O cursor do polling e a ordem da conversa usam `visibleAt`, não `createdAt`** (ver
+  `src/lib/message-visibility.ts`, `messageVisibleAt`): entrada usa `createdAt` (sempre visível
+  desde que chega); saída usa `sentAt` (o instante em que `dispatchOneMessage`, `dispatch.ts`,
+  marca SENT) — ou `updatedAt` pra uma que FALHOU (nunca chega a ter `sentAt`; `updatedAt` é o
+  instante exato da própria falha, a única escrita que muda o status pra FAILED). Isto resolve o
+  bug de cursor que esconder PENDING/SENDING introduziria sem essa mudança: uma resposta criada em
+  T0 (escondida), com o lead mandando outra mensagem em T0+2s (o cursor avança) e a resposta só
+  saindo em T0+10s (createdAt=T0, ANTES do cursor) — sem usar `visibleAt`, o polling nunca traria
+  essa mensagem (só apareceria num F5). Com `sentAt` (T0+10s, DEPOIS do cursor) como `visibleAt`,
+  ela aparece no próximo polling, na hora certa.
+- **Nenhuma mudança em `dispatch.ts`/`conversation-pipeline.ts`/migration**: toda mensagem de saída
+  SENT já preenche `sentAt` no mesmo instante da transição (auditado em `dispatch.ts`,
+  `reminders.ts` e no backfill de histórico, `conversation-pipeline.ts`) — a correção é só nos 2
+  pontos de LEITURA (página + polling), nunca em quem grava.
+- **Pipeline já estava alinhado, sem precisar de nenhuma mudança**: `Conversation.lastMessageAt`
+  (usado pra ordenar/exibir o card no board) só é atualizado na transição SENT (`dispatch.ts`),
+  nunca na criação PENDING — confirmado por auditoria, não corrigido, porque já estava certo.
 
 ## Login "Revisor" (App Review da Meta) — somente leitura, lista fixa de telas
 

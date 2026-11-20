@@ -22,16 +22,16 @@ describe("shouldPoll", () => {
 describe("nextPollCursor", () => {
   it("sem mensagem nenhuma, usa um cursor que qualquer mensagem real passa", () => {
     const cursor = nextPollCursor([]);
-    expect(cursor.afterCreatedAt).toBe(new Date(0).toISOString());
+    expect(cursor.afterVisibleAt).toBe(new Date(0).toISOString());
     expect(cursor.afterId).toBe("");
   });
 
-  it("usa createdAt/id da ÚLTIMA mensagem, não da primeira", () => {
+  it("usa visibleAt/id da ÚLTIMA mensagem, não da primeira", () => {
     const cursor = nextPollCursor([
-      { id: "a", createdAt: "2026-01-01T00:00:00.000Z" },
-      { id: "b", createdAt: "2026-01-02T00:00:00.000Z" },
+      { id: "a", visibleAt: "2026-01-01T00:00:00.000Z" },
+      { id: "b", visibleAt: "2026-01-02T00:00:00.000Z" },
     ]);
-    expect(cursor).toEqual({ afterCreatedAt: "2026-01-02T00:00:00.000Z", afterId: "b" });
+    expect(cursor).toEqual({ afterVisibleAt: "2026-01-02T00:00:00.000Z", afterId: "b" });
   });
 });
 

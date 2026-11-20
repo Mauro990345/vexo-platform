@@ -9,9 +9,12 @@ type MessageDTO = {
   sender: "LEAD" | "AI" | "HUMAN" | "SYSTEM";
   content: string;
   mediaUrl: string | null;
-  status: "PENDING" | "SENDING" | "SENT" | "FAILED";
-  sentAt: string | null;
-  createdAt: string;
+  // PENDING/SENDING nunca chegam até aqui — filtradas tanto na carga
+  // inicial (conversas/[id]/page.tsx) quanto no polling (mensagens/
+  // route.ts), ver src/lib/message-visibility.ts: a resposta da IA só
+  // aparece depois de enviada de verdade (SENT), nunca antes.
+  status: "SENT" | "FAILED";
+  visibleAt: string;
 };
 
 const POLL_INTERVAL_MS = 3500;
@@ -47,8 +50,8 @@ function MessageBubble({ m }: { m: MessageDTO }) {
         {m.mediaUrl ? <p className="italic opacity-80">{m.content}</p> : <p>{m.content}</p>}
         <p className="mt-0.5 text-caption opacity-60">
           {m.sender === "AI" ? "IA" : m.sender === "HUMAN" ? "Humano" : m.sender === "SYSTEM" ? "Sistema" : "Lead"} ·{" "}
-          {formatMessageTime(m.sentAt ?? m.createdAt)}
-          {m.status === "PENDING" ? " · agendada" : m.status === "FAILED" ? " · falhou" : ""}
+          {formatMessageTime(m.visibleAt)}
+          {m.status === "FAILED" ? " · falhou" : ""}
         </p>
       </div>
     </div>
@@ -79,10 +82,10 @@ export function ConversationMessages({
     isFetchingRef.current = true;
     try {
       const current = messagesRef.current;
-      const { afterCreatedAt, afterId } = nextPollCursor(current);
+      const { afterVisibleAt, afterId } = nextPollCursor(current);
 
       const res = await fetch(
-        `/api/conversas/${conversationId}/mensagens?afterCreatedAt=${encodeURIComponent(afterCreatedAt)}&afterId=${encodeURIComponent(afterId)}`,
+        `/api/conversas/${conversationId}/mensagens?afterVisibleAt=${encodeURIComponent(afterVisibleAt)}&afterId=${encodeURIComponent(afterId)}`,
         { cache: "no-store" }
       );
       if (!res.ok) return;

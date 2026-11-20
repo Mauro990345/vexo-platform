@@ -3,7 +3,11 @@
 // real (este repo não tem infra de teste de componente, só node puro —
 // ver vitest.config.ts). O componente em si só chama estas funções.
 
-export type PollableMessage = { id: string; createdAt: string };
+// visibleAt (não createdAt) — o instante em que a mensagem passa a
+// aparecer na conversa, ver src/lib/message-visibility.ts. Precisa ser
+// isso, não o horário de criação, porque uma resposta da IA é criada
+// PENDING e só fica visível minutos depois, quando sai de verdade.
+export type PollableMessage = { id: string; visibleAt: string };
 
 // Decide se o próximo tick do setInterval deve de fato buscar mensagens
 // novas. Nunca dispara com a aba escondida (pausa o polling) e nunca
@@ -13,14 +17,14 @@ export function shouldPoll(visibilityState: DocumentVisibilityState, isFetching:
   return visibilityState === "visible" && !isFetching;
 }
 
-// Cursor (afterCreatedAt/afterId) da busca: mensagens estritamente depois
+// Cursor (afterVisibleAt/afterId) da busca: mensagens estritamente depois
 // da última já exibida. Sem mensagem nenhuma ainda, usa um cursor que
-// qualquer mensagem real passa (createdAt=epoch, id="" — menor que
+// qualquer mensagem real passa (visibleAt=epoch, id="" — menor que
 // qualquer cuid).
-export function nextPollCursor(messages: PollableMessage[]): { afterCreatedAt: string; afterId: string } {
+export function nextPollCursor(messages: PollableMessage[]): { afterVisibleAt: string; afterId: string } {
   const last = messages[messages.length - 1];
   return {
-    afterCreatedAt: last ? last.createdAt : new Date(0).toISOString(),
+    afterVisibleAt: last ? last.visibleAt : new Date(0).toISOString(),
     afterId: last ? last.id : "",
   };
 }
