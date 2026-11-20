@@ -1188,6 +1188,30 @@ quando a mensagem passa a APARECER.
   (usado pra ordenar/exibir o card no board) só é atualizado na transição SENT (`dispatch.ts`),
   nunca na criação PENDING — confirmado por auditoria, não corrigido, porque já estava certo.
 
+### Conversa — rodada 4 (a confirmação de agendamento por WhatsApp nunca aparece como bolha)
+
+Problema real: a confirmação imediata de agendamento (`formatAppointmentConfirmationMessage`,
+`Message.channel = "WHATSAPP"`, ver `maybeSendWhatsappConfirmation`) aparecia na conversa do
+Instagram como se fosse uma bolha dela — colada na pergunta de presença da IA, inclusive
+mostrando "· falhou" quando o envio por WhatsApp falhava. O lead não precisa ver por onde a
+confirmação foi mandada.
+
+- **`channel = "WHATSAPP"` nunca aparece na conversa** — mesmos dois pontos de leitura de sempre
+  (`conversas/[id]/page.tsx` e `/api/conversas/[id]/mensagens`), mesma técnica da rodada 3: filtra
+  `channel IN (INSTAGRAM)` na própria query ao banco, nunca em memória. Vale pra Admin, Equipe e
+  Revisor — sem regra especial por papel. Mensagem de WhatsApp escondida nunca é candidata, então
+  nunca pode mover o cursor do polling.
+- **Status/Nenhuma mudança em `dispatch.ts`**: a Message em si (envio, status, falha) continua
+  gravada exatamente como hoje — a tela Status da clínica (`crm/clinicas/[id]/status/page.tsx`)
+  lê `Message` sem filtrar por canal de propósito, pra continuar mostrando falhas de WhatsApp.
+- **`VISIBLE_MESSAGE_STATUSES`/`VISIBLE_MESSAGE_CHANNELS` (`message-visibility.ts`)**: os dois
+  arrays que os dois pontos de leitura usam agora pro `where` do Prisma — nunca mais um literal
+  `["SENT", "FAILED"]`/`["INSTAGRAM"]` duplicado em cada arquivo, pra nunca divergirem.
+- **Lembretes de véspera (`reminders.ts`) continuam de fora desta regra, sem precisar de nenhuma
+  mudança**: já são sempre `channel = "INSTAGRAM"` hoje (regra de produto: "o WhatsApp da clínica
+  serve só pra confirmação de agendamento, nunca pra lembrete") — confirmado por auditoria, nunca
+  ficam escondidos.
+
 ## Login "Revisor" (App Review da Meta) — somente leitura, lista fixa de telas
 
 Papel novo de usuário (`UserRole.REVIEWER`) pensado só pra entregar um acesso de demonstração
@@ -1312,6 +1336,15 @@ sua própria caixinha "Enviar", na aba "Prompt de conversação da IA" > "Config
   final está marcada E a sequência vai disparar neste turno (`shouldSuppressAiFarewell`,
   `conversation-pipeline.ts`) — nunca em `Clinic.aiSystemPrompt` nem no prompt padrão. Com a
   final desmarcada, a IA se despede normalmente, mesmo que vídeo/cafezinho ainda disparem.
+- **Bug real corrigido (rodada 2)**: com a sequência inteira desligada (as 4 caixinhas
+  desmarcadas, ou sem vídeo cadastrado), a IA simplesmente não ficava sabendo que o lead tinha
+  acabado de confirmar presença — respondia qualquer coisa sem sentido a um "sim, claro."
+  (ex.: "Por nada."). `buildAttendanceConfirmedContext` (`conversation-pipeline.ts`) agora SEMPRE
+  injeta um aviso quando o lead confirma presença (mesma condição de sempre,
+  `pendingAttendanceCheck?.decision === "NAO_REMARCA"`, nunca uma segunda detecção): o aviso sem
+  despedida de cima quando `shouldSuppressAiFarewell` é `true`, ou um aviso novo permitindo a IA
+  se despedir normalmente quando nada mais vai sair depois. Mesma regra de sempre: só instrução
+  interna, nunca `Clinic.aiSystemPrompt` nem o prompt padrão.
 - **Clínica já existente preserva o comportamento de hoje** (migration
   `20261120000000_attendance_sequence_item_toggles`): as 4 caixinhas nascem `true` (comportamento
   de sequência completa) pra quem JÁ TEM vídeo cadastrado; `false` nas 4 pra quem NÃO tem (hoje

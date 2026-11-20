@@ -88,11 +88,19 @@ async function renderConversationHtml(): Promise<string> {
   return renderToStaticMarkup(createElement("div", null, element));
 }
 
-describe("Conversa — a query ao banco já esconde PENDING/SENDING", () => {
+describe("Conversa — a query ao banco já esconde PENDING/SENDING e mensagens de WhatsApp", () => {
   it("messages.where pede só status SENT/FAILED", async () => {
     await renderConversationHtml();
     const args = findUniqueMock.mock.calls.at(-1)![0] as { include: { messages: { where: { status: { in: string[] } } } } };
     expect(args.include.messages.where.status).toEqual({ in: ["SENT", "FAILED"] });
+  });
+
+  // Bug real reportado: a confirmação de agendamento por WhatsApp
+  // aparecia na conversa como se fosse uma bolha do Instagram.
+  it("messages.where pede só channel INSTAGRAM — mensagem de WhatsApp nunca sai do banco pra esta tela", async () => {
+    await renderConversationHtml();
+    const args = findUniqueMock.mock.calls.at(-1)![0] as { include: { messages: { where: { channel: { in: string[] } } } } };
+    expect(args.include.messages.where.channel).toEqual({ in: ["INSTAGRAM"] });
   });
 });
 

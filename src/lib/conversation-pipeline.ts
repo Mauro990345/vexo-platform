@@ -441,6 +441,52 @@ export function shouldSuppressAiFarewell(
   return buildAttendanceSequenceItems(flags, hasVideoFile).includes("final");
 }
 
+// Instrução interna (nunca Clinic.aiSystemPrompt nem o prompt padrão) pra
+// avisar a IA que o lead ACABOU de confirmar presença — usada em
+// attendanceConfirmedContext, handleInboundInstagramMessage. Reaproveita a
+// MESMA condição de "o lead confirmou" que shouldSuppressAiFarewell já usa
+// (decision === "NAO_REMARCA"), nunca uma segunda detecção.
+//
+// Bug real corrigido: com a sequência de confirmação de presença
+// desligada (as 4 caixinhas da PR #252 desmarcadas, ou sem vídeo
+// cadastrado — ver buildAttendanceSequenceItems), nenhum aviso chegava à
+// IA, que respondia qualquer coisa sem sentido a um "sim, claro." (ex.:
+// "Por nada."). Dois avisos possíveis, nunca os dois juntos:
+//
+// - sequência VAI mandar a frase final (willSuppressFarewell=true, ver
+//   shouldSuppressAiFarewell): a IA não pode se despedir, pra não
+//   duplicar a despedida que o sistema já vai mandar separadamente.
+// - lead confirmou, mas NADA mais vai sair depois (sequência desligada,
+//   caixinha da final desmarcada, ou sem vídeo): a IA PODE (e deve) se
+//   despedir ela mesma neste turno — sem este aviso, ela nem saberia que
+//   o lead tinha confirmado.
+export function buildAttendanceConfirmedContext(
+  decision: AttendanceReplyDecision | undefined,
+  flags: { introEnabled: boolean; videoEnabled: boolean; tipEnabled: boolean; finalEnabled: boolean },
+  hasVideoFile: boolean
+): string | null {
+  if (decision !== "NAO_REMARCA") return null;
+
+  if (shouldSuppressAiFarewell(decision, flags, hasVideoFile)) {
+    return (
+      `[O lead acabou de confirmar presença. Responda de forma breve e natural (ex.: ` +
+      `agradecendo, confirmando que anotou) — mas NÃO inclua nenhuma despedida ou frase de ` +
+      `encerramento (ex.: "até amanhã", "até mais", "nos vemos", "até sexta"): o sistema vai ` +
+      `enviar uma mensagem de encerramento separada automaticamente. Se o lead tiver dito mais ` +
+      `alguma coisa junto da confirmação (uma pergunta, um aviso — ex.: "vou chegar atrasada"), ` +
+      `responda essa parte normalmente.]`
+    );
+  }
+
+  return (
+    `[O lead acabou de confirmar presença. Responda de forma breve e natural, confirmando ` +
+    `que anotou (ex.: "te esperamos sábado às 9h") e pode se despedir normalmente — nenhuma ` +
+    `outra mensagem automática vai sair depois desta. Não pergunte de novo se ele vai ` +
+    `comparecer. Se o lead tiver dito mais alguma coisa junto da confirmação (uma pergunta, ` +
+    `um aviso — ex.: "vou chegar atrasada"), responda essa parte normalmente.]`
+  );
+}
+
 // Conteúdo de texto de um item da sequência — "video" não tem texto
 // próprio (vai como mídia pura, ver mediaUrl no caller); os outros 3 usam
 // o texto já resolvido (com o default aplicado quando o campo da clínica
@@ -1838,23 +1884,17 @@ export async function handleInboundInstagramMessage(
     reengaged,
   });
 
-  // Só existe quando pendingAttendanceCheck (acima, calculado ANTES desta
-  // chamada) classificou a resposta deste turno como NAO_REMARCA (ou seja,
-  // a sequência de confirmação de presença vai disparar no fim deste
-  // mesmo turno, ver applyAttendanceReplyDecision, mais abaixo) E a
-  // mensagem FINAL dessa sequência está marcada pra sair (ver
-  // Clinic.attendanceFinalEnabled/buildAttendanceSequenceItems — com ela
-  // desmarcada, a sequência pode disparar só com vídeo/cafezinho, ou nem
-  // disparar, mas nenhum dos dois casos manda nenhuma frase de
-  // encerramento, então a IA tem que se despedir normalmente). Pedido
-  // explícito: a IA não pode escrever sua própria despedida só quando o
-  // código VAI mandar a frase final, pra não duplicar. Ajuste só de
-  // instrução interna (este bloco) — nunca em Clinic.aiSystemPrompt nem no
-  // prompt padrão; e não descarta reply.text (ver decisão grande nesta
-  // mesma investigação) — a IA continua respondendo normalmente a
-  // qualquer outra coisa que o lead tenha dito junto da confirmação, só
-  // sem a despedida.
-  const attendanceSequenceWillFire = shouldSuppressAiFarewell(
+  // attendanceConfirmedContext: ver comentário grande de
+  // buildAttendanceConfirmedContext, acima — dois avisos possíveis
+  // (sequência vai mandar a frase final -> sem despedida própria da IA;
+  // lead confirmou mas nada mais vai sair -> IA pode se despedir), nunca
+  // os dois juntos, nunca nenhum fora de pendingAttendanceCheck?.decision
+  // === "NAO_REMARCA". Ajuste só de instrução interna — nunca em
+  // Clinic.aiSystemPrompt nem no prompt padrão; e não descarta reply.text
+  // (ver decisão grande nesta mesma investigação) — a IA continua
+  // respondendo normalmente a qualquer outra coisa que o lead tenha dito
+  // junto da confirmação.
+  const attendanceConfirmedContext = buildAttendanceConfirmedContext(
     pendingAttendanceCheck?.decision,
     {
       introEnabled: clinic.confirmationVideoCaptionEnabled,
@@ -1864,15 +1904,6 @@ export async function handleInboundInstagramMessage(
     },
     Boolean(clinic.confirmationVideoUrl)
   );
-  const attendanceConfirmedContext =
-    attendanceSequenceWillFire
-      ? `[O lead acabou de confirmar presença. Responda de forma breve e natural (ex.: ` +
-        `agradecendo, confirmando que anotou) — mas NÃO inclua nenhuma despedida ou frase de ` +
-        `encerramento (ex.: "até amanhã", "até mais", "nos vemos", "até sexta"): o sistema vai ` +
-        `enviar uma mensagem de encerramento separada automaticamente. Se o lead tiver dito mais ` +
-        `alguma coisa junto da confirmação (uma pergunta, um aviso — ex.: "vou chegar atrasada"), ` +
-        `responda essa parte normalmente.]`
-      : null;
 
   // Só existe quando wantsHumanWithClinicWhatsapp (calculado bem acima,
   // junto de signal.needsHuman) for true nesse turno — lead pediu humano E

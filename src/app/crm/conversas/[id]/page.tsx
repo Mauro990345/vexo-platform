@@ -8,7 +8,7 @@ import { AppointmentStatusBadge } from "@/components/AppointmentStatusBadge";
 import { normalizeBrazilianWhatsappNumber } from "@/lib/whatsapp";
 import { setConversationStatus, sendHumanReply } from "../../clinicas/actions";
 import { ConversationMessages } from "@/components/ConversationMessages";
-import { messageVisibleAt, compareByVisibleAt } from "@/lib/message-visibility";
+import { messageVisibleAt, compareByVisibleAt, VISIBLE_MESSAGE_STATUSES, VISIBLE_MESSAGE_CHANNELS } from "@/lib/message-visibility";
 
 export const dynamic = "force-dynamic";
 
@@ -21,9 +21,14 @@ export default async function ConversationDetailPage({ params }: { params: { id:
       // PENDING/SENDING nunca aparecem (ver message-visibility.ts): a
       // resposta da IA só entra na conversa depois de SAIR de verdade, não
       // quando é gravada (minutos antes, por causa do atraso adaptativo).
+      // channel WHATSAPP (confirmação de agendamento) também nunca
+      // aparece aqui — mesmo motivo, ver VISIBLE_MESSAGE_CHANNELS.
       // orderBy aqui é só uma base estável pra sair do banco — a ordem
       // REAL (por visibleAt, não createdAt) é recalculada abaixo.
-      messages: { where: { status: { in: ["SENT", "FAILED"] } }, orderBy: [{ createdAt: "asc" }, { id: "asc" }] },
+      messages: {
+        where: { status: { in: [...VISIBLE_MESSAGE_STATUSES] }, channel: { in: [...VISIBLE_MESSAGE_CHANNELS] } },
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      },
       appointments: { orderBy: { scheduledAt: "desc" }, take: 1 },
     },
   });
