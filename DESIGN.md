@@ -1471,3 +1471,27 @@ mesmo tempo, um geral e um por clínica.
   abre a URL direto; o caminho normal agora é pelo "Status" do menu global (com o badge de
   falhas).
 - `buildReviewerNavGroups` nunca teve esse grupo (lista fixa, só 3 itens) — nada mudou ali.
+
+### Menu global — rodada 3 (o "Status" por clínica voltou, com os dois links coexistindo)
+
+Na prática, ter só o link global forçava sair da clínica (clicar "Contas") toda vez pra checar e
+resolver uma falha dela — o custo de remover o duplicado (rodada 2) acabou maior que o ganho. O
+grupo "Status" voltou pra `buildClinicNavGroups`, igual estava antes da rodada 2, com um badge
+próprio — os dois links agora coexistem, cada um com sua contagem:
+
+- **Mesmo item de sempre, mesma rota** — `{ href: "${base}/status", label: "Status", icon:
+  Activity }`, igual ao que existia antes da rodada 2; `/crm/clinicas/[id]/status/page.tsx`
+  nunca foi alterada em nenhuma dessas idas e vindas (botão "Reenviar" e tudo mais continuam
+  exatamente como estavam).
+- **Badge igual ao do menu global (rodada 1), mas com OUTRA contagem** — mesmo `NavItem.badge`/
+  `NavBadge` (`AppShell.tsx`), sempre `vexo-error`, só quando `> 0`; aqui a contagem é SÓ desta
+  clínica: `prisma.message.count({ where: { status: "FAILED", conversation: { clinicId } } })` —
+  o mesmo `where` que `/crm/clinicas/[id]/status/page.tsx` já usa pra "Mensagens que falharam ao
+  enviar" (`recentFailed`), não uma regra nova. Calculado no layout
+  (`clinicas/[id]/layout.tsx`/`conversas/[id]/layout.tsx`, os dois pontos que montam a sidebar
+  desta clínica) e passado como 2º parâmetro de `buildClinicNavGroups(clinicId,
+  statusFailedCount)`.
+- **O badge do menu global não mudou nada** — continua contando TODAS as clínicas
+  (`crm/(global)/layout.tsx`, rodada 1), sem relação com este. Dois números podem aparecer ao
+  mesmo tempo (o geral em "Contas" e o desta clínica aqui), e isso é esperado: um é a visão
+  completa, o outro é o recorte de onde o usuário já está.

@@ -27,10 +27,19 @@ export default async function ConversationLayout({
   });
   if (!conversation) notFound();
 
+  // Mesma contagem que /crm/clinicas/[id]/status já usa (status "FAILED",
+  // filtrado por conversation.clinicId) — só pro badge do item "Status" da
+  // sidebar desta clínica, não uma regra nova.
+  const statusFailedCount = reviewer
+    ? 0
+    : await prisma.message.count({ where: { status: "FAILED", conversation: { clinicId: conversation.clinicId } } });
+
   return (
     <AppShell
       userLabel={`${session?.user.name} · ${role === "INTERNAL_ADMIN" ? "Admin" : reviewer ? "Revisor" : "Equipe"}`}
-      navGroups={reviewer ? buildReviewerNavGroups(conversation.clinicId) : buildClinicNavGroups(conversation.clinicId)}
+      navGroups={
+        reviewer ? buildReviewerNavGroups(conversation.clinicId) : buildClinicNavGroups(conversation.clinicId, statusFailedCount)
+      }
       contextHeader={
         <div className="rounded-lg bg-vexo-surface2 px-2 py-1.5">
           {reviewer ? (

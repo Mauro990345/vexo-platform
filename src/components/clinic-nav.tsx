@@ -1,4 +1,4 @@
-import { Columns3, Repeat, Gift, Link2, Bot, Zap, LayoutDashboard, ClipboardList } from "lucide-react";
+import { Columns3, Repeat, Gift, Link2, Activity, Bot, Zap, LayoutDashboard, ClipboardList } from "lucide-react";
 import type { NavGroup } from "@/components/AppShell";
 
 // Grupos de navegação de UMA clínica específica — usados tanto pelo layout
@@ -22,15 +22,15 @@ import type { NavGroup } from "@/components/AppShell";
 // Ordem pedida pelo usuário: Conexões, Painel, Pipeline, Agente de IA
 // (config de conversação/IA — separada de Automações), Automações (só o
 // que sobrou: lembretes, ativa/inativa, registrar abordagens), Follow-up.
-// O grupo "Status" (que existia aqui, sozinho, no lugar onde
-// "Configurações" ficava) foi removido: agora há um único link "Status"
-// no menu GLOBAL (grupo "Operação" de crm/(global)/layout.tsx), com badge
-// de contagem de falhas — repetir o mesmo link dentro de cada clínica
-// ficava redundante. A rota /crm/clinicas/[id]/status (filtrada pra esta
-// clínica) continua existindo e funcionando normalmente — só não tem mais
-// item de menu apontando pra ela aqui; quem chegar até ela pelo menu
-// global vê o diagnóstico de todas as clínicas, e quem precisar do
-// recorte por clínica ainda pode abrir a URL direto.
+// O grupo "Status" voltou (tinha sido removido na PR #259, quando o menu
+// GLOBAL ganhou seu próprio link "Status" com badge — ver
+// crm/(global)/layout.tsx): na prática, só o link global forçava sair da
+// clínica (clicar em "Contas") pra checar/resolver uma falha dela — pedido
+// explícito pra restaurar o atalho por clínica de volta, agora com os DOIS
+// links coexistindo (global = todas as clínicas; este = só esta). A rota
+// /crm/clinicas/[id]/status nunca foi tocada em nenhuma dessas idas e
+// vindas — sempre existiu e sempre funcionou, com ou sem item de menu
+// apontando pra ela.
 // (A Agenda — grade semanal — existiu aqui entre Pipeline e Agente de IA e
 // foi removida do sistema: a integração com o Google Calendar da clínica
 // continua normal, só a tela/visualização saiu.)
@@ -44,7 +44,7 @@ import type { NavGroup } from "@/components/AppShell";
 // acessível por "Contas" no menu global a qualquer momento — por isso
 // clinicas/[id]/painel/page.tsx não tem mais link nenhum de volta pra ela
 // (era redundante, "Contas" já mostra a lista de todas as clínicas).
-export function buildClinicNavGroups(clinicId: string): NavGroup[] {
+export function buildClinicNavGroups(clinicId: string, statusFailedCount = 0): NavGroup[] {
   const base = `/crm/clinicas/${clinicId}`;
 
   return [
@@ -72,6 +72,22 @@ export function buildClinicNavGroups(clinicId: string): NavGroup[] {
         // visível pro admin, independente do interruptor da conta (que só
         // controla a aba no Painel da CLIENTE).
         { href: `${base}/bonus`, label: "Bônus", icon: <Gift className="h-3.5 w-3.5 shrink-0" strokeWidth={2} /> },
+      ],
+    },
+    {
+      label: "Status",
+      items: [
+        {
+          href: `${base}/status`,
+          label: "Status",
+          icon: <Activity className="h-3.5 w-3.5 shrink-0" strokeWidth={2} />,
+          // Mesmo badge (vexo-error, só quando > 0) do "Status" do menu
+          // global (PR #258, AppShell.tsx) — aqui a contagem já vem
+          // filtrada só pra esta clínica (ver clinicas/[id]/layout.tsx e
+          // conversas/[id]/layout.tsx, que calculam com o MESMO where da
+          // própria página de Status: status "FAILED" + conversation.clinicId).
+          badge: statusFailedCount > 0 ? statusFailedCount : undefined,
+        },
       ],
     },
   ];

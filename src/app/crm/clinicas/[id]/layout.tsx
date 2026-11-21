@@ -29,10 +29,17 @@ export default async function ClinicLayout({
   });
   if (!clinic) notFound();
 
+  // Mesma contagem que /crm/clinicas/[id]/status já usa (status "FAILED",
+  // filtrado por conversation.clinicId) — só pro badge do item "Status" da
+  // sidebar desta clínica, não uma regra nova.
+  const statusFailedCount = reviewer
+    ? 0
+    : await prisma.message.count({ where: { status: "FAILED", conversation: { clinicId: clinic.id } } });
+
   return (
     <AppShell
       userLabel={`${session?.user.name} · ${role === "INTERNAL_ADMIN" ? "Admin" : reviewer ? "Revisor" : "Equipe"}`}
-      navGroups={reviewer ? buildReviewerNavGroups(clinic.id) : buildClinicNavGroups(clinic.id)}
+      navGroups={reviewer ? buildReviewerNavGroups(clinic.id) : buildClinicNavGroups(clinic.id, statusFailedCount)}
       // Revisor nunca vê o link "Contas" (só tem uma clínica, sem seletor
       // nem volta pra lista geral — ver DESIGN.md) nem o "←", só o nome.
       contextHeader={
