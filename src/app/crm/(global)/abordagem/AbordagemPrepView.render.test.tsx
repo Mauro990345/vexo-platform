@@ -69,3 +69,31 @@ describe("AbordagemPrepView — contador de leads restantes por clínica", () =>
     expect(html).toContain("text-vexo-error");
   });
 });
+
+// Botão "Link da Fila" (pedido explícito, ver DESIGN.md) — atalho pra
+// copiar o mesmo ClientFilaLink que o modal "Criar painel" já usa, direto
+// desta lista, ao lado de "Mensagens". Este projeto não roda testes com
+// jsdom/clique simulado (toda interação é testada pelas SERVER ACTIONS
+// isoladas, ver client-fila-link.test.ts — getOrCreateClientFilaLink já
+// está coberto lá); aqui só confirmamos o que o render estático consegue
+// provar: o botão existe, é um <button> (não navega), e nada em volta
+// mudou.
+describe("AbordagemPrepView — botão 'Link da Fila' ao lado de cada clínica", () => {
+  it("mostra o botão 'Link da Fila' pra cada clínica da lista", () => {
+    const html = renderToStaticMarkup(<AbordagemPrepView clinics={[baseClinic()]} window={window} timing={timing} />);
+    expect(html).toContain(">Link da Fila<");
+  });
+
+  it("é um <button>, nunca um <a> (não navega — só copia)", () => {
+    const html = renderToStaticMarkup(<AbordagemPrepView clinics={[baseClinic()]} window={window} timing={timing} />);
+    const buttonIndex = html.indexOf(">Link da Fila<");
+    const beforeButton = html.slice(Math.max(0, buttonIndex - 220), buttonIndex);
+    expect(beforeButton).toContain("<button");
+  });
+
+  it("não mexe no botão/texto 'Mensagens' que já existia", () => {
+    const html = renderToStaticMarkup(<AbordagemPrepView clinics={[baseClinic({ hasMessages: true })]} window={window} timing={timing} />);
+    expect(html).toContain(">Mensagens<");
+    expect(html).toContain('href="/crm/abordagem/clinic-1/mensagens"');
+  });
+});
