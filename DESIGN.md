@@ -1426,3 +1426,31 @@ sua própria caixinha "Enviar", na aba "Prompt de conversação da IA" > "Config
   PRESENÇA, bem mais tarde no fluxo).
 - **Responsivo**: validado em 390/414px e 1366px via Playwright (Tailwind compilado) em
   `agente-ia/page.layout.test.ts` — sem rolagem horizontal em nenhuma das 4 abas.
+
+## Menu global (`AppShell`) — item "Status" + badge de contagem
+
+Problema real: `/crm/dispatch-status` (diagnóstico de mensagens presas/falhadas, ver seção
+"Envio de mensagens" mais acima nesta investigação) só era alcançável digitando a URL direto —
+sem link nenhum na sidebar do CRM. Agora tem um item "Status" no grupo "Operação"
+(`crm/(global)/layout.tsx`), ao lado de "Contas" e "Abordagem", usando o ícone `Activity`
+(lucide-react) pra diferenciar dos outros dois sem introduzir uma cor nova.
+
+- **`NavItem` ganhou um campo opcional `badge?: number`** (`AppShell.tsx`) — contagem exibida ao
+  lado do rótulo do item, SÓ quando `> 0` (`!!item.badge`, então `0`/`undefined` não mostram
+  nada). Renderizado tanto na sidebar desktop (`NavLink`) quanto na barra de abas do celular, pelo
+  mesmo componente `NavBadge` — um pill arredondado em `bg-vexo-error` com texto branco, 10px,
+  semibold. Deliberadamente genérico (qualquer item de qualquer `AppGroup`, não só "Status") pra
+  não precisar de um componente novo se outro item global precisar de badge no futuro.
+- **Sempre a cor de erro já existente (`vexo-error`), nunca uma cor nova por item** — mesma
+  semântica usada em toda a seção "Mensagens que falharam ao enviar" da própria página de Status
+  (`border-vexo-error/30 bg-vexo-error/10 text-vexo-error`); aqui o fundo é sólido (não com
+  opacidade) porque o texto por cima precisa de contraste garantido em ambos os temas, mas a cor
+  em si é a mesma.
+- **Mesma contagem que a própria página de Status já usa** — `prisma.message.count({ where:
+  { status: "FAILED" } })`, direto no layout (`crm/(global)/layout.tsx`), não uma consulta nova
+  nem uma regra própria: é só um atalho visual pra uma informação que a página de destino já
+  calculava sozinha.
+- **Nenhuma checagem de papel nova** — o grupo "Operação" já vive dentro de `CrmGlobalLayout`,
+  que só é alcançado por quem passa primeiro por `requireCrmAreaSession` (bloqueia CLIENT) no
+  layout pai (`crm/layout.tsx`); a própria página de Status usa `requireInternalSession`
+  (bloqueia também REVIEWER). O link novo não muda esse alcance.
