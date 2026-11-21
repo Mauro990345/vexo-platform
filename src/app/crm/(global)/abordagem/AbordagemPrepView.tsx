@@ -6,6 +6,8 @@ import { Button } from "@/components/Button";
 import { Card } from "@/components/Card";
 import { toggleActiveInQueueAction, updateDailyLimitAction, uploadApproachLeadsAction, updateApproachWindowAction, updateApproachTimingAction } from "./actions";
 import { formatApproachDaysRemainingLabel, approachQueueLevel } from "@/lib/approach-queue";
+import { getOrCreateClientFilaLink } from "@/app/crm/clinicas/actions";
+import { copyToClipboard } from "@/lib/clipboard";
 import type { ApproachWindow, ApproachTiming } from "@/lib/approach-queue-db";
 
 type PrepClinic = {
@@ -117,6 +119,7 @@ function ClinicRow({ clinic }: { clinic: PrepClinic }) {
           </p>
         </div>
         <DailyLimitField clinicId={clinic.id} dailyLimit={clinic.dailyLimit} />
+        <FilaLinkButton clinicId={clinic.id} />
         <Link
           href={`/crm/abordagem/${clinic.id}/mensagens`}
           className={`shrink-0 text-caption font-medium underline-offset-2 hover:underline ${clinic.hasMessages ? "text-vexo-accent" : "text-vexo-warning"}`}
@@ -125,6 +128,43 @@ function ClinicRow({ clinic }: { clinic: PrepClinic }) {
         </Link>
       </div>
     </li>
+  );
+}
+
+const COPIED_FEEDBACK_MS = 1500;
+
+// Atalho pedido explícito: copiar o link da Fila (ClientFilaLink, ver
+// DESIGN.md "segundo link de acesso do cliente") direto desta lista, sem
+// precisar abrir "Criar painel" (clinicas/[id]/painel/page.tsx) só pra
+// isso. Reaproveita a MESMA action (getOrCreateClientFilaLink,
+// clinicas/actions.ts) que o modal já usa — cria o link na hora se ainda
+// não existir, devolve o mesmo token se já existir (nunca gera um
+// segundo/diferente). Não mexe em nada do Painel nem do modal — é só mais
+// um jeito de pegar o mesmo link.
+function FilaLinkButton({ clinicId }: { clinicId: string }) {
+  const [isPending, startTransition] = useTransition();
+  const [copied, setCopied] = useState(false);
+
+  function handleClick() {
+    startTransition(async () => {
+      const { url } = await getOrCreateClientFilaLink(clinicId);
+      const ok = await copyToClipboard(url);
+      if (ok) {
+        setCopied(true);
+        window.setTimeout(() => setCopied(false), COPIED_FEEDBACK_MS);
+      }
+    });
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={handleClick}
+      disabled={isPending}
+      className="shrink-0 text-caption font-medium text-vexo-accent underline-offset-2 hover:underline disabled:opacity-50"
+    >
+      {copied ? "Copiado!" : "Link da Fila"}
+    </button>
   );
 }
 

@@ -602,6 +602,31 @@ tela errada.
   pro login Revisor). `requireSession` agora detecta os dois prefixos e valida pela `Clinic.active`
   em vez do `User`.
 
+### Fila de abordagem — rodada 14 (botão "Link da Fila" direto na Preparação, ao lado de "Mensagens")
+
+Pedido explícito: copiar o link da Fila (`ClientFilaLink`, rodada 13) direto da lista de clínicas
+em `AbordagemPrepView.tsx` (Preparação — a mesma tela do checkbox/limite diário/"Mensagens"), sem
+precisar abrir "Criar painel" (`clinicas/[id]/painel/page.tsx`) só pra pegar esse link.
+
+- **Reaproveita a MESMA action, nenhum mecanismo novo** — `FilaLinkButton` chama
+  `getOrCreateClientFilaLink` (`clinicas/actions.ts`) direto, igual o `ClientFilaLinkSection` do
+  modal já fazia; cria o link na hora se a clínica ainda não tiver um, devolve o mesmo token se já
+  tiver (nunca gera um segundo/diferente) — os dois pontos de entrada (aqui e o modal) sempre
+  mostram/copiam o MESMO link.
+- **Copia e dá feedback, sem mostrar a URL** — diferente do `ClientFilaLinkSection` (que exibe a
+  URL pra conferência visual antes de copiar), aqui é um atalho de um clique só: copia
+  (`copyToClipboard`, `lib/clipboard.ts` — mesmo helper com fallback já usado pelo botão "Enviar"
+  da própria Fila) e o texto do próprio botão vira "Copiado!" por 1,5s, depois volta a "Link da
+  Fila" — mesmo padrão de feedback rápido do "✓ Salvo" dos outros formulários desta tela.
+- **Não mexe em nada do Painel nem do modal "Criar painel"** (pedido explícito) — é só mais um
+  jeito de pegar o mesmo link, sem alterar `ClientAccessModal.tsx`/`ClientFilaLinkSection.tsx`.
+- **Mesmo padrão visual dos outros botões da linha** — `text-caption font-medium
+  underline-offset-2 hover:underline`, mesma cor de ação (`text-vexo-accent`) do link "Mensagens"
+  ao lado; um `<button>`, nunca um link (não navega, só copia).
+- **Largura validada via Playwright** (`AbordagemPrepView.layout.test.tsx`, mesmo padrão de
+  sempre) — checkbox + nome/@ longo + contador + limite diário + "Link da Fila" + "Mensagens" na
+  mesma linha, sem rolagem horizontal em 360/390/414px.
+
 ## Relatório de resultados (quinzenal/mensal) — envio automático por WhatsApp
 Nova tela, administrada pela página "Contas" (`/crm`, só admin — ver DESIGN.md/CLAUDE.md,
 `ClinicReportPanel.tsx`/`report-actions.ts`). Mesmos tokens/componentes de sempre, nenhuma cor solta:
