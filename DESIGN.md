@@ -1454,3 +1454,20 @@ sem link nenhum na sidebar do CRM. Agora tem um item "Status" no grupo "Operaç�
   que só é alcançado por quem passa primeiro por `requireCrmAreaSession` (bloqueia CLIENT) no
   layout pai (`crm/layout.tsx`); a própria página de Status usa `requireInternalSession`
   (bloqueia também REVIEWER). O link novo não muda esse alcance.
+
+### Menu global — rodada 2 (removido o "Status" duplicado da sidebar de cada clínica)
+
+Com o link acima existindo no menu global, o grupo "Status" que `buildClinicNavGroups`
+(`clinic-nav.tsx`) colocava sozinho na sidebar de CADA clínica (apontando pra
+`/crm/clinicas/[id]/status`) ficou redundante e poluiu a lista — dois links "Status" visíveis ao
+mesmo tempo, um geral e um por clínica.
+
+- **Grupo inteiro removido de `buildClinicNavGroups`**, não só o item — era o único item do
+  grupo, então sobrar o cabeçalho "Status" sem nada dentro seria pior que não ter o grupo. O
+  grupo "Operação" (Conexões, Painel, Pipeline, Briefing, Agente de IA, Automações, Follow-up,
+  Bônus) não mudou nada.
+- **A rota continua existindo e funcionando** — `/crm/clinicas/[id]/status/page.tsx` não foi
+  tocada; só o item de menu que apontava pra ela saiu. Quem precisar do recorte por clínica ainda
+  abre a URL direto; o caminho normal agora é pelo "Status" do menu global (com o badge de
+  falhas).
+- `buildReviewerNavGroups` nunca teve esse grupo (lista fixa, só 3 itens) — nada mudou ali.

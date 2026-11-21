@@ -1,4 +1,4 @@
-import { Columns3, Repeat, Gift, Link2, Activity, Bot, Zap, LayoutDashboard, ClipboardList } from "lucide-react";
+import { Columns3, Repeat, Gift, Link2, Bot, Zap, LayoutDashboard, ClipboardList } from "lucide-react";
 import type { NavGroup } from "@/components/AppShell";
 
 // Grupos de navegação de UMA clínica específica — usados tanto pelo layout
@@ -22,12 +22,15 @@ import type { NavGroup } from "@/components/AppShell";
 // Ordem pedida pelo usuário: Conexões, Painel, Pipeline, Agente de IA
 // (config de conversação/IA — separada de Automações), Automações (só o
 // que sobrou: lembretes, ativa/inativa, registrar abordagens), Follow-up.
-// "Status" segue como último grupo, sozinho, no lugar onde "Configurações"
-// (tema/aparência do sistema — sem uso, ver histórico) ficava — reúne o
-// que antes só era acessível por link direto (/crm/webhook-logs e
-// /crm/dispatch-status), filtrado pra esta clínica (ver
-// clinicas/[id]/status/page.tsx), pra não precisar lembrar/guardar essas
-// URLs separadamente.
+// O grupo "Status" (que existia aqui, sozinho, no lugar onde
+// "Configurações" ficava) foi removido: agora há um único link "Status"
+// no menu GLOBAL (grupo "Operação" de crm/(global)/layout.tsx), com badge
+// de contagem de falhas — repetir o mesmo link dentro de cada clínica
+// ficava redundante. A rota /crm/clinicas/[id]/status (filtrada pra esta
+// clínica) continua existindo e funcionando normalmente — só não tem mais
+// item de menu apontando pra ela aqui; quem chegar até ela pelo menu
+// global vê o diagnóstico de todas as clínicas, e quem precisar do
+// recorte por clínica ainda pode abrir a URL direto.
 // (A Agenda — grade semanal — existiu aqui entre Pipeline e Agente de IA e
 // foi removida do sistema: a integração com o Google Calendar da clínica
 // continua normal, só a tela/visualização saiu.)
@@ -69,12 +72,6 @@ export function buildClinicNavGroups(clinicId: string): NavGroup[] {
         // visível pro admin, independente do interruptor da conta (que só
         // controla a aba no Painel da CLIENTE).
         { href: `${base}/bonus`, label: "Bônus", icon: <Gift className="h-3.5 w-3.5 shrink-0" strokeWidth={2} /> },
-      ],
-    },
-    {
-      label: "Status",
-      items: [
-        { href: `${base}/status`, label: "Status", icon: <Activity className="h-3.5 w-3.5 shrink-0" strokeWidth={2} /> },
       ],
     },
   ];
