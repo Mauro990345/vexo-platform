@@ -34,7 +34,9 @@ export default async function ClinicLayout({
   // sidebar desta clínica, não uma regra nova.
   const statusFailedCount = reviewer
     ? 0
-    : await prisma.message.count({ where: { status: "FAILED", conversation: { clinicId: clinic.id } } });
+    : await prisma.message.count({
+        where: { status: "FAILED", dismissedAt: null, conversation: { clinicId: clinic.id } },
+      });
 
   return (
     <AppShell

@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireInternalSession } from "@/lib/session";
 import { LocalDateTime } from "@/components/LocalDateTime";
 import { getSilenceHours } from "@/lib/follow-up";
-import { closeStuckFollowUpLogAction } from "./actions";
+import { closeStuckFollowUpLogAction, dismissFailedMessageAction } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -46,7 +46,10 @@ export default async function DispatchStatusPage() {
       take: 50,
     }),
     prisma.message.findMany({
-      where: { status: "FAILED" },
+      // dismissedAt: null — nunca lista (nem conta) uma falha descartada
+      // pelo botão "Descartar" (ver actions.ts); a Message continua
+      // FAILED de verdade, só sai desta tela.
+      where: { status: "FAILED", dismissedAt: null },
       include: { conversation: { include: { lead: true, clinic: true } } },
       orderBy: { createdAt: "desc" },
       take: 50,
@@ -268,6 +271,17 @@ export default async function DispatchStatusPage() {
                     {m.failReason}
                   </p>
                 )}
+                <div className="mt-1.5 flex items-center justify-end">
+                  <form action={dismissFailedMessageAction.bind(null, m.id)}>
+                    <button
+                      type="submit"
+                      title="Marca como resolvida/ignorada — sai da contagem e desta lista, mas a mensagem e o erro continuam no histórico da conversa."
+                      className="rounded-lg border border-vexo-border px-2.5 py-1 font-medium text-vexo-muted hover:border-vexo-fg hover:text-vexo-fg"
+                    >
+                      Descartar
+                    </button>
+                  </form>
+                </div>
               </div>
             ))}
           </div>

@@ -1511,3 +1511,34 @@ exatamente como era antes da rodada 1 (PR #258).
   quem precisar da visão geral agora abre a URL direto.
 - **O "Status" por clínica (rodada 3) não muda em nada** — continua na sidebar de cada clínica,
   com seu próprio badge filtrado só pra ela; é o único lugar que resta pra essa funcionalidade.
+
+## Status (`dispatch-status`) — botão "Descartar" pra falhas sem conserto
+
+Problema real: uma mensagem FAILED sem conserto (fora da janela de 24h da Meta, token
+permanentemente vencido) ficava contando pra sempre no badge vermelho de "Status" (global e por
+clínica) e na lista de "Mensagens que falharam ao enviar" — sem nenhum jeito de tirá-la de lá
+além de ir direto no banco. Agora cada mensagem da lista tem um botão "Descartar", ao lado de
+"Reenviar".
+
+- **`Message.dismissedAt` (novo, nullable, sem default)** — campo puramente aditivo
+  (`20261121000000_message_dismissed_at`). Descartar NUNCA muda `status` nem `failReason`: a
+  Message continua FAILED de verdade, com o erro visível no histórico da conversa (nenhuma
+  consulta de conversa/mensagens filtra por `dismissedAt` — só as duas telas de Status) — é
+  puramente um "sair da contagem/listagem", nunca um apagar ou mascarar.
+- **Sempre visível, não só quando "fora da janela"** — pedido explícito: serve tanto pra erro
+  sem conserto quanto pra quando o usuário simplesmente decide não reenviar mais aquele envio.
+  Aparece ao lado de "Reenviar" (quando reenviável) ou do aviso "Fora da janela..." (quando não).
+- **Duas actions, mesmo padrão de sempre** (`dispatch-status/actions.ts`, igual
+  `resendFailedMessageAction`/`closeStuckFollowUpLogForClinicAction`): `dismissFailedMessageAction`
+  (página global, sem `clinicId`) e `dismissFailedMessageForClinicAction` (aba por clínica, confere
+  `conversation.clinicId` antes de marcar — nunca descarta mensagem de outra clínica a partir
+  desta tela). As duas usam `updateMany` com `status: "FAILED"` na condição — nunca marca
+  `dismissedAt` numa mensagem que não é (ou já deixou de ser) uma falha.
+- **Botão neutro, nunca uma cor nova** — mesmo padrão visual das outras ações secundárias desta
+  tela (`border-vexo-border`/`text-vexo-muted`, acende levemente no hover), distinto do contorno
+  azul (`vexo-accent`) de "Reenviar" — "Descartar" não é a ação principal do card.
+- **As 3 queries de falhas filtram `dismissedAt: null`** — `dispatch-status/page.tsx`
+  (`recentFailed`, global), `clinicas/[id]/status/page.tsx` (`recentFailed`, por clínica) e os
+  dois badges da sidebar (`clinicas/[id]/layout.tsx`/`conversas/[id]/layout.tsx`,
+  `prisma.message.count`) — as quatro contagens/listagens do sistema que mostram "falhas"
+  agora concordam entre si sobre o que já foi descartado.

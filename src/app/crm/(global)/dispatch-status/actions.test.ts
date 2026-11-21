@@ -14,16 +14,18 @@ vi.mock("@/lib/follow-up", () => ({
 
 const messageFindUniqueMock = vi.fn();
 const messageUpdateMock = vi.fn();
+const messageUpdateManyMock = vi.fn();
 vi.mock("@/lib/prisma", () => ({
   prisma: {
     message: {
       findUnique: (...args: unknown[]) => messageFindUniqueMock(...args),
       update: (...args: unknown[]) => messageUpdateMock(...args),
+      updateMany: (...args: unknown[]) => messageUpdateManyMock(...args),
     },
   },
 }));
 
-import { resendFailedMessageAction } from "./actions";
+import { resendFailedMessageAction, dismissFailedMessageAction, dismissFailedMessageForClinicAction } from "./actions";
 
 const NOW = new Date("2026-11-14T12:00:00Z");
 
@@ -96,5 +98,59 @@ describe("resendFailedMessageAction", () => {
 
     await expect(resendFailedMessageAction("msg-1", "clinic-1")).rejects.toThrow("não autenticado");
     expect(messageFindUniqueMock).not.toHaveBeenCalled();
+  });
+});
+
+// Botão "Descartar" (pedido explícito): falha sem conserto (fora da janela
+// de 24h, token permanentemente vencido) ou que o usuário decidiu não
+// reenviar mais — marca dismissedAt sem tocar em status/failReason, pra
+// sair da contagem/listagem sem apagar nada do histórico.
+describe("dismissFailedMessageAction (página GLOBAL)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+    requireInternalSessionMock.mockResolvedValue({});
+  });
+
+  it("marca dismissedAt=agora, só pra mensagens FAILED (nunca muda status/failReason)", async () => {
+    await dismissFailedMessageAction("msg-1");
+
+    expect(messageUpdateManyMock).toHaveBeenCalledWith({
+      where: { id: "msg-1", status: "FAILED" },
+      data: { dismissedAt: NOW },
+    });
+  });
+
+  it("exige sessão interna antes de tocar no banco", async () => {
+    requireInternalSessionMock.mockRejectedValue(new Error("não autenticado"));
+
+    await expect(dismissFailedMessageAction("msg-1")).rejects.toThrow("não autenticado");
+    expect(messageUpdateManyMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("dismissFailedMessageForClinicAction (aba Status de uma clínica)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+    requireInternalSessionMock.mockResolvedValue({});
+  });
+
+  it("marca dismissedAt=agora, filtrando por FAILED + conversation.clinicId (nunca de outra clínica)", async () => {
+    await dismissFailedMessageForClinicAction("msg-1", "clinic-1");
+
+    expect(messageUpdateManyMock).toHaveBeenCalledWith({
+      where: { id: "msg-1", status: "FAILED", conversation: { clinicId: "clinic-1" } },
+      data: { dismissedAt: NOW },
+    });
+  });
+
+  it("exige sessão interna antes de tocar no banco", async () => {
+    requireInternalSessionMock.mockRejectedValue(new Error("não autenticado"));
+
+    await expect(dismissFailedMessageForClinicAction("msg-1", "clinic-1")).rejects.toThrow("não autenticado");
+    expect(messageUpdateManyMock).not.toHaveBeenCalled();
   });
 });
