@@ -313,6 +313,17 @@ export function buildReactivationWhatsAppLink(phone: string, message: string): s
 // folga pro caso de o app do Instagram ser mais restritivo.
 export const INSTAGRAM_DM_LINK_MAX_LENGTH = 2000;
 
+// Nome FIXO da aba (2º argumento de window.open), nunca "_blank" — com
+// "_blank" cada clique abre uma aba NOVA; com um nome fixo, o navegador
+// reaproveita a MESMA aba na próxima chamada. Bug real reportado: na Fila
+// de abordagem (FilaView.tsx), 70-90 envios por dia significavam 70-90
+// abas novas acumuladas no PC da secretária. Mesmo nome usado em TODO
+// lugar que abre um dmLink (FilaView.tsx, InstagramDmButton.tsx — usado
+// tanto na Fila quanto na Reativação, ver ReactivationRail.tsx) — nunca
+// um literal duplicado em cada arquivo, pra nunca abrirem em abas
+// diferentes uma da outra por engano.
+export const INSTAGRAM_DM_WINDOW_NAME = "vexo_ig_dm";
+
 // ig.me abre a conversa no Instagram direto (sem precisar já ter o
 // contato salvo, diferente do wa.me que precisa de telefone). `message`
 // tenta pré-preencher o campo via ?text= — parâmetro NÃO documentado pela
