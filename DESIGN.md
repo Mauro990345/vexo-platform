@@ -476,6 +476,41 @@ exatamente iguais — a técnica do `::before` já usava `min-h-11` fixo, indepe
 visual do botão, então reduzir o padding não afeta a área tocável. Padding do card e espaço entre
 os cards (`px-block`/`py-block-y`/`space-y-2`) inalterados, por pedido explícito.
 
+### Fila de abordagem — rodada 11 (@ do Instagram conectado no card + Fila por clínica)
+
+Pedido explícito: operar várias clínicas ao mesmo tempo, um perfil do Chrome por clínica (cada
+aba sempre presa na mesma conta do Instagram) — precisava de 1) um jeito de conferir, antes de
+apertar "Enviar", se o card bate com a conta logada naquele navegador, e 2) uma Fila com link
+próprio por clínica, pra abrir uma aba fixa por clínica em vez de uma tela global misturando
+todas.
+
+- **@ do Instagram CONECTADO desta clínica, em destaque, na linha do nome** (`ClinicQueueCard`,
+  `FilaView.tsx` — usado pelas DUAS telas, a global e a nova por clínica): `@{igUsername}`
+  (semibold, com o glifo do Instagram, `InstagramGlyphIcon`) + `· {nome da clínica}` (truncado) +
+  `· {leadsRemaining}`, nessa ordem — o @ é o PRIMEIRO elemento da linha, então sempre antes do
+  nome da clínica e do @ do LEAD (que continua intocado, numa linha de baixo). Sem Instagram
+  conectado: "Instagram não conectado" no lugar do @, nunca inventa um valor.
+  - **Decisão de layout**: o @ entra na MESMA linha do nome da clínica, não numa linha nova — uma
+    linha extra por card quebrava o orçamento de altura da rodada 7 (os 5 cards cabendo na 1ª
+    tela de um iPhone SE sem rolar, `FilaView.layout.test.tsx`: uma linha nova a mais custava
+    ~14px por card, 70px no total pros 5 — o viewport do SE (667px) não sobrava isso). Testado de
+    verdade (Playwright) depois do ajuste: os 5 cards continuam cabendo, sem rolagem.
+- **Fila por clínica, nova rota** (`/crm/clinicas/[id]/abordagem/fila`, `ClinicFilaView.tsx`) —
+  mesmo comportamento da Fila global (tempos, pausa de lote, botão "Enviar" reaproveitando a
+  mesma aba do Instagram, ver rodada anterior/PR #255) e o MESMO componente de card
+  (`ClinicQueueCard`, reaproveitado — qualquer ajuste nele, como o @ conectado acima, vale pras
+  duas telas de uma vez), só que mostrando SÓ o card desta clínica. Independente do toggle "ativa
+  na fila" da Preparação — `getApproachBoardForClinicAction` busca a conta direto
+  (`getApproachBoardAccount`), nunca passa pela lista de contas ATIVAS que a Fila global usa.
+  - Card centralizado, `max-w-[520px]` (mesma largura da Fila global) dentro do shell cheio da
+    clínica (`clinicas/[id]/layout.tsx`, sidebar normal) — sem isso, o card ficaria esparramado
+    na largura padrão (`max-w-6xl`) do resto das telas da clínica.
+  - **Não entra em `clinic-nav.tsx`** — alcançada só pelo link direto, pra abrir numa aba/perfil
+    de navegador dedicado (é esse o ponto: um link fixo por clínica). Mesmo padrão já usado por
+    `relatorio-preview/page.tsx` (admin-only, também fora da sidebar).
+  - A Fila global (`/crm/abordagem/fila`) continua existindo exatamente como estava — tela nova,
+    a mais, nunca uma substituição.
+
 ## Relatório de resultados (quinzenal/mensal) — envio automático por WhatsApp
 Nova tela, administrada pela página "Contas" (`/crm`, só admin — ver DESIGN.md/CLAUDE.md,
 `ClinicReportPanel.tsx`/`report-actions.ts`). Mesmos tokens/componentes de sempre, nenhuma cor solta:
