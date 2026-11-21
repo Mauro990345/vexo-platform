@@ -23,6 +23,8 @@ import {
   approachAccountSortKey,
   formatApproachDaysRemainingLabel,
   approachQueueLevel,
+  estimateQueuedItemsMsRemaining,
+  formatApproachEstimateLabel,
 } from "./approach-queue";
 
 describe("normalizeApproachUsername", () => {
@@ -408,6 +410,87 @@ describe("computeApproachAccountState", () => {
     const outside = new Date("2026-01-15T03:00:00Z");
     const batchPausedUntil = new Date(outside.getTime() - 1000);
     expect(computeApproachAccountState({ ...base, now: outside, batchPausedUntil })).toEqual({ kind: "OUTSIDE_HOURS" });
+  });
+});
+
+// Fila por clínica (/crm/clinicas/[id]/abordagem/fila) — estimativa
+// PURAMENTE VISUAL de quando os itens empilhados atrás do ativo devem
+// liberar (nunca decide se o botão é clicável, ver ClinicFilaView.tsx).
+describe("estimateQueuedItemsMsRemaining", () => {
+  const NO_BATCH_PAUSE = { batchSentCount: 0, batchSize: 30, batchPauseMs: 0, waitMinMs: 60_000, waitMaxMs: 120_000 };
+
+  it("item 0 (ativo): sempre o frontMsRemaining exato, sem nenhum acréscimo", () => {
+    const result = estimateQueuedItemsMsRemaining({ frontMsRemaining: 45_000, itemCount: 3, ...NO_BATCH_PAUSE });
+    expect(result[0]).toBe(45_000);
+  });
+
+  it("itens seguintes somam a espera MÉDIA configurada (waitMin+waitMax)/2, item a item", () => {
+    const result = estimateQueuedItemsMsRemaining({ frontMsRemaining: 0, itemCount: 4, ...NO_BATCH_PAUSE });
+    const avgWaitMs = (60_000 + 120_000) / 2; // 90_000
+    expect(result).toEqual([0, avgWaitMs, avgWaitMs * 2, avgWaitMs * 3]);
+  });
+
+  it("front já com espera real (WAITING): os itens de baixo somam a média EM CIMA do tempo real do ativo", () => {
+    const result = estimateQueuedItemsMsRemaining({ frontMsRemaining: 20_000, itemCount: 2, ...NO_BATCH_PAUSE });
+    expect(result).toEqual([20_000, 20_000 + 90_000]);
+  });
+
+  it("cruza a fronteira do lote: soma a pausa inteira quando o envio hipotético fecha o lote (nextBatchSentCount >= batchSize)", () => {
+    // batchSentCount=29, batchSize=30 — o 1º item hipotético (índice 1) fecha o lote.
+    const result = estimateQueuedItemsMsRemaining({
+      frontMsRemaining: 0,
+      itemCount: 3,
+      batchSentCount: 29,
+      batchSize: 30,
+      batchPauseMs: 2 * 3600_000,
+      waitMinMs: 60_000,
+      waitMaxMs: 120_000,
+    });
+    const avgWaitMs = 90_000;
+    expect(result[0]).toBe(0);
+    expect(result[1]).toBe(avgWaitMs + 2 * 3600_000); // fechou o lote — soma a pausa inteira
+    // depois da pausa, o contador do lote reinicia — o 2º item hipotético não cruza outra fronteira.
+    expect(result[2]).toBe(avgWaitMs * 2 + 2 * 3600_000);
+  });
+
+  it("pausa de lote DESLIGADA (batchPauseMs=0): nunca soma pausa, mesmo cruzando o tamanho do lote", () => {
+    const result = estimateQueuedItemsMsRemaining({
+      frontMsRemaining: 0,
+      itemCount: 3,
+      batchSentCount: 29,
+      batchSize: 30,
+      batchPauseMs: 0,
+      waitMinMs: 60_000,
+      waitMaxMs: 120_000,
+    });
+    expect(result).toEqual([0, 90_000, 180_000]);
+  });
+
+  it("itemCount=1 (só o ativo): devolve só [frontMsRemaining], sem calcular mais nada", () => {
+    expect(estimateQueuedItemsMsRemaining({ frontMsRemaining: 5_000, itemCount: 1, ...NO_BATCH_PAUSE })).toEqual([5_000]);
+  });
+});
+
+describe("formatApproachEstimateLabel", () => {
+  it("minutos e segundos — exemplo do pedido: '1min 20s'", () => {
+    expect(formatApproachEstimateLabel(80_000)).toBe("1min 20s");
+  });
+
+  it("só segundos (abaixo de 1 minuto)", () => {
+    expect(formatApproachEstimateLabel(45_000)).toBe("45s");
+  });
+
+  it("minutos exatos, sem segundos sobrando", () => {
+    expect(formatApproachEstimateLabel(3 * 60_000)).toBe("3min 00s");
+  });
+
+  it("acima de 1 hora — formato próprio, nunca 'NNNmin'", () => {
+    expect(formatApproachEstimateLabel(2 * 3600_000 + 5 * 60_000)).toBe("2h05min");
+  });
+
+  it("zero ou negativo — nunca negativo, cai pra '0s'", () => {
+    expect(formatApproachEstimateLabel(0)).toBe("0s");
+    expect(formatApproachEstimateLabel(-500)).toBe("0s");
   });
 });
 

@@ -27,9 +27,19 @@ function account(state: ApproachAccountState, overrides: Partial<ApproachBoardAc
   };
 }
 
-function render(acc: ApproachBoardAccount, fetchedAt = NOW) {
+function render(acc: ApproachBoardAccount, fetchedAt = NOW, hideConnectedHandle = false) {
   return renderToStaticMarkup(
-    <ClinicQueueCard account={acc} now={NOW} fetchedAt={fetchedAt} sendingItemId={null} onSend={() => {}} onSkip={() => {}} onUndo={() => {}} onPauseToggle={() => {}} />
+    <ClinicQueueCard
+      account={acc}
+      now={NOW}
+      fetchedAt={fetchedAt}
+      sendingItemId={null}
+      onSend={() => {}}
+      onSkip={() => {}}
+      onUndo={() => {}}
+      onPauseToggle={() => {}}
+      hideConnectedHandle={hideConnectedHandle}
+    />
   );
 }
 
@@ -123,6 +133,18 @@ describe("ClinicQueueCard", () => {
     const markup = render(account({ kind: "READY" }, { igUsername: null }));
     expect(markup).toContain("Instagram não conectado");
     expect(markup).not.toContain("@null");
+  });
+
+  // hideConnectedHandle (pedido explícito, ClinicFilaView.tsx — o @
+  // conectado sobe pro topo da PÁGINA só nessa tela por clínica): a Fila
+  // GLOBAL nunca passa isso (default false, já coberto nos testes acima);
+  // quando passado, o card volta pro texto simples de sempre (nome da
+  // clínica + contador), sem repetir o @ que já está na página.
+  it("hideConnectedHandle=true: NUNCA mostra o @ conectado dentro do card (ele já está no topo da página)", () => {
+    const markup = render(account({ kind: "READY" }, { igUsername: "clinica.demo" }), NOW, true);
+    expect(markup).not.toContain("clinica.demo");
+    expect(markup).toContain("Clínica Demo");
+    expect(markup).toContain("· 320");
   });
 
   it("botão liberado tem área de toque ampliada (pelo menos 44px), sem mudar o desenho visual", () => {

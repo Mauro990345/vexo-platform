@@ -47,6 +47,24 @@ export function InstagramGlyphIcon({ className }: { className?: string }) {
   );
 }
 
+// Mesmo desenho do glifo acima (quadrado arredondado + círculo + pontinho),
+// SEM o squircle de fundo com o gradiente da marca — só o contorno, em
+// `currentColor` (herda a cor do texto ao redor, nunca fixo em branco/preto),
+// pra usar junto de texto comum (ex.: o @ do Instagram CONECTADO no topo da
+// Fila por clínica, ClinicFilaView.tsx) sem competir visualmente com um
+// badge colorido da marca ao lado. Não é autocontido como o glifo acima —
+// o wrapper deve ter espaço (ex.: h-4 w-4), mas pode (e deve) herdar a cor
+// do texto via `text-*` no elemento pai ou nele mesmo.
+export function InstagramOutlineIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" aria-hidden="true">
+      <rect x="3.2" y="3.2" width="17.6" height="17.6" rx="5" stroke="currentColor" strokeWidth="1.8" />
+      <circle cx="12" cy="12" r="4.6" stroke="currentColor" strokeWidth="1.8" />
+      <circle cx="16.3" cy="7.7" r="1.15" fill="currentColor" />
+    </svg>
+  );
+}
+
 // Glifo do WhatsApp: squircle com gradiente verde (mais claro em cima, mais
 // escuro embaixo), círculo branco vazado GRANDE (quase tocando as bordas)
 // com um "rabinho" de balão de conversa saindo do canto inferior esquerdo
