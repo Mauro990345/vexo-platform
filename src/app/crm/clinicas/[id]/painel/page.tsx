@@ -45,11 +45,17 @@ export default async function ClinicPainelPage({
 
   const clinic = await prisma.clinic.findUniqueOrThrow({
     where: { id: params.id },
-    select: { clientPanelLink: { select: { token: true } } },
+    select: {
+      clientPanelLink: { select: { token: true } },
+      clientFilaLink: { select: { token: true } },
+    },
   });
 
   const initialLink = clinic.clientPanelLink
     ? { token: clinic.clientPanelLink.token, url: `${process.env.APP_URL ?? ""}/acesso/${clinic.clientPanelLink.token}` }
+    : null;
+  const initialFilaLink = clinic.clientFilaLink
+    ? { token: clinic.clientFilaLink.token, url: `${process.env.APP_URL ?? ""}/acesso-fila/${clinic.clientFilaLink.token}` }
     : null;
 
   return (
@@ -70,7 +76,9 @@ export default async function ClinicPainelPage({
       hotLeadCardSentAction={toggleHotLeadCardSentAction}
       neverScheduledCardSentAction={toggleNeverScheduledCardSentAction}
       standalone={false}
-      headerAction={isReviewer ? undefined : <ClientAccessModal clinicId={params.id} initialLink={initialLink} />}
+      headerAction={
+        isReviewer ? undefined : <ClientAccessModal clinicId={params.id} initialLink={initialLink} initialFilaLink={initialFilaLink} />
+      }
       readOnly={isReviewer}
     />
   );

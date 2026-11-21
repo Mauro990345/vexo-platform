@@ -545,6 +545,63 @@ a Fila global (`/crm/abordagem/fila`) não muda em nada aqui.
   - **Orçamento de altura validado de novo** (`ClinicFilaView.layout.test.tsx`, mesmo padrão da
     rodada 7): 1 card ativo + 4 empilhados cabem na 1ª tela de um iPhone SE sem rolar.
 
+### Fila de abordagem — rodada 13 (segundo link de acesso do cliente: só a Fila, nunca o painel)
+
+Pedido explícito: dar acesso à Fila de abordagem desta clínica (mesma tela/mesmas regras da
+rodada 12) a quem NÃO deve ver o painel inteiro (`/dashboard`) — uma pessoa que só vai mandar
+mensagens pelo Instagram, não precisa ver agendamentos nem métricas. Em vez de um papel novo ou
+uma tabela de permissão, é um SEGUNDO link permanente por clínica, independente do link do
+painel que já existia (`ClientPanelLink`/`/acesso/[token]`), com um claim só no token que trava a
+tela errada.
+
+- **`ClientFilaLink` (schema, mesmo shape do `ClientPanelLink`)** — token próprio, `clinicId
+  @unique` (só 1 link válido por clínica, igual o original), criar/cancelar sem "regenerar"
+  separado (`getOrCreateClientFilaLink`/`revokeClientFilaLink`, `clinicas/actions.ts`). Mostrado
+  no mesmo modal "Acesso do cliente" que já existia (`ClientAccessModal.tsx`, agora com duas
+  seções — "Painel completo" e "Só a Fila de abordagem", cada uma com seu próprio componente:
+  `ClientPanelLinkSection`/`ClientFilaLinkSection`, cópia adaptada, não generalizada, mesmo
+  padrão já usado pelo `BriefingLinkSection`).
+- **`/acesso-fila/[token]/route.ts` (novo, cópia do `/acesso/[token]` original)** — mesmo login
+  automático por cookie montado manualmente (não existe `signIn()` chamável fora de um `<form>`
+  no NextAuth v4), só que grava um claim extra no JWT: `scope: "fila"`. **Esse claim, e não um
+  papel novo, é a ÚNICA coisa que distingue os dois links** — os dois continuam `role: "CLIENT"`.
+  Equipe interna já logada no mesmo navegador vai pra Fila INTERNA desta clínica
+  (`/crm/clinicas/[id]/abordagem/fila`) em vez de ter a própria sessão sobrescrita (mesmo desvio
+  do link original, só que pro equivalente certo).
+- **Regra de segurança pedida explicitamente, em duas camadas**: quem só tem o link da Fila
+  nunca alcança `/dashboard`, mesmo digitando a URL direto, mesmo logado.
+  1. **Middleware** (`isFilaScopeAllowedPath`, `client-fila-access.ts` — mesmo molde de
+     `isReviewerAllowedPath`/`reviewer-access.ts`): decide só por pathname, sem tocar banco;
+     `scope: "fila"` em qualquer rota sob `/dashboard` que não seja `/dashboard/fila` redireciona
+     de volta pra ela (nunca 404 — um cliente de verdade só errou o caminho, não está sondando).
+  2. **`requireClientSession` (session.ts)** repete a mesma checagem como segunda camada —
+     redireciona pro `/dashboard/fila` se `scope === "fila"`, antes de devolver a sessão pra
+     `/dashboard`/`/dashboard/bonus`.
+  - **O inverso é permitido de propósito** (pedido explícito): quem tem o link do painel
+    completo (sem esse claim) também abre a Fila — `requireClientFilaSession` (novo gate, usado
+    só por `/dashboard/fila`) não exige `scope` nenhum, só `CLIENT` + `clinicId`.
+- **Botão "Abrir Fila de abordagem" dentro do `/dashboard`** (`headerAction` do `ClientPanelView`,
+  mesmo slot que já existia pro "Criar painel" no CRM) — só aparece pra quem chega até ali, ou
+  seja, só pra quem TEM o painel completo (quem só tem o link da Fila já foi redirecionado antes
+  de chegar nesta página).
+- **Mesmo componente, mesmo visual, mesmas regras de negócio — só troca a autenticação por
+  baixo**: `ClinicFilaView.tsx` ganhou as 5 actions (buscar board, confirmar envio, desfazer,
+  pular, pausar) e o link "Fila de todas as clínicas" como PROPS injetáveis, com default = os
+  mesmos imports de sempre (gated por `requireInternalSession`) — a tela interna não mudou nada.
+  `dashboard/fila/page.tsx` passa a dupla própria (`dashboard/fila/actions.ts`, gated por
+  `requireClientFilaSession`, conferindo `session.user.clinicId` antes de qualquer ação — nunca
+  confia só no `clinicId` que a tela devolve) e `showGlobalFilaLink={false}` (o link de volta pra
+  Fila global não faz sentido pro cliente, que só vê a própria clínica).
+- **BUG REAL encontrado e corrigido ao construir isto**: `requireSession` (`session.ts`) sempre
+  consultava `prisma.user.findUnique({ where: { id: session.user.id } })` pra checar
+  `User.active` — pra uma sessão nascida de QUALQUER um dos dois links (`sub` sintético,
+  `"client-panel-link:<clinicId>"`/`"client-fila-link:<clinicId>"`, sem `User` real por trás, só
+  `Clinic`), isso sempre devolvia `null` e tratava o acesso como desativado, mandando pro
+  `/entrar` — ou seja, **o link do painel original também caía nesse bug**; nunca tinha sido
+  validado de ponta a ponta depois do checkpoint de `User.active` ter sido adicionado (pensado só
+  pro login Revisor). `requireSession` agora detecta os dois prefixos e valida pela `Clinic.active`
+  em vez do `User`.
+
 ## Relatório de resultados (quinzenal/mensal) — envio automático por WhatsApp
 Nova tela, administrada pela página "Contas" (`/crm`, só admin — ver DESIGN.md/CLAUDE.md,
 `ClinicReportPanel.tsx`/`report-actions.ts`). Mesmos tokens/componentes de sempre, nenhuma cor solta:

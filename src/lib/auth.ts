@@ -68,6 +68,12 @@ export const authOptions: NextAuthOptions = {
         session.user.id = token.sub as string;
         session.user.role = token.role;
         session.user.clinicId = (token.clinicId as string | null) ?? null;
+        // Repassa o escopo (ver next-auth.d.ts) só quando presente —
+        // nunca gravado aqui, só lido: quem grava é o encode() manual do
+        // login por link (/acesso-fila/[token]/route.ts), fora deste
+        // callback (não existe signIn() chamável fora de um POST de
+        // formulário no NextAuth v4 — ver comentário grande lá).
+        session.user.scope = token.scope ?? null;
       }
       return session;
     },

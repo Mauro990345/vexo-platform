@@ -3,27 +3,32 @@
 import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { ClientPanelLinkSection } from "@/components/ClientPanelLinkSection";
+import { ClientFilaLinkSection } from "@/components/ClientFilaLinkSection";
 
-type ClientPanelLink = { token: string; url: string };
+type ClientLink = { token: string; url: string };
 
 // Botão "Criar painel" (mesmo padrão visual do "Criar conta" em Contas) +
-// modal com o acesso do cliente ao painel dele — antes ficava fixo direto
+// modal com os DOIS links de acesso do cliente — antes ficava fixo direto
 // no topo da página (ver histórico de clinicas/[id]/painel/page.tsx),
 // ocupando espaço e desalinhando a primeira dobra mesmo pra quem só queria
 // ver os números do dia.
 //
-// Único mecanismo de acesso: link permanente por clínica (ver
-// ClientPanelLinkSection) — sem e-mail/senha/tela de login em nenhuma
-// hipótese. O fluxo antigo de e-mail+senha (CreateClientLoginForm/
-// createClientLogin/removeClientLogin) foi removido de propósito, não
-// mantido como alternativa — pedido explícito depois de confusão
-// recorrente sobre qual dos dois mecanismos usar.
+// Dois mecanismos INDEPENDENTES, cada um com seu próprio token: o painel
+// completo (ClientPanelLinkSection, sempre existiu) e, pedido explícito,
+// a Fila de abordagem sozinha (ClientFilaLinkSection — sem sidebar, sem o
+// painel, só o card de leads). Nenhum dos dois usa e-mail/senha/tela de
+// login em nenhuma hipótese. O fluxo antigo de e-mail+senha
+// (CreateClientLoginForm/createClientLogin/removeClientLogin) foi
+// removido de propósito, não mantido como alternativa — pedido explícito
+// depois de confusão recorrente sobre qual dos dois mecanismos usar.
 export function ClientAccessModal({
   clinicId,
   initialLink,
+  initialFilaLink,
 }: {
   clinicId: string;
-  initialLink: ClientPanelLink | null;
+  initialLink: ClientLink | null;
+  initialFilaLink: ClientLink | null;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -56,7 +61,7 @@ export function ClientAccessModal({
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mb-3 flex items-center justify-between gap-3">
-              <h2 className="text-sm font-medium">Acesso do cliente ao painel dele</h2>
+              <h2 className="text-sm font-medium">Acesso do cliente</h2>
               <button
                 type="button"
                 onClick={() => setOpen(false)}
@@ -67,7 +72,17 @@ export function ClientAccessModal({
               </button>
             </div>
 
-            <ClientPanelLinkSection clinicId={clinicId} initialLink={initialLink} />
+            <div className="space-y-3">
+              <div>
+                <p className="mb-1.5 text-xs font-medium text-vexo-fg">Painel completo</p>
+                <ClientPanelLinkSection clinicId={clinicId} initialLink={initialLink} />
+              </div>
+
+              <div className="border-t border-vexo-border pt-3">
+                <p className="mb-1.5 text-xs font-medium text-vexo-fg">Só a Fila de abordagem</p>
+                <ClientFilaLinkSection clinicId={clinicId} initialLink={initialFilaLink} />
+              </div>
+            </div>
           </div>
         </div>
       )}

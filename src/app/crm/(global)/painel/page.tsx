@@ -20,6 +20,7 @@ export default async function PainelPage() {
       instagramAccount: true,
       googleCalendarAccount: true,
       clientPanelLink: { select: { token: true } },
+      clientFilaLink: { select: { token: true } },
     },
   });
 
@@ -80,6 +81,11 @@ export default async function PainelPage() {
                 initialLink={
                   clinic.clientPanelLink
                     ? { token: clinic.clientPanelLink.token, url: `${process.env.APP_URL ?? ""}/acesso/${clinic.clientPanelLink.token}` }
+                    : null
+                }
+                initialFilaLink={
+                  clinic.clientFilaLink
+                    ? { token: clinic.clientFilaLink.token, url: `${process.env.APP_URL ?? ""}/acesso-fila/${clinic.clientFilaLink.token}` }
                     : null
                 }
               />

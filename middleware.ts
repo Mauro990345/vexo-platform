@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getToken } from "next-auth/jwt";
 import { isReviewerAllowedPath } from "@/lib/reviewer-access";
+import { isFilaScopeAllowedPath } from "@/lib/client-fila-access";
 
 // Gate de pathname pro login Revisor (ver UserRole.REVIEWER) — roda ANTES
 // de qualquer layout/página, cobrindo automaticamente rota nova que
@@ -15,14 +16,37 @@ import { isReviewerAllowedPath } from "@/lib/reviewer-access";
 // própria página/rota, que já consulta o banco mesmo (ver
 // requireInternalOrReviewerSession em src/lib/session.ts).
 //
-// Qualquer papel que NÃO seja Revisor passa direto, sem nenhuma mudança de
-// comportamento (Admin/Equipe/Cliente continuam exatamente como sempre
-// foram — a lógica de página/ação deles nem é tocada por este arquivo).
+// Segundo gate, mesmo molde, pro segundo link de acesso do cliente
+// (ClientFilaLink, `scope: "fila"` no JWT — ver acesso-fila/[token]/
+// route.ts/client-fila-access.ts) — regra de segurança pedida
+// explicitamente: quem só tem o link da Fila nunca alcança /dashboard
+// (o painel inteiro), mesmo digitando a URL direto, mesmo já logado.
+// Redireciona pra própria Fila (nunca 404/rewrite como o Revisor acima —
+// não é "esconder que a rota existe", é "essa não é a tela deste link",
+// um cliente de verdade só erra o caminho, nunca está sondando).
+function handleFilaScopeGate(request: NextRequest, pathname: string): NextResponse | null {
+  if (!pathname.startsWith("/dashboard")) return null;
+  if (isFilaScopeAllowedPath(pathname)) return null;
+  return NextResponse.redirect(new URL("/dashboard/fila", request.url));
+}
+
+// Qualquer papel que NÃO seja Revisor/CLIENT com scope "fila" passa
+// direto, sem nenhuma mudança de comportamento (Admin/Equipe continuam
+// exatamente como sempre foram — a lógica de página/ação deles nem é
+// tocada por este arquivo).
 export async function middleware(request: NextRequest) {
   const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET });
-  if (!token || token.role !== "REVIEWER") return NextResponse.next();
+  if (!token) return NextResponse.next();
 
   const { pathname } = request.nextUrl;
+
+  if (token.role === "CLIENT" && token.scope === "fila") {
+    const blocked = handleFilaScopeGate(request, pathname);
+    if (blocked) return blocked;
+  }
+
+  if (token.role !== "REVIEWER") return NextResponse.next();
+
   const clinicId = (token.clinicId as string | null) ?? "";
   if (isReviewerAllowedPath(pathname, clinicId)) return NextResponse.next();
 
@@ -37,5 +61,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/crm/:path*", "/api/conversas/:path*", "/api/clinicas/:path*"],
+  matcher: ["/crm/:path*", "/api/conversas/:path*", "/api/clinicas/:path*", "/dashboard/:path*"],
 };

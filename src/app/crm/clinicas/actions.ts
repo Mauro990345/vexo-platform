@@ -611,6 +611,36 @@ export async function revokeClientPanelLink(clinicId: string): Promise<void> {
   revalidatePath("/crm/painel");
 }
 
+// Segundo link de acesso do cliente (ver ClientFilaLink no schema e
+// /acesso-fila/[token]/route.ts) — INDEPENDENTE do ClientPanelLink acima
+// (pedido explícito: dá acesso só à Fila de abordagem, nunca ao painel).
+// Mesmo padrão exato de getOrCreateClientPanelLink (token reaproveitado
+// se já existe, nunca "regenerar" — só criar/cancelar).
+export async function getOrCreateClientFilaLink(clinicId: string): Promise<{ token: string; url: string }> {
+  await requireInternalSession();
+
+  const existing = await prisma.clientFilaLink.findUnique({ where: { clinicId } });
+  if (existing) {
+    return { token: existing.token, url: `${process.env.APP_URL ?? ""}/acesso-fila/${existing.token}` };
+  }
+
+  const token = crypto.randomBytes(24).toString("base64url");
+  await prisma.clientFilaLink.create({ data: { clinicId, token } });
+
+  revalidatePath(`/crm/clinicas/${clinicId}/painel`);
+  revalidatePath("/crm/painel");
+  return { token, url: `${process.env.APP_URL ?? ""}/acesso-fila/${token}` };
+}
+
+export async function revokeClientFilaLink(clinicId: string): Promise<void> {
+  await requireInternalSession();
+
+  await prisma.clientFilaLink.deleteMany({ where: { clinicId } });
+
+  revalidatePath(`/crm/clinicas/${clinicId}/painel`);
+  revalidatePath("/crm/painel");
+}
+
 // Mesmo padrão do ClientPanelLink acima, pra outra finalidade: link
 // público de briefing de onboarding (ver BriefingLink no schema). Única
 // diferença real — aqui a criação exige dois textos digitados pelo Mauro

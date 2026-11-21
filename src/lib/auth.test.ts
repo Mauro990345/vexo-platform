@@ -69,3 +69,27 @@ describe("login (authorize) — User.active bloqueia o login", () => {
     expect(result).toBeNull();
   });
 });
+
+// callback session() — repassa `scope` do JWT pra session.user.scope
+// (ver next-auth.d.ts/session.ts). Quem GRAVA o scope é o encode()
+// manual de acesso-fila/[token]/route.ts (não passa por aqui, nem por
+// authorize() — este callback só LÊ o que já está no token).
+describe("callback session() — repassa scope do token (segundo link da Fila)", () => {
+  const baseSession = { user: { id: "", name: null, email: null, role: "CLIENT" as const, clinicId: null } };
+
+  it("token com scope='fila': session.user.scope='fila'", async () => {
+    const result = (await authOptions.callbacks!.session!({
+      session: structuredClone(baseSession),
+      token: { sub: "client-fila-link:clinic-1", role: "CLIENT", clinicId: "clinic-1", scope: "fila" },
+    } as never)) as { user: { scope?: string | null } };
+    expect(result.user.scope).toBe("fila");
+  });
+
+  it("token sem scope (login normal/ClientPanelLink): session.user.scope=null", async () => {
+    const result = (await authOptions.callbacks!.session!({
+      session: structuredClone(baseSession),
+      token: { sub: "user-1", role: "INTERNAL_ADMIN", clinicId: null },
+    } as never)) as { user: { scope?: string | null } };
+    expect(result.user.scope).toBeNull();
+  });
+});
