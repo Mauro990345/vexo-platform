@@ -1495,3 +1495,19 @@ próprio — os dois links agora coexistem, cada um com sua contagem:
   (`crm/(global)/layout.tsx`, rodada 1), sem relação com este. Dois números podem aparecer ao
   mesmo tempo (o geral em "Contas" e o desta clínica aqui), e isso é esperado: um é a visão
   completa, o outro é o recorte de onde o usuário já está.
+
+### Menu global — rodada 4 (removido de novo, definitivo: só um "Status", dentro da clínica)
+
+Com o "Status" por clínica de volta (rodada 3) e funcionando bem, os dois links ao mesmo tempo
+(geral em "Contas" + um por clínica) voltaram a ser redundantes na prática — pedido explícito
+pra ter só UM lugar pra isso, nunca dois. O item "Status" (e o badge de todas as clínicas) saiu
+de `crm/(global)/layout.tsx` de novo — o menu global volta a ter só "Contas" e "Abordagem",
+exatamente como era antes da rodada 1 (PR #258).
+
+- **`crm/(global)/layout.tsx` não calcula mais `prisma.message.count` nenhum** — a consulta
+  inteira saiu, não só o item de menu; não tinha mais nada ali que precisasse dela.
+- **`/crm/dispatch-status` (a visão de TODAS as clínicas) continua existindo e funcionando** —
+  só sem link nenhum no menu, igual ficou `/crm/clinicas/[id]/status` entre as rodadas 2 e 3;
+  quem precisar da visão geral agora abre a URL direto.
+- **O "Status" por clínica (rodada 3) não muda em nada** — continua na sidebar de cada clínica,
+  com seu próprio badge filtrado só pra ela; é o único lugar que resta pra essa funcionalidade.
