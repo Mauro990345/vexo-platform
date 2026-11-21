@@ -230,6 +230,77 @@ describe("getApproachBoardAccount — atribuição de mensagem (ver ensureApproa
   });
 });
 
+// Fila POR CLÍNICA (/crm/clinicas/[id]/abordagem/fila, pedido explícito) —
+// itemsLimit > 1 traz os próximos leads empilhados atrás do ativo, só
+// pra prévia (nome/@ + estimativa visual de liberação, nunca
+// message/dmLink — ver comentário grande de ApproachBoardItem acima).
+describe("getApproachBoardAccount — itemsLimit (Fila por clínica)", () => {
+  it("itemsLimit > 1: pede esse tanto ao banco (não mais 1 fixo) e devolve todos os itens encontrados", async () => {
+    approachQueueItemFindManyMock.mockResolvedValue([
+      { id: "item-1", username: "um.ig", name: "Um", assignedMessage: null, assignedMessageSlot: null },
+      { id: "item-2", username: "dois.ig", name: "Dois", assignedMessage: null, assignedMessageSlot: null },
+      { id: "item-3", username: "tres.ig", name: null, assignedMessage: null, assignedMessageSlot: null },
+    ]);
+
+    const account = await getApproachBoardAccount("clinic-1", NOW, undefined, 5);
+
+    expect(approachQueueItemFindManyMock).toHaveBeenCalledWith(expect.objectContaining({ take: 5 }));
+    expect(account?.items).toHaveLength(3);
+  });
+
+  it("só o item 0 (ativo) tem message/dmLink — os de baixo nunca sorteiam mensagem nem gravam no banco", async () => {
+    approachQueueItemFindManyMock.mockResolvedValue([
+      { id: "item-1", username: "um.ig", name: "Um", assignedMessage: null, assignedMessageSlot: null },
+      { id: "item-2", username: "dois.ig", name: "Dois", assignedMessage: null, assignedMessageSlot: null },
+    ]);
+
+    const account = await getApproachBoardAccount("clinic-1", NOW, undefined, 5);
+
+    expect(account?.items[0]?.message).not.toBeNull();
+    expect(account?.items[1]?.message).toBeNull();
+    expect(account?.items[1]?.dmLink).toBeNull();
+    // ensureApproachItemMessageAssigned só rodou pro item 0 — 1 update só.
+    expect(approachQueueItemUpdateMock).toHaveBeenCalledTimes(1);
+    expect(approachQueueItemUpdateMock).toHaveBeenCalledWith(expect.objectContaining({ where: { id: "item-1" } }));
+  });
+
+  it("itens empilhados ganham estimatedMsRemaining, crescente item a item; o ativo (índice 0) nunca tem esse campo", async () => {
+    approachTimingSettingsFindUniqueMock.mockResolvedValue({ waitMinMinutes: 1, waitMaxMinutes: 2, batchSize: 30, batchPauseHours: 2 });
+    approachQueueItemFindManyMock.mockResolvedValue([
+      { id: "item-1", username: "um.ig", name: null, assignedMessage: null, assignedMessageSlot: null },
+      { id: "item-2", username: "dois.ig", name: null, assignedMessage: null, assignedMessageSlot: null },
+      { id: "item-3", username: "tres.ig", name: null, assignedMessage: null, assignedMessageSlot: null },
+    ]);
+
+    const account = await getApproachBoardAccount("clinic-1", NOW, undefined, 5);
+
+    expect(account?.items[0]?.estimatedMsRemaining).toBeUndefined();
+    expect(account?.items[1]?.estimatedMsRemaining).toBe(90_000); // (1+2)/2 min
+    expect(account?.items[2]?.estimatedMsRemaining).toBe(180_000);
+  });
+
+  it("itemsLimit=1 (Fila global, padrão): nunca gasta a query de timing nem calcula estimativa nenhuma", async () => {
+    approachQueueItemFindManyMock.mockResolvedValue([{ id: "item-1", username: "um.ig", name: null, assignedMessage: null, assignedMessageSlot: null }]);
+
+    await getApproachBoardAccount("clinic-1", NOW);
+
+    expect(approachTimingSettingsFindUniqueMock).not.toHaveBeenCalled();
+  });
+
+  it("estimativa soma a pausa de lote inteira quando o lote já está perto do fim (batchSentCount vindo do ApproachQueueConfig)", async () => {
+    approachQueueConfigUpsertMock.mockResolvedValue(baseConfig({ batchSentCount: 29 }));
+    approachTimingSettingsFindUniqueMock.mockResolvedValue({ waitMinMinutes: 1, waitMaxMinutes: 2, batchSize: 30, batchPauseHours: 2 });
+    approachQueueItemFindManyMock.mockResolvedValue([
+      { id: "item-1", username: "um.ig", name: null, assignedMessage: null, assignedMessageSlot: null },
+      { id: "item-2", username: "dois.ig", name: null, assignedMessage: null, assignedMessageSlot: null },
+    ]);
+
+    const account = await getApproachBoardAccount("clinic-1", NOW, undefined, 5);
+
+    expect(account?.items[1]?.estimatedMsRemaining).toBe(90_000 + 2 * 3600_000);
+  });
+});
+
 describe("confirmApproachSend", () => {
   it("fora do horário permitido — não registra", async () => {
     const result = await confirmApproachSend("clinic-1", "item-1", new Date("2026-01-15T03:00:00Z"));

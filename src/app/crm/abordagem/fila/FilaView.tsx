@@ -20,7 +20,10 @@ const POLL_INTERVAL_MS = 15_000;
 const TICK_INTERVAL_MS = 1_000;
 const NOTICE_DURATION_MS = 3_000;
 
-function firstNameOnly(name: string): string {
+// Exportada pra ClinicFilaView.tsx (Fila por clínica) reaproveitar no
+// texto dos itens empilhados atrás do ativo — mesmo recorte de "só o
+// primeiro nome" usado aqui.
+export function firstNameOnly(name: string): string {
   return name.trim().split(/\s+/)[0] ?? name;
 }
 
@@ -195,6 +198,13 @@ export function ClinicQueueCard({
   onSkip,
   onUndo,
   onPauseToggle,
+  // true só na Fila POR CLÍNICA (ClinicFilaView.tsx) — lá o @ do Instagram
+  // CONECTADO já aparece no topo da PÁGINA (ao lado do título, pedido
+  // explícito), então repeti-lo de novo dentro do card seria redundante.
+  // A Fila GLOBAL nunca passa isso (default false) — continua exatamente
+  // como está, com o @ dentro do card (cada card é de uma clínica
+  // diferente, não tem onde "subir pra página" pra todas de uma vez).
+  hideConnectedHandle = false,
 }: {
   account: ApproachBoardAccount;
   now: number;
@@ -204,6 +214,7 @@ export function ClinicQueueCard({
   onSkip: (itemId: string) => void;
   onUndo: () => void;
   onPauseToggle: (paused: boolean) => void;
+  hideConnectedHandle?: boolean;
 }) {
   const item = account.items[0];
   if (!item) return null;
@@ -237,24 +248,32 @@ export function ClinicQueueCard({
     <div className="flex items-center gap-2.5 rounded-block border border-vexo-border bg-vexo-surface px-block py-block-y" data-clinic-queue-card>
       <ClinicAvatar name={account.name} profilePictureUrl={account.profilePictureUrl} size="md" />
       <div className="min-w-0 flex-1">
-        {/* @ do Instagram CONECTADO desta clínica (não o @ do lead, logo
-            abaixo) — pedido explícito, pro operador conferir, antes de
-            apertar "Enviar", se bate com a conta logada no Instagram
-            daquele navegador/perfil do Chrome (um por clínica). Na MESMA
-            linha do nome da clínica (não numa linha própria) — os 5 cards
-            da Fila precisam continuar cabendo na 1ª tela de um iPhone SE
-            sem rolar (ver FilaView.layout.test.tsx), e uma linha nova por
-            card não cabia nesse orçamento. Primeiro elemento da linha,
-            então continua "antes do nome do lead" (e do próprio nome da
-            clínica) — exatamente o pedido. */}
-        <p className="flex items-center gap-1 text-body-sm font-medium text-vexo-fg">
-          <InstagramGlyphIcon className="h-3 w-3 shrink-0" />
-          <span className="shrink-0 font-semibold">
-            {account.igUsername ? `@${account.igUsername}` : "Instagram não conectado"}
-          </span>
-          <span className="truncate text-meta font-normal text-vexo-mutedLight">· {account.name}</span>
-          <span className="shrink-0 text-meta font-normal text-vexo-mutedLight">· {account.leadsRemaining}</span>
-        </p>
+        {hideConnectedHandle ? (
+          // Fila por clínica: o @ conectado já está no topo da PÁGINA —
+          // volta pro texto simples de sempre (nome da clínica + contador).
+          <p className="truncate text-body-sm font-medium text-vexo-fg">
+            {account.name} <span className="text-meta font-normal text-vexo-mutedLight">· {account.leadsRemaining}</span>
+          </p>
+        ) : (
+          // @ do Instagram CONECTADO desta clínica (não o @ do lead, logo
+          // abaixo) — pedido explícito, pro operador conferir, antes de
+          // apertar "Enviar", se bate com a conta logada no Instagram
+          // daquele navegador/perfil do Chrome (um por clínica). Na MESMA
+          // linha do nome da clínica (não numa linha própria) — os 5 cards
+          // da Fila precisam continuar cabendo na 1ª tela de um iPhone SE
+          // sem rolar (ver FilaView.layout.test.tsx), e uma linha nova por
+          // card não cabia nesse orçamento. Primeiro elemento da linha,
+          // então continua "antes do nome do lead" (e do próprio nome da
+          // clínica) — exatamente o pedido.
+          <p className="flex items-center gap-1 text-body-sm font-medium text-vexo-fg">
+            <InstagramGlyphIcon className="h-3 w-3 shrink-0" />
+            <span className="shrink-0 font-semibold">
+              {account.igUsername ? `@${account.igUsername}` : "Instagram não conectado"}
+            </span>
+            <span className="truncate text-meta font-normal text-vexo-mutedLight">· {account.name}</span>
+            <span className="shrink-0 text-meta font-normal text-vexo-mutedLight">· {account.leadsRemaining}</span>
+          </p>
+        )}
         {name ? (
           <p className="truncate text-meta text-vexo-muted">
             {firstNameOnly(name)} · @{username}

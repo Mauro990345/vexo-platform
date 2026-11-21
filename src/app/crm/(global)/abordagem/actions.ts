@@ -26,6 +26,7 @@ import {
   confirmApproachSend,
   undoLastApproachSend,
   skipApproachItem,
+  CLINIC_FILA_STACK_SIZE,
   type ApproachBoardAccount,
   type ApproachWindow,
   type ApproachTiming,
@@ -225,7 +226,10 @@ export async function getApproachBoardForClinicAction(clinicId: string): Promise
   await requireApproachAdmin();
   const now = new Date();
   const window = await getApproachWindow();
-  const account = await getApproachBoardAccount(clinicId, now, window);
+  // CLINIC_FILA_STACK_SIZE (não 1, como a Fila global) — pedido explícito:
+  // mostrar os próximos leads empilhados, não só o ativo (ver
+  // ClinicFilaView.tsx).
+  const account = await getApproachBoardAccount(clinicId, now, window, CLINIC_FILA_STACK_SIZE);
   return { account, window };
 }
 

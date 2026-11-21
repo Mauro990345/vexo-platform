@@ -511,6 +511,40 @@ todas.
   - A Fila global (`/crm/abordagem/fila`) continua existindo exatamente como estava — tela nova,
     a mais, nunca uma substituição.
 
+### Fila de abordagem — rodada 12 (@ conectado sobe pro topo da página + próximos leads empilhados, só na Fila por clínica)
+
+Dois ajustes pedidos na Fila por clínica (`/crm/clinicas/[id]/abordagem/fila`, rodada anterior) —
+a Fila global (`/crm/abordagem/fila`) não muda em nada aqui.
+
+- **@ conectado sobe pro topo da PÁGINA, não mais dentro do card** — ao lado do título
+  "Abordagem", separado por "·": `InstagramOutlineIcon` (novo, `BrandIcons.tsx` — mesmo desenho
+  do glifo de sempre, quadrado arredondado + círculo + pontinho, SEM o squircle com o gradiente da
+  marca, em `currentColor` pra herdar a cor do texto ao lado) + o username, **sem "@" na frente**
+  (pedido explícito), `text-base font-semibold` (16px, mesmo tamanho do próprio título).
+  `ClinicQueueCard` ganha a prop `hideConnectedHandle` (`FilaView.tsx`, usada só aqui — default
+  `false` preserva a Fila global 100% intocada) que troca a linha do @ pelo texto simples de
+  sempre (nome da clínica + contador), pra não repetir a mesma informação duas vezes na tela.
+- **Próximos leads empilhados atrás do ativo** (`CLINIC_FILA_STACK_SIZE = 5`,
+  `approach-queue-db.ts`) — só o 1º card é o de sempre (`ClinicQueueCard`, botão "Enviar" real);
+  os outros 4 são uma prévia esmaecida (`opacity-50`), sem avatar nem links de ação, só
+  nome/@ do lead + uma estimativa de quando devem liberar (ex.: "1min 20s" — `formatApproachEstimateLabel`,
+  approach-queue.ts). **Nunca clicáveis** — a regra de "só um envio por vez liberado" (espera de
+  1-2min, pausa de 2h a cada 30) não muda em nada; isto é só visual.
+  - **A estimativa é uma projeção, nunca uma promessa** (`estimateQueuedItemsMsRemaining`,
+    approach-queue.ts): o espaçamento real entre envios só é sorteado (`randomApproachWaitMs`) no
+    momento em que cada um sai de verdade — a função assume "liberou, enviou na hora, esperou a
+    média configurada" repetido item a item, somando a pausa de lote inteira quando o item
+    hipotético cruzaria o tamanho do lote (`ApproachQueueConfig.batchSentCount`). Calculada no
+    SERVIDOR (`getApproachBoardAccount`, novo parâmetro `itemsLimit` — 1 de sempre pra Fila
+    global, nunca entra nesse cálculo; 5 só na Fila por clínica) e anexada em
+    `ApproachBoardItem.estimatedMsRemaining` (undefined pro item ativo). Tique ao vivo no cliente
+    (mesmo `now`/`fetchedAt` de sempre), nunca precisa recarregar a página pra contar.
+  - Mensagem/link de DM **nunca** são sorteados/atribuídos pros itens empilhados (só o item 0,
+    igual já era) — evita "prender" uma mensagem a um lead que ainda pode ser pulado antes de
+    chegar a vez dele.
+  - **Orçamento de altura validado de novo** (`ClinicFilaView.layout.test.tsx`, mesmo padrão da
+    rodada 7): 1 card ativo + 4 empilhados cabem na 1ª tela de um iPhone SE sem rolar.
+
 ## Relatório de resultados (quinzenal/mensal) — envio automático por WhatsApp
 Nova tela, administrada pela página "Contas" (`/crm`, só admin — ver DESIGN.md/CLAUDE.md,
 `ClinicReportPanel.tsx`/`report-actions.ts`). Mesmos tokens/componentes de sempre, nenhuma cor solta:

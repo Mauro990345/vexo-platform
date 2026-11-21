@@ -20,6 +20,7 @@ import {
   DEFAULT_APPROACH_WAIT_MAX_MINUTES,
   DEFAULT_APPROACH_BATCH_SIZE,
   DEFAULT_APPROACH_BATCH_PAUSE_HOURS,
+  estimateQueuedItemsMsRemaining,
   type ApproachAccountState,
   type ApproachUploadRow,
 } from "@/lib/approach-queue";
@@ -213,7 +214,20 @@ export { parseApproachUsernamesTxt };
 // Board da Fila (contas + até 3 cards cada)
 // ---------------------------------------------------------------------------
 
-export type ApproachBoardItem = { id: string; username: string; name: string | null; message: string | null; dmLink: string | null };
+export type ApproachBoardItem = {
+  id: string;
+  username: string;
+  name: string | null;
+  message: string | null;
+  dmLink: string | null;
+  // Só presente em itens EMPILHADOS (índice > 0, ver itemsLimit em
+  // getApproachBoardAccount abaixo) — estimativa PURAMENTE VISUAL de
+  // quando este item deve liberar (ver estimateQueuedItemsMsRemaining,
+  // approach-queue.ts, pro porquê de nunca ser uma garantia exata).
+  // undefined pro item ativo (índice 0) e sempre que itemsLimit=1 (Fila
+  // global, ClinicQueueCard continua usando o `state` da conta de sempre).
+  estimatedMsRemaining?: number;
+};
 
 export type ApproachBoardAccount = {
   clinicId: string;
@@ -281,7 +295,22 @@ async function ensureApproachItemMessageAssigned(
 // (getApproachBoard) quanto pelas actions de enviar/desfazer/pular/pausar
 // (cada uma devolve o snapshot só da conta que mexeu, pro cliente atualizar
 // aquele card sem precisar recarregar o board inteiro).
-export async function getApproachBoardAccount(clinicId: string, now: Date = new Date(), window?: ApproachWindow): Promise<ApproachBoardAccount | null> {
+// itemsLimit: quantos itens da fila (QUEUED) trazer, não só o ativo — a
+// Fila GLOBAL continua pedindo 1 (padrão, comportamento intocado, ver
+// DESIGN.md "3/5 cards"); a Fila POR CLÍNICA (pedido explícito,
+// ClinicFilaView.tsx) pede mais (4-5), pra mostrar os próximos leads
+// empilhados atrás do ativo. Só o item [0] (o ativo de sempre) tem
+// message/dmLink atribuídos (ensureApproachItemMessageAssigned) — os
+// demais só servem de PRÉVIA (nome/@), nunca precisam de mensagem
+// sorteada antes de realmente virarem o ativo (mesmo motivo de sempre:
+// sortear adiantado "prenderia" a mensagem a um item que pode ser pulado
+// antes de chegar a vez dele).
+export async function getApproachBoardAccount(
+  clinicId: string,
+  now: Date = new Date(),
+  window?: ApproachWindow,
+  itemsLimit: number = 1
+): Promise<ApproachBoardAccount | null> {
   const clinic = await prisma.clinic.findUnique({
     where: { id: clinicId },
     select: { id: true, name: true, instagramAccount: { select: { igUsername: true, profilePictureUrl: true } } },
@@ -292,13 +321,13 @@ export async function getApproachBoardAccount(clinicId: string, now: Date = new 
     getOrCreateApproachQueueConfig(clinicId),
     countApproachedToday(clinicId, now),
     countApproachQueueRemaining(clinicId),
-    // Cada clínica participante tem sempre só 1 lead ativo na tela (o
-    // próximo @ dela) — a fila de preparação pode ter mais itens atrás
-    // dele, mas só o da frente aparece no board (ver DESIGN.md "3 cards").
+    // Cada clínica participante tem sempre só 1 lead ATIVO na tela da
+    // Fila global (o próximo @ dela, ver itemsLimit acima) — a fila de
+    // preparação pode ter mais itens atrás dele (ver DESIGN.md "3 cards").
     prisma.approachQueueItem.findMany({
       where: { clinicId, status: "QUEUED" },
       orderBy: { createdAt: "asc" },
-      take: 1,
+      take: itemsLimit,
       select: { id: true, username: true, name: true, assignedMessage: true, assignedMessageSlot: true },
     }),
     window ? Promise.resolve(window) : getApproachWindow(),
@@ -314,20 +343,51 @@ export async function getApproachBoardAccount(clinicId: string, now: Date = new 
     windowEndMinute: resolvedWindow.endMinute,
   });
 
-  const front = rawItems[0];
+  const [front, ...rest] = rawItems;
   const assigned = front ? await ensureApproachItemMessageAssigned(clinicId, front) : null;
 
-  const items: ApproachBoardItem[] = front
-    ? [
-        {
-          id: front.id,
-          username: front.username,
-          name: front.name,
-          message: assigned?.message ?? null,
-          dmLink: assigned ? buildInstagramDmLink(front.username, assigned.message) : null,
-        },
-      ]
-    : [];
+  const frontItem: ApproachBoardItem | null = front
+    ? {
+        id: front.id,
+        username: front.username,
+        name: front.name,
+        message: assigned?.message ?? null,
+        dmLink: assigned ? buildInstagramDmLink(front.username, assigned.message) : null,
+      }
+    : null;
+
+  let items: ApproachBoardItem[] = frontItem ? [frontItem] : [];
+
+  // Só gasta a query extra (timing) e calcula estimativa quando existe
+  // mais de 1 item de verdade (itemsLimit=1, caminho de sempre da Fila
+  // global, nunca entra aqui) — ver comentário grande de
+  // estimateQueuedItemsMsRemaining, approach-queue.ts.
+  if (rest.length > 0) {
+    const timing = await getApproachTimingSettings();
+    const frontMsRemaining = state.kind === "WAITING" || state.kind === "BATCH_PAUSED" ? state.msRemaining : 0;
+    const estimates = estimateQueuedItemsMsRemaining({
+      frontMsRemaining,
+      itemCount: rawItems.length,
+      batchSentCount: config.batchSentCount,
+      batchSize: timing.batchSize,
+      batchPauseMs: timing.batchPauseHours * 3600_000,
+      waitMinMs: timing.waitMinMinutes * 60_000,
+      waitMaxMs: timing.waitMaxMinutes * 60_000,
+    });
+    items = [
+      ...items,
+      ...rest.map((item, idx) => ({
+        id: item.id,
+        username: item.username,
+        name: item.name,
+        message: null,
+        dmLink: null,
+        // rest[0] é o índice 1 do lote original (0 é o front) — estimates
+        // está na mesma ordem de rawItems.
+        estimatedMsRemaining: estimates[idx + 1],
+      })),
+    ];
+  }
 
   return {
     clinicId: clinic.id,
@@ -345,6 +405,15 @@ export async function getApproachBoardAccount(clinicId: string, now: Date = new 
 // Quantos cards aparecem ao mesmo tempo na tela da Fila (rodada 7: 3 -> 5,
 // só ajuste de quantidade/altura — ver DESIGN.md "rodada 7").
 export const APPROACH_BOARD_MAX_ACCOUNTS = 5;
+
+// Quantos leads aparecem empilhados na Fila POR CLÍNICA (pedido explícito
+// — ver ClinicFilaView.tsx/getApproachBoardForClinicAction, actions.ts):
+// só o item 0 tem o botão "Enviar" de verdade; os demais são prévia
+// esmaecida com a estimativa de quando devem liberar. Testado via
+// Playwright (ClinicFilaView.layout.test.tsx) — cabe na 1ª tela de um
+// iPhone SE sem rolar, mesmo orçamento da rodada 7 (ver DESIGN.md "Fila
+// de abordagem — rodada 12").
+export const CLINIC_FILA_STACK_SIZE = 5;
 
 // Escolhe até APPROACH_BOARD_MAX_ACCOUNTS clínicas pra mostrar na tela: só
 // as que têm lead ativo (sem isso, não há "próximo @" pra mostrar no

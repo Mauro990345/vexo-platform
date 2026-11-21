@@ -399,6 +399,73 @@ export function computeApproachAccountState(params: {
 }
 
 // ---------------------------------------------------------------------------
+// Estimativa de liberação dos itens EMPILHADOS atrás do ativo (Fila por
+// clínica, /crm/clinicas/[id]/abordagem/fila — pedido explícito: mostrar os
+// próximos 4-5 leads, só o 1º com botão clicável, os de baixo esmaecidos
+// com uma contagem de quando devem liberar)
+// ---------------------------------------------------------------------------
+
+// NUNCA uma promessa exata — o único instante real é frontMsRemaining (o
+// `lockedUntil`/`batchPausedUntil` JÁ GRAVADO, ver computeApproachAccountState
+// acima); o espaçamento REAL entre os próximos envios só é sorteado
+// (randomApproachWaitMs) no momento em que cada um sai de verdade, nunca
+// antes. Esta função projeta uma estimativa PURAMENTE VISUAL assumindo o
+// cenário "liberou, enviou na hora, esperou a média configurada" repetido
+// item a item — serve só pra dar uma ideia de quando cada card deve ficar
+// pronto, NUNCA decide se o botão é clicável (isso continua sendo só o
+// item 0, o ativo de verdade — ver ClinicFilaView.tsx). Errar pra mais ou
+// pra menos aqui nunca quebra a regra de "só um envio por vez liberado".
+//
+// Pausa de lote: cruza a mesma fronteira que confirmApproachSend usa de
+// verdade (nextBatchSentCount >= batchSize) — cada item hipotético conta
+// como +1 no lote; ao cruzar o tamanho do lote, soma a pausa inteira e
+// zera a contagem (mesmo reset que acontece de verdade quando uma pausa
+// vencida é detectada no próximo envio real).
+export function estimateQueuedItemsMsRemaining(params: {
+  frontMsRemaining: number; // 0 quando o item ativo já está READY agora
+  itemCount: number; // total de itens, incluindo o ativo (índice 0)
+  batchSentCount: number; // envios já contados no lote ATUAL (ApproachQueueConfig.batchSentCount)
+  batchSize: number;
+  batchPauseMs: number; // 0 = pausa de lote desligada
+  waitMinMs: number;
+  waitMaxMs: number;
+}): number[] {
+  const avgWaitMs = (params.waitMinMs + params.waitMaxMs) / 2;
+  const results: number[] = [];
+  let cumulativeMs = Math.max(0, params.frontMsRemaining);
+  let batchCount = params.batchSentCount;
+
+  for (let index = 0; index < params.itemCount; index++) {
+    if (index > 0) {
+      cumulativeMs += avgWaitMs;
+      batchCount += 1;
+      if (params.batchPauseMs > 0 && batchCount >= params.batchSize) {
+        cumulativeMs += params.batchPauseMs;
+        batchCount = 0;
+      }
+    }
+    results.push(Math.round(cumulativeMs));
+  }
+  return results;
+}
+
+// "1min 20s" / "2h05min" / "45s" — rótulo da estimativa (ver
+// estimateQueuedItemsMsRemaining acima) nos itens empilhados da Fila por
+// clínica. Formato DIFERENTE de propósito de formatApproachCountdown
+// ("m:ss", o botão "Aguarde" do item ATIVO) — esse aqui é só uma prévia
+// visual, não um relógio de verdade, então escreve por extenso (pedido
+// explícito, ver DESIGN.md) em vez do formato compacto do cronômetro real.
+export function formatApproachEstimateLabel(msRemaining: number): string {
+  const totalSeconds = Math.max(0, Math.round(msRemaining / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  if (hours > 0) return `${hours}h${String(minutes).padStart(2, "0")}min`;
+  if (minutes > 0) return `${minutes}min ${String(seconds).padStart(2, "0")}s`;
+  return `${seconds}s`;
+}
+
+// ---------------------------------------------------------------------------
 // Ordem dos cards na Fila: liberadas primeiro, depois espera/pausa da que
 // volta mais cedo pra que volta mais tarde — ver DESIGN.md
 // ---------------------------------------------------------------------------

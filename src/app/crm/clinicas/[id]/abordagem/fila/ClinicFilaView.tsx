@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { useEffect, useState, useTransition } from "react";
-import { isWithinApproachHours, formatApproachWindowLabel } from "@/lib/approach-queue";
+import { isWithinApproachHours, formatApproachWindowLabel, formatApproachEstimateLabel } from "@/lib/approach-queue";
 import { copyToClipboard } from "@/lib/clipboard";
 import { INSTAGRAM_DM_WINDOW_NAME } from "@/lib/reactivation";
+import { InstagramOutlineIcon } from "@/components/BrandIcons";
 import {
   getApproachBoardForClinicAction,
   confirmApproachSendAction,
@@ -12,7 +13,7 @@ import {
   skipApproachItemAction,
   setApproachPausedAction,
 } from "@/app/crm/(global)/abordagem/actions";
-import { ClinicQueueCard } from "@/app/crm/abordagem/fila/FilaView";
+import { ClinicQueueCard, firstNameOnly } from "@/app/crm/abordagem/fila/FilaView";
 import type { ApproachBoardAccount, ApproachBoardItem, ApproachWindow } from "@/lib/approach-queue-db";
 
 const POLL_INTERVAL_MS = 15_000;
@@ -129,17 +130,33 @@ export function ClinicFilaView({
     });
   }
 
+  // Itens 1..N (tudo que não é o ativo) — só prévia esmaecida, nunca
+  // clicável (ver comentário grande de QueuedLeadPreviewRow, abaixo).
+  const queuedPreview = (account?.items ?? []).slice(1);
+
   return (
     <div className="max-w-[520px] space-y-2">
-      <div>
-        <h1 className="text-base font-semibold tracking-tight">Abordagem</h1>
-        <p className="mt-0.5 text-xs text-vexo-muted">
-          Fila só desta clínica — {clinicName}.{" "}
-          <Link href="/crm/abordagem/fila" className="underline hover:text-vexo-fg">
-            Ver a Fila de todas as clínicas
-          </Link>
-          .
-        </p>
+      <div className="flex flex-wrap items-baseline justify-between gap-1.5">
+        <div className="flex flex-wrap items-baseline gap-1.5">
+          <h1 className="text-base font-semibold tracking-tight">Abordagem</h1>
+          <span aria-hidden="true" className="text-vexo-mutedLight">
+            ·
+          </span>
+          {/* @ do Instagram CONECTADO desta clínica, SEM "@" na frente
+              (pedido explícito) — só nesta tela, ao lado do título; a Fila
+              global continua com o @ dentro de cada card (ver
+              ClinicQueueCard, hideConnectedHandle). Ícone de CONTORNO
+              (InstagramOutlineIcon, sem a cor da marca) — já tem bastante
+              cor perto (badge do título/sidebar), o contorno evita
+              competir visualmente. */}
+          <span className="flex items-center gap-1 text-base font-semibold text-vexo-fg">
+            <InstagramOutlineIcon className="h-4 w-4 shrink-0" />
+            {account?.igUsername ?? "Instagram não conectado"}
+          </span>
+        </div>
+        <Link href="/crm/abordagem/fila" className="shrink-0 text-caption text-vexo-muted underline hover:text-vexo-fg">
+          Fila de todas as clínicas
+        </Link>
       </div>
 
       {!withinHours ? (
@@ -149,16 +166,22 @@ export function ClinicFilaView({
       ) : (
         <>
           {account && account.items.length > 0 ? (
-            <ClinicQueueCard
-              account={account}
-              now={now}
-              fetchedAt={fetchedAt}
-              sendingItemId={sendingItemId}
-              onSend={handleSend}
-              onSkip={handleSkip}
-              onUndo={handleUndo}
-              onPauseToggle={handlePauseToggle}
-            />
+            <div className="space-y-1.5">
+              <ClinicQueueCard
+                account={account}
+                now={now}
+                fetchedAt={fetchedAt}
+                sendingItemId={sendingItemId}
+                onSend={handleSend}
+                onSkip={handleSkip}
+                onUndo={handleUndo}
+                onPauseToggle={handlePauseToggle}
+                hideConnectedHandle
+              />
+              {queuedPreview.map((item) => (
+                <QueuedLeadPreviewRow key={item.id} item={item} now={now} fetchedAt={fetchedAt} />
+              ))}
+            </div>
           ) : (
             <p className="rounded-block bg-vexo-surface p-block text-center text-sm text-vexo-muted">Nenhum lead pronto pra abordar agora.</p>
           )}
@@ -166,6 +189,26 @@ export function ClinicFilaView({
           {notice && <p className="text-caption text-vexo-muted">{notice}</p>}
         </>
       )}
+    </div>
+  );
+}
+
+// Prévia dos PRÓXIMOS leads da fila, empilhados atrás do ativo (pedido
+// explícito — ver CLINIC_FILA_STACK_SIZE, approach-queue-db.ts). Só
+// aparência: nome/@ + uma estimativa de quando devem liberar
+// (formatApproachEstimateLabel, ver comentário grande de
+// estimateQueuedItemsMsRemaining, approach-queue.ts, pro porquê de NUNCA
+// ser uma garantia exata). NUNCA clicável — sem onClick, sem
+// href, sem cursor-pointer — só o card ativo (ClinicQueueCard, acima)
+// tem o botão "Enviar" de verdade; manter só um envio por vez liberado é
+// a MESMA regra de sempre, isto aqui é só visual.
+function QueuedLeadPreviewRow({ item, now, fetchedAt }: { item: ApproachBoardItem; now: number; fetchedAt: number }) {
+  const estimatedMs = item.estimatedMsRemaining ?? 0;
+  const remaining = Math.max(0, fetchedAt + estimatedMs - now);
+  return (
+    <div className="flex items-center justify-between gap-2 rounded-block border border-vexo-border bg-vexo-surface px-block py-1.5 opacity-50">
+      <p className="truncate text-meta text-vexo-muted">{item.name ? `${firstNameOnly(item.name)} · @${item.username}` : `@${item.username}`}</p>
+      <span className="shrink-0 whitespace-nowrap text-meta text-vexo-mutedLight">{formatApproachEstimateLabel(remaining)}</span>
     </div>
   );
 }

@@ -16,6 +16,11 @@ const getApproachWindowMock = vi.fn();
 vi.mock("@/lib/approach-queue-db", () => ({
   getApproachBoardAccount: (...args: unknown[]) => getApproachBoardAccountMock(...args),
   getApproachWindow: (...args: unknown[]) => getApproachWindowMock(...args),
+  // Mesmo valor real de CLINIC_FILA_STACK_SIZE (approach-queue-db.ts) —
+  // precisa ser o valor de verdade aqui (não um vi.fn()), já que
+  // getApproachBoardForClinicAction repassa ele direto pro 4º argumento
+  // de getApproachBoardAccount.
+  CLINIC_FILA_STACK_SIZE: 5,
   // Resto do módulo não usado por esta action — mocks mínimos só pra não
   // quebrar a importação dos outros exports usados por actions.ts.
   getApproachBoard: vi.fn(),
@@ -48,7 +53,18 @@ describe("getApproachBoardForClinicAction", () => {
     const result = await getApproachBoardForClinicAction("clinic-1");
 
     expect(result).toEqual({ account, window: WINDOW });
-    expect(getApproachBoardAccountMock).toHaveBeenCalledWith("clinic-1", expect.any(Date), WINDOW);
+    expect(getApproachBoardAccountMock).toHaveBeenCalledWith("clinic-1", expect.any(Date), WINDOW, 5);
+  });
+
+  // Pedido explícito: mostrar os próximos leads empilhados (não só 1,
+  // como a Fila global) nesta tela por clínica.
+  it("pede CLINIC_FILA_STACK_SIZE itens (não 1, como a Fila global pede por padrão)", async () => {
+    getApproachBoardAccountMock.mockResolvedValue({ clinicId: "clinic-1", name: "Clínica Demo", igUsername: null, profilePictureUrl: null, dailyLimit: 60, sentToday: 0, leadsRemaining: 0, state: { kind: "READY" }, items: [] });
+
+    const { getApproachBoardForClinicAction } = await import("./actions");
+    await getApproachBoardForClinicAction("clinic-1");
+
+    expect(getApproachBoardAccountMock).toHaveBeenCalledWith("clinic-1", expect.any(Date), WINDOW, 5);
   });
 
   it("clínica sem ApproachQueueConfig.activeInQueue (desligada na Preparação) continua funcionando — getApproachBoardAccount não recebe nem checa esse campo", async () => {
