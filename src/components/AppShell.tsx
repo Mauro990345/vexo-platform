@@ -14,7 +14,10 @@ import { SignOutButton } from "@/components/SignOutButton";
 // "/whatsapp" é alcançada a partir do card de WhatsApp em "Conexões", mas
 // não vive em "/conexoes/whatsapp" (é rota irmã, não filha), então o
 // prefixo comum de URL sozinho não bastava pra ligar as duas.
-export type NavItem = { href: string; label: string; icon: React.ReactNode; activeMatch?: string[] };
+// badge: contagem opcional exibida ao lado do item (ex: mensagens com
+// FAILED em "Status") — só aparece quando > 0, sempre na cor de erro do
+// design system (vexo-error), nunca uma cor nova por item.
+export type NavItem = { href: string; label: string; icon: React.ReactNode; activeMatch?: string[]; badge?: number };
 export type NavGroup = { label: string; items: NavItem[] };
 
 // Resolve o item ativo pelo prefixo mais específico — evita que "/crm" fique
@@ -37,6 +40,14 @@ function resolveActiveHref(pathname: string, groups: NavGroup[]): string | null 
   return matches.reduce((best, item) => (item.href.length > best.href.length ? item : best)).href;
 }
 
+function NavBadge({ count }: { count: number }) {
+  return (
+    <span className="ml-auto shrink-0 rounded-full bg-vexo-error px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white">
+      {count}
+    </span>
+  );
+}
+
 function NavLink({ item, active }: { item: NavItem; active: boolean }) {
   return (
     <Link
@@ -49,6 +60,7 @@ function NavLink({ item, active }: { item: NavItem; active: boolean }) {
     >
       {item.icon}
       <span className="truncate">{item.label}</span>
+      {!!item.badge && <NavBadge count={item.badge} />}
     </Link>
   );
 }
@@ -123,11 +135,12 @@ export function AppShell({
               <Link
                 key={item.href}
                 href={item.href}
-                className={`whitespace-nowrap rounded-lg px-2.5 py-1.5 text-sm font-medium transition ${
+                className={`flex items-center gap-1.5 whitespace-nowrap rounded-lg px-2.5 py-1.5 text-sm font-medium transition ${
                   active ? "bg-vexo-accent/15 text-vexo-accent" : "text-vexo-muted hover:text-vexo-fg"
                 }`}
               >
                 {item.label}
+                {!!item.badge && <NavBadge count={item.badge} />}
               </Link>
             );
           })}
