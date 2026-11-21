@@ -4,14 +4,17 @@ import { useState } from "react";
 import { InstagramGlyphIcon } from "@/components/BrandIcons";
 import { INSTAGRAM_ACTION_BUTTON_CLASS } from "@/components/ReactivationActionButtonStyle";
 import { copyToClipboard } from "@/lib/clipboard";
+import { INSTAGRAM_DM_WINDOW_NAME } from "@/lib/reactivation";
 
 const LABEL_RESET_DELAY_MS = 2000;
 const TOAST_DURATION_MS = 2500;
 
 // Botão "Instagram" da faixa de Reativação (ver ReactivationRail.tsx) — um
 // clique faz DUAS coisas: copia a mensagem sugerida pra área de
-// transferência E abre a conversa no Instagram (ig.me/m/<@>) numa aba
-// nova. `dmLink` já chega pronto de resolveInstagramDmLink/buildInstagramDmLink
+// transferência E abre a conversa no Instagram (ig.me/m/<@>) numa aba com
+// nome fixo (INSTAGRAM_DM_WINDOW_NAME, reactivation.ts) — a MESMA aba é
+// reaproveitada no próximo clique, nunca uma nova. `dmLink` já chega
+// pronto de resolveInstagramDmLink/buildInstagramDmLink
 // (reactivation.ts) com ?text=<mensagem> tentando pré-preencher o campo —
 // parâmetro NÃO documentado pela Meta (ao contrário do wa.me), então
 // algumas versões do app/webview podem ignorá-lo (ou a URL ter ficado
@@ -54,7 +57,10 @@ export function InstagramDmButton({
       setCopied(true);
       window.setTimeout(() => setCopied(false), LABEL_RESET_DELAY_MS);
     }
-    if (dmLink) window.open(dmLink, "_blank", "noopener,noreferrer");
+    // Nome fixo em vez de "_blank" (ver INSTAGRAM_DM_WINDOW_NAME,
+    // reactivation.ts) — reaproveita a MESMA aba a cada clique, em vez de
+    // acumular uma aba nova por envio.
+    if (dmLink) window.open(dmLink, INSTAGRAM_DM_WINDOW_NAME, "noopener,noreferrer");
   }
 
   return (

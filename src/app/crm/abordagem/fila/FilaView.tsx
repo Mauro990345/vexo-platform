@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState, useTransition } from "react";
 import { isWithinApproachHours, formatApproachCountdown, formatApproachPauseCountdown, formatApproachWindowLabel } from "@/lib/approach-queue";
 import { copyToClipboard } from "@/lib/clipboard";
+import { INSTAGRAM_DM_WINDOW_NAME } from "@/lib/reactivation";
 import { ClinicAvatar } from "@/components/ClinicAvatar";
 import {
   getApproachBoardAction,
@@ -102,7 +103,10 @@ export function FilaView({ initialAccounts, initialWindow }: { initialAccounts: 
     void (async () => {
       const copied = await copyToClipboard(item.message!);
       if (!copied) showNotice("Não foi possível copiar — cole a mensagem na mão.");
-      window.open(item.dmLink!, "_blank", "noopener,noreferrer");
+      // Nome fixo em vez de "_blank" (ver INSTAGRAM_DM_WINDOW_NAME,
+      // reactivation.ts) — reaproveita a MESMA aba a cada envio, em vez
+      // de acumular uma aba nova por clique (70-90 envios/dia na Fila).
+      window.open(item.dmLink!, INSTAGRAM_DM_WINDOW_NAME, "noopener,noreferrer");
 
       const result = await confirmApproachSendAction(clinicId, item.id);
       setSendingItemId(null);
