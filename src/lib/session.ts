@@ -7,9 +7,38 @@ import { prisma } from "@/lib/prisma";
 // Garantem isolamento de tenant: um usuário CLIENT só enxerga dados de
 // clinicId === session.user.clinicId. Usuários internos veem tudo.
 
+// Prefixo do `sub` sintético usado por toda sessão nascida de um link
+// permanente de acesso do cliente (ClientPanelLink/ClientFilaLink — ver
+// /acesso/[token] e /acesso-fila/[token]/route.ts) — NUNCA existe um
+// `User` de verdade por trás (ver comentário grande nas duas rotas), só
+// `Clinic`. BUG REAL encontrado e corrigido aqui ao construir o segundo
+// link: antes desta checagem, requireSession ia direto pro
+// `prisma.user.findUnique` abaixo pra QUALQUER sessão — pra um sub
+// sintético, isso sempre devolve `null` (nenhum User com esse id),
+// `!user?.active` sempre `true`, redirect pro /entrar. Ou seja: o
+// ClientPanelLink original também caía nesse mesmo bug (confirmado: não
+// existe nenhuma exceção pra isso em lugar nenhum do código, e o
+// comentário da rota mesmo diz "sem User nenhum por trás" — o acesso por
+// link simplesmente nunca tinha sido validado de ponta a ponta depois do
+// checkpoint de `User.active` ter sido adicionado, pensado só pro login
+// Revisor).
+const CLIENT_LINK_SUB_PREFIX = "client-panel-link:";
+const CLIENT_FILA_LINK_SUB_PREFIX = "client-fila-link:";
+
 export async function requireSession() {
   const session = await getServerSession(authOptions);
   if (!session) redirect("/entrar");
+
+  if (session.user.id?.startsWith(CLIENT_LINK_SUB_PREFIX) || session.user.id?.startsWith(CLIENT_FILA_LINK_SUB_PREFIX)) {
+    // Sem User real por trás (ver comentário grande acima) — valida pela
+    // CLÍNICA em vez de pelo usuário: mesma regra de "acesso revogado
+    // quando contrato encerra" que authorize() já aplica pro login
+    // normal de CLIENT (auth.ts), só que aqui é o único sinal que existe.
+    if (!session.user.clinicId) redirect("/entrar");
+    const clinic = await prisma.clinic.findUnique({ where: { id: session.user.clinicId }, select: { active: true } });
+    if (!clinic?.active) redirect("/entrar");
+    return session;
+  }
 
   // Desativar um usuário (ver User.active, pensado pro login Revisor, mas
   // vale pra qualquer um) precisa tirar o acesso NA PRÓXIMA REQUISIÇÃO,
@@ -81,7 +110,33 @@ export async function requireAdminSession() {
   return session;
 }
 
+// Painel completo (/dashboard e tudo embaixo) — regra de segurança
+// pedida explicitamente: quem entrou só pelo link da Fila (ClientFilaLink,
+// `scope: "fila"` no token, ver acesso-fila/[token]/route.ts) NUNCA
+// alcança o painel, mesmo digitando a URL direto. O bloqueio "de
+// verdade" já é o middleware (isFilaScopeAllowedPath, pathname-based,
+// cobre qualquer rota nova sob /dashboard sem precisar lembrar de
+// chamar isto); esta checagem aqui é a segunda camada (mesmo espírito
+// de toda outra página que confia tanto em middleware quanto em
+// requireXSession), não a única.
 export async function requireClientSession() {
+  const session = await requireSession();
+  if (session.user.role !== "CLIENT" || !session.user.clinicId) {
+    redirect("/crm");
+  }
+  if (session.user.scope === "fila") {
+    redirect("/dashboard/fila");
+  }
+  return session;
+}
+
+// Gate da Fila do cliente (/dashboard/fila) — o INVERSO acima é permitido
+// de propósito (pedido explícito): quem tem o link do painel completo
+// (`scope` ausente/"full") também precisa conseguir abrir esta tela a
+// partir do botão "Abrir Fila de abordagem" no painel. Por isso este gate
+// não confere `scope` nenhum — só CLIENT + clinicId, igual
+// requireClientSession fazia antes de existir um 2º escopo.
+export async function requireClientFilaSession() {
   const session = await requireSession();
   if (session.user.role !== "CLIENT" || !session.user.clinicId) {
     redirect("/crm");

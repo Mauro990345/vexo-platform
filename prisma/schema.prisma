@@ -182,6 +182,7 @@ model Clinic {
   connectionLinks       ConnectionLink[]
   connectionBundles     ConnectionBundle[]
   clientPanelLink       ClientPanelLink?
+  clientFilaLink        ClientFilaLink?
   briefingLink          BriefingLink?
   briefing              Briefing?
   reportConfig          ClinicReportConfig?
@@ -402,6 +403,28 @@ model ConnectionBundle {
 // link, cancela e cria de novo. clinicId @unique (não só @@index) garante
 // no banco que só existe UM link válido por clínica de cada vez.
 model ClientPanelLink {
+  id       String @id @default(cuid())
+  clinicId String @unique
+  clinic   Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  token String @unique
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Segundo link de acesso do cliente, independente do ClientPanelLink
+// acima — pedido explícito: dar acesso SÓ à Fila de abordagem (a mesma
+// tela de /crm/clinicas/[id]/abordagem/fila, numa versão sem sidebar pro
+// cliente, ver dashboard/fila/page.tsx), sem abrir o painel inteiro
+// (/dashboard) pra quem só recebeu este link. Mesmo shape/mesmas duas
+// operações do ClientPanelLink (criar/cancelar, sem "regenerar") — ver
+// getOrCreateClientFilaLink/revokeClientFilaLink, clinicas/actions.ts, e
+// /acesso-fila/[token]/route.ts (login automático, mesmo padrão do
+// /acesso/[token], mas gravando `scope: "fila"` no JWT — é esse claim, e
+// não um model/role novo, que trava /dashboard pra quem só tem este link,
+// ver middleware.ts/isFilaScopeAllowedPath).
+model ClientFilaLink {
   id       String @id @default(cuid())
   clinicId String @unique
   clinic   Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)

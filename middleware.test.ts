@@ -26,7 +26,7 @@ describe("middleware — gate do login Revisor", () => {
     expect(res.headers.get("x-middleware-next")).toBe("1");
   });
 
-  it("CLIENT: passa direto (este arquivo não mexe no papel Cliente)", async () => {
+  it("CLIENT sem scope (link do painel completo): passa direto, fora de /dashboard", async () => {
     getTokenMock.mockResolvedValueOnce({ role: "CLIENT", clinicId: "clinic-1" });
     const res = await middleware(req("/crm/abordagem/fila"));
     expect(res.headers.get("x-middleware-rewrite")).toBeNull();
@@ -82,5 +82,48 @@ describe("middleware — gate do login Revisor", () => {
     expect(res.status).toBe(404);
     const body = await res.json();
     expect(body).toEqual({ error: "not_found" });
+  });
+});
+
+// Segundo gate: segundo link de acesso do cliente (ClientFilaLink,
+// `scope: "fila"`) — regra de segurança pedida explicitamente: nunca
+// alcança /dashboard (o painel), mesmo digitando a URL direto.
+describe("middleware — gate do segundo link de acesso (scope='fila')", () => {
+  it("CLIENT com scope='fila' abrindo /dashboard/fila (a própria tela liberada): passa direto", async () => {
+    getTokenMock.mockResolvedValueOnce({ role: "CLIENT", clinicId: "clinic-1", scope: "fila" });
+    const res = await middleware(req("/dashboard/fila"));
+    expect(res.headers.get("location")).toBeNull();
+    expect(res.headers.get("x-middleware-next")).toBe("1");
+  });
+
+  it("CLIENT com scope='fila' tentando /dashboard (o painel inteiro): redireciona pra /dashboard/fila", async () => {
+    getTokenMock.mockResolvedValueOnce({ role: "CLIENT", clinicId: "clinic-1", scope: "fila" });
+    const res = await middleware(req("/dashboard"));
+    expect(res.headers.get("location")).toContain("/dashboard/fila");
+  });
+
+  it("CLIENT com scope='fila' tentando /dashboard/bonus: também redireciona pra /dashboard/fila", async () => {
+    getTokenMock.mockResolvedValueOnce({ role: "CLIENT", clinicId: "clinic-1", scope: "fila" });
+    const res = await middleware(req("/dashboard/bonus"));
+    expect(res.headers.get("location")).toContain("/dashboard/fila");
+  });
+
+  it("CLIENT SEM scope (link do painel completo) em /dashboard: passa direto — o inverso é permitido", async () => {
+    getTokenMock.mockResolvedValueOnce({ role: "CLIENT", clinicId: "clinic-1" });
+    const res = await middleware(req("/dashboard"));
+    expect(res.headers.get("location")).toBeNull();
+    expect(res.headers.get("x-middleware-next")).toBe("1");
+  });
+
+  it("CLIENT SEM scope em /dashboard/fila (abriu a partir do botão do painel): passa direto também", async () => {
+    getTokenMock.mockResolvedValueOnce({ role: "CLIENT", clinicId: "clinic-1" });
+    const res = await middleware(req("/dashboard/fila"));
+    expect(res.headers.get("x-middleware-next")).toBe("1");
+  });
+
+  it("sem token em /dashboard: passa direto (requireClientFilaSession/requireClientSession cuidam disso)", async () => {
+    getTokenMock.mockResolvedValueOnce(null);
+    const res = await middleware(req("/dashboard"));
+    expect(res.headers.get("x-middleware-next")).toBe("1");
   });
 });

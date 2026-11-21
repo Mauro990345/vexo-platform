@@ -12,6 +12,8 @@ import {
   undoApproachSendAction,
   skipApproachItemAction,
   setApproachPausedAction,
+  type ApproachBoardForClinic,
+  type ConfirmApproachSendActionResult,
 } from "@/app/crm/(global)/abordagem/actions";
 import { ClinicQueueCard, firstNameOnly } from "@/app/crm/abordagem/fila/FilaView";
 import type { ApproachBoardAccount, ApproachBoardItem, ApproachWindow } from "@/lib/approach-queue-db";
@@ -35,16 +37,38 @@ const NOTICE_DURATION_MS = 3_000;
 // DESIGN.md) em vez de duplicar o card aqui — qualquer ajuste nele (ex.:
 // o próprio @ conectado, pedido junto desta tela) vale pras duas telas
 // de uma vez, sem precisar lembrar de mudar em dois lugares.
+//
+// As 5 actions e o link "Fila de todas as clínicas" são INJETÁVEIS (pedido
+// explícito — segundo link de acesso do cliente, só pra Fila, ver
+// dashboard/fila/page.tsx): os defaults são os mesmos imports de sempre
+// (gated por requireApproachAdmin), então esta página interna continua
+// funcionando exatamente como sempre funcionou sem passar nenhuma prop
+// nova. A versão do cliente (dashboard/fila/actions.ts, gated por
+// requireClientFilaSession) passa as 5 próprias e showGlobalFilaLink=false
+// — mesmo componente, mesmo visual/regras de negócio, só troca a camada
+// de autenticação por baixo.
 export function ClinicFilaView({
   clinicId,
   clinicName,
   initialAccount,
   initialWindow,
+  showGlobalFilaLink = true,
+  getBoardAction = getApproachBoardForClinicAction,
+  confirmSendAction = confirmApproachSendAction,
+  undoSendAction = undoApproachSendAction,
+  skipItemAction = skipApproachItemAction,
+  setPausedAction = setApproachPausedAction,
 }: {
   clinicId: string;
   clinicName: string;
   initialAccount: ApproachBoardAccount | null;
   initialWindow: ApproachWindow;
+  showGlobalFilaLink?: boolean;
+  getBoardAction?: (clinicId: string) => Promise<ApproachBoardForClinic>;
+  confirmSendAction?: (clinicId: string, itemId: string) => Promise<ConfirmApproachSendActionResult>;
+  undoSendAction?: (clinicId: string) => Promise<ApproachBoardAccount | null>;
+  skipItemAction?: (clinicId: string, itemId: string) => Promise<ApproachBoardAccount | null>;
+  setPausedAction?: (clinicId: string, paused: boolean) => Promise<ApproachBoardAccount | null>;
 }) {
   const [account, setAccount] = useState(initialAccount);
   const [approachWindow, setApproachWindow] = useState(initialWindow);
@@ -74,7 +98,7 @@ export function ClinicFilaView({
   }, [approachWindow]);
 
   async function refreshBoard() {
-    const board = await getApproachBoardForClinicAction(clinicId);
+    const board = await getBoardAction(clinicId);
     setAccount(board.account);
     setApproachWindow(board.window);
     setFetchedAt(Date.now());
@@ -102,7 +126,7 @@ export function ClinicFilaView({
       if (!copied) showNotice("Não foi possível copiar — cole a mensagem na mão.");
       window.open(item.dmLink!, INSTAGRAM_DM_WINDOW_NAME, "noopener,noreferrer");
 
-      const result = await confirmApproachSendAction(clinicId, item.id);
+      const result = await confirmSendAction(clinicId, item.id);
       setSendingItemId(null);
       if (!result.ok) showNotice("Não deu pra registrar o envio agora — tente de novo.");
       await refreshBoard();
@@ -111,21 +135,21 @@ export function ClinicFilaView({
 
   function handleSkip(itemId: string) {
     startTransition(async () => {
-      await skipApproachItemAction(clinicId, itemId);
+      await skipItemAction(clinicId, itemId);
       await refreshBoard();
     });
   }
 
   function handleUndo() {
     startTransition(async () => {
-      await undoApproachSendAction(clinicId);
+      await undoSendAction(clinicId);
       await refreshBoard();
     });
   }
 
   function handlePauseToggle(paused: boolean) {
     startTransition(async () => {
-      await setApproachPausedAction(clinicId, paused);
+      await setPausedAction(clinicId, paused);
       await refreshBoard();
     });
   }
@@ -154,9 +178,11 @@ export function ClinicFilaView({
             {account?.igUsername ?? "Instagram não conectado"}
           </span>
         </div>
-        <Link href="/crm/abordagem/fila" className="shrink-0 text-caption text-vexo-muted underline hover:text-vexo-fg">
-          Fila de todas as clínicas
-        </Link>
+        {showGlobalFilaLink && (
+          <Link href="/crm/abordagem/fila" className="shrink-0 text-caption text-vexo-muted underline hover:text-vexo-fg">
+            Fila de todas as clínicas
+          </Link>
+        )}
       </div>
 
       {!withinHours ? (
