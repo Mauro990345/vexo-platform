@@ -801,6 +801,19 @@ model Message {
   sentAt       DateTime?
   failReason   String?
 
+  // Preenchido só pelo botão "Descartar" na lista de "Mensagens que
+  // falharam ao enviar" (dispatch-status, global e por clínica) — pra
+  // falhas sem conserto (fora da janela de 24h da Meta, token
+  // permanentemente expirado) ou que o usuário simplesmente decidiu não
+  // reenviar mais. NUNCA muda `status`/`failReason`: a Message continua
+  // FAILED de verdade, com o erro visível no histórico da conversa — só
+  // sai da CONTAGEM do badge e da LISTAGEM de falhas (ver
+  // dispatch-status/page.tsx e crm/clinicas/[id]/status/page.tsx, que
+  // agora filtram `dismissedAt: null` nessas duas consultas). null em
+  // toda mensagem que ainda conta como falha pendente — inclusive toda
+  // FAILED já existente antes deste campo existir.
+  dismissedAt DateTime?
+
   // Marca a Message de confirmação de agendamento por WHATSAPP (ver
   // maybeSendWhatsappConfirmation, conversation-pipeline.ts) — dispatchOneMessage
   // (dispatch.ts) aplica até 3 tentativas com backoff crescente antes de

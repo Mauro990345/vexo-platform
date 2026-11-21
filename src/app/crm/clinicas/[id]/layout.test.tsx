@@ -26,11 +26,13 @@ async function render() {
 }
 
 describe("ClinicLayout — badge de FAILED no item 'Status' da sidebar, filtrado por clínica", () => {
-  it("conta FAILED só desta clínica (mesmo where da página de Status)", async () => {
+  it("conta FAILED não-descartadas só desta clínica (mesmo where da página de Status)", async () => {
     clinicFindUniqueMock.mockResolvedValue({ id: "clinic-1", name: "Clínica Demo" });
     messageCountMock.mockResolvedValue(0);
     await render();
-    expect(messageCountMock).toHaveBeenCalledWith({ where: { status: "FAILED", conversation: { clinicId: "clinic-1" } } });
+    expect(messageCountMock).toHaveBeenCalledWith({
+      where: { status: "FAILED", dismissedAt: null, conversation: { clinicId: "clinic-1" } },
+    });
   });
 
   it("1+ FAILED desta clínica: mostra o badge vermelho (vexo-error) ao lado de Status", async () => {

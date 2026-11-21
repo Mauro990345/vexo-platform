@@ -4,7 +4,11 @@ import { prisma } from "@/lib/prisma";
 import { requireInternalSession } from "@/lib/session";
 import { getSilenceHours } from "@/lib/follow-up";
 import { LocalDateTime } from "@/components/LocalDateTime";
-import { closeStuckFollowUpLogForClinicAction, resendFailedMessageAction } from "@/app/crm/(global)/dispatch-status/actions";
+import {
+  closeStuckFollowUpLogForClinicAction,
+  resendFailedMessageAction,
+  dismissFailedMessageForClinicAction,
+} from "@/app/crm/(global)/dispatch-status/actions";
 import { runEvolutionDiagnostics } from "@/lib/evolution-diagnostics";
 import { canResendFailedMessage } from "@/lib/dispatch";
 
@@ -81,7 +85,10 @@ export default async function ClinicStatusPage({ params }: { params: { id: strin
       take: 50,
     }),
     prisma.message.findMany({
-      where: { status: "FAILED", conversation: { clinicId: clinic.id } },
+      // dismissedAt: null — nunca lista (nem conta) uma falha descartada
+      // pelo botão "Descartar" (ver actions.ts); a Message continua
+      // FAILED de verdade, só sai desta tela.
+      where: { status: "FAILED", dismissedAt: null, conversation: { clinicId: clinic.id } },
       include: { conversation: { include: { lead: true } } },
       orderBy: { createdAt: "desc" },
       take: 50,
@@ -401,7 +408,7 @@ export default async function ClinicStatusPage({ params }: { params: { id: strin
                         {m.failReason}
                       </p>
                     )}
-                    <div className="mt-1.5 flex items-center justify-end">
+                    <div className="mt-1.5 flex items-center justify-end gap-1.5">
                       {resendable ? (
                         <form action={resendFailedMessageAction.bind(null, m.id, clinic.id)}>
                           <button
@@ -417,6 +424,20 @@ export default async function ClinicStatusPage({ params }: { params: { id: strin
                           Fora da janela de 24h da Meta pra reenviar
                         </span>
                       )}
+                      {/* Sempre visível (não só "fora da janela") — pedido
+                          explícito: serve tanto pra erro sem conserto
+                          quanto pra quando o usuário decide não reenviar
+                          mais. Nunca apaga nada nem muda status/failReason
+                          (ver dismissFailedMessageForClinicAction). */}
+                      <form action={dismissFailedMessageForClinicAction.bind(null, m.id, clinic.id)}>
+                        <button
+                          type="submit"
+                          title="Marca como resolvida/ignorada — sai da contagem e desta lista, mas a mensagem e o erro continuam no histórico da conversa."
+                          className="rounded-lg border border-vexo-border px-2.5 py-1 font-medium text-vexo-muted hover:border-vexo-fg hover:text-vexo-fg"
+                        >
+                          Descartar
+                        </button>
+                      </form>
                     </div>
                   </div>
                 );

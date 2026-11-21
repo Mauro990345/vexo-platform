@@ -74,3 +74,34 @@ export async function resendFailedMessageAction(messageId: string, clinicId: str
   });
   revalidatePath(`/crm/clinicas/${clinicId}/status`);
 }
+
+// Botão "Descartar" (pedido explícito): falha sem conserto (fora da
+// janela de 24h da Meta, token permanentemente vencido) ou que o usuário
+// simplesmente decidiu não reenviar mais — fica contando pra sempre no
+// badge/lista sem isso. NUNCA muda `status`/`failReason`: a Message
+// continua FAILED de verdade, com o erro visível no histórico da
+// conversa (ver mensagens.ts/conversas/[id]/page.tsx — não filtram por
+// `dismissedAt`); só sai da CONTAGEM e da LISTAGEM de falhas (ver
+// dispatch-status/page.tsx e clinicas/[id]/status/page.tsx, que agora
+// filtram `dismissedAt: null`). Chamada da página GLOBAL — sem
+// `clinicId` pra checar/revalidar (ver a versão "ForClinic" abaixo, pra
+// dentro de uma clínica).
+export async function dismissFailedMessageAction(messageId: string) {
+  await requireInternalSession();
+  await prisma.message.updateMany({ where: { id: messageId, status: "FAILED" }, data: { dismissedAt: new Date() } });
+  revalidatePath("/crm/dispatch-status");
+}
+
+// Mesma ação acima, chamada da aba "Status" de dentro de uma clínica —
+// mesmo motivo de closeStuckFollowUpLogForClinicAction (função própria,
+// não um parâmetro opcional, por causa do .bind com <form action>).
+// Confere `conversation.clinicId` antes de marcar, pra nunca descartar
+// uma mensagem de outra clínica a partir desta tela.
+export async function dismissFailedMessageForClinicAction(messageId: string, clinicId: string) {
+  await requireInternalSession();
+  await prisma.message.updateMany({
+    where: { id: messageId, status: "FAILED", conversation: { clinicId } },
+    data: { dismissedAt: new Date() },
+  });
+  revalidatePath(`/crm/clinicas/${clinicId}/status`);
+}
