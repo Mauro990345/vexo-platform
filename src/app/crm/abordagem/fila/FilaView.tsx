@@ -6,6 +6,7 @@ import { isWithinApproachHours, formatApproachCountdown, formatApproachPauseCoun
 import { copyToClipboard } from "@/lib/clipboard";
 import { INSTAGRAM_DM_WINDOW_NAME } from "@/lib/reactivation";
 import { ClinicAvatar } from "@/components/ClinicAvatar";
+import { InstagramGlyphIcon } from "@/components/BrandIcons";
 import {
   getApproachBoardAction,
   confirmApproachSendAction,
@@ -236,8 +237,23 @@ export function ClinicQueueCard({
     <div className="flex items-center gap-2.5 rounded-block border border-vexo-border bg-vexo-surface px-block py-block-y" data-clinic-queue-card>
       <ClinicAvatar name={account.name} profilePictureUrl={account.profilePictureUrl} size="md" />
       <div className="min-w-0 flex-1">
-        <p className="truncate text-body-sm font-medium text-vexo-fg">
-          {account.name} <span className="text-meta font-normal text-vexo-mutedLight">· {account.leadsRemaining}</span>
+        {/* @ do Instagram CONECTADO desta clínica (não o @ do lead, logo
+            abaixo) — pedido explícito, pro operador conferir, antes de
+            apertar "Enviar", se bate com a conta logada no Instagram
+            daquele navegador/perfil do Chrome (um por clínica). Na MESMA
+            linha do nome da clínica (não numa linha própria) — os 5 cards
+            da Fila precisam continuar cabendo na 1ª tela de um iPhone SE
+            sem rolar (ver FilaView.layout.test.tsx), e uma linha nova por
+            card não cabia nesse orçamento. Primeiro elemento da linha,
+            então continua "antes do nome do lead" (e do próprio nome da
+            clínica) — exatamente o pedido. */}
+        <p className="flex items-center gap-1 text-body-sm font-medium text-vexo-fg">
+          <InstagramGlyphIcon className="h-3 w-3 shrink-0" />
+          <span className="shrink-0 font-semibold">
+            {account.igUsername ? `@${account.igUsername}` : "Instagram não conectado"}
+          </span>
+          <span className="truncate text-meta font-normal text-vexo-mutedLight">· {account.name}</span>
+          <span className="shrink-0 text-meta font-normal text-vexo-mutedLight">· {account.leadsRemaining}</span>
         </p>
         {name ? (
           <p className="truncate text-meta text-vexo-muted">

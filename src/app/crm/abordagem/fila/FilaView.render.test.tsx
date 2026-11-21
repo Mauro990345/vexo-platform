@@ -6,8 +6,9 @@ import type { ApproachBoardAccount } from "@/lib/approach-queue-db";
 
 // Render puro (sem interação, mesmo padrão de Button.test.tsx/Card.test.tsx)
 // — cobre o card de UMA clínica no novo layout de 3 cards simultâneos (ver
-// DESIGN.md "Fila de abordagem — rodada 6"): nome da clínica, @ do lead
-// (com nome só se houver) e o botão conforme o estado da conta.
+// DESIGN.md "Fila de abordagem — rodada 6"): @ do Instagram CONECTADO
+// desta clínica, nome da clínica, @ do lead (com nome só se houver) e o
+// botão conforme o estado da conta.
 
 const NOW = 1_000_000;
 
@@ -104,7 +105,24 @@ describe("ClinicQueueCard", () => {
 
   it("nome da clínica e @ longos usam truncate (uma linha só, nunca empurra o botão)", () => {
     const markup = render(account({ kind: "READY" }, { name: "Clínica Com Um Nome Bem Longo Que Não Caberia Numa Linha" }));
-    expect(markup).toMatch(/class="truncate[^"]*">Clínica Com Um Nome Bem Longo Que Não Caberia Numa Linha /);
+    expect(markup).toMatch(/class="truncate[^"]*">· Clínica Com Um Nome Bem Longo Que Não Caberia Numa Linha</);
+  });
+
+  // Pedido explícito: o @ do Instagram CONECTADO desta clínica (não o @ do
+  // lead) precisa aparecer bem visível, na mesma linha do nome da clínica
+  // — PRIMEIRO elemento da linha, então antes do nome da clínica E do
+  // nome/@ do lead (ver os testes acima, que continuam passando: o @ do
+  // lead continua só nas linhas de baixo).
+  it("mostra o @ do Instagram conectado da clínica, em destaque, ANTES do nome dela", () => {
+    const markup = render(account({ kind: "READY" }, { igUsername: "clinica.demo" }));
+    expect(markup).toMatch(/@clinica\.demo.*· Clínica Demo/s);
+    expect(markup).toContain('<span class="shrink-0 font-semibold">@clinica.demo</span>');
+  });
+
+  it("clínica sem Instagram conectado: mostra o aviso em vez de um @ inventado", () => {
+    const markup = render(account({ kind: "READY" }, { igUsername: null }));
+    expect(markup).toContain("Instagram não conectado");
+    expect(markup).not.toContain("@null");
   });
 
   it("botão liberado tem área de toque ampliada (pelo menos 44px), sem mudar o desenho visual", () => {

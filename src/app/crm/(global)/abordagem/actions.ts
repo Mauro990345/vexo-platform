@@ -41,6 +41,15 @@ async function requireApproachAdmin() {
 const PREP_PATH = "/crm/abordagem";
 const QUEUE_PATH = "/crm/abordagem/fila";
 
+// Fila por clínica (/crm/clinicas/[id]/abordagem/fila) — rota irmã da
+// Fila global acima, mesmo dado (ApproachBoardAccount), só que de uma
+// clínica só. Revalidada junto da global em toda action de
+// enviar/desfazer/pular/pausar abaixo, pra uma ação feita numa tela
+// nunca deixar a OUTRA tela com cache desatualizado dessa mesma clínica.
+function clinicQueuePath(clinicId: string): string {
+  return `/crm/clinicas/${clinicId}/abordagem/fila`;
+}
+
 export async function listClinicsForPrep() {
   await requireApproachAdmin();
   const clinics = await prisma.clinic.findMany({
@@ -199,6 +208,27 @@ export async function getApproachBoardAction(): Promise<ApproachBoard> {
   return getApproachBoard(new Date());
 }
 
+export type ApproachBoardForClinic = { account: ApproachBoardAccount | null; window: ApproachWindow };
+
+// Fila de UMA clínica só (/crm/clinicas/[id]/abordagem/fila — pedido
+// explícito: operar várias clínicas ao mesmo tempo, um perfil do Chrome
+// por clínica, cada aba sempre na mesma conta). Reaproveita
+// getApproachBoardAccount DIRETO (mesma função já usada pelo board global
+// e por toda action de enviar/desfazer/pular/pausar abaixo) — ela NUNCA
+// checou ApproachQueueConfig.activeInQueue (esse filtro só existe em
+// getApproachBoard, que monta o board GLOBAL a partir da lista de contas
+// ativas na fila); então esta tela funciona pra uma clínica mesmo com o
+// toggle "ativa na fila" da Preparação desligado, sem precisar de
+// nenhuma lógica nova — só não passa pela escolha de QUAIS contas entram
+// no board global.
+export async function getApproachBoardForClinicAction(clinicId: string): Promise<ApproachBoardForClinic> {
+  await requireApproachAdmin();
+  const now = new Date();
+  const window = await getApproachWindow();
+  const account = await getApproachBoardAccount(clinicId, now, window);
+  return { account, window };
+}
+
 export type ConfirmApproachSendActionResult = { ok: true; account: ApproachBoardAccount } | { ok: false; reason: string };
 
 // Chamada DEPOIS que o cliente já copiou a mensagem e abriu o Instagram
@@ -216,6 +246,7 @@ export async function confirmApproachSendAction(clinicId: string, itemId: string
   const result = await confirmApproachSend(clinicId, itemId, new Date());
   const account = await getApproachBoardAccount(clinicId, new Date());
   revalidatePath(QUEUE_PATH);
+  revalidatePath(clinicQueuePath(clinicId));
   if (!result.ok) return { ok: false, reason: result.reason };
   return { ok: true, account: account! };
 }
@@ -224,6 +255,7 @@ export async function undoApproachSendAction(clinicId: string): Promise<Approach
   await requireApproachAdmin();
   await undoLastApproachSend(clinicId);
   revalidatePath(QUEUE_PATH);
+  revalidatePath(clinicQueuePath(clinicId));
   return getApproachBoardAccount(clinicId, new Date());
 }
 
@@ -231,6 +263,7 @@ export async function skipApproachItemAction(clinicId: string, itemId: string): 
   await requireApproachAdmin();
   await skipApproachItem(itemId);
   revalidatePath(QUEUE_PATH);
+  revalidatePath(clinicQueuePath(clinicId));
   return getApproachBoardAccount(clinicId, new Date());
 }
 
@@ -238,6 +271,7 @@ export async function setApproachPausedAction(clinicId: string, paused: boolean)
   await requireApproachAdmin();
   await setApproachPaused(clinicId, paused);
   revalidatePath(QUEUE_PATH);
+  revalidatePath(clinicQueuePath(clinicId));
   return getApproachBoardAccount(clinicId, new Date());
 }
 
