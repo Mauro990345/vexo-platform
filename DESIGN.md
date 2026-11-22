@@ -86,6 +86,16 @@ quadrado azul liso E o robô das rodadas anteriores). Só na sidebar desktop; o 
 visualmente (screenshot comparando o X da sidebar lado a lado com o da página pública) antes de
 fechar.
 
+## Fundo da sidebar (desktop) — mesmo tom do conteúdo, separados só por uma linha fina
+Pedido explícito (estilo Linear/Vercel): o `<aside>` da sidebar desktop usava `bg-vexo-surface`
+(#141a24, mesmo tom dos cards) — mais claro que o fundo da página (`bg-vexo-bg`, #0b0f17, usado no
+`<body>`), criando um contraste de blocos que não era a intenção. Trocado pra `bg-vexo-bg` — agora
+sidebar e conteúdo principal têm exatamente o mesmo fundo; a separação entre os dois vira só a
+borda fina de 1px que já existia (`border-r border-vexo-border`), sem precisar de nada novo. Cor de
+ícones/texto da sidebar (item ativo, grupos, badge etc.) não foi tocada — só o `bg-*` do `<aside>`
+mudou. Só a sidebar **desktop**; o cabeçalho mobile (`sm:hidden`) continua em `bg-vexo-surface`, não
+é a sidebar. Verificado visualmente (screenshot antes/depois) antes de fechar.
+
 ## Tamanho dos títulos — rodada 3 (pedido explícito: títulos ligeiramente maiores, como no app de referência)
 Dois tokens novos de `fontSize` (`tailwind.config.ts`), peso 600 (`font-semibold`) já embutido —
 mesmo peso de sempre, só o tamanho muda:
