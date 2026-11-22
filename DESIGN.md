@@ -53,7 +53,18 @@ Pedido explícito: o texto das abas (`Tabs.tsx`) estava pequeno/desproporcional 
 tela que usa o componente (Agente de IA, Follow-up, Automações, Fila de abordagem e qualquer outra
 com esse padrão de abas), não só pras que apareceram no pedido como exemplo.
 
-## Ícone decorativo da sidebar — rodada 2 (robô, sozinho, sem sobrepor o logo)
+### Abas com ícone — rodada 3 (correção: Agente de IA ganhou rolagem horizontal feia depois da fonte maior)
+Efeito colateral da rodada 2: com a fonte maior, as 4 abas de Agente de IA ("Prompt de conversação
+da IA"/"Fotos de resultado"/"Timing de resposta da IA"/"Janela de envio") passaram a somar mais
+largura que o container da própria página (`max-w-3xl`, 768px) — por ~16px, medido com o CSS real
+do app — e a linha de abas (que tem `overflow-x-auto` por design, ver rodada 1 desta seção) ganhou
+sua própria barra de rolagem horizontal, visível mesmo em telas de computador largas. Corrigido
+alargando só o container de Agente de IA (`max-w-3xl` → `max-w-4xl`, 896px — dá folga suficiente,
+confirmado com o mesmo método de medição), em vez de reduzir a fonte de novo. Automações e Follow-up
+não precisaram de ajuste: já cabiam folgado nos containers deles (`max-w-3xl`/`max-w-lg`) mesmo com
+a fonte maior. Teste de regressão em `Tabs.layout.test.ts` cobre os 3 containers reais.
+
+## Ícone decorativo da sidebar — rodada 2 (robô, sozinho, sem sobrepor o logo) [SUBSTITUÍDO, ver rodada 3]
 Pedido explícito corrigindo a 1ª rodada: a versão anterior colocava um ícone "mascote" (dois
 círculos) por CIMA do quadrado azul liso de sempre, os dois sobrepostos — visualmente errado.
 Agora é um ícone SÓ, no lugar do quadrado: cara de robô (estilo do ícone "Eli" do app de
@@ -62,6 +73,18 @@ referência) — cabeça arredondada azul (`fill-vexo-accent`) com "olhos" e ant
 Ao lado do nome "VEXO" no topo da sidebar **desktop**, puramente estético, sem nenhuma função de
 busca/comando associada. Só na sidebar desktop; o cabeçalho mobile (`sm:hidden`) não muda — continua
 com o quadrado azul liso de sempre, não é a sidebar.
+
+## Ícone da sidebar — rodada 3 (decisão final: o mesmo "X" da logo pública, não um ícone novo)
+Decisão explícita: esquecer o robô (e qualquer outra referência de app concorrente) pro ícone da
+sidebar. Em vez de desenhar algo novo/próprio pra sidebar, reaproveita DIRETO o `VexoMark`
+(`components/public/VexoLogo.tsx`) — o mesmo "X" de dois traços retos cruzados que já é a logo da
+página pública (vexoia.com.br, "X vexo ia" no topo). Mesmo componente, mesmo desenho, mesma cor
+(`stroke-vexo-pubAccent`/`stroke-vexo-pubFg`, os tokens que o próprio `VexoMark` já usa — não um
+token novo), importado em `AppShell.tsx` em vez de duplicado. Único ícone ali (substitui de vez o
+quadrado azul liso E o robô das rodadas anteriores). Só na sidebar desktop; o cabeçalho mobile
+(`sm:hidden`) não muda — continua com o quadrado azul liso de sempre, não é a sidebar. Verificado
+visualmente (screenshot comparando o X da sidebar lado a lado com o da página pública) antes de
+fechar.
 
 ## Tamanho dos títulos — rodada 3 (pedido explícito: títulos ligeiramente maiores, como no app de referência)
 Dois tokens novos de `fontSize` (`tailwind.config.ts`), peso 600 (`font-semibold`) já embutido —
