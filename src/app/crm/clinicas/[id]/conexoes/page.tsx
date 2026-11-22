@@ -222,7 +222,7 @@ export default async function ClinicConexoesPage({
     <div className="space-y-3">
       <RefreshOnFocus />
 
-      <h1 className="text-base font-semibold tracking-tight">Conexões</h1>
+      <h1 className="text-page-title tracking-tight">Conexões</h1>
 
       {searchParams.status === "erro" && (
         <p className="rounded-lg border border-vexo-error/30 bg-vexo-error/10 p-2 text-xs text-vexo-error">

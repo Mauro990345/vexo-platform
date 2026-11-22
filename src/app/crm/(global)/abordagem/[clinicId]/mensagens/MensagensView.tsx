@@ -48,7 +48,7 @@ export function MensagensView({
       <Link href="/crm/abordagem" className="text-caption text-vexo-muted hover:text-vexo-accent">
         ← Abordagem
       </Link>
-      <h1 className="mt-1 text-base font-semibold tracking-tight text-vexo-fg">Mensagens · {clinicName}</h1>
+      <h1 className="mt-1 text-page-title tracking-tight text-vexo-fg">Mensagens · {clinicName}</h1>
       <p className="mt-1 text-xs text-vexo-muted">
         Até 5 mensagens — uma é sorteada a cada envio, sem repetir a mesma duas vezes seguidas. Use <code>{"{nome}"}</code>{" "}
         pra inserir o primeiro nome do lead.

@@ -314,17 +314,26 @@ export function ReactivationRail({
       // abaixo), não daqui.
       <div
         key={key}
-        className={`flex items-center gap-2.5 rounded-control border bg-vexo-surface p-2.5 transition-opacity duration-150 ${isSent ? "border-vexo-border opacity-50" : CARD_BORDER_CLASS[card.kind]}`}
+        className={`flex items-center gap-2.5 rounded-control border bg-vexo-surface p-2.5 transition-opacity duration-150 ${
+          isSent
+            ? "border-vexo-border opacity-50"
+            : card.kind === "REACTIVATION"
+              // Barra lateral azul, só nos cards de Reativação (pedido
+              // explícito — inspirado num app concorrente): diferencia
+              // esses cards dos de Agendamento (PanelAppointmentsColumn.tsx,
+              // sem barra nenhuma), que no celular ficam na mesma coluna, um
+              // embaixo do outro. É a própria borda esquerda do cartão
+              // (não um elemento interno): `border-l-4` (grossa) por cima
+              // do `border` fino dos outros 3 lados — a cor da borda
+              // esquerda (`border-l-vexo-accent`) sobrescreve só esse lado,
+              // os outros 3 continuam no tom tingido de CARD_BORDER_CLASS.
+              // Mesmo azul de sempre (vexo-accent), nenhum token novo. Sem
+              // barra quando já enviado (cartão todo fica neutro, ramo de
+              // cima).
+              ? `${CARD_BORDER_CLASS.REACTIVATION} border-l-4 border-l-vexo-accent`
+              : CARD_BORDER_CLASS[card.kind]
+        }`}
       >
-        {/* Barra lateral azul, só nos cards de Reativação (pedido
-            explícito — inspirado num app concorrente): diferencia esses
-            cards dos de Agendamento (PanelAppointmentsColumn.tsx, sem
-            barra nenhuma), que no celular ficam na mesma coluna, um
-            embaixo do outro. "Meia barra" (h-8, não a altura inteira do
-            cartão) — um indicador, não uma faixa lateral grossa cobrindo
-            o cartão todo. Mesmo azul de sempre (vexo-accent), nenhum token
-            novo. Sem barra quando já enviado (cartão todo fica neutro). */}
-        {card.kind === "REACTIVATION" && !isSent && <span aria-hidden="true" className="h-8 w-1 shrink-0 self-center rounded-full bg-vexo-accent" />}
         <LeadAvatar profilePictureUrl={card.profilePictureUrl} name={card.name} size="appointment" />
         <div className="min-w-0 flex-1 space-y-0.5">
           {/* 1ª linha: NOME completo em destaque, com o @ do Instagram logo

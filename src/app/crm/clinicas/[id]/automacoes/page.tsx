@@ -50,7 +50,7 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
 
   return (
     <div className="max-w-3xl space-y-4">
-      <h1 className="text-base font-semibold tracking-tight">Automações</h1>
+      <h1 className="text-page-title tracking-tight">Automações</h1>
 
       {/* Abas horizontais — mesmo padrão do topo do Follow-up (ver
           FollowUpView.tsx): clicar numa aba troca o conteúdo abaixo, sem

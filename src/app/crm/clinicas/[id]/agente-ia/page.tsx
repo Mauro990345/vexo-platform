@@ -64,7 +64,7 @@ export default async function ClinicAiAgentPage({ params }: { params: { id: stri
 
   return (
     <div className="max-w-3xl space-y-4">
-      <h1 className="text-base font-semibold tracking-tight">Agente de IA</h1>
+      <h1 className="text-page-title tracking-tight">Agente de IA</h1>
 
       {/* Abas horizontais — mesmo padrão do topo do Follow-up (ver
           FollowUpView.tsx): clicar numa aba troca o conteúdo abaixo, sem

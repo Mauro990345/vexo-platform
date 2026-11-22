@@ -21,7 +21,7 @@ export default async function WebhookLogsPage() {
   return (
     <div className="space-y-3">
       <div>
-        <h1 className="text-base font-semibold tracking-tight">Logs do webhook (Instagram)</h1>
+        <h1 className="text-page-title tracking-tight">Logs do webhook (Instagram)</h1>
         <p className="mt-0.5 text-xs text-vexo-muted">
           As últimas {logs.length} requisições recebidas em /api/webhooks/instagram, mais recente
           primeiro — inclui as que falharam na verificação de assinatura. Horário mostrado no fuso

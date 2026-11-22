@@ -143,7 +143,7 @@ export default async function DispatchStatusPage() {
     <div className="space-y-4">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h1 className="text-base font-semibold tracking-tight">Envio de mensagens (diagnóstico)</h1>
+          <h1 className="text-page-title tracking-tight">Envio de mensagens (diagnóstico)</h1>
           <p className="mt-0.5 text-xs text-vexo-muted">
             dispatchDueMessages roda no processo separado do worker, não no processo web — ver README
             &gt; Deploy (Railway). Ferramenta de diagnóstico temporária.

@@ -272,7 +272,7 @@ export async function FollowUpView() {
   return (
     <div className="max-w-lg space-y-8">
       <div>
-        <h1 className="text-base font-semibold tracking-tight">Follow-up</h1>
+        <h1 className="text-page-title tracking-tight">Follow-up</h1>
         <p className="mt-1 text-xs text-vexo-muted">
           Duas sequências automáticas independentes, cada uma com seus próprios passos, e os
           textos dos cards manuais do Painel. Vale pra todas as clínicas. Clique num passo pra

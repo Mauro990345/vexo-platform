@@ -47,7 +47,7 @@ export function AbordagemPrepView({
     <div className="mx-auto max-w-[520px] px-4 py-6 sm:px-0">
       <div className="flex items-start justify-between gap-2">
         <div>
-          <h1 className="text-base font-semibold tracking-tight text-vexo-fg">Abordagem</h1>
+          <h1 className="text-page-title tracking-tight text-vexo-fg">Abordagem</h1>
           <p className="mt-1 text-xs text-vexo-muted">
             Preparação da fila — escolha quais contas entram agora, ajuste o limite por dia e envie a lista de leads de
             cada clínica.

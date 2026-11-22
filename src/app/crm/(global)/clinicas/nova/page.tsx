@@ -12,7 +12,7 @@ export default async function NewClinicPage() {
 
   return (
     <div className="max-w-md">
-      <h1 className="mb-6 text-xl font-semibold tracking-tight">Nova clínica</h1>
+      <h1 className="mb-6 text-page-title tracking-tight">Nova clínica</h1>
       <form action={createClinic} className="space-y-4 rounded-2xl border border-vexo-border bg-vexo-surface p-5">
         <div>
           <label className="mb-1.5 block text-sm text-vexo-muted" htmlFor="name">

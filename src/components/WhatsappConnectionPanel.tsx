@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { MessageCircle } from "lucide-react";
+import { Button } from "@/components/Button";
 import {
   type WhatsappConnectionState,
   shouldShowWhatsappResetAction,
@@ -259,9 +260,9 @@ export function WhatsappConnectionPanel({
               title="Apenas letras minúsculas, números e hífen"
               className="flex-1 rounded-lg border border-vexo-border bg-vexo-bg px-2 py-1 text-xs font-mono outline-none focus:border-vexo-accent"
             />
-            <button className="rounded-lg border border-vexo-accent px-2.5 py-1 text-xs text-vexo-accent hover:bg-vexo-accent/10">
+            <Button type="submit" variant="primary" size="sm">
               Salvar
-            </button>
+            </Button>
           </form>
         </div>
       )}

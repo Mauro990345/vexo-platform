@@ -7,9 +7,14 @@ const SAVED_LABEL_DURATION_MS = 2000;
 
 // Classe do botão "Salvar" pequeno, mesmo estilo já usado em "Salvar
 // lembretes"/"Salvar configuração" — compartilhada pelos forms deste
-// arquivo pra ficarem idênticos.
+// arquivo pra ficarem idênticos. Fundo azul preenchido + texto branco +
+// sombra sutil só embaixo (pedido explícito, rodada 3 — antes era contorno/
+// fundo vazio); mesmos tokens do `Button` (`variant="primary"`), só sem
+// passar pelo componente porque esta classe soma estados próprios
+// (`disabled`) que o componente também cobre, mas o restante do arquivo já
+// usa `<button>` cru.
 const SAVE_BUTTON_CLASS =
-  "shrink-0 rounded-lg border border-vexo-accent px-2.5 py-1 text-caption font-medium text-vexo-accent transition hover:bg-vexo-accent/10 disabled:cursor-not-allowed disabled:opacity-50";
+  "shrink-0 rounded-lg bg-vexo-accent px-2.5 py-1 text-caption font-medium text-vexo-accentFg shadow-button transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50";
 
 // Intercepta o submit pra poder mostrar "Salvo ✓" por 2s depois que a
 // server action volta — um <form action={fn}> puro não dá esse gancho

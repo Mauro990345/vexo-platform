@@ -145,7 +145,7 @@ export function FilaView({ initialAccounts, initialWindow }: { initialAccounts: 
       <Link href="/crm/abordagem" className="text-caption text-vexo-muted hover:text-vexo-accent">
         ← Preparação
       </Link>
-      <h1 className="text-base font-semibold tracking-tight text-vexo-fg">Abordagem</h1>
+      <h1 className="text-page-title tracking-tight text-vexo-fg">Abordagem</h1>
 
       {!withinHours ? (
         <p className="mt-4 rounded-block bg-vexo-surface p-block text-center text-sm text-vexo-muted">
