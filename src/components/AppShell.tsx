@@ -20,6 +20,21 @@ import { SignOutButton } from "@/components/SignOutButton";
 export type NavItem = { href: string; label: string; icon: React.ReactNode; activeMatch?: string[]; badge?: number };
 export type NavGroup = { label: string; items: NavItem[] };
 
+// Ícone decorativo da sidebar (pedido explícito, inspirado num app
+// concorrente) — circular, branco e azul, estilo avatar/mascote, ao lado
+// do quadrado azul de sempre e do nome "VEXO" no topo. Só estético por
+// enquanto, SEM nenhuma função de busca/comando associada. Tokens de
+// sempre (vexo-accent/vexo-accentFg — o branco "oficial" do app, nunca a
+// palavra-chave `white` solta), nenhuma cor nova.
+function VexoMascotIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
+      <circle cx="12" cy="12" r="10" className="fill-vexo-accentFg" />
+      <circle cx="15.5" cy="15.5" r="4.5" className="fill-vexo-accent" />
+    </svg>
+  );
+}
+
 // Resolve o item ativo pelo prefixo mais específico — evita que "/crm" fique
 // destacado junto com "/crm/follow-up" quando ambos "batem" no pathname.
 //
@@ -91,6 +106,7 @@ export function AppShell({
       <aside className="hidden w-52 shrink-0 flex-col border-r border-vexo-border bg-vexo-surface sm:flex">
         <Link href="/" className="flex items-center gap-2 px-4 py-4">
           <span className="h-6 w-6 shrink-0 rounded-lg bg-vexo-accent" />
+          <VexoMascotIcon className="h-5 w-5 shrink-0" />
           <div className="min-w-0">
             <p className="text-xs font-semibold leading-none tracking-tight">VEXO</p>
           </div>

@@ -11,8 +11,13 @@ export type ButtonVariant = "primary" | "outline" | "ghost";
 export type ButtonSize = "sm" | "md";
 
 const VARIANT_CLASSES: Record<ButtonVariant, string> = {
-  // Preenchido — ação principal de uma tela (ex: "Registrar" em Automações).
-  primary: "bg-vexo-accent text-vexo-accentFg hover:opacity-90",
+  // Preenchido — ação principal de uma tela (ex: "Registrar" em
+  // Automações) e, pedido explícito, todo botão "Salvar X" (Agente de
+  // IA/Automações/Follow-up — ver DESIGN.md). `shadow-button` (novo, só
+  // aqui) dá o sombreado sutil pedido; o "afundamento" ao clicar vem do
+  // CSS global em globals.css (vale pra qualquer <button> do app, não só
+  // este componente — ver comentário lá).
+  primary: "bg-vexo-accent text-vexo-accentFg shadow-button hover:opacity-90",
   // Contorno — ação de salvar dentro de um bloco, a mais comum hoje.
   outline: "border border-vexo-accent text-vexo-accent hover:bg-vexo-accent/10",
   // Discreto — ação secundária/pouco destacada (ex: "Salvar legenda" num

@@ -12,6 +12,7 @@ import {
 import { updateAiSettings, updateFollowUpWindow } from "@/app/crm/(global)/follow-up/actions";
 import { PromptTextarea } from "@/components/PromptTextarea";
 import { ConfirmSubmitButton } from "@/components/ConfirmSubmitButton";
+import { Button } from "@/components/Button";
 import { Tabs } from "@/components/Tabs";
 import { AttendanceVideoSettings } from "@/components/AttendanceVideoSettings";
 
@@ -179,12 +180,9 @@ export default async function ClinicAiAgentPage({ params }: { params: { id: stri
                     </div>
                   </div>
 
-                  <button
-                    type="submit"
-                    className="rounded-lg border border-vexo-accent px-2.5 py-1.5 text-xs font-medium text-vexo-accent hover:bg-vexo-accent/10"
-                  >
+                  <Button type="submit" variant="primary">
                     Salvar configuração
-                  </button>
+                  </Button>
                 </form>
               </section>
             ),
@@ -350,12 +348,9 @@ export default async function ClinicAiAgentPage({ params }: { params: { id: stri
                       className="w-24 rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5 text-xs outline-none focus:border-vexo-accent"
                     />
                   </div>
-                  <button
-                    type="submit"
-                    className="rounded-lg border border-vexo-accent px-2.5 py-1.5 text-xs font-medium text-vexo-accent hover:bg-vexo-accent/10"
-                  >
+                  <Button type="submit" variant="primary">
                     Salvar
-                  </button>
+                  </Button>
                 </form>
 
                 <form
@@ -371,12 +366,9 @@ export default async function ClinicAiAgentPage({ params }: { params: { id: stri
                     />
                     Delay adaptativo ativado (vale pra todas as clínicas)
                   </label>
-                  <button
-                    type="submit"
-                    className="shrink-0 rounded-lg border border-vexo-accent px-2.5 py-1.5 text-card font-medium text-vexo-accent hover:bg-vexo-accent/10"
-                  >
+                  <Button type="submit" variant="primary" className="shrink-0">
                     Salvar
-                  </button>
+                  </Button>
                 </form>
               </section>
             ),
@@ -444,12 +436,9 @@ export default async function ClinicAiAgentPage({ params }: { params: { id: stri
                         className="rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5 text-xs outline-none focus:border-vexo-accent"
                       />
                     </div>
-                    <button
-                      type="submit"
-                      className="rounded-lg border border-vexo-accent px-2.5 py-1.5 text-xs font-medium text-vexo-accent hover:bg-vexo-accent/10"
-                    >
+                    <Button type="submit" variant="primary">
                       Salvar janela
-                    </button>
+                    </Button>
                   </div>
                   <p className="text-card text-vexo-muted">Horário de Brasília.</p>
                 </form>
