@@ -60,7 +60,12 @@ export function Tabs({ tabs, defaultTabId }: { tabs: TabItem[]; defaultTabId?: s
             // off-white de sempre (text-vexo-tabFg) — antes as duas eram
             // sempre off-white, só o traço embaixo (já existia, ver
             // `underline` abaixo) indicava qual estava selecionada.
-            className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap px-0.5 pb-2.5 text-xs font-medium transition-colors ${
+            // Fonte (pedido explícito, outra rodada): text-sm (14px), era
+            // text-xs (12px) — pequena/desproporcional ao resto da tela.
+            // Vale pra TODO uso deste componente (Agente de IA, Follow-up,
+            // Automações e qualquer outra tela com abas), por ser o único
+            // lugar que define esse estilo.
+            className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap px-0.5 pb-2.5 text-sm font-medium transition-colors ${
               tab.id === activeId ? "text-vexo-tabFg" : "text-vexo-muted"
             }`}
           >
