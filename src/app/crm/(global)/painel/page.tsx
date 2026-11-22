@@ -41,7 +41,7 @@ export default async function PainelPage() {
   return (
     <div>
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-xl font-semibold tracking-tight">Painel</h1>
+        <h1 className="text-page-title tracking-tight">Painel</h1>
         <Link
           href="/crm/clinicas/nova"
           className="rounded-lg bg-vexo-accent px-3 py-1.5 text-sm font-medium text-vexo-accentFg hover:opacity-90"

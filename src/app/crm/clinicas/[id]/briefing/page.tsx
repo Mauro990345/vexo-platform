@@ -64,7 +64,7 @@ export default async function ClinicBriefingPage({ params }: { params: { id: str
   return (
     <div className="space-y-3">
       <div>
-        <h1 className="text-base font-semibold tracking-tight">Briefing de onboarding</h1>
+        <h1 className="text-page-title tracking-tight">Briefing de onboarding</h1>
         <p className="mt-0.5 text-xs text-vexo-muted">
           Link público (sem login) com 7 perguntas rápidas pra preparar a IA e o atendimento desta
           clínica. Não cobre Instagram/Google Calendar — isso continua pelo link de conexão, em

@@ -162,7 +162,7 @@ export function ClinicFilaView({
     <div className="max-w-[520px] space-y-2">
       <div className="flex flex-wrap items-baseline justify-between gap-1.5">
         <div className="flex flex-wrap items-baseline gap-1.5">
-          <h1 className="text-base font-semibold tracking-tight">Abordagem</h1>
+          <h1 className="text-page-title tracking-tight">Abordagem</h1>
           <span aria-hidden="true" className="text-vexo-mutedLight">
             ·
           </span>

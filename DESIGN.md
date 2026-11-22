@@ -24,16 +24,44 @@
 ## Bônus Full Face (identidade própria, não mexer sem aviso)
 - Verde sutil e escuro no bloco grande (áudio + texto), via variável única; fundo da página no escuro padrão.
 - Bloco "Ideia central": marrom escuro com borda vertical mais clara à esquerda (mesmo marrom do card "Faltou"). É a única faixa lateral aprovada (além da barra de Reativação em "Para fazer hoje", ver rodada 2 daquela seção).
-- Fontes do Bônus: Bricolage Grotesque (títulos) e Figtree (texto). Resto do app: Inter, já era a
-  fonte global antes deste pedido — não precisou trocar nada; hospedadas via pacotes @fontsource,
-  sem buscar nada no Google durante o build.
+- Fontes do Bônus: Bricolage Grotesque (títulos) e Figtree (texto). Resto do app: **Inter
+  Variable** — ver seção própria "Fonte (Inter Variable)" abaixo.
 
-## Ícone decorativo da sidebar
-Ícone circular branco+azul (estilo avatar/mascote, `VexoMascotIcon` em `AppShell.tsx`: dois
-círculos sobrepostos, `fill-vexo-accentFg`/`fill-vexo-accent` — tokens de sempre, nenhuma cor
-nova), ao lado do quadrado azul de sempre e do nome "VEXO" no topo da sidebar desktop. Pedido
-explícito (inspirado num app concorrente), puramente estético por enquanto — sem nenhuma função de
-busca/comando associada. Só na sidebar desktop; o cabeçalho mobile (`sm:hidden`) não muda.
+## Fonte (Inter Variable)
+Investigado a fundo depois de um pedido explícito pra trocar "a fonte datada do VEXO" por Inter
+Variable self-hosted: o VEXO **já usava exatamente isso**, não a fonte estática. Confirmado em
+`node_modules/@fontsource-variable/inter/wght.css` — `font-family: 'Inter Variable'`,
+`font-weight: 100 900` (um único arquivo `.woff2-variations` por range de caracteres, não um
+arquivo por peso), importado em `src/app/layout.tsx` via `@fontsource-variable/inter/wght.css` (o
+pacote variável, não o `@fontsource/inter` estático) — mesmo princípio de sempre (self-hosted,
+sem chamada a fonts.googleapis.com no build do Railway, ver `--font-inter` em `globals.css`).
+Nada precisou trocar aqui; a sensação de "datada" vinha do tamanho dos títulos (pequenos demais,
+não do peso — os títulos já usavam `font-semibold`/600, não 400) — ver "Tamanho dos títulos"
+abaixo, que é a correção de verdade pra esse pedido.
+
+## Ícone decorativo da sidebar — rodada 2 (robô, sozinho, sem sobrepor o logo)
+Pedido explícito corrigindo a 1ª rodada: a versão anterior colocava um ícone "mascote" (dois
+círculos) por CIMA do quadrado azul liso de sempre, os dois sobrepostos — visualmente errado.
+Agora é um ícone SÓ, no lugar do quadrado: cara de robô (estilo do ícone "Eli" do app de
+referência) — cabeça arredondada azul (`fill-vexo-accent`) com "olhos" e antena brancos
+(`fill-vexo-accentFg`), `VexoRobotIcon` em `AppShell.tsx`, só tokens de sempre, nenhuma cor nova.
+Ao lado do nome "VEXO" no topo da sidebar **desktop**, puramente estético, sem nenhuma função de
+busca/comando associada. Só na sidebar desktop; o cabeçalho mobile (`sm:hidden`) não muda — continua
+com o quadrado azul liso de sempre, não é a sidebar.
+
+## Tamanho dos títulos — rodada 3 (pedido explícito: títulos ligeiramente maiores, como no app de referência)
+Dois tokens novos de `fontSize` (`tailwind.config.ts`), peso 600 (`font-semibold`) já embutido —
+mesmo peso de sempre, só o tamanho muda:
+- `sidebar-title` (14px, era 12px/`text-xs`): só o "VEXO" no topo da sidebar desktop.
+- `page-title` (22px, era 16px/`text-base` na maioria das telas por clínica, ou 20px/`text-xl` nas
+  telas globais "Pipeline"/"Contas"/"Painel"/"Nova clínica") — **unificado num tamanho só**: as
+  duas famílias de h1 que existiam (16px e 20px) eram uma inconsistência não documentada; em vez de
+  só aumentar cada uma separadamente, ficou um token único reaproveitado por todo cabeçalho de
+  tela do CRM (Pipeline, Contas, Painel, Nova clínica, Agente de IA, Automações, Briefing,
+  Configurações, Conexões, Conectar WhatsApp, Status, Abordagem — todas as variantes, Envio de
+  mensagens, Logs do webhook, Follow-up, Buscar seguidores, Mensagens). Ficaram de fora
+  (deliberado): o título do Bônus Full Face (identidade própria, não mexer sem aviso) e o cabeçalho
+  da Conversa (`crm/conversas/[id]`, mostra o NOME do lead, não um título de seção fixo).
 
 ## Direção desejada (a aplicar primeiro em UMA página piloto, depois estender)
 - Base em camadas de cinza-azulado escuro: fundo da página, sidebar e blocos em 3 níveis sutis; mini-cards internos mais escuros que o card; bordas finas (~6-8% de branco), sem sombras pesadas.
@@ -48,15 +76,29 @@ busca/comando associada. Só na sidebar desktop; o cabeçalho mobile (`sm:hidden
   componente/tela. Resolve o problema de botões parecerem "mortos" ao clicar, sem nenhum sinal de
   que a ação foi registrada — cobre o `Button` e qualquer `<button>` cru, inclusive os que ainda
   existirem soltos nas telas.
-- Botões de "Salvar" (configuração/lembretes/prazos/textos/janela/mensagens, no Agente de IA,
-  Automações, Follow-up e Abordagem) passaram de `variant="outline"` (ou `<button>` cru) pra
-  `variant="primary"` do `Button` — mesmo azul de ação dos botões principais (ex. "Criar painel"),
-  texto branco. O `primary` ganhou também um sombreado sutil (`shadow-button`, novo token em
-  `tailwind.config.ts`: duas sombras bem leves, só pra dar profundidade — nunca uma sombra pesada,
-  ver Princípios) pra reforçar que é a ação principal do bloco. Ficou de fora deliberadamente:
-  "Salvar legenda" (botão pequeno dentro de um card de foto, no Agente de IA) — é o próprio exemplo
-  usado no comentário do `ghost` em `Button.tsx` pra esse tipo de ação secundária/discreta, e
-  "Enviar lista"/"Copiar script" (não são botões de salvar).
+- Botões de "Salvar" (configuração/lembretes/prazos/textos/janela/mensagens/cores, no Agente de
+  IA, Automações, Follow-up, Abordagem, Configurações e nos forms de Reativação/Quente) passaram
+  de `variant="outline"` (ou `<button>` cru com borda azul/fundo vazio) pra fundo azul PREENCHIDO
+  (`bg-vexo-accent`) + texto branco (`text-vexo-accentFg`) — `variant="primary"` do `Button` onde
+  o componente já era usado, ou a mesma combinação de classes direto onde ainda é `<button>` cru
+  (`ReactivationConfigForms.tsx`, `WhatsappConnectionPanel.tsx`, `configuracoes/page.tsx`). O
+  sombreado sutil (`shadow-button`, token em `tailwind.config.ts`) dá profundidade — nunca uma
+  sombra pesada (ver Princípios). Ficou de fora deliberadamente: "Salvar legenda" (botão pequeno
+  dentro de um card de foto, no Agente de IA) — é o próprio exemplo usado no comentário do `ghost`
+  em `Button.tsx` pra esse tipo de ação secundária/discreta, e "Enviar lista"/"Copiar script" (não
+  são botões de salvar).
+
+### Botões "Salvar" — rodada 3 (correção: alguns ficaram outline por engano, sombra só embaixo)
+Dois problemas da rodada anterior, corrigidos:
+- Vários "Salvar" **não foram pegos** na 1ª rodada porque vivem fora dos arquivos de tela
+  verificados então, em componentes compartilhados: `ReactivationConfigForms.tsx` (classe
+  `SAVE_BUTTON_CLASS`, usada pelos 3 forms de prazo/limite da Reativação e do card Quente —
+  ficaram com borda azul/fundo vazio), `WhatsappConnectionPanel.tsx` ("Salvar" do nome da
+  instância, `<button>` cru) e `ClinicReportPanel.tsx` (`variant="outline"` explícito). Todos
+  passaram pro mesmo padrão preenchido acima.
+- O token `shadow-button` tinha 2 camadas de sombra; reduzido pra 1 só, com `x=0` e sem
+  `spread` (`0 2px 3px 0 rgb(0 0 0 / 0.35)`) — pra garantir que a sombra só aparece embaixo do
+  botão (efeito de elevação), nunca "contornando" as 4 bordas.
 
 ## Regras técnicas
 - Todas as cores, tamanhos de fonte, espaçamentos, raios e bordas vêm de variáveis (tokens) em um único lugar. Proibido hex, rgb ou classe de cor escrita direto nas telas.
@@ -167,6 +209,15 @@ que ficam juntas:
 - Faltou (roxo) e Quente (laranja), como já eram: sem nenhuma mudança — continuam no mesmo
   `--vexo-card-type-followup` (marrom/dourado) de antes; a descrição de cor nesta rodada do pedido
   não bateu com o valor real no código, então nada foi tocado neles.
+
+### Cor por tipo em "Para fazer hoje" — rodada 3 (correção: a barra vira a própria borda do cartão)
+Pedido explícito corrigindo a rodada anterior: a barra era um `<span>` DENTRO do cartão (encostada
+na borda, mas por dentro da área de conteúdo) — o pedido original era a própria borda esquerda do
+cartão virando essa barra grossa. Trocado: o `<span>` interno saiu; agora, só nos cards de
+Reativação (e só fora do grupo "Enviados"), a borda esquerda do cartão ganha `border-l-4
+border-l-vexo-accent` por cima do `border` fino dos outros 3 lados (que continuam no mesmo tom
+tingido de sempre, `border-vexo-cardTypeReativacao/35`) — é a borda de verdade do elemento, não
+mais um indicador interno. Mesmo azul de sempre, nenhum token novo.
 
 ## Follow-up (tela piloto do mesmo padrão visual do Painel — aguardando aprovação no celular)
 `FollowUpView.tsx` é uma tela de CONFIGURAÇÃO (textos/prazos das sequências automáticas e dos

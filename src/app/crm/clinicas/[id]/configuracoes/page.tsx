@@ -31,7 +31,7 @@ export default async function ClinicConfiguracoesPage({ params }: { params: { id
   return (
     <div className="max-w-3xl space-y-4">
       <div>
-        <h1 className="text-base font-semibold tracking-tight">Configurações</h1>
+        <h1 className="text-page-title tracking-tight">Configurações</h1>
         <p className="mt-0.5 text-xs text-vexo-muted">
           Cores do sistema. Essas cores valem para o VEXO inteiro — todas as clínicas, não só esta
           — mesmo esse item de menu estando dentro do contexto de uma clínica. Mude o que quiser e
@@ -65,7 +65,7 @@ export default async function ClinicConfiguracoesPage({ params }: { params: { id
         <div className="flex items-center gap-2 border-t border-vexo-border pt-3">
           <button
             type="submit"
-            className="rounded-lg bg-vexo-accent px-3 py-1.5 text-sm font-medium text-vexo-accentFg hover:opacity-90"
+            className="rounded-lg bg-vexo-accent px-3 py-1.5 text-sm font-medium text-vexo-accentFg shadow-button hover:opacity-90"
           >
             Salvar cores
           </button>
@@ -114,7 +114,7 @@ export default async function ClinicConfiguracoesPage({ params }: { params: { id
         <div className="flex items-center gap-2 border-t border-vexo-border pt-3">
           <button
             type="submit"
-            className="rounded-lg bg-vexo-accent px-3 py-1.5 text-sm font-medium text-vexo-accentFg hover:opacity-90"
+            className="rounded-lg bg-vexo-accent px-3 py-1.5 text-sm font-medium text-vexo-accentFg shadow-button hover:opacity-90"
           >
             Salvar cores por página
           </button>

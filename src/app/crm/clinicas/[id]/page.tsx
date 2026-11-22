@@ -26,7 +26,7 @@ export default async function ClinicPipelinePage({ params }: { params: { id: str
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-xl font-semibold tracking-tight">Pipeline</h1>
+        <h1 className="text-page-title tracking-tight">Pipeline</h1>
         <p className="mt-1 text-sm text-vexo-muted">{clinic.name}</p>
       </div>
 

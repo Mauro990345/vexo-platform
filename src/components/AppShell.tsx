@@ -21,16 +21,21 @@ export type NavItem = { href: string; label: string; icon: React.ReactNode; acti
 export type NavGroup = { label: string; items: NavItem[] };
 
 // Ícone decorativo da sidebar (pedido explícito, inspirado num app
-// concorrente) — circular, branco e azul, estilo avatar/mascote, ao lado
-// do quadrado azul de sempre e do nome "VEXO" no topo. Só estético por
-// enquanto, SEM nenhuma função de busca/comando associada. Tokens de
-// sempre (vexo-accent/vexo-accentFg — o branco "oficial" do app, nunca a
-// palavra-chave `white` solta), nenhuma cor nova.
-function VexoMascotIcon({ className }: { className?: string }) {
+// concorrente — "cara de robô", estilo do ícone "Eli" do app de
+// referência), ao lado do nome "VEXO" no topo. Substitui de vez o quadrado
+// azul liso de antes — É O ÚNICO ícone ali agora (rodada anterior tinha os
+// dois sobrepostos, por engano). Só estético, SEM nenhuma função de busca/
+// comando associada. Tokens de sempre (vexo-accent/vexo-accentFg — o
+// branco "oficial" do app, nunca a palavra-chave `white` solta), nenhuma
+// cor nova: cabeça arredondada azul, "olhos" e antena em branco.
+function VexoRobotIcon({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
-      <circle cx="12" cy="12" r="10" className="fill-vexo-accentFg" />
-      <circle cx="15.5" cy="15.5" r="4.5" className="fill-vexo-accent" />
+      <rect x="11" y="1.5" width="2" height="4.5" rx="1" className="fill-vexo-accent" />
+      <circle cx="12" cy="2.5" r="1.6" className="fill-vexo-accentFg" />
+      <rect x="4" y="6.5" width="16" height="14" rx="5" className="fill-vexo-accent" />
+      <circle cx="9" cy="13.5" r="1.8" className="fill-vexo-accentFg" />
+      <circle cx="15" cy="13.5" r="1.8" className="fill-vexo-accentFg" />
     </svg>
   );
 }
@@ -105,10 +110,9 @@ export function AppShell({
     <div className="flex min-h-screen">
       <aside className="hidden w-52 shrink-0 flex-col border-r border-vexo-border bg-vexo-surface sm:flex">
         <Link href="/" className="flex items-center gap-2 px-4 py-4">
-          <span className="h-6 w-6 shrink-0 rounded-lg bg-vexo-accent" />
-          <VexoMascotIcon className="h-5 w-5 shrink-0" />
+          <VexoRobotIcon className="h-6 w-6 shrink-0" />
           <div className="min-w-0">
-            <p className="text-xs font-semibold leading-none tracking-tight">VEXO</p>
+            <p className="text-sidebar-title leading-none tracking-tight">VEXO</p>
           </div>
         </Link>
 

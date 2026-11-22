@@ -126,7 +126,7 @@ export default async function ClinicStatusPage({ params }: { params: { id: strin
     <div className="space-y-4">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h1 className="text-base font-semibold tracking-tight">Status</h1>
+          <h1 className="text-page-title tracking-tight">Status</h1>
           <p className="mt-0.5 text-xs text-vexo-muted">
             Saúde do sistema pra esta clínica — envio de mensagens e webhook do Instagram. Ferramenta
             de diagnóstico temporária (sem acesso a logs do Railway).

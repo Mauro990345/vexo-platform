@@ -22,7 +22,7 @@ export function SeguidoresView({ clinics }: { clinics: SeguidoresClinic[] }) {
       <Link href="/crm/abordagem" className="text-caption text-vexo-muted hover:text-vexo-accent">
         ← Preparação
       </Link>
-      <h1 className="mt-1 text-base font-semibold tracking-tight text-vexo-fg">Buscar seguidores</h1>
+      <h1 className="mt-1 text-page-title tracking-tight text-vexo-fg">Buscar seguidores</h1>
       <p className="mt-1 text-xs text-vexo-muted">Uso interno. Roda no seu navegador, na conta da clínica logada no instagram.com.</p>
 
       <div className="mt-4">

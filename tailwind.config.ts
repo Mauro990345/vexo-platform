@@ -139,6 +139,15 @@ const config: Config = {
         // reaproveitáveis em qualquer lugar que precise do mesmo degrau.
         meta: "13px",
         "body-sm": "15px",
+        // Títulos (pedido explícito, rodada 3 — "no app de referência os
+        // títulos são ligeiramente maiores"): um degrau acima do que cada
+        // um usava antes. "sidebar-title" é só o "VEXO" no topo da sidebar
+        // (era text-xs/12px); "page-title" é o h1 de cada tela do CRM (era
+        // text-xl/20px, ex.: "Pipeline"/"Contas"/"Painel"). Peso 600
+        // (font-semibold) já embutido no token — mesmo peso de antes, só o
+        // tamanho muda.
+        "sidebar-title": ["0.875rem", { fontWeight: "600" }], // 14px
+        "page-title": ["1.375rem", { fontWeight: "600" }], // 22px
         // Página pública: título do hero (38px celular / 68px desktop) e
         // títulos de seção (28px / 40px), com o letter-spacing pedido.
         "pub-hero": ["2.375rem", { lineHeight: "1.06", letterSpacing: "-0.036em", fontWeight: "600" }], // 38px
@@ -195,9 +204,12 @@ const config: Config = {
         // Sombreado sutil pedido explicitamente pros botões de ação
         // principal (fundo azul — "Salvar X", "Criar painel"...): só pra
         // dar profundidade, nunca uma sombra pesada (ver DESIGN.md,
-        // Princípios: "sem sombras pesadas"). Usado pelo `Button`
-        // (`variant="primary"`, Button.tsx).
-        button: "0 1px 2px 0 rgb(0 0 0 / 0.35), 0 1px 1px 0 rgb(0 0 0 / 0.2)",
+        // Princípios: "sem sombras pesadas"). Ajuste explícito (rodada 3):
+        // só embaixo (x=0, blur baixo, sem spread) — nunca nas 4 bordas,
+        // pra ler como elevação, não como contorno. Usado pelo `Button`
+        // (`variant="primary"`, Button.tsx) e pelos botões "Salvar"
+        // crus que não passam pelo componente (ver DESIGN.md).
+        button: "0 2px 3px 0 rgb(0 0 0 / 0.35)",
       },
       // Animação de entrada do gráfico "Abordagens por dia" (ver
       // ApproachChart) — cresce da esquerda pra direita ao montar, em vez

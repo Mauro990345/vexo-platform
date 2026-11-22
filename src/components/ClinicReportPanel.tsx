@@ -314,7 +314,7 @@ export function ClinicReportPanelBody({
 
         {saveError && <p className="text-vexo-error">{saveError}</p>}
 
-        <Button type="button" variant="outline" onClick={handleSave} disabled={saving} className="w-full justify-center">
+        <Button type="button" variant="primary" onClick={handleSave} disabled={saving} className="w-full justify-center">
           {saving ? "Salvando…" : saved ? "Salvo ✓" : "Salvar configuração"}
         </Button>
       </Card>

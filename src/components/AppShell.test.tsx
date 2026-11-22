@@ -21,10 +21,12 @@ function groups(badge?: number): NavGroup[] {
   ];
 }
 
-// Ícone decorativo (mascote circular branco+azul) ao lado do logo, só na
-// sidebar desktop — pedido explícito, puramente estético.
+// Ícone decorativo "cara de robô" (azul+branco) ao lado do nome VEXO, só na
+// sidebar desktop — pedido explícito, puramente estético. Rodada 3:
+// substitui de vez o quadrado azul liso de antes — é o ÚNICO ícone ali
+// agora (a rodada anterior tinha dois sobrepostos, por engano).
 describe("AppShell — ícone decorativo da sidebar", () => {
-  it("renderiza o svg do mascote ao lado do quadrado azul e do nome VEXO", () => {
+  it("renderiza só o ícone do robô (svg) ao lado do nome VEXO, sem o quadrado azul liso de antes", () => {
     const markup = renderToStaticMarkup(
       <AppShell navGroups={groups()} userLabel="Admin">
         <div />
@@ -33,6 +35,9 @@ describe("AppShell — ícone decorativo da sidebar", () => {
     expect(markup).toContain("<svg");
     expect(markup).toContain("fill-vexo-accentFg");
     expect(markup).toContain("fill-vexo-accent");
+    // só um svg decorativo na sidebar (nenhum outro elemento duplicado/sobreposto)
+    expect(markup.match(/<svg/g)?.length).toBe(1);
+    expect(markup).not.toContain("rounded-lg bg-vexo-accent\"");
   });
 });
 
