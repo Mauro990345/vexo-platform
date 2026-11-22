@@ -89,7 +89,14 @@ export function AppShell({
 
   return (
     <div className="flex min-h-screen">
-      <aside className="hidden w-52 shrink-0 flex-col border-r border-vexo-border bg-vexo-surface sm:flex">
+      {/* Fundo igual ao do conteúdo principal (pedido explícito, estilo
+          Linear/Vercel) — era bg-vexo-surface (mais claro que o fundo da
+          página), virou bg-vexo-bg, o mesmo tom do <body> (globals.css).
+          A separação vira só a borda fina de 1px (border-r border-vexo-
+          border, já existia) — nenhuma cor de ícone/texto da sidebar foi
+          tocada. Só o <aside> do desktop; o cabeçalho mobile (sm:hidden)
+          continua em bg-vexo-surface, não é a sidebar. */}
+      <aside className="hidden w-52 shrink-0 flex-col border-r border-vexo-border bg-vexo-bg sm:flex">
         <Link href="/" className="flex items-center gap-2 px-4 py-4">
           {/* Decisão final (pedido explícito): mesmo "X" da logo da página
               pública (VexoMark, components/public/VexoLogo.tsx) — mesmo
