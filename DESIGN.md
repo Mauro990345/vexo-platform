@@ -39,6 +39,20 @@ Nada precisou trocar aqui; a sensação de "datada" vinha do tamanho dos título
 não do peso — os títulos já usavam `font-semibold`/600, não 400) — ver "Tamanho dos títulos"
 abaixo, que é a correção de verdade pra esse pedido.
 
+Pedido explícito de confirmar com PROVA (não só ler o código): rodado o app de verdade
+(`npm run dev`) e inspecionado com Playwright. `getComputedStyle(document.body).fontFamily` e o
+mesmo em um `<h1>` retornam `"Inter Variable", ui-sans-serif, system-ui, -apple-system, sans-serif`
+— e a aba de rede mostra o arquivo `inter-latin-wght-normal.*.woff2` sendo baixado (o pacote
+VARIÁVEL, nome do arquivo tem `-wght-`; a versão estática teria um arquivo por peso, tipo
+`inter-latin-400-normal.woff2`, `inter-latin-600-normal.woff2` etc. — não é isso que carrega).
+Confirmado, nada a trocar.
+
+## Abas com ícone — rodada 2 (título maior)
+Pedido explícito: o texto das abas (`Tabs.tsx`) estava pequeno/desproporcional ao resto da tela —
+`text-sm` (14px), era `text-xs` (12px). Único lugar que define esse estilo, então vale pra TODA
+tela que usa o componente (Agente de IA, Follow-up, Automações, Fila de abordagem e qualquer outra
+com esse padrão de abas), não só pras que apareceram no pedido como exemplo.
+
 ## Ícone decorativo da sidebar — rodada 2 (robô, sozinho, sem sobrepor o logo)
 Pedido explícito corrigindo a 1ª rodada: a versão anterior colocava um ícone "mascote" (dois
 círculos) por CIMA do quadrado azul liso de sempre, os dois sobrepostos — visualmente errado.
