@@ -113,9 +113,9 @@ describe("ReactivationRail", () => {
     expect(markup).toContain("border-vexo-cardTypeReativacao/35");
     // Nunca engrossar a borda em si (nem border-l-4, nem qualquer -l-).
     expect(markup).not.toMatch(/border-l-\d/);
-    // Uma única barrinha, absoluta (fora do flex), fina (w-1) e curta (h-8,
-    // bem menor que a altura do cartão) — não a altura inteira.
-    const barMatches = markup.match(/<span aria-hidden="true" class="absolute left-0 top-1\/2 h-8 w-1 -translate-y-1\/2 rounded-full bg-vexo-accent"/g);
+    // Uma única barrinha, absoluta (fora do flex), fina (w-0.5) e com
+    // altura (h-10) bem menor que a do cartão — não a altura inteira.
+    const barMatches = markup.match(/<span aria-hidden="true" class="absolute left-0 top-1\/2 h-10 w-0\.5 -translate-y-1\/2 rounded-full bg-vexo-accent"/g);
     expect(barMatches?.length).toBe(1);
     expect(markup).toContain("bg-vexo-cardTypeReativacaoChipText/16");
     expect(markup).toContain("text-vexo-cardTypeReativacaoChipText");
@@ -140,7 +140,7 @@ describe("ReactivationRail", () => {
     expect(markup).toContain("Enviados (1)");
     expect(markup).not.toContain("border-vexo-cardTypeReativacao");
     expect(markup).not.toContain("bg-vexo-cardTypeReativacaoChipText");
-    expect(markup).not.toContain("absolute left-0 top-1/2 h-8 w-1");
+    expect(markup).not.toContain("absolute left-0 top-1/2 h-10 w-0.5");
   });
 
   it("a barrinha só aparece em cards de Reativação, nunca em Faltou/Quente/Não agendou", () => {
@@ -150,6 +150,6 @@ describe("ReactivationRail", () => {
         {...noopActions}
       />
     );
-    expect(markup).not.toContain("absolute left-0 top-1/2 h-8 w-1");
+    expect(markup).not.toContain("absolute left-0 top-1/2 h-10 w-0.5");
   });
 });

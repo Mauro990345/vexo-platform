@@ -324,14 +324,14 @@ export function ReactivationRail({
             uma deixava a barra por DENTRO do conteúdo, empurrando o avatar;
             a outra virava a borda inteira, grossa e da altura toda do
             cartão): um `<span>` ABSOLUTO (não ocupa espaço no flex do
-            conteúdo), fino (`w-1`, mais fino que a borda grossa da tentativa
-            anterior) e curto (`h-8`, bem menor que a altura do cartão),
-            centralizado verticalmente, sobreposto na borda esquerda
-            (`left-0`, por cima do `border` fino de 1px de sempre). Mesmo
-            azul de sempre (vexo-accent), nenhum token novo. Sem barra
-            quando já enviado (cartão todo fica neutro). */}
+            conteúdo), fino (`w-0.5`, ajuste fino — era `w-1`) e um pouco
+            mais alto que antes (`h-10`, era `h-8`, ainda bem menor que a
+            altura do cartão), centralizado verticalmente, sobreposto na
+            borda esquerda (`left-0`, por cima do `border` fino de 1px de
+            sempre). Mesmo azul de sempre (vexo-accent), nenhum token novo.
+            Sem barra quando já enviado (cartão todo fica neutro). */}
         {card.kind === "REACTIVATION" && !isSent && (
-          <span aria-hidden="true" className="absolute left-0 top-1/2 h-8 w-1 -translate-y-1/2 rounded-full bg-vexo-accent" />
+          <span aria-hidden="true" className="absolute left-0 top-1/2 h-10 w-0.5 -translate-y-1/2 rounded-full bg-vexo-accent" />
         )}
         <LeadAvatar profilePictureUrl={card.profilePictureUrl} name={card.name} size="appointment" />
         <div className="min-w-0 flex-1 space-y-0.5">
