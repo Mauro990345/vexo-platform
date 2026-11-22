@@ -143,11 +143,15 @@ const config: Config = {
         // títulos são ligeiramente maiores"): um degrau acima do que cada
         // um usava antes. "sidebar-title" é só o "VEXO" no topo da sidebar
         // (era text-xs/12px); "page-title" é o h1 de cada tela do CRM (era
-        // text-xl/20px, ex.: "Pipeline"/"Contas"/"Painel"). Peso 600
-        // (font-semibold) já embutido no token — mesmo peso de antes, só o
-        // tamanho muda.
+        // 16px na maioria das telas por clínica, 20px nas telas globais de
+        // lista — ver rodada 4). Peso 600 (font-semibold) já embutido no
+        // token — mesmo peso de antes, só o tamanho muda.
         "sidebar-title": ["0.875rem", { fontWeight: "600" }], // 14px
-        "page-title": ["1.375rem", { fontWeight: "600" }], // 22px
+        // Ajuste (pedido explícito, rodada 4 — "o aumento ficou grande
+        // demais, eu pedi algo sutil"): reduzido de 1.375rem/22px pra
+        // 1.125rem/18px. Ainda um degrau acima da maioria das telas (que
+        // usava 16px antes da rodada 3), sem o salto que 22px dava.
+        "page-title": ["1.125rem", { fontWeight: "600" }], // 18px
         // Página pública: título do hero (38px celular / 68px desktop) e
         // títulos de seção (28px / 40px), com o letter-spacing pedido.
         "pub-hero": ["2.375rem", { lineHeight: "1.06", letterSpacing: "-0.036em", fontWeight: "600" }], // 38px

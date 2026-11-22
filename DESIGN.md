@@ -2,22 +2,23 @@
 
 ## Princípios
 - Premium, minimalista e compacto. Interface escura, poucos elementos, bom espaçamento, sem blocos grandes ou espaçados demais.
-- Hierarquia clara: títulos principais em off-white, textos de apoio em cinza. Cor aparece só em detalhes (palavras, ícones, indicadores), nunca em grandes preenchimentos.
+- Hierarquia clara: títulos principais em branco puro (ver "Cor" abaixo), textos de apoio em cinza. Cor aparece só em detalhes (palavras, ícones, indicadores), nunca em grandes preenchimentos.
 - No máximo 2 matizes de destaque por bloco. Nada de etiquetas chamativas, faixas coloridas na lateral de blocos novos nem cores vivas.
 - Mobile-first: nunca rolagem horizontal da página; abas rolam dentro da própria linha. Testar em 360, 390, 414 e 1366 px.
 
 ## Cor (decidido e aplicado)
 - Azul da marca e das ações: #2b87bd. Usado em item ativo da sidebar, logo, botões principais, abas ativas (sublinhado), links, checkbox/toggle e foco de campos. Fundos de estado ativo com esse azul em ~12-14% de opacidade.
 - Cores de significado, só para o que significam (não decorativas): verde do "Agendado" (ok/ativo/conectado), marrom do "Quente/Faltou" (atenção/destaque), roxo da coluna "Em conversa", e as cores de erro/alerta já existentes. Não adicionar vermelho nem rosa novos como decoração. O ícone do Instagram segue as cores da marca dele.
-- Texto: títulos principais em off-white (~#e6e8ec, nunca #ffffff puro); textos que explicam ou informam em cinza (~#8b909a).
+- Texto: títulos e texto principal em branco puro (#ffffff — `--vexo-fg`; `--vexo-tab-fg`, abas/alguns rótulos, segue o mesmo valor). Era off-white (~#f1f4f8/#e6e8ec, regra antiga "nunca #ffffff puro") — revertido por pedido explícito: lia como acinzentado/opaco, baixa definição, comparado ao branco nítido de outras plataformas. Textos que explicam ou informam continuam em cinza (~#8b909a).
 - Desagradam e não devem ser usados: verde-água/pastel apagado, azul muito vivo e saturado, rosa.
 
 ## Abas com ícone (aplicado; cores em atualização)
 - Cor do ícone fixa por posição (da esquerda para a direita, recomeçando em cada página): 1ª #28a4c2, 2ª #dbb148, 3ª #547aca, 4ª #49b76c. Variáveis tab-icon-1 a tab-icon-4.
-- Texto da aba **ativa** em off-white (`--vexo-tab-fg`), com o sublinhado azul fino embaixo dela
-  (já existia, continua animado). Texto das abas **inativas** em cinza (`text-vexo-muted`) — antes
-  todas ficavam em off-white e só o sublinhado indicava a seleção; pedido explícito (inspirado num
-  app concorrente) pra aumentar o contraste entre ativa/inativa. Vale pro `Tabs.tsx` reutilizável
+- Texto da aba **ativa** em branco puro (`--vexo-tab-fg`, ver "Cor" acima), com o sublinhado azul
+  fino embaixo dela (já existia, continua animado). Texto das abas **inativas** em cinza
+  (`text-vexo-muted`) — antes todas ficavam no mesmo tom e só o sublinhado indicava a seleção;
+  pedido explícito (inspirado num app concorrente) pra aumentar o contraste entre ativa/inativa.
+  Vale pro `Tabs.tsx` reutilizável
   (ex.: dentro de "Agente de IA": "Prompt de conversação da IA"/"Fotos de resultado"/"Timing de
   resposta da IA"/"Janela de envio") e qualquer outra tela com esse mesmo padrão de abas.
 
@@ -109,6 +110,17 @@ mesmo peso de sempre, só o tamanho muda:
   mensagens, Logs do webhook, Follow-up, Buscar seguidores, Mensagens). Ficaram de fora
   (deliberado): o título do Bônus Full Face (identidade própria, não mexer sem aviso) e o cabeçalho
   da Conversa (`crm/conversas/[id]`, mostra o NOME do lead, não um título de seção fixo).
+
+### Tamanho dos títulos — rodada 4 (correção: aumento ficou grande demais, pedido era sutil)
+Pedido explícito corrigindo a rodada anterior: o salto de `page-title` pra 22px (vindo de 16/20px)
+e das abas internas (`Tabs.tsx`) pra 14px (vindo de 12px) foi longe demais do "aumento sutil"
+pedido originalmente — ficou desproporcional ao resto da tela, repetido em Agente de IA,
+Automações e Follow-up (título principal + abas internas das três). Reduzido:
+- `page-title`: 22px → **18px** (`1.125rem`). Ainda um degrau acima da maioria das telas por
+  clínica (que usava 16px antes da rodada 3), sem o salto que 22px dava.
+- Abas internas (`Tabs.tsx`): 14px → **13px** (`text-meta`, token já existente — reaproveitado em
+  vez de criar um novo só pra este valor, mesmo princípio de sempre). Um meio-termo entre o 12px
+  original (pequeno demais) e o 14px da rodada anterior (grande demais).
 
 ## Direção desejada (a aplicar primeiro em UMA página piloto, depois estender)
 - Base em camadas de cinza-azulado escuro: fundo da página, sidebar e blocos em 3 níveis sutis; mini-cards internos mais escuros que o card; bordas finas (~6-8% de branco), sem sombras pesadas.
