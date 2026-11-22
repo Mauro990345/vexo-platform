@@ -45,15 +45,26 @@
      2 cards de prévia, link "Pausar esta conta") mas sem chegar no branco
      do texto principal/ativo. */
   --vexo-muted-light: 178 186 199; /* #b2bac7 */
-  --vexo-fg: 241 244 248; /* #f1f4f8 — texto principal */
+  /* Branco puro (pedido explícito — rodada seguinte à Etapa 1): era #f1f4f8,
+     um off-white deliberado ("nunca #ffffff puro", regra antiga desta
+     seção). Na prática lia como acinzentado/opaco, baixa definição,
+     comparado ao branco nítido de outras plataformas — decisão revertida:
+     #ffffff mesmo, por pedido explícito. Vale pra todo texto principal
+     (títulos e corpo) que usa este token. */
+  --vexo-fg: 255 255 255; /* #ffffff — texto principal */
 
-  /* Título das abas (ver Tabs.tsx) — token PRÓPRIO, fixo, que NÃO
-     acompanha --vexo-fg (pedido explícito: off-white ~#e6e8ec, nunca
-     branco puro — um pouco mais escuro que o texto principal padrão). Vale
-     pro texto da aba em QUALQUER estado (ativa ou não) — só o sublinhado
-     continua indicando qual está selecionada (o ícone agora tem cor FIXA
-     por posição, ver --tab-icon-1..4 abaixo). */
-  --vexo-tab-fg: 230 232 236; /* #e6e8ec */
+  /* Título das abas (ver Tabs.tsx) — token PRÓPRIO, fixo, que antes NÃO
+     acompanhava --vexo-fg (era #e6e8ec, um pouco mais escuro de propósito,
+     pra não competir com o branco do texto principal — mas os dois eram só
+     off-white, nenhum dos dois branco puro). Agora que --vexo-fg virou
+     branco puro, por consistência (mesmo pedido de "branco mais nítido nos
+     títulos", abas inclusas) este token passa a usar o MESMO valor — ainda
+     um token separado (não substituído por --vexo-fg direto), caso um dia
+     precise voltar a divergir. Vale pro texto da aba em QUALQUER estado
+     (ativa ou não) — só o sublinhado continua indicando qual está
+     selecionada (o ícone tem cor FIXA por posição, ver --tab-icon-1..4
+     abaixo). */
+  --vexo-tab-fg: 255 255 255; /* #ffffff */
 
   /* Cor do ÍCONE de cada aba — FIXA por posição (1ª, 2ª, 3ª, 4ª aba da
      esquerda pra direita), não pela aba estar selecionada ou não — ver
