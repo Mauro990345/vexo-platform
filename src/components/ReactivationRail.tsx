@@ -334,6 +334,15 @@ export function ReactivationRail({
               : CARD_BORDER_CLASS[card.kind]
         }`}
       >
+        {/* Barra lateral azul, só nos cards de Reativação (pedido
+            explícito — inspirado num app concorrente): diferencia esses
+            cards dos de Agendamento (PanelAppointmentsColumn.tsx, sem
+            barra nenhuma), que no celular ficam na mesma coluna, um
+            embaixo do outro. "Meia barra" (h-8, não a altura inteira do
+            cartão) — um indicador, não uma faixa lateral grossa cobrindo
+            o cartão todo. Mesmo azul de sempre (vexo-accent), nenhum token
+            novo. Sem barra quando já enviado (cartão todo fica neutro). */}
+        {card.kind === "REACTIVATION" && !isSent && <span aria-hidden="true" className="h-8 w-1 shrink-0 self-center rounded-full bg-vexo-accent" />}
         <LeadAvatar profilePictureUrl={card.profilePictureUrl} name={card.name} size="appointment" />
         <div className="min-w-0 flex-1 space-y-0.5">
           {/* 1ª linha: NOME completo em destaque, com o @ do Instagram logo
