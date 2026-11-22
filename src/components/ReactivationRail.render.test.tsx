@@ -100,17 +100,23 @@ describe("ReactivationRail", () => {
   });
 
   // Ajuste dedicado (cor por tipo, ver DESIGN.md): Reativação com a borda
-  // fina tingida de azul nos 3 lados (mesmo token de sempre,
-  // `cardTypeReativacao`) + a própria borda ESQUERDA grossa (`border-l-4`,
-  // rodada 3 — antes era um `<span>` interno, "meia barra", virou a borda
-  // de verdade do cartão) + etiqueta "Reativação" em VERDE (token próprio,
-  // não o vexo-success semântico). Follow-up e os 3 subtipos continuam no
-  // marrom/dourado.
-  it('Reativação: borda fina azul (3 lados) + borda esquerda grossa azul (border-l-4) + etiqueta VERDE (card-type-reativacao-chip-text)', () => {
+  // fina tingida de azul nos 4 lados, igual a antes (mesmo token de sempre,
+  // `cardTypeReativacao`) + uma barrinha própria, absoluta (não ocupa
+  // espaço no flex do conteúdo), fina e curta, sobreposta na borda
+  // esquerda (rodada 4 — correção: as 2 tentativas anteriores deixaram
+  // DUAS barras juntas, uma por dentro do conteúdo e outra virando a borda
+  // inteira grossa/da altura toda; agora é uma só) + etiqueta "Reativação"
+  // em VERDE (token próprio, não o vexo-success semântico). Follow-up e os
+  // 3 subtipos continuam no marrom/dourado.
+  it('Reativação: borda fina azul (4 lados, sem engrossar) + 1 barrinha absoluta fina/curta na borda esquerda + etiqueta VERDE (card-type-reativacao-chip-text)', () => {
     const markup = renderToStaticMarkup(<ReactivationRail cards={[card({ kind: "REACTIVATION" })]} {...noopActions} />);
     expect(markup).toContain("border-vexo-cardTypeReativacao/35");
-    expect(markup).toContain("border-l-4");
-    expect(markup).toContain("border-l-vexo-accent");
+    // Nunca engrossar a borda em si (nem border-l-4, nem qualquer -l-).
+    expect(markup).not.toMatch(/border-l-\d/);
+    // Uma única barrinha, absoluta (fora do flex), fina (w-1) e curta (h-8,
+    // bem menor que a altura do cartão) — não a altura inteira.
+    const barMatches = markup.match(/<span aria-hidden="true" class="absolute left-0 top-1\/2 h-8 w-1 -translate-y-1\/2 rounded-full bg-vexo-accent"/g);
+    expect(barMatches?.length).toBe(1);
     expect(markup).toContain("bg-vexo-cardTypeReativacaoChipText/16");
     expect(markup).toContain("text-vexo-cardTypeReativacaoChipText");
     // Etiqueta não é mais azul.
@@ -129,21 +135,21 @@ describe("ReactivationRail", () => {
     expect(markup).toContain("text-vexo-cardTypeFollowup");
   });
 
-  it('card já enviado (grupo "Enviados") fica neutro mesmo sendo Reativação — não carrega a cor do tipo nem a borda esquerda grossa', () => {
+  it('card já enviado (grupo "Enviados") fica neutro mesmo sendo Reativação — não carrega a cor do tipo nem a barrinha', () => {
     const markup = renderToStaticMarkup(<ReactivationRail cards={[card({ kind: "REACTIVATION", sentAt: new Date() })]} {...noopActions} />);
     expect(markup).toContain("Enviados (1)");
     expect(markup).not.toContain("border-vexo-cardTypeReativacao");
     expect(markup).not.toContain("bg-vexo-cardTypeReativacaoChipText");
-    expect(markup).not.toContain("border-l-4");
+    expect(markup).not.toContain("absolute left-0 top-1/2 h-8 w-1");
   });
 
-  it("borda esquerda grossa azul só aparece em cards de Reativação, nunca em Faltou/Quente/Não agendou", () => {
+  it("a barrinha só aparece em cards de Reativação, nunca em Faltou/Quente/Não agendou", () => {
     const markup = renderToStaticMarkup(
       <ReactivationRail
         cards={[card({ kind: "NO_SHOW", actionKey: { kind: "NO_SHOW", appointmentId: "appt-1", step: 1 }, channel: "INSTAGRAM" })]}
         {...noopActions}
       />
     );
-    expect(markup).not.toContain("border-l-4");
+    expect(markup).not.toContain("absolute left-0 top-1/2 h-8 w-1");
   });
 });
