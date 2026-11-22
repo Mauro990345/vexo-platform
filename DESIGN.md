@@ -239,6 +239,16 @@ A borda do cartão (4 lados) volta a ser só a tingida normal (`CARD_BORDER_CLAS
 rodadas, sem engrossar nenhum lado). Mesmo azul de sempre (vexo-accent), nenhum token novo.
 Verificado visualmente (screenshot do card renderizado com o CSS real do app) antes de fechar.
 
+### Cor por tipo em "Para fazer hoje" — rodada 5 (ajuste fino: barra mais fina/alta, verde menos saturado)
+Dois ajustes finos pedidos depois de aprovar a barra única da rodada 4:
+- Barrinha: mais fina (`w-0.5`, era `w-1`) e um pouco mais alta (`h-10`, era `h-8`) — continua
+  absoluta, centralizada verticalmente, sem ocupar espaço no flex do conteúdo.
+- Etiqueta "REATIVAÇÃO": o verde estava um pouco saturado demais. Reduzida a saturação do token
+  `--vexo-card-type-reativacao-chip-text` de ~64% pra ~50% (mesmo matiz/luminosidade — só menos
+  vívido): de `52 211 153` (#34d399) pra `71 194 149` (#47c295). Continua um valor PRÓPRIO e fixo,
+  independente do `--vexo-success` semântico/customizável.
+Verificado visualmente (screenshot do card renderizado com o CSS real do app) antes de fechar.
+
 ## Follow-up (tela piloto do mesmo padrão visual do Painel — aguardando aprovação no celular)
 `FollowUpView.tsx` é uma tela de CONFIGURAÇÃO (textos/prazos das sequências automáticas e dos
 cards manuais), sem nenhuma lista de pacientes/agendamentos — diferente do Painel, aqui não existem

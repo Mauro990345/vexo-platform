@@ -126,7 +126,7 @@
      trocar a cor de "sucesso" dela. A BORDA do cartão continua o azul de
      sempre (--vexo-card-type-reativacao, acima) — é a barra lateral nova
      (ver ReactivationRail.tsx) que ficou azul, não esta etiqueta. */
-  --vexo-card-type-reativacao-chip-text: 52 211 153; /* #34d399 — mesmo tom do verde já aprovado no app (--vexo-success), valor PRÓPRIO e fixo */
+  --vexo-card-type-reativacao-chip-text: 71 194 149; /* #47c295 — mesmo verde acima (#34d399), saturação reduzida levemente (pedido explícito: "um pouco vibrante/saturado demais"), mesmo tom/luminosidade */
 
   /* Botão WhatsApp da Reativação (ver ReactivationActionButtonStyle.ts) —
      valor FIXO, travado no verde que o badge "Compareceu" usava antes do
