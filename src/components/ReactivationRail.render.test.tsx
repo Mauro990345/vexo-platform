@@ -99,17 +99,21 @@ describe("ReactivationRail", () => {
     expect(markup).toMatch(/Joana Lima<\/p><span[^>]*>@joana\.ig/);
   });
 
-  // Ajuste dedicado (cor por tipo, ver DESIGN.md): Reativação no azul da
-  // marca (borda do cartão + etiqueta), Follow-up e os 3 subtipos
-  // (Faltou/Não agendou/Quente) no marrom/dourado — SEM faixa lateral
-  // grossa, só a borda fina inteira tingida.
-  it('Reativação: borda do cartão e etiqueta tingidas de azul (card-type-reativacao), sem faixa lateral', () => {
+  // Ajuste dedicado (cor por tipo, ver DESIGN.md): Reativação com borda
+  // fina tingida de azul (mesmo token de sempre, `cardTypeReativacao`) +
+  // uma barra lateral azul própria (pedido explícito, rodada seguinte —
+  // "meia barra", h-8, não a altura inteira do cartão) + etiqueta
+  // "Reativação" agora em VERDE (token próprio, não o vexo-success
+  // semântico). Follow-up e os 3 subtipos continuam no marrom/dourado.
+  it('Reativação: borda azul + barra lateral azul (h-8) + etiqueta VERDE (card-type-reativacao-chip-text)', () => {
     const markup = renderToStaticMarkup(<ReactivationRail cards={[card({ kind: "REACTIVATION" })]} {...noopActions} />);
     expect(markup).toContain("border-vexo-cardTypeReativacao/35");
-    expect(markup).toContain("bg-vexo-cardTypeReativacao/16");
-    expect(markup).toContain("text-vexo-cardTypeReativacaoText");
-    expect(markup).not.toContain("border-l-4");
-    expect(markup).not.toContain("border-l-2");
+    expect(markup).toContain("h-8 w-1 shrink-0 self-center rounded-full bg-vexo-accent");
+    expect(markup).toContain("bg-vexo-cardTypeReativacaoChipText/16");
+    expect(markup).toContain("text-vexo-cardTypeReativacaoChipText");
+    // Etiqueta não é mais azul.
+    expect(markup).not.toContain("bg-vexo-cardTypeReativacao/16");
+    expect(markup).not.toContain("text-vexo-cardTypeReativacaoText");
   });
 
   it.each([
@@ -123,10 +127,21 @@ describe("ReactivationRail", () => {
     expect(markup).toContain("text-vexo-cardTypeFollowup");
   });
 
-  it('card já enviado (grupo "Enviados") fica neutro mesmo sendo Reativação — não carrega a cor do tipo', () => {
+  it('card já enviado (grupo "Enviados") fica neutro mesmo sendo Reativação — não carrega a cor do tipo nem a barra lateral', () => {
     const markup = renderToStaticMarkup(<ReactivationRail cards={[card({ kind: "REACTIVATION", sentAt: new Date() })]} {...noopActions} />);
     expect(markup).toContain("Enviados (1)");
     expect(markup).not.toContain("border-vexo-cardTypeReativacao");
-    expect(markup).not.toContain("bg-vexo-cardTypeReativacao");
+    expect(markup).not.toContain("bg-vexo-cardTypeReativacaoChipText");
+    expect(markup).not.toContain("h-8 w-1 shrink-0 self-center rounded-full bg-vexo-accent");
+  });
+
+  it("barra lateral azul só aparece em cards de Reativação, nunca em Faltou/Quente/Não agendou", () => {
+    const markup = renderToStaticMarkup(
+      <ReactivationRail
+        cards={[card({ kind: "NO_SHOW", actionKey: { kind: "NO_SHOW", appointmentId: "appt-1", step: 1 }, channel: "INSTAGRAM" })]}
+        {...noopActions}
+      />
+    );
+    expect(markup).not.toContain("h-8 w-1 shrink-0 self-center rounded-full bg-vexo-accent");
   });
 });

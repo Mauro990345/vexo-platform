@@ -115,9 +115,18 @@
      o grupo recolhido "Enviados" continuam neutros (vexo-border/vexo-
      surface2/vexo-muted, sem usar nenhuma destas duas). Fáceis de
      reajustar depois — mudar só o valor aqui. */
-  --vexo-card-type-reativacao: 43 135 189; /* #2b87bd — mesmo azul da marca (--vexo-accent) */
-  --vexo-card-type-reativacao-text: 90 168 214; /* #5aa8d6 — tom mais claro do mesmo azul, só pro texto da etiqueta */
+  --vexo-card-type-reativacao: 43 135 189; /* #2b87bd — mesmo azul da marca (--vexo-accent); continua só na BORDA fina do cartão */
+  --vexo-card-type-reativacao-text: 90 168 214; /* #5aa8d6 — tom mais claro do mesmo azul (sem uso atual na etiqueta, ver -chip-text abaixo) */
   --vexo-card-type-followup: 209 164 104; /* #d1a468 — marrom/dourado já usado no VEXO (Quente/Faltou); cobre Follow-up e os subtipos Faltou/Não agendou/Quente */
+  /* Etiqueta "REATIVAÇÃO" (pedido explícito, inspirado num app
+     concorrente — rodada seguinte desta mesma seção): passou de azul pra
+     verde, mas um verde PRÓPRIO, não o --vexo-success acima (que é
+     semântico e customizável por clínica em Configurações) — esta
+     etiqueta é só uma categoria visual, nunca deve mudar se a clínica
+     trocar a cor de "sucesso" dela. A BORDA do cartão continua o azul de
+     sempre (--vexo-card-type-reativacao, acima) — é a barra lateral nova
+     (ver ReactivationRail.tsx) que ficou azul, não esta etiqueta. */
+  --vexo-card-type-reativacao-chip-text: 52 211 153; /* #34d399 — mesmo tom do verde já aprovado no app (--vexo-success), valor PRÓPRIO e fixo */
 
   /* Botão WhatsApp da Reativação (ver ReactivationActionButtonStyle.ts) —
      valor FIXO, travado no verde que o badge "Compareceu" usava antes do
@@ -227,6 +236,27 @@
 @media (min-width: 1024px) {
   :root {
     --vexo-report-col-w: 26px;
+  }
+}
+
+@layer base {
+  /* Feedback de clique (pressed state) — pedido explícito: "garantir que
+     TODOS os botões clicáveis do VEXO tenham feedback visual de clique
+     (efeito de afundamento), hoje alguns parecem mortos ao clicar". Em
+     vez de adicionar active:scale/active:brightness em cada botão de
+     cada tela (duplicação, o oposto do que DESIGN.md pede — "Regras
+     técnicas": tokens/comportamento num único lugar), é uma regra só,
+     aqui, valendo pra todo <button> do app de uma vez — inclusive os que
+     ainda não usam o componente `Button` (Button.tsx). disabled nunca
+     "afunda" (nada clicável de verdade acontece ali). Sutil de propósito
+     (mesmo espírito de "sem sombras pesadas" do resto do app): só um
+     leve encolhimento + escurecimento, não um salto chamativo. */
+  button:not(:disabled) {
+    transition: transform 100ms ease, filter 100ms ease;
+  }
+  button:not(:disabled):active {
+    transform: scale(0.97);
+    filter: brightness(0.9);
   }
 }
 

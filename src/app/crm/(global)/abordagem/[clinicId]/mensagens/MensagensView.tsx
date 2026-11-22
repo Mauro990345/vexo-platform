@@ -90,7 +90,7 @@ export function MensagensView({
             />
           </div>
         ))}
-        <Button type="submit" variant="outline" size="sm" disabled={isPending}>
+        <Button type="submit" variant="primary" size="sm" disabled={isPending}>
           {saved ? "Salvo ✓" : "Salvar mensagens"}
         </Button>
       </Card>

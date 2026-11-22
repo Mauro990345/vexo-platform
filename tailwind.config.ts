@@ -112,6 +112,10 @@ const config: Config = {
           cardTypeReativacao: "rgb(var(--vexo-card-type-reativacao) / <alpha-value>)",
           cardTypeReativacaoText: "rgb(var(--vexo-card-type-reativacao-text) / <alpha-value>)",
           cardTypeFollowup: "rgb(var(--vexo-card-type-followup) / <alpha-value>)",
+          // Etiqueta "REATIVAÇÃO" (pedido explícito, ver DESIGN.md) — verde
+          // FIXO, independente do azul acima (que a BORDA do cartão continua
+          // usando) e do `vexo-success` semântico/customizável.
+          cardTypeReativacaoChipText: "rgb(var(--vexo-card-type-reativacao-chip-text) / <alpha-value>)",
         },
       },
       fontFamily: {
@@ -188,6 +192,12 @@ const config: Config = {
       },
       boxShadow: {
         card: "0 1px 2px 0 rgb(0 0 0 / 0.4)",
+        // Sombreado sutil pedido explicitamente pros botões de ação
+        // principal (fundo azul — "Salvar X", "Criar painel"...): só pra
+        // dar profundidade, nunca uma sombra pesada (ver DESIGN.md,
+        // Princípios: "sem sombras pesadas"). Usado pelo `Button`
+        // (`variant="primary"`, Button.tsx).
+        button: "0 1px 2px 0 rgb(0 0 0 / 0.35), 0 1px 1px 0 rgb(0 0 0 / 0.2)",
       },
       // Animação de entrada do gráfico "Abordagens por dia" (ver
       // ApproachChart) — cresce da esquerda pra direita ao montar, em vez

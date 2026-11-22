@@ -169,7 +169,7 @@ function StepList({
                   </div>
                 )}
 
-                <Button type="submit" variant="outline">
+                <Button type="submit" variant="primary">
                   Salvar passo {i + 1}
                 </Button>
               </form>
@@ -315,7 +315,7 @@ export async function FollowUpView() {
                       <span className="text-xs text-vexo-muted">horas</span>
                     </div>
                   </div>
-                  <Button type="submit" variant="outline">
+                  <Button type="submit" variant="primary">
                     Salvar prazo
                   </Button>
                 </form>
@@ -365,7 +365,7 @@ export async function FollowUpView() {
                         </span>
                       </div>
                     </div>
-                    <Button type="submit" variant="outline">
+                    <Button type="submit" variant="primary">
                       Salvar prazo
                     </Button>
                   </form>
@@ -629,7 +629,7 @@ export async function FollowUpView() {
                     </div>
                   </details>
 
-                  <Button type="submit" variant="outline">
+                  <Button type="submit" variant="primary">
                     Salvar textos
                   </Button>
                 </form>

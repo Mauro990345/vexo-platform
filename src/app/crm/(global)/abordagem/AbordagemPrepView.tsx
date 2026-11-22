@@ -264,7 +264,7 @@ function WindowForm({ window: approachWindow }: { window: ApproachWindow }) {
             className="rounded-control border border-vexo-border bg-vexo-bg px-2 py-1.5 text-xs text-vexo-fg outline-none focus:border-vexo-accent"
           />
         </div>
-        <Button type="submit" variant="outline" size="sm" disabled={isPending}>
+        <Button type="submit" variant="primary" size="sm" disabled={isPending}>
           {saved ? "Salvo ✓" : "Salvar"}
         </Button>
       </div>
@@ -333,7 +333,7 @@ function TimingForm({ timing }: { timing: ApproachTiming }) {
           </label>
           <input id="batchPauseHours" name="batchPauseHours" type="number" min={0} step={1} required defaultValue={timing.batchPauseHours} className={fieldClass} />
         </div>
-        <Button type="submit" variant="outline" size="sm" disabled={isPending}>
+        <Button type="submit" variant="primary" size="sm" disabled={isPending}>
           {saved ? "Salvo ✓" : "Salvar"}
         </Button>
       </div>

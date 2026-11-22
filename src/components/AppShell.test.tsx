@@ -21,6 +21,21 @@ function groups(badge?: number): NavGroup[] {
   ];
 }
 
+// Ícone decorativo (mascote circular branco+azul) ao lado do logo, só na
+// sidebar desktop — pedido explícito, puramente estético.
+describe("AppShell — ícone decorativo da sidebar", () => {
+  it("renderiza o svg do mascote ao lado do quadrado azul e do nome VEXO", () => {
+    const markup = renderToStaticMarkup(
+      <AppShell navGroups={groups()} userLabel="Admin">
+        <div />
+      </AppShell>
+    );
+    expect(markup).toContain("<svg");
+    expect(markup).toContain("fill-vexo-accentFg");
+    expect(markup).toContain("fill-vexo-accent");
+  });
+});
+
 describe("AppShell — badge de contagem no item do menu", () => {
   it("badge > 0: mostra o número ao lado do item, na cor de erro (vexo-error)", () => {
     const markup = renderToStaticMarkup(

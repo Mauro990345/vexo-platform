@@ -143,7 +143,7 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
                     </p>
                   </div>
 
-                  <Button type="submit" variant="outline">
+                  <Button type="submit" variant="primary">
                     Salvar configuração
                   </Button>
                 </form>
@@ -241,7 +241,7 @@ export default async function ClinicAutomationPage({ params }: { params: { id: s
                       </div>
                     </details>
 
-                    <Button type="submit" variant="outline">
+                    <Button type="submit" variant="primary">
                       Salvar lembretes
                     </Button>
                   </form>

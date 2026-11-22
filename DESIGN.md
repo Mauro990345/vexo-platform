@@ -14,18 +14,49 @@
 
 ## Abas com ícone (aplicado; cores em atualização)
 - Cor do ícone fixa por posição (da esquerda para a direita, recomeçando em cada página): 1ª #28a4c2, 2ª #dbb148, 3ª #547aca, 4ª #49b76c. Variáveis tab-icon-1 a tab-icon-4.
-- Texto das abas em off-white; aba selecionada indicada pelo sublinhado azul.
+- Texto da aba **ativa** em off-white (`--vexo-tab-fg`), com o sublinhado azul fino embaixo dela
+  (já existia, continua animado). Texto das abas **inativas** em cinza (`text-vexo-muted`) — antes
+  todas ficavam em off-white e só o sublinhado indicava a seleção; pedido explícito (inspirado num
+  app concorrente) pra aumentar o contraste entre ativa/inativa. Vale pro `Tabs.tsx` reutilizável
+  (ex.: dentro de "Agente de IA": "Prompt de conversação da IA"/"Fotos de resultado"/"Timing de
+  resposta da IA"/"Janela de envio") e qualquer outra tela com esse mesmo padrão de abas.
 
 ## Bônus Full Face (identidade própria, não mexer sem aviso)
 - Verde sutil e escuro no bloco grande (áudio + texto), via variável única; fundo da página no escuro padrão.
-- Bloco "Ideia central": marrom escuro com borda vertical mais clara à esquerda (mesmo marrom do card "Faltou"). É a única faixa lateral aprovada.
-- Fontes do Bônus: Bricolage Grotesque (títulos) e Figtree (texto). Resto do app: Inter. Todas hospedadas via pacotes @fontsource, sem buscar nada no Google durante o build.
+- Bloco "Ideia central": marrom escuro com borda vertical mais clara à esquerda (mesmo marrom do card "Faltou"). É a única faixa lateral aprovada (além da barra de Reativação em "Para fazer hoje", ver rodada 2 daquela seção).
+- Fontes do Bônus: Bricolage Grotesque (títulos) e Figtree (texto). Resto do app: Inter, já era a
+  fonte global antes deste pedido — não precisou trocar nada; hospedadas via pacotes @fontsource,
+  sem buscar nada no Google durante o build.
+
+## Ícone decorativo da sidebar
+Ícone circular branco+azul (estilo avatar/mascote, `VexoMascotIcon` em `AppShell.tsx`: dois
+círculos sobrepostos, `fill-vexo-accentFg`/`fill-vexo-accent` — tokens de sempre, nenhuma cor
+nova), ao lado do quadrado azul de sempre e do nome "VEXO" no topo da sidebar desktop. Pedido
+explícito (inspirado num app concorrente), puramente estético por enquanto — sem nenhuma função de
+busca/comando associada. Só na sidebar desktop; o cabeçalho mobile (`sm:hidden`) não muda.
 
 ## Direção desejada (a aplicar primeiro em UMA página piloto, depois estender)
 - Base em camadas de cinza-azulado escuro: fundo da página, sidebar e blocos em 3 níveis sutis; mini-cards internos mais escuros que o card; bordas finas (~6-8% de branco), sem sombras pesadas.
 - Sidebar minimalista: ícones de linha fina em cinza, cor só no item ativo, item ativo com fundo sutil e SEM contorno, tipografia regular e discreta.
 - Cor por seção em detalhes (ícone do cabeçalho, título em caixa alta, palavras-chave), no máximo 4 cores no total: azul, dourado, verde e laranja/âmbar.
 - Valores/números em off-white, unidade em cinza menor; títulos de seção pequenos em caixa alta com letter-spacing leve.
+
+## Feedback de clique e botões "Salvar" (rodada inspirada num app concorrente)
+- Todo botão clicável (`<button>`, qualquer variante) ganhou um estado "pressed" global: ao
+  clicar, encolhe levemente (`scale(0.97)`) e escurece um pouco (`brightness(0.9)`), por 100ms —
+  regra única em `globals.css` (`@layer base`, seletor `button:not(:disabled)`), não repetida por
+  componente/tela. Resolve o problema de botões parecerem "mortos" ao clicar, sem nenhum sinal de
+  que a ação foi registrada — cobre o `Button` e qualquer `<button>` cru, inclusive os que ainda
+  existirem soltos nas telas.
+- Botões de "Salvar" (configuração/lembretes/prazos/textos/janela/mensagens, no Agente de IA,
+  Automações, Follow-up e Abordagem) passaram de `variant="outline"` (ou `<button>` cru) pra
+  `variant="primary"` do `Button` — mesmo azul de ação dos botões principais (ex. "Criar painel"),
+  texto branco. O `primary` ganhou também um sombreado sutil (`shadow-button`, novo token em
+  `tailwind.config.ts`: duas sombras bem leves, só pra dar profundidade — nunca uma sombra pesada,
+  ver Princípios) pra reforçar que é a ação principal do bloco. Ficou de fora deliberadamente:
+  "Salvar legenda" (botão pequeno dentro de um card de foto, no Agente de IA) — é o próprio exemplo
+  usado no comentário do `ghost` em `Button.tsx` pra esse tipo de ação secundária/discreta, e
+  "Enviar lista"/"Copiar script" (não são botões de salvar).
 
 ## Regras técnicas
 - Todas as cores, tamanhos de fonte, espaçamentos, raios e bordas vêm de variáveis (tokens) em um único lugar. Proibido hex, rgb ou classe de cor escrita direto nas telas.
@@ -117,6 +148,25 @@ tipo não chega neles. Tokens em `globals.css`/`tailwind.config.ts` (ver coment�
 `globals.css`), nomeados pra reajuste fácil depois (`--vexo-card-type-reativacao[-text]`,
 `--vexo-card-type-followup`) — igual ao padrão de `--vexo-whatsapp-action-border`/`--bonus-green`:
 valores FIXOS, não acompanham o azul de marca personalizável nem nenhum token semântico existente.
+
+### Cor por tipo em "Para fazer hoje" — rodada 2 (barra lateral de volta só pra Reativação, etiqueta vira verde)
+Pedido explícito (inspirado num app concorrente), que **reverte pontualmente** a regra "SEM faixa
+lateral grossa" decidida acima e em Princípios ("nada de... faixas coloridas na lateral de blocos
+novos") — só pro card de Reativação, só nesta lista, pra diferenciar visualmente das Agendamento
+que ficam juntas:
+- Cartão de Reativação (quando não está no grupo "Enviados") ganhou uma barra vertical azul
+  (`bg-vexo-accent`, `h-8 w-1 rounded-full`) antes do avatar — a borda fina do cartão continua
+  exatamente como estava (azul, ~35%, `--vexo-card-type-reativacao`), a barra é um elemento extra,
+  não substitui nada. Cards de Faltou/Quente/Não agendou nunca ganham essa barra.
+- A etiqueta/texto "REATIVAÇÃO" passa de azul pra **verde** — token novo e FIXO,
+  `--vexo-card-type-reativacao-chip-text` (#34d399, mesmo tom do `--vexo-success` já aprovado no
+  app, mas um valor próprio e independente dele: `--vexo-success` é semântico/customizável via
+  Tema, este é fixo só pra esta etiqueta). Importante: só a etiqueta muda de cor — a borda do
+  cartão continua usando o token azul de sempre, por isso a etiqueta precisou de um token separado
+  em vez de reaproveitar `--vexo-card-type-reativacao`.
+- Faltou (roxo) e Quente (laranja), como já eram: sem nenhuma mudança — continuam no mesmo
+  `--vexo-card-type-followup` (marrom/dourado) de antes; a descrição de cor nesta rodada do pedido
+  não bateu com o valor real no código, então nada foi tocado neles.
 
 ## Follow-up (tela piloto do mesmo padrão visual do Painel — aguardando aprovação no celular)
 `FollowUpView.tsx` é uma tela de CONFIGURAÇÃO (textos/prazos das sequências automáticas e dos

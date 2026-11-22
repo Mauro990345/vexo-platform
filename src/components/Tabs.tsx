@@ -55,7 +55,14 @@ export function Tabs({ tabs, defaultTabId }: { tabs: TabItem[]; defaultTabId?: s
             }}
             type="button"
             onClick={() => setActiveId(tab.id)}
-            className="flex shrink-0 items-center gap-1.5 whitespace-nowrap px-0.5 pb-2.5 text-xs font-medium text-vexo-tabFg transition-colors"
+            // Pedido explícito (inspirado num app concorrente): aba
+            // inativa em cinza (text-vexo-muted); só a ativa fica no
+            // off-white de sempre (text-vexo-tabFg) — antes as duas eram
+            // sempre off-white, só o traço embaixo (já existia, ver
+            // `underline` abaixo) indicava qual estava selecionada.
+            className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap px-0.5 pb-2.5 text-xs font-medium transition-colors ${
+              tab.id === activeId ? "text-vexo-tabFg" : "text-vexo-muted"
+            }`}
           >
             {/* Ícone num span próprio, de cor independente do texto acima —
                 sem isso, herdaria currentColor do <button> (sempre
