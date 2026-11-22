@@ -109,3 +109,73 @@ describe("Tabs — linha de abas não estoura a largura da página no celular", 
     await page.close();
   });
 });
+
+// Bug real reportado (rodada seguinte): depois de aumentar a fonte das
+// abas (text-xs -> text-sm, pedido explícito de legibilidade), as 4 abas
+// de Agente de IA passaram a estourar a largura do CONTAINER da própria
+// página (max-w-3xl, 768px) por ~16px — a linha de abas (que tem
+// overflow-x-auto) então ganhava uma barra de rolagem horizontal própria
+// mesmo em telas de computador largas, o que é feio/inesperado numa tela
+// que deveria caber inteira. Correção: alargar o container da página
+// (max-w-3xl -> max-w-4xl, só em Agente de IA) em vez de mexer na fonte
+// de novo. Este teste reproduz os containers REAIS de cada página (não o
+// viewport inteiro) e confirma que a linha de abas NUNCA precisa da
+// própria rolagem interna no desktop — só o scroll de segurança pro
+// celular (ver suíte acima) continua existindo.
+describe("Tabs — a linha de abas cabe inteira (sem rolagem própria) dentro do container real de cada página, no desktop", () => {
+  let browser: Browser;
+  let compiledCss: string;
+
+  beforeAll(async () => {
+    const tmpDir = mkdtempSync(path.join(tmpdir(), "vexo-tabs-container-"));
+    const outCssPath = path.join(tmpDir, "compiled.css");
+    execFileSync("npx", ["tailwindcss", "-i", "./src/app/globals.css", "-o", outCssPath, "--minify"], { cwd: PROJECT_ROOT, stdio: "pipe" });
+    compiledCss = readFileSync(outCssPath, "utf8");
+    browser = await chromium.launch({ executablePath: process.env.PLAYWRIGHT_CHROMIUM_PATH || "/opt/pw-browsers/chromium" });
+  }, 60_000);
+
+  afterAll(async () => {
+    await browser?.close();
+  });
+
+  function markupInContainer(labels: string[], containerClass: string): string {
+    const markup = renderToStaticMarkup(
+      createElement(Tabs, {
+        defaultTabId: "t0",
+        tabs: labels.map((label, i) => ({
+          id: `t${i}`,
+          label,
+          icon: createElement("svg", { width: 14, height: 14 }),
+          content: createElement("div", null, label),
+        })),
+      })
+    );
+    return `<!DOCTYPE html><html class="dark"><head><meta charset="utf-8"><style>${compiledCss}</style></head><body class="bg-vexo-bg text-vexo-fg antialiased"><div class="${containerClass}">${markup}</div></body></html>`;
+  }
+
+  // Container REAL de cada página hoje (ver <h1>/div pai do Tabs nos
+  // respectivos arquivos) — Agente de IA e Automações usam max-w-4xl/
+  // max-w-3xl, Follow-up usa max-w-lg.
+  const REAL_PAGE_CONTAINERS: { page: string; labels: string[]; containerClass: string }[] = [
+    { page: "Agente de IA", labels: PAGE_TAB_SETS[0]!.labels, containerClass: "max-w-4xl" },
+    { page: "Follow-up", labels: PAGE_TAB_SETS[1]!.labels, containerClass: "max-w-lg" },
+    { page: "Automações", labels: PAGE_TAB_SETS[2]!.labels, containerClass: "max-w-3xl" },
+  ];
+
+  for (const { page: pageName, labels, containerClass } of REAL_PAGE_CONTAINERS) {
+    it(`${pageName} (container ${containerClass}) em 1366px: a linha de abas cabe sem precisar rolar`, async () => {
+      const page = await browser.newPage({ viewport: { width: 1366, height: 500 } });
+      await page.setContent(markupInContainer(labels, containerClass));
+      await page.waitForTimeout(50);
+
+      const tabRow = await page.$("div.overflow-x-auto");
+      const { rowScrollWidth, rowClientWidth } = await tabRow!.evaluate((el) => ({ rowScrollWidth: el.scrollWidth, rowClientWidth: el.clientWidth }));
+      expect(
+        rowScrollWidth,
+        `linha de abas rolável (scrollWidth ${rowScrollWidth} > clientWidth ${rowClientWidth}) — container ${containerClass} está estreito demais pras abas desta página`
+      ).toBeLessThanOrEqual(rowClientWidth);
+
+      await page.close();
+    });
+  }
+});

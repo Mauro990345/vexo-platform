@@ -63,7 +63,14 @@ export default async function ClinicAiAgentPage({ params }: { params: { id: stri
   const windowEnd = minutesToTime(followUpSettings?.windowEndMinute ?? 18 * 60);
 
   return (
-    <div className="max-w-3xl space-y-4">
+    // max-w-4xl (era max-w-3xl) — pedido explícito: depois de aumentar a
+    // fonte das abas (Tabs.tsx), as 4 abas desta tela ("Prompt de
+    // conversação da IA"/"Fotos de resultado"/"Timing de resposta da
+    // IA"/"Janela de envio") passaram a estourar os 768px de max-w-3xl por
+    // ~16px, forçando a linha de abas a rolar (barra horizontal feia).
+    // 896px (max-w-4xl) dá folga suficiente pra caber tudo numa linha só,
+    // sem rolagem (medido com o CSS real do app).
+    <div className="max-w-4xl space-y-4">
       <h1 className="text-page-title tracking-tight">Agente de IA</h1>
 
       {/* Abas horizontais — mesmo padrão do topo do Follow-up (ver

@@ -21,20 +21,21 @@ function groups(badge?: number): NavGroup[] {
   ];
 }
 
-// Ícone decorativo "cara de robô" (azul+branco) ao lado do nome VEXO, só na
-// sidebar desktop — pedido explícito, puramente estético. Rodada 3:
-// substitui de vez o quadrado azul liso de antes — é o ÚNICO ícone ali
-// agora (a rodada anterior tinha dois sobrepostos, por engano).
-describe("AppShell — ícone decorativo da sidebar", () => {
-  it("renderiza só o ícone do robô (svg) ao lado do nome VEXO, sem o quadrado azul liso de antes", () => {
+// Ícone da sidebar (decisão final, pedido explícito): o mesmo "X" da logo
+// da página pública (VexoMark), reaproveitado direto — mesmo desenho,
+// mesma cor — não um ícone próprio/novo. Substitui de vez o quadrado azul
+// liso E o ícone "cara de robô" de rodadas anteriores — é o ÚNICO ícone ali.
+describe("AppShell — ícone da sidebar (mesmo X da logo pública)", () => {
+  it("renderiza o VexoMark (svg com os 2 traços cruzados) ao lado do nome VEXO, sem o quadrado azul liso de antes", () => {
     const markup = renderToStaticMarkup(
       <AppShell navGroups={groups()} userLabel="Admin">
         <div />
       </AppShell>
     );
     expect(markup).toContain("<svg");
-    expect(markup).toContain("fill-vexo-accentFg");
-    expect(markup).toContain("fill-vexo-accent");
+    // Mesmos tokens que a página pública usa pro X (stroke, não fill).
+    expect(markup).toContain("stroke-vexo-pubAccent");
+    expect(markup).toContain("stroke-vexo-pubFg");
     // só um svg decorativo na sidebar (nenhum outro elemento duplicado/sobreposto)
     expect(markup.match(/<svg/g)?.length).toBe(1);
     expect(markup).not.toContain("rounded-lg bg-vexo-accent\"");
