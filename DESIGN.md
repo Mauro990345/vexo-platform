@@ -219,6 +219,26 @@ border-l-vexo-accent` por cima do `border` fino dos outros 3 lados (que continua
 tingido de sempre, `border-vexo-cardTypeReativacao/35`) — é a borda de verdade do elemento, não
 mais um indicador interno. Mesmo azul de sempre, nenhum token novo.
 
+### Cor por tipo em "Para fazer hoje" — rodada 4 (correção: ficaram DUAS barras juntas; fina+curta, não a borda inteira)
+Bug introduzido pelas 2 rodadas anteriores: o merge de uma PR anterior trouxe de volta o `<span>`
+interno da rodada 1 (nunca tinha sido removido de verdade do arquivo final, só da intenção) ao
+mesmo tempo que a borda grossa da rodada 3 — resultado: duas barras juntas no mesmo card. Pedido
+explícito pra corrigir, com 4 partes:
+1. Removido de vez o `<span>` interno (o que ocupava espaço no flex, empurrando o avatar).
+2. Removida também a borda esquerda grossa (`border-l-4`) — ela cobria a altura INTEIRA do cartão,
+   o que não era o pedido ("não a borda inteira, mais curta").
+3. Ficou **uma barrinha só**: um `<span>` com posição `absolute` (não ocupa espaço no flex, não
+   empurra o avatar — diferença-chave da rodada 1) dentro do cartão (que agora é `relative`),
+   `left-0 top-1/2 -translate-y-1/2` (centralizada verticalmente, sobreposta na borda esquerda de
+   1px de sempre).
+4. Fina (`w-1`, 4px — mais fina que a borda grossa de 4px da rodada 3 só porque não soma mais à
+   borda normal de 1px por baixo) e curta (`h-8`, 32px — bem menor que a altura do cartão,
+   centralizada, não de ponta a ponta).
+
+A borda do cartão (4 lados) volta a ser só a tingida normal (`CARD_BORDER_CLASS`, igual às outras
+rodadas, sem engrossar nenhum lado). Mesmo azul de sempre (vexo-accent), nenhum token novo.
+Verificado visualmente (screenshot do card renderizado com o CSS real do app) antes de fechar.
+
 ## Follow-up (tela piloto do mesmo padrão visual do Painel — aguardando aprovação no celular)
 `FollowUpView.tsx` é uma tela de CONFIGURAÇÃO (textos/prazos das sequências automáticas e dos
 cards manuais), sem nenhuma lista de pacientes/agendamentos — diferente do Painel, aqui não existem
