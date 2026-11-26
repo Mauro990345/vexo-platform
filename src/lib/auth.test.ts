@@ -93,3 +93,44 @@ describe("callback session() — repassa scope do token (segundo link da Fila)",
     expect(result.user.scope).toBeNull();
   });
 });
+
+// BUG REAL (link "Painel completo" caindo no /entrar em vez de autenticar
+// direto pelo token): sem `useSecureCookies` explícito, o NextAuth decide
+// o nome do cookie de sessão olhando NEXTAUTH_URL — que pode nem existir
+// como variável no serviço do Railway (só APP_URL é garantida, é o que o
+// resto do app já usa pra tudo) — enquanto `acesso/[token]/route.ts`/
+// `acesso-fila/[token]/route.ts` montam o cookie NA MÃO olhando APP_URL.
+// Sem os dois lados usando o MESMO critério, o cookie gravado e o nome que
+// `getServerSession()` procura nunca batem, e a sessão nunca é encontrada
+// — por isso `useSecureCookies` precisa vir de APP_URL, nunca de
+// NEXTAUTH_URL (nem do default do NextAuth). Reimporta o módulo a cada
+// teste (igual acesso/[token]/route.test.ts) porque o valor é calculado
+// uma vez, na carga do módulo, a partir do env atual.
+describe("authOptions.useSecureCookies — deriva de APP_URL, nunca de NEXTAUTH_URL", () => {
+  const ORIGINAL_ENV = { ...process.env };
+
+  beforeEach(() => {
+    vi.resetModules();
+    process.env = { ...ORIGINAL_ENV };
+  });
+
+  it("APP_URL https (produção real): useSecureCookies=true — mesmo critério das rotas de token", async () => {
+    process.env.APP_URL = "https://vexo-platform-production.up.railway.app";
+    delete process.env.NEXTAUTH_URL;
+    const { authOptions: freshAuthOptions } = await import("./auth");
+    expect(freshAuthOptions.useSecureCookies).toBe(true);
+  });
+
+  it("NEXTAUTH_URL ausente não muda nada — só APP_URL decide (essa é a causa raiz do bug)", async () => {
+    process.env.APP_URL = "https://app.vexoia.com.br";
+    delete process.env.NEXTAUTH_URL;
+    const { authOptions: freshAuthOptions } = await import("./auth");
+    expect(freshAuthOptions.useSecureCookies).toBe(true);
+  });
+
+  it("APP_URL ausente/http (dev local): useSecureCookies=false", async () => {
+    delete process.env.APP_URL;
+    const { authOptions: freshAuthOptions } = await import("./auth");
+    expect(freshAuthOptions.useSecureCookies).toBe(false);
+  });
+});

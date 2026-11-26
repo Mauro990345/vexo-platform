@@ -35,7 +35,13 @@ function handleFilaScopeGate(request: NextRequest, pathname: string): NextRespon
 // exatamente como sempre foram — a lógica de página/ação deles nem é
 // tocada por este arquivo).
 export async function middleware(request: NextRequest) {
-  const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET });
+  // secureCookie explícito, mesmo critério de src/lib/auth.ts (derivado de
+  // APP_URL, nunca de NEXTAUTH_URL — ver comentário grande lá: sem isso o
+  // getToken() aqui pode procurar um nome de cookie diferente do que as
+  // rotas de login automático por token gravam). Não importa authOptions
+  // inteiro aqui de propósito (bundle de Edge, sem Prisma/bcrypt).
+  const secureCookie = (process.env.APP_URL ?? "").startsWith("https://");
+  const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET, secureCookie });
   if (!token) return NextResponse.next();
 
   const { pathname } = request.nextUrl;

@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { requireClientSession } from "@/lib/session";
 import { ClientPanelView } from "@/components/ClientPanelView";
 
@@ -19,8 +18,10 @@ export const dynamic = "force-dynamic";
 // requireClientSession (não requireClientFilaSession) de propósito: quem
 // só tem o segundo link de acesso (scope="fila") nunca chega até aqui —
 // já foi redirecionado pro /dashboard/fila antes (ver session.ts/
-// middleware.ts). Então "headerAction" abaixo (botão "Abrir Fila de
-// abordagem") só aparece pra quem TEM o painel completo — o inverso
+// middleware.ts). Então "abordagemHref" abaixo (aba "Abordagem", ao lado
+// de "Painel"/"Bônus Full Face" — ver ClientPanelTabs.tsx; era um botão
+// solto no header antes, pedido explícito pra virar aba no mesmo
+// lugar/estilo) só aparece pra quem TEM o painel completo — o inverso
 // pedido explicitamente: quem já está no painel também consegue abrir a
 // Fila a partir dele, sem precisar do segundo link.
 export default async function ClientDashboardPage({
@@ -37,14 +38,7 @@ export default async function ClientDashboardPage({
       week={searchParams.week}
       base="/dashboard"
       bonusHref="/dashboard/bonus"
-      headerAction={
-        <Link
-          href="/dashboard/fila"
-          className="shrink-0 rounded-control border border-vexo-accent px-control-x py-control-y text-xs font-medium text-vexo-accent hover:bg-vexo-accent/10"
-        >
-          Abrir Fila de abordagem
-        </Link>
-      }
+      abordagemHref="/dashboard/fila"
     />
   );
 }

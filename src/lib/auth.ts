@@ -8,7 +8,30 @@ import { prisma } from "@/lib/prisma";
 // O mesmo provider atende usuários internos (CRM) e clientes (painel),
 // diferenciados pelo campo `role`.
 
+// BUG REAL encontrado e corrigido (link "Painel completo" caindo na tela de
+// login em vez de autenticar direto pelo token): o NextAuth decide o NOME
+// do cookie de sessão (com ou sem o prefixo "__Secure-") sozinho, por
+// padrão, olhando se `NEXTAUTH_URL` começa com "https://" — não o que o
+// navegador/proxy realmente usa. Em produção (Railway), só `APP_URL` é
+// garantidamente configurada (é a variável que o resto do app já usa pra
+// montar todo link — ver uploads.ts, que lança erro se faltar); `NEXTAUTH_URL`
+// pode simplesmente não existir como variável do serviço (ninguém além do
+// próprio NextAuth a lê, fácil esquecer). Sem ela, o NextAuth cai no default
+// "http://localhost:3000" por baixo dos panos e decide useSecureCookies=false
+// — só que `acesso/[token]/route.ts`/`acesso-fila/[token]/route.ts` (login
+// automático por token, que montam o cookie NA MÃO) decidem o nome do
+// cookie olhando `APP_URL` (sempre https em produção) e gravam com o
+// prefixo "__Secure-". Resultado: o cookie é gravado com um nome e o
+// `getServerSession()` procura por outro — nunca bate, a sessão nunca é
+// encontrada, e a página trata como "não logado" e manda pro /entrar.
+// Fixado aqui, de vez: `useSecureCookies` explícito, derivado de `APP_URL`
+// (nunca de `NEXTAUTH_URL`) — o MESMO critério que as rotas de token já
+// usam, então os dois lados sempre concordam no nome do cookie,
+// independente de `NEXTAUTH_URL` estar ou não configurada no ambiente.
+const useSecureCookies = (process.env.APP_URL ?? "").startsWith("https://");
+
 export const authOptions: NextAuthOptions = {
+  useSecureCookies,
   session: {
     strategy: "jwt",
     maxAge: 60 * 60 * 24 * 365, // 1 ano — renovado a cada login; revogação é manual (desativar usuário)

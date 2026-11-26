@@ -23,5 +23,7 @@ export default async function ClientBonusPage() {
     redirect("/dashboard");
   }
 
-  return <FullFaceBonusPage clinicId={clinic.id} panelHref="/dashboard" bonusHref="/dashboard/bonus" />;
+  return (
+    <FullFaceBonusPage clinicId={clinic.id} panelHref="/dashboard" bonusHref="/dashboard/bonus" abordagemHref="/dashboard/fila" />
+  );
 }
