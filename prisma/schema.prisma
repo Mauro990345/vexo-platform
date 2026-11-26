@@ -573,6 +573,17 @@ enum ConversationStatus {
   NEEDS_HUMAN // escalonado — IA parou de responder
 }
 
+// Usado em Lead.gender e ResultPhoto.gender — nenhum dos dois é inferido
+// automaticamente (a Graph API do Instagram não devolve gênero, e um
+// "chute" pelo nome não é seguro o bastante pra decidir se manda ou não
+// uma foto de resultado pro lead). Campo nulo = desconhecido/não
+// cadastrado; ver canSendResultPhoto, result-photo-message.ts, pro
+// casamento entre os dois.
+enum Gender {
+  MALE
+  FEMALE
+}
+
 model Lead {
   id       String @id @default(cuid())
   clinicId String
@@ -582,6 +593,14 @@ model Lead {
   igUsername String?
   name       String? // nome usado na abordagem manual do Mauro
   phone      String?
+
+  // Nunca inferido (nem pelo nome, nem por qualquer API) — só preenchido
+  // quando alguém da equipe confirma manualmente (ver conversas/[id]/page.tsx).
+  // null = desconhecido. Usado só pra decidir se uma foto de resultado
+  // (ResultPhoto.gender) pode ser enviada a este lead — ver send_result_photo,
+  // conversation-pipeline.ts: sem gênero conhecido dos dois lados, nenhuma
+  // foto é enviada, nunca um chute.
+  gender Gender?
 
   // true depois da PRIMEIRA tentativa de getInstagramUserProfile (sucesso,
   // erro ou resposta sem "name" — ver handleInboundInstagramMessage,
@@ -1825,13 +1844,19 @@ model ResultPhoto {
   imageUrl String
 
   // Mensagem que a IA manda ANTES da foto (ex: "Separei um resultado real
-  // de um procedimento parecido com o que você quer") — sem isso, a foto
-  // saía sozinha (só o anexo, sem nenhum texto de acompanhamento — ver
-  // buildResultPhotoMessages, src/lib/result-photo-message.ts), quebrando
-  // o fluxo natural da conversa. Opcional de propósito: fotos já
-  // cadastradas antes desse campo existir continuam funcionando exatamente
-  // como antes (só a foto, sem legenda) até alguém preencher.
+  // pra você ver") — sem isso, a foto saía sozinha (só o anexo, sem nenhum
+  // texto de acompanhamento — ver buildResultPhotoMessages,
+  // src/lib/result-photo-message.ts), quebrando o fluxo natural da
+  // conversa. Opcional de propósito: fotos já cadastradas antes desse
+  // campo existir continuam funcionando exatamente como antes (só a foto,
+  // sem legenda) até alguém preencher.
   caption String? @db.Text
+
+  // Gênero da pessoa retratada na foto — null = não cadastrado. Só é
+  // enviada ao lead quando bate com Lead.gender (ver send_result_photo,
+  // conversation-pipeline.ts); uma foto sem gênero cadastrado nunca é
+  // enviada, pelo mesmo motivo (nunca um chute).
+  gender Gender?
 
   createdAt DateTime @default(now())
 

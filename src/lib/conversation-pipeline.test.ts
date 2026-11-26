@@ -741,8 +741,17 @@ describe("buildAttendanceConfirmedContext", () => {
 
   it("NAO_REMARCA + sequência vai mandar a frase final: aviso SEM despedida (evita duplicar)", () => {
     const context = buildAttendanceConfirmedContext("NAO_REMARCA", ALL_ENABLED, true);
-    expect(context).toContain("NÃO inclua nenhuma despedida");
+    expect(context).toContain("sem nenhuma despedida");
     expect(context).toContain("confirmar presença");
+  });
+
+  // Ajuste de 3 pontos pedido: depois que o lead confirma presença, o
+  // sistema já manda tudo sozinho (aviso + vídeo + cafezinho) — a IA só
+  // deve responder se o lead tiver dito mais alguma coisa.
+  it("NAO_REMARCA + sequência vai mandar a frase final: avisa pra usar o sinal de sem resposta quando não há mais nada a dizer", () => {
+    const context = buildAttendanceConfirmedContext("NAO_REMARCA", ALL_ENABLED, true);
+    expect(context).toContain("sinal combinado");
+    expect(context).toContain("não escreva absolutamente nada");
   });
 
   it("NAO_REMARCA + sequência DESLIGADA (todas as caixinhas desmarcadas): aviso novo, PERMITINDO despedida", () => {

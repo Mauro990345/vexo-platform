@@ -6,7 +6,7 @@ import { requireInternalOrReviewerSession } from "@/lib/session";
 import { StatusBadge } from "@/components/StatusBadge";
 import { AppointmentStatusBadge } from "@/components/AppointmentStatusBadge";
 import { normalizeBrazilianWhatsappNumber } from "@/lib/whatsapp";
-import { setConversationStatus, sendHumanReply } from "../../clinicas/actions";
+import { setConversationStatus, sendHumanReply, setLeadGender } from "../../clinicas/actions";
 import { ConversationMessages } from "@/components/ConversationMessages";
 import { messageVisibleAt, compareByVisibleAt, VISIBLE_MESSAGE_STATUSES, VISIBLE_MESSAGE_CHANNELS } from "@/lib/message-visibility";
 
@@ -121,6 +121,38 @@ export default async function ConversationDetailPage({ params }: { params: { id:
           <p className="break-words text-vexo-muted">
             {conversation.lead.phone ?? "WhatsApp não informado"}
           </p>
+          {!isReviewer && (
+            // Gênero do lead — nunca inferido (nem pelo nome), só cadastrado
+            // aqui manualmente. Usado só pra decidir se uma foto de
+            // resultado (ResultPhoto.gender) pode ser enviada a este lead —
+            // ver sendResultPhoto, conversation-pipeline.ts.
+            <form
+              action={setLeadGender.bind(null, conversation.id, conversation.lead.id)}
+              className="mt-1.5 flex items-end gap-1.5"
+            >
+              <div className="min-w-0 flex-1">
+                <label className="mb-0.5 block text-caption text-vexo-muted" htmlFor="leadGender">
+                  Gênero do lead (pra foto de resultado)
+                </label>
+                <select
+                  id="leadGender"
+                  name="gender"
+                  defaultValue={conversation.lead.gender ?? ""}
+                  className="w-full rounded-control border border-vexo-border bg-vexo-bg px-2 py-1 text-card outline-none focus:border-vexo-accent"
+                >
+                  <option value="">Não informado</option>
+                  <option value="FEMALE">Feminino</option>
+                  <option value="MALE">Masculino</option>
+                </select>
+              </div>
+              <button
+                type="submit"
+                className="shrink-0 rounded-control border border-vexo-border px-1.5 py-1 text-card text-vexo-muted hover:border-vexo-accent hover:text-vexo-accent"
+              >
+                Salvar
+              </button>
+            </form>
+          )}
         </div>
 
         {appointment && (

@@ -441,6 +441,19 @@ export function shouldSuppressAiFarewell(
   return buildAttendanceSequenceItems(flags, hasVideoFile).includes("final");
 }
 
+// Sinal que a IA usa pra dizer "não tenho nada a acrescentar neste turno,
+// não mande nenhuma mensagem minha" — ver o bloco que cria a Message da
+// IA, mais abaixo (reply.text === NO_AI_REPLY_SIGNAL não cria Message
+// nenhuma). Esta constante NUNCA é escrita em Clinic.aiSystemPrompt nem no
+// prompt padrão — a instrução de QUANDO usar este sinal é combinada
+// manualmente no prompt de cada clínica (fora deste código); aqui só fica
+// a detecção. Pedido explícito (item 2 do ajuste de 3 pontos): depois que
+// o lead confirma presença, a sequência automática (aviso + vídeo +
+// cafezinho, ver fireAttendanceConfirmationSequence) já cobre tudo — a IA
+// só deve escrever alguma coisa se o lead tiver dito mais alguma coisa
+// (uma pergunta, um agradecimento) além da própria confirmação.
+export const NO_AI_REPLY_SIGNAL = "SEM_RESPOSTA";
+
 // Instrução interna (nunca Clinic.aiSystemPrompt nem o prompt padrão) pra
 // avisar a IA que o lead ACABOU de confirmar presença — usada em
 // attendanceConfirmedContext, handleInboundInstagramMessage. Reaproveita a
@@ -469,12 +482,14 @@ export function buildAttendanceConfirmedContext(
 
   if (shouldSuppressAiFarewell(decision, flags, hasVideoFile)) {
     return (
-      `[O lead acabou de confirmar presença. Responda de forma breve e natural (ex.: ` +
-      `agradecendo, confirmando que anotou) — mas NÃO inclua nenhuma despedida ou frase de ` +
-      `encerramento (ex.: "até amanhã", "até mais", "nos vemos", "até sexta"): o sistema vai ` +
-      `enviar uma mensagem de encerramento separada automaticamente. Se o lead tiver dito mais ` +
-      `alguma coisa junto da confirmação (uma pergunta, um aviso — ex.: "vou chegar atrasada"), ` +
-      `responda essa parte normalmente.]`
+      `[O lead acabou de confirmar presença. O sistema já vai enviar, automaticamente e na ordem ` +
+      `certa, todo o resto (aviso do vídeo, o vídeo, e a mensagem do cafezinho) — você NÃO precisa ` +
+      `escrever nada sobre isso. Se o lead não disse mais nada além de confirmar a presença, não ` +
+      `escreva absolutamente nada: responda SOMENTE com o sinal combinado de "sem resposta" (sem ` +
+      `nenhum outro texto, nenhuma pontuação extra, nenhuma saudação). Se o lead tiver dito mais ` +
+      `alguma coisa junto da confirmação (um agradecimento, uma pergunta, um aviso — ex.: "vou ` +
+      `chegar atrasada"), responda só essa parte, de forma breve e natural, sem nenhuma despedida ` +
+      `ou frase de encerramento (ex.: "até amanhã", "até mais", "nos vemos", "até sexta").]`
     );
   }
 
@@ -1925,9 +1940,15 @@ export async function handleInboundInstagramMessage(
   // cadastrada, limite atingido, foto repetida, primeiro turno de lead
   // frio), fica null e NADA é dito sobre foto — nunca planta a ideia numa
   // hora em que não devia. NUNCA edita aiSystemPrompt nem o prompt padrão.
+  // Mesmo filtro de gênero de sendResultPhoto, abaixo — nunca plantar a
+  // ideia de uma foto que não poderia ser enviada de verdade (gênero do
+  // lead desconhecido, ou só existe foto cadastrada de outro gênero).
+  const genderMatchedResultPhotosForHint = lead.gender
+    ? clinicResultPhotos.filter((p) => p.gender === lead.gender)
+    : [];
   const resultPhotoHint = buildResultPhotoHintContext({
     leadBatchText,
-    candidates: clinicResultPhotos,
+    candidates: genderMatchedResultPhotosForHint,
     isFirstTurnEver,
     alreadySentThisTurn: resultPhotoSentThisTurn,
     alreadySentImageUrls: sentResultPhotoUrls,
@@ -2296,16 +2317,38 @@ export async function handleInboundInstagramMessage(
         const category = args.category.trim();
         if (!category) return { error: "Categoria vazia." };
 
+        // Pedido explícito: nunca enviar foto de resultado de gênero
+        // diferente do lead (bug real: foto de mulher enviada pra um lead
+        // homem). Lead.gender NUNCA é inferido (nem pelo nome) — só
+        // cadastrado manualmente (ver conversas/[id]/page.tsx). Sem gênero
+        // sabido do lead, OU sem nenhuma foto cadastrada com o MESMO
+        // gênero, nenhuma foto é enviada — nunca um chute, mesmo que
+        // exista foto cadastrada de outro gênero pra essa categoria.
+        const genderMatchedPhotos = lead.gender
+          ? clinicResultPhotos.filter((p) => p.gender === lead.gender)
+          : [];
+
+        if (genderMatchedPhotos.length === 0) {
+          const reason = !lead.gender
+            ? "Gênero do lead não cadastrado — por segurança, não é possível enviar foto de resultado agora. Siga a conversa normalmente, sem foto."
+            : `Nenhuma foto de resultado cadastrada para o gênero deste lead. Siga a conversa normalmente, sem foto.`;
+          console.log(
+            `[vexo:result-photo] conversa=${conversation.id} categoriaPedida="${category}" decisao=bloqueada (gênero: ${reason})`
+          );
+          return { error: reason };
+        }
+
         // findBestResultPhotoMatch substitui o "contains" exato de antes
         // (bug real: "rugas"/"toxina botulínica" nunca batiam com a
         // categoria cadastrada "botox") — ver result-photo-message.ts pra
-        // a regra completa de casamento.
-        const photo = findBestResultPhotoMatch(category, clinicResultPhotos);
+        // a regra completa de casamento. Só compara dentro das fotos já
+        // filtradas por gênero, acima.
+        const photo = findBestResultPhotoMatch(category, genderMatchedPhotos);
 
         if (!photo) {
           const reason =
-            clinicResultPhotos.length > 0
-              ? `Nenhuma foto de resultado cadastrada bate com a categoria "${category}". Categorias cadastradas nesta clínica: ${clinicResultPhotos
+            genderMatchedPhotos.length > 0
+              ? `Nenhuma foto de resultado cadastrada (do gênero deste lead) bate com a categoria "${category}". Categorias cadastradas pro gênero deste lead nesta clínica: ${genderMatchedPhotos
                   .map((p) => p.category)
                   .join(", ")}. Chame esta ferramenta de novo com uma categoria dessa lista, se fizer sentido, ou siga sem foto.`
               : "Nenhuma foto de resultado cadastrada para esta clínica ainda.";
@@ -2409,6 +2452,18 @@ export async function handleInboundInstagramMessage(
   // de ferramentas ter esgotado.
   const isGoogleCalendarFailure = Boolean(googleCalendarFailureReason);
 
+  // Item 2 do ajuste de 3 pontos: a IA pode optar por não responder nada
+  // neste turno (ver NO_AI_REPLY_SIGNAL, acima, e
+  // buildAttendanceConfirmedContext) — detectado aqui pelo CÓDIGO, nunca
+  // confiando em mais nada que o modelo tenha feito (mesmo princípio de
+  // reply.truncated/isGoogleCalendarFailure abaixo). Comparação sem
+  // diferenciar maiúsculas/minúsculas e ignorando espaços nas pontas —
+  // tolera variação de caixa do modelo sem deixar de detectar o sinal.
+  // Nunca se aplica junto de truncated/isGoogleCalendarFailure (esses dois
+  // já descartam reply.text por completo com sua própria mensagem fixa).
+  const isNoAiReplySignal =
+    !reply.truncated && !isGoogleCalendarFailure && reply.text.trim().toUpperCase() === NO_AI_REPLY_SIGNAL;
+
   // Pedido explícito: quando a IA envia foto de resultado neste turno, o
   // lead recebe SOMENTE a legenda cadastrada + a foto — o texto livre que
   // a IA escreveu (reply.text) é DESCARTADO por completo, nunca criado
@@ -2417,8 +2472,9 @@ export async function handleInboundInstagramMessage(
   // usam — só que aqui o motivo não é um erro, é a decisão de produto de
   // nunca misturar texto livre com uma foto de resultado no mesmo turno.
   // Sem foto (bloqueio, categoria inexistente, limite atingido —
-  // capturedResultPhoto undefined), o texto sai exatamente como hoje.
-  if (!capturedResultPhoto) {
+  // capturedResultPhoto undefined) e sem o sinal de "sem resposta" acima,
+  // o texto sai exatamente como hoje.
+  if (!capturedResultPhoto && !isNoAiReplySignal) {
     await prisma.message.create({
       data: {
         conversationId: conversation.id,
