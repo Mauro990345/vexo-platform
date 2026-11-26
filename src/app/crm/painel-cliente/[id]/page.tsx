@@ -52,6 +52,12 @@ export default async function ClientPanelPreviewPage({
       hotLeadCardSentAction={toggleHotLeadCardSentAction}
       neverScheduledCardSentAction={toggleNeverScheduledCardSentAction}
       bonusHref={`/crm/painel-cliente/${clinic.id}/bonus`}
+      // Pedido explícito: a aba "Abordagem" que já aparece no /dashboard de
+      // verdade do cliente também aparece aqui, pra manter o preview do
+      // admin consistente com o que o cliente vê. Mesma rota interna da
+      // Fila por clínica (clinic-nav não lista, mas já existe e já é
+      // gated por requireInternalSession — ver abordagem/fila/page.tsx).
+      abordagemHref={`/crm/clinicas/${clinic.id}/abordagem/fila`}
     />
   );
 }

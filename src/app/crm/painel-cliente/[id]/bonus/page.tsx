@@ -16,5 +16,14 @@ export default async function ClientBonusPreviewPage({ params }: { params: { id:
   if (!clinic) notFound();
 
   const base = `/crm/painel-cliente/${clinic.id}`;
-  return <FullFaceBonusPage clinicId={clinic.id} panelHref={base} bonusHref={`${base}/bonus`} />;
+  // abordagemHref: mesma aba "Abordagem" do preview do Painel acima — ver
+  // comentário em /crm/painel-cliente/[id]/page.tsx.
+  return (
+    <FullFaceBonusPage
+      clinicId={clinic.id}
+      panelHref={base}
+      bonusHref={`${base}/bonus`}
+      abordagemHref={`/crm/clinicas/${clinic.id}/abordagem/fila`}
+    />
+  );
 }

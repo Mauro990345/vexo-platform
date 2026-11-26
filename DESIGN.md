@@ -855,10 +855,22 @@ da tela. `ClientPanelTabs` ganhou `abordagemHref` opcional (terceiro item da lis
 quando passado) e `bonusHref` virou opcional também — a linha de abas agora aparece sempre que
 houver Bônus OU Abordagem disponível, não só quando o Bônus está ligado. Os dois pontos que
 renderizam a linha (`ClientPanelView.tsx`, ativa="painel"; `FullFaceBonusGuide.tsx`, ativa="bonus")
-passam `abordagemHref="/dashboard/fila"` só a partir de `/dashboard`/`/dashboard/bonus` (o Painel
-de verdade do cliente) — as duas visões do admin (`/crm/painel-cliente/[id]` e
-`/crm/clinicas/[id]/painel`, que já têm a Fila na sidebar do CRM) não passam nada, a aba
-simplesmente não aparece pra elas, comportamento inalterado.
+passam `abordagemHref="/dashboard/fila"` a partir de `/dashboard`/`/dashboard/bonus` (o Painel de
+verdade do cliente). `/crm/clinicas/[id]/painel` (dentro do AppShell da clínica, com "Abordagem" já
+na própria sidebar do CRM) continua sem passar nada — a aba não aparece ali, redundante por
+desenho. `/crm/painel-cliente/[id]`/`.../bonus` ("Ver painel de [clínica]", SEM sidebar nenhuma)
+ficou de fora nesta rodada — ver correção na rodada 16 abaixo.
+
+### Fila de abordagem — rodada 16 (correção: aba "Abordagem" faltando no preview "Ver painel de [clínica]")
+Pedido explícito: o preview do admin (`/crm/painel-cliente/[id]`, sem sidebar — ver rodada 15
+acima) ficou inconsistente com o `/dashboard` de verdade do cliente, que já mostra "Abordagem".
+Corrigido passando `abordagemHref` também nos dois pontos deste preview
+(`crm/painel-cliente/[id]/page.tsx` e `.../bonus/page.tsx`) — apontando pra rota interna da Fila
+por clínica que já existe (`/crm/clinicas/[id]/abordagem/fila`, já gated por
+`requireInternalSession`, não a rota do cliente `/dashboard/fila`, que exigiria sessão `CLIENT`).
+Verificado de ponta a ponta: login real como admin, `next start` com Postgres local, Playwright
+confirmando a aba aparecendo ao lado de "Painel"/"Bônus Full Face" e levando pra Fila certa da
+clínica (dentro do AppShell do CRM, com a sidebar normal do admin).
 
 ## Relatório de resultados (quinzenal/mensal) — envio automático por WhatsApp
 Nova tela, administrada pela página "Contas" (`/crm`, só admin — ver DESIGN.md/CLAUDE.md,
