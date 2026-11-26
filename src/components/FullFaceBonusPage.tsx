@@ -8,17 +8,21 @@ export function FullFaceBonusPage({
   clinicId,
   panelHref,
   bonusHref,
+  abordagemHref,
 }: {
   clinicId: string;
   panelHref: string;
   bonusHref: string;
+  // Aba "Abordagem" (Fila de abordagem) — só /dashboard/bonus (cliente de
+  // verdade) passa; "Ver painel"/bonus (preview do admin) não.
+  abordagemHref?: string;
 }) {
   return (
     <div className="min-h-screen bg-vexo-bg px-4 pt-4 pb-6 sm:px-8 sm:pt-6 sm:pb-8">
       <div className="mx-auto max-w-6xl">
         <FullFaceBonusGuide
           storageKey={`vexo:bonus-full-face:v1:${clinicId}`}
-          tabs={{ panelHref, bonusHref }}
+          tabs={{ panelHref, bonusHref, abordagemHref }}
         />
       </div>
     </div>

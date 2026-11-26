@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { NextRequest } from "next/server";
 
 const getTokenMock = vi.fn();
@@ -125,5 +125,37 @@ describe("middleware — gate do segundo link de acesso (scope='fila')", () => {
     getTokenMock.mockResolvedValueOnce(null);
     const res = await middleware(req("/dashboard"));
     expect(res.headers.get("x-middleware-next")).toBe("1");
+  });
+});
+
+// BUG REAL (link "Painel completo" caindo no /entrar): getToken() decide
+// sozinho o nome do cookie de sessão (com ou sem "__Secure-") olhando
+// NEXTAUTH_URL por padrão — variável que pode nem existir no serviço do
+// Railway. As rotas de login automático por token (acesso/[token],
+// acesso-fila/[token]) montam o cookie NA MÃO olhando APP_URL. Sem o MESMO
+// critério dos dois lados, o cookie nunca é encontrado. Este teste prova
+// que o middleware passa `secureCookie` explícito pro getToken(), derivado
+// de APP_URL (não do default do NextAuth) — mesmo critério de
+// src/lib/auth.ts (`useSecureCookies`, ver auth.test.ts).
+describe("middleware — secureCookie do getToken() deriva de APP_URL (mesmo critério das rotas de token)", () => {
+  const ORIGINAL_APP_URL = process.env.APP_URL;
+
+  afterEach(() => {
+    if (ORIGINAL_APP_URL === undefined) delete process.env.APP_URL;
+    else process.env.APP_URL = ORIGINAL_APP_URL;
+  });
+
+  it("APP_URL https: getToken() recebe secureCookie=true", async () => {
+    process.env.APP_URL = "https://vexo-platform-production.up.railway.app";
+    getTokenMock.mockResolvedValueOnce(null);
+    await middleware(req("/crm"));
+    expect(getTokenMock).toHaveBeenCalledWith(expect.objectContaining({ secureCookie: true }));
+  });
+
+  it("APP_URL ausente: getToken() recebe secureCookie=false", async () => {
+    delete process.env.APP_URL;
+    getTokenMock.mockResolvedValueOnce(null);
+    await middleware(req("/crm"));
+    expect(getTokenMock).toHaveBeenCalledWith(expect.objectContaining({ secureCookie: false }));
   });
 });

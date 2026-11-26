@@ -89,6 +89,7 @@ export async function ClientPanelView({
   standalone = true,
   headerAction,
   bonusHref,
+  abordagemHref,
   readOnly,
 }: {
   clinicId: string;
@@ -120,10 +121,19 @@ export async function ClientPanelView({
   standalone?: boolean;
   headerAction?: React.ReactNode;
   // Rota do guia "Bônus Full Face" neste contexto (/dashboard/bonus ou
-  // /crm/painel-cliente/[id]/bonus). As abas "Painel / Bônus Full Face"
-  // só aparecem com o interruptor da conta ligado
-  // (Clinic.fullFaceBonusEnabled); desligado, nada aparece.
+  // /crm/painel-cliente/[id]/bonus). A aba "Bônus Full Face" só aparece
+  // com o interruptor da conta ligado (Clinic.fullFaceBonusEnabled);
+  // desligado, ela some (mas a linha de abas continua, se abordagemHref
+  // estiver presente — ver abaixo).
   bonusHref?: string;
+  // Rota da Fila de abordagem do cliente (/dashboard/fila) — pedido
+  // explícito: uma aba "Abordagem" ao lado de "Painel"/"Bônus Full Face",
+  // não mais um botão solto (ver antigo headerAction em dashboard/
+  // page.tsx). Só /dashboard passa isto; as duas visões do admin
+  // (/crm/painel-cliente/[id] e /crm/clinicas/[id]/painel, dentro do
+  // AppShell com a Fila já na sidebar) não passam nada — undefined some a
+  // aba, comportamento inalterado pra elas.
+  abordagemHref?: string;
   // Login Revisor (ver UserRole.REVIEWER) — some os botões de ação da
   // Reativação/Não compareceu/Retorno (nunca os dados em si). Só
   // clinicas/[id]/painel/page.tsx passa true; /dashboard (CLIENT) e
@@ -264,8 +274,13 @@ export async function ClientPanelView({
   return (
     <div className={standalone ? "min-h-screen bg-vexo-bg px-4 pt-4 pb-6 sm:px-8 sm:pt-6 sm:pb-8" : undefined}>
       <div className={standalone ? "mx-auto max-w-6xl" : undefined}>
-        {shouldShowClientBonusTab(bonusHref, clinic.fullFaceBonusEnabled) && (
-          <ClientPanelTabs active="painel" panelHref={base} bonusHref={bonusHref!} />
+        {(shouldShowClientBonusTab(bonusHref, clinic.fullFaceBonusEnabled) || abordagemHref) && (
+          <ClientPanelTabs
+            active="painel"
+            panelHref={base}
+            bonusHref={shouldShowClientBonusTab(bonusHref, clinic.fullFaceBonusEnabled) ? bonusHref : undefined}
+            abordagemHref={abordagemHref}
+          />
         )}
 
         <PanelOverview

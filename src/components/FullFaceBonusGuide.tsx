@@ -107,7 +107,10 @@ export function FullFaceBonusGuide({
   header,
 }: {
   storageKey: string;
-  tabs?: { panelHref: string; bonusHref: string };
+  // abordagemHref opcional (aba "Abordagem") — só /dashboard/bonus (Painel
+  // do cliente de verdade) passa; "Ver painel"/bonus (preview do admin)
+  // não, e a aba some.
+  tabs?: { panelHref: string; bonusHref: string; abordagemHref?: string };
   header?: React.ReactNode;
 }) {
   const actionsKey = `${storageKey}:acoes`;
@@ -206,7 +209,13 @@ export function FullFaceBonusGuide({
   return (
     <div ref={topRef} className={`scroll-mt-4 ${styles.scope} ${bonusTitleFont.variable} ${bonusBodyFont.variable}`}>
       {tabs ? (
-        <ClientPanelTabs active="bonus" panelHref={tabs.panelHref} bonusHref={tabs.bonusHref} trailing={callButton} />
+        <ClientPanelTabs
+          active="bonus"
+          panelHref={tabs.panelHref}
+          bonusHref={tabs.bonusHref}
+          abordagemHref={tabs.abordagemHref}
+          trailing={callButton}
+        />
       ) : (
         <div className="mb-4 flex items-start justify-between gap-3">
           <div className="min-w-0">{header}</div>

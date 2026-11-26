@@ -817,6 +817,49 @@ precisar abrir "Criar painel" (`clinicas/[id]/painel/page.tsx`) só pra pegar es
   sempre) — checkbox + nome/@ longo + contador + limite diário + "Link da Fila" + "Mensagens" na
   mesma linha, sem rolagem horizontal em 360/390/414px.
 
+### Fila de abordagem — rodada 15 (BUG REAL: link "Painel completo" pedia login; aba "Abordagem" em vez de botão solto)
+
+Dois problemas relatados ao testar o link `/acesso/[token]` numa aba anônima:
+
+**1. BUG REAL: o token não autenticava — caía no `/entrar`.** Causa raiz: o NextAuth decide
+sozinho o NOME do cookie de sessão (com ou sem o prefixo `"__Secure-"`) olhando se `NEXTAUTH_URL`
+começa com `"https://"` — variável que pode nem existir no serviço do Railway (só `APP_URL` é
+garantida; é a que o resto do app já usa pra tudo, ver `uploads.ts`, que lança erro se faltar).
+Sem `NEXTAUTH_URL`, o NextAuth cai no default `http://localhost:3000` e decide
+`useSecureCookies=false` — só que `acesso/[token]/route.ts`/`acesso-fila/[token]/route.ts` (login
+automático por token, cookie montado NA MÃO) decidem o nome do cookie olhando `APP_URL` (sempre
+https em produção) e gravam com o prefixo `"__Secure-"`. Os dois lados nunca batiam, a sessão
+nunca era encontrada, `requireSession` tratava como "não logado" e mandava pro `/entrar` — o MESMO
+bug já valia pro login por e-mail/senha normal e pro middleware (`getToken()`), só não aparecia
+porque, pra esses, os dois lados (gravar e ler) sempre usam a MESMA fonte (o `useSecureCookies`
+default do próprio NextAuth), nunca ficando fora de sincronia COM SI MESMA — só as rotas de token,
+que decidem por fora via `APP_URL`, quebravam a simetria.
+
+Corrigido de vez: `useSecureCookies` explícito em `authOptions` (`src/lib/auth.ts`), derivado de
+`APP_URL` — nunca de `NEXTAUTH_URL` nem do default do NextAuth — mesmo critério que as rotas de
+token já usavam, então os dois lados sempre concordam, independente de `NEXTAUTH_URL` estar ou não
+configurada no ambiente. `middleware.ts` ganhou o mesmo ajuste, passando `secureCookie` explícito
+pro `getToken()` (sem importar `authOptions` inteiro ali — bundle de Edge, sem Prisma/bcrypt, ver
+comentário já existente no arquivo).
+
+Verificado de ponta a ponta antes de fechar: build real, Postgres local, clínica + `ClientPanelLink`
+semeados, servidor rodando (`next start`) com `NEXTAUTH_URL` ausente — confirmado via requisição
+HTTP crua que o código ANTIGO reproduzia o bug (`/dashboard` com o cookie voltava `/entrar`) e que o
+código corrigido não (`/dashboard` 200, conteúdo real do Painel). Depois, com Playwright (aba
+anônima de verdade): abrir o link cai direto no Painel, sem nenhuma tela de login.
+
+**2. Aba "Abordagem" no lugar do botão solto.** O botão "Abrir Fila de abordagem" (rodada anterior,
+ver seção "Fila de abordagem — rodada 13") virou uma aba, no MESMO lugar/estilo de "Painel"/"Bônus
+Full Face" (`ClientPanelTabs.tsx`) — pedido explícito, pra não ser um elemento solto em outro canto
+da tela. `ClientPanelTabs` ganhou `abordagemHref` opcional (terceiro item da lista, só aparece
+quando passado) e `bonusHref` virou opcional também — a linha de abas agora aparece sempre que
+houver Bônus OU Abordagem disponível, não só quando o Bônus está ligado. Os dois pontos que
+renderizam a linha (`ClientPanelView.tsx`, ativa="painel"; `FullFaceBonusGuide.tsx`, ativa="bonus")
+passam `abordagemHref="/dashboard/fila"` só a partir de `/dashboard`/`/dashboard/bonus` (o Painel
+de verdade do cliente) — as duas visões do admin (`/crm/painel-cliente/[id]` e
+`/crm/clinicas/[id]/painel`, que já têm a Fila na sidebar do CRM) não passam nada, a aba
+simplesmente não aparece pra elas, comportamento inalterado.
+
 ## Relatório de resultados (quinzenal/mensal) — envio automático por WhatsApp
 Nova tela, administrada pela página "Contas" (`/crm`, só admin — ver DESIGN.md/CLAUDE.md,
 `ClinicReportPanel.tsx`/`report-actions.ts`). Mesmos tokens/componentes de sempre, nenhuma cor solta:
