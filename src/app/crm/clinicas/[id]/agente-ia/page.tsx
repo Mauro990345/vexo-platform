@@ -204,7 +204,8 @@ export default async function ClinicAiAgentPage({ params }: { params: { id: stri
                   Fotos por procedimento, marcadas por categoria/tag. A IA busca a foto da categoria
                   mais próxima do que o lead demonstrou interesse e anexa na resposta — no máximo 2
                   por conversa, nunca repetindo a mesma foto, e nunca na primeira mensagem de um lead
-                  novo.
+                  novo. A foto só é enviada quando o gênero dela bate com o gênero do lead (cadastrado
+                  na conversa) — sem essa informação dos dois lados, nenhuma foto é enviada.
                 </p>
 
                 <div className="mt-5 space-y-2.5">
@@ -245,9 +246,24 @@ export default async function ClinicAiAgentPage({ params }: { params: { id: stri
                         id="caption"
                         name="caption"
                         rows={2}
-                        placeholder='ex: "Separei um resultado real de um procedimento parecido com o que você quer"'
+                        placeholder='ex: "Separei um resultado real pra você ver"'
                         className="w-full rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5 text-xs outline-none focus:border-vexo-accent"
                       />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs text-vexo-muted" htmlFor="gender">
+                        Gênero da foto
+                      </label>
+                      <select
+                        id="gender"
+                        name="gender"
+                        defaultValue=""
+                        className="w-full rounded-lg border border-vexo-border bg-vexo-bg px-2.5 py-1.5 text-xs outline-none focus:border-vexo-accent"
+                      >
+                        <option value="">Não especificado</option>
+                        <option value="FEMALE">Feminino</option>
+                        <option value="MALE">Masculino</option>
+                      </select>
                     </div>
                     <button
                       type="submit"
@@ -289,15 +305,27 @@ export default async function ClinicAiAgentPage({ params }: { params: { id: stri
                                 placeholder='Sem legenda — a IA manda só a foto. Ex: "Olha esse resultado real!"'
                                 className="w-full rounded-lg border border-vexo-border bg-vexo-surface px-2 py-1 text-card outline-none focus:border-vexo-accent"
                               />
+                              <select
+                                name="gender"
+                                defaultValue={photo.gender ?? ""}
+                                className="w-full rounded-lg border border-vexo-border bg-vexo-surface px-2 py-1 text-card outline-none focus:border-vexo-accent"
+                              >
+                                <option value="">Gênero: não especificado</option>
+                                <option value="FEMALE">Gênero: feminino</option>
+                                <option value="MALE">Gênero: masculino</option>
+                              </select>
                               <div className="flex items-center justify-between gap-2">
                                 {!photo.caption && (
                                   <span className="text-card text-vexo-warning">Sem legenda</span>
+                                )}
+                                {!photo.gender && (
+                                  <span className="text-card text-vexo-warning">Sem gênero — nunca enviada</span>
                                 )}
                                 <button
                                   type="submit"
                                   className="ml-auto rounded-md border border-vexo-border px-1.5 py-0.5 text-card text-vexo-muted hover:border-vexo-accent hover:text-vexo-accent"
                                 >
-                                  Salvar legenda
+                                  Salvar
                                 </button>
                               </div>
                             </form>

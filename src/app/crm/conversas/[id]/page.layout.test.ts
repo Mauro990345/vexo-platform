@@ -16,6 +16,7 @@ const PROJECT_ROOT = path.resolve(__dirname, "../../../../..");
 vi.mock("../../clinicas/actions", () => ({
   setConversationStatus: vi.fn(async () => {}),
   sendHumanReply: vi.fn(async () => {}),
+  setLeadGender: vi.fn(async () => {}),
 }));
 
 // Mutável pelo próprio teste (ver describe "Revisor" abaixo) — var (não

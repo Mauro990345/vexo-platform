@@ -960,10 +960,16 @@ export async function addResultPhoto(clinicId: string, formData: FormData) {
   // funcionou.
   const caption = String(formData.get("caption") ?? "").trim() || null;
 
+  // Gênero da pessoa na foto — opcional, mas sem ele a foto NUNCA é
+  // enviada (ver comentário em ResultPhoto.gender, schema, e sendResultPhoto
+  // em conversation-pipeline.ts).
+  const genderRaw = String(formData.get("gender") ?? "");
+  const gender = genderRaw === "MALE" || genderRaw === "FEMALE" ? genderRaw : null;
+
   const imageUrl = await saveUploadedAttachment(file, "result-photos");
 
   await prisma.resultPhoto.create({
-    data: { clinicId, category, imageUrl, caption },
+    data: { clinicId, category, imageUrl, caption, gender },
   });
 
   // A tela de fotos de resultado vive dentro de Agente de IA (não existe
@@ -985,7 +991,10 @@ export async function updateResultPhotoCaption(clinicId: string, photoId: string
 
   const caption = String(formData.get("caption") ?? "").trim() || null;
 
-  await prisma.resultPhoto.update({ where: { id: photoId }, data: { caption } });
+  const genderRaw = String(formData.get("gender") ?? "");
+  const gender = genderRaw === "MALE" || genderRaw === "FEMALE" ? genderRaw : null;
+
+  await prisma.resultPhoto.update({ where: { id: photoId }, data: { caption, gender } });
 
   revalidatePath(`/crm/clinicas/${clinicId}/agente-ia`);
 }
@@ -1000,6 +1009,22 @@ export async function deleteResultPhoto(clinicId: string, photoId: string) {
   await deleteUploadedAttachment(photo.imageUrl);
 
   revalidatePath(`/crm/clinicas/${clinicId}/agente-ia`);
+}
+
+// Pedido explícito: enviar foto de resultado só pro mesmo gênero do lead
+// (ver ResultPhoto.gender/Lead.gender, schema, e sendResultPhoto em
+// conversation-pipeline.ts) — NUNCA inferido automaticamente (nem pelo
+// nome), só esta tela permite cadastrar. "" (select vazio) volta a null —
+// desfazer um cadastro errado sem precisar de outra ação.
+export async function setLeadGender(conversationId: string, leadId: string, formData: FormData) {
+  await requireInternalSession();
+
+  const genderRaw = String(formData.get("gender") ?? "");
+  const gender = genderRaw === "MALE" || genderRaw === "FEMALE" ? genderRaw : null;
+
+  await prisma.lead.update({ where: { id: leadId }, data: { gender } });
+
+  revalidatePath(`/crm/conversas/${conversationId}`);
 }
 
 export async function sendHumanReply(conversationId: string, formData: FormData) {

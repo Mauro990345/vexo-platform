@@ -11,6 +11,7 @@ import { createElement } from "react";
 vi.mock("../../clinicas/actions", () => ({
   setConversationStatus: vi.fn(async () => {}),
   sendHumanReply: vi.fn(async () => {}),
+  setLeadGender: vi.fn(async () => {}),
 }));
 
 vi.mock("@/lib/session", () => ({
