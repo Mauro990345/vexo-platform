@@ -2,6 +2,25 @@ import { prisma } from "@/lib/prisma";
 import { formatReminderMessage, applyReminderTemplate } from "@/lib/whatsapp";
 import { sendInstagramMessage, ensureLeadFirstNameFromInstagram } from "@/lib/instagram";
 import { normalizeFirstNameForTemplate } from "@/lib/message-template";
+import { startOfBrazilDay } from "@/lib/timezone";
+
+// Pedido explícito: nenhum lembrete pode chegar de madrugada — se o horário
+// calculado (scheduledAt - hoursBefore) cair antes deste horário em
+// Brasília, o envio é empurrado pra este horário no mesmo dia. Valores
+// fáceis de mudar, de propósito (ver pedido original).
+const MIN_SEND_HOUR_BRAZIL = 7;
+// Depois de empurrar pro horário mínimo acima, se sobrar menos do que isto
+// até a avaliação, o lembrete não sai (empurrar mais ainda deixaria o aviso
+// tarde demais pra servir de lembrete).
+const MIN_HOURS_BEFORE_APPOINTMENT_AFTER_ADJUSTMENT = 2;
+
+// Empurra triggerAt pras MIN_SEND_HOUR_BRAZIL (Brasília) do mesmo dia,
+// quando ele cair antes disso — senão devolve o próprio triggerAt sem
+// alteração.
+function applyMinimumSendHour(triggerAt: Date): Date {
+  const minSendTime = new Date(startOfBrazilDay(triggerAt).getTime() + MIN_SEND_HOUR_BRAZIL * 60 * 60 * 1000);
+  return triggerAt < minSendTime ? minSendTime : triggerAt;
+}
 
 // Lembretes de agendamento — horas configuráveis por clínica (padrão 24h e 3h
 // antes, ver ReminderConfig). SEMPRE por Instagram (mesmo canal da conversa)
@@ -78,7 +97,16 @@ export async function processReminders(): Promise<{ sent: number }> {
       // Horário deste lembrete já tinha passado no momento em que o
       // agendamento foi confirmado — nunca manda um lembrete "atrasado".
       if (triggerAt <= confirmedAt) continue;
-      if (now < triggerAt) continue; // ainda não chegou a hora deste lembrete
+
+      // Nunca de madrugada: se o horário calculado cair antes das 7h de
+      // Brasília, empurra pras 7h do mesmo dia. Se depois disso sobrar
+      // menos do que o mínimo até a avaliação, não envia de jeito nenhum.
+      const sendAt = applyMinimumSendHour(triggerAt);
+      if (appt.scheduledAt.getTime() - sendAt.getTime() < MIN_HOURS_BEFORE_APPOINTMENT_AFTER_ADJUSTMENT * 60 * 60 * 1000) {
+        continue;
+      }
+
+      if (now < sendAt) continue; // ainda não chegou a hora deste lembrete
       if (now >= appt.scheduledAt) continue; // já passou do horário do agendamento
 
       const alreadySent = appt.reminderLogs.some((r) => r.hoursBefore === hoursBefore);
