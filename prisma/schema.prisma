@@ -1015,6 +1015,17 @@ model Appointment {
   // abaixo) — esta é a confirmação imediata, disparada assim que o
   // agendamento existe E Lead.phone está disponível, não uma janela fixa
   // antes do horário marcado.
+  // Instante da confirmação de horário mais recente (agendamento novo OU
+  // remarcação pra um horário diferente — MESMOS dois pontos em que
+  // attendancePromptSentAt acima é setado, ver scheduleAppointment em
+  // conversation-pipeline.ts) — diferente de attendancePromptSentAt,
+  // nunca zerado por outro fluxo (sequência de presença, cancelamento),
+  // porque processReminders (reminders.ts) precisa dele disponível até o
+  // próprio lembrete disparar, pra saber com quanta antecedência o lead
+  // marcou e decidir se o lembrete mais longo ainda faz sentido. Null só
+  // em agendamentos antigos de antes deste campo existir — nesse caso
+  // reminders.ts cai pra createdAt.
+  scheduleConfirmedAt DateTime?
   whatsappConfirmationSentAt DateTime?
   // Mesmo instante de "enfileirado" que whatsappConfirmationSentAt acima,
   // mas pro cartão de confirmação por INSTAGRAM (ver
