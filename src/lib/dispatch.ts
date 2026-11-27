@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { sendInstagramMessage, sendInstagramGenericTemplateCard } from "@/lib/instagram";
-import { sendWhatsappMessage } from "@/lib/whatsapp";
+import { sendWhatsappMessage, EvolutionInstanceNotFoundError } from "@/lib/whatsapp";
 import { toPublicUploadUrl } from "@/lib/uploads";
 import { withRetry, RetryableError } from "@/lib/retry";
 import {
@@ -272,6 +272,13 @@ async function dispatchOneMessage(
             try {
               await sendWhatsappMessage(instanceName, phone, message.content);
             } catch (err) {
+              // Instância quebrada na Evolution (ver EvolutionInstanceNotFoundError,
+              // whatsapp.ts) não é um erro transitório — insistir 3x não vai
+              // conectar a instância de volta, só atrasa a correção do
+              // status (ver catch de fora, mais abaixo) por até ~3.5s de
+              // backoff à toa. Propaga como veio (não-retryable), preservando
+              // o tipo pro catch de fora reconhecer.
+              if (err instanceof EvolutionInstanceNotFoundError) throw err;
               throw err instanceof RetryableError ? err : new RetryableError(err instanceof Error ? err.message : String(err));
             }
           },
@@ -565,6 +572,28 @@ async function dispatchOneMessage(
   } catch (err) {
     const detail = err instanceof Error ? `${err.message}\n${err.stack ?? ""}` : String(err);
     console.error(`[vexo] Falha ao processar mensagem ${message.id}:`, err);
+
+    // Causa raiz real investigada: envio de WhatsApp falhando (instância
+    // quebrada na Evolution — ver EvolutionInstanceNotFoundError,
+    // whatsapp.ts) enquanto a tela de Conexões continuava mostrando
+    // "Conectado", porque o status ali vem de um endpoint DIFERENTE
+    // (/instance/connectionState, só consultado quando alguém abre a tela),
+    // que pode responder "open" mesmo pra uma instância já quebrada pro
+    // envio de verdade. Corrige Clinic.whatsappStatus NA HORA, pelo próprio
+    // envio que falhou — não só loga e segue, e não precisa de ninguém
+    // abrir a tela (que poderia consultar o mesmo endpoint inconsistente de
+    // novo) pra o status refletir a realidade.
+    if (err instanceof EvolutionInstanceNotFoundError && message.channel === "WHATSAPP") {
+      await prisma.clinic
+        .update({
+          where: { id: message.conversation.clinic.id },
+          data: { whatsappStatus: "close", whatsappStatusCheckedAt: new Date() },
+        })
+        .catch((updateErr) =>
+          console.error(`[vexo] Falha ao corrigir whatsappStatus da clínica ${message.conversation.clinic.id}:`, updateErr)
+        );
+    }
+
     // Elo falhou — o próximo elo da cadeia de confirmação de presença
     // (vídeo/cafezinho/frase final) nunca é criado (nem o claim roda, já
     // que essa parte do código só é alcançada em sucesso). Sem campo

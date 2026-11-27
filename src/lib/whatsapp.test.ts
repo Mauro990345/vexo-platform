@@ -6,6 +6,8 @@ import {
   formatBrazilianPhoneForDisplay,
   applyReminderTemplate,
   sendWhatsappMessage,
+  isInstanceNotFoundResponse,
+  EvolutionInstanceNotFoundError,
 } from "./whatsapp";
 
 describe("normalizeBrazilianWhatsappNumber", () => {
@@ -271,5 +273,49 @@ describe("sendWhatsappMessage", () => {
     const [, requestInit] = fetchMock.mock.calls[0] as [string, RequestInit];
     const body = JSON.parse(requestInit.body as string);
     expect(body.text).toBe("Oi! Tudo bem?");
+  });
+
+  // Causa raiz real investigada: envio falhando com 404 "Application not
+  // found" (instância quebrada na Evolution) pra uma clínica cuja tela de
+  // Conexões mostrava "Conectado" — porque o status da tela vem de
+  // /instance/connectionState, um endpoint DIFERENTE do de envio
+  // (/message/sendText), que pode responder "open" mesmo pra essa mesma
+  // instância quebrada. Antes desta mudança, QUALQUER falha de envio virava
+  // um Error genérico — sem nenhum jeito de o chamador (dispatch.ts)
+  // distinguir "instância quebrada" (precisa corrigir o status mostrado) de
+  // qualquer outro erro.
+  it('404 "Application not found" (mesma classe de falha, formato novo): lança EvolutionInstanceNotFoundError, não um Error genérico', async () => {
+    const fetchMock = fetch as unknown as ReturnType<typeof vi.fn>;
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ status: "error", code: 404, message: "Application not found" }), { status: 404 })
+    );
+
+    await expect(sendWhatsappMessage("clinica-demo", "5511987654321", "Oi!")).rejects.toThrow(EvolutionInstanceNotFoundError);
+  });
+
+  it("qualquer outra falha (ex.: 500 fora do ar): continua lançando Error genérico, nunca EvolutionInstanceNotFoundError", async () => {
+    const fetchMock = fetch as unknown as ReturnType<typeof vi.fn>;
+    fetchMock.mockResolvedValue(new Response("Internal Server Error", { status: 500 }));
+
+    const promise = sendWhatsappMessage("clinica-demo", "5511987654321", "Oi!");
+    await expect(promise).rejects.toThrow(/500/);
+    await expect(promise).rejects.not.toBeInstanceOf(EvolutionInstanceNotFoundError);
+  });
+});
+
+describe("isInstanceNotFoundResponse", () => {
+  it("qualquer 404 conta — a Evolution não é consistente sobre o texto (já vimos 'does not exist' e 'Application not found')", () => {
+    expect(isInstanceNotFoundResponse(404, "Application not found")).toBe(true);
+    expect(isInstanceNotFoundResponse(404, "qualquer coisa")).toBe(true);
+  });
+
+  it('400 só conta quando o texto diz "does not exist"', () => {
+    expect(isInstanceNotFoundResponse(400, 'The "foo" instance does not exist')).toBe(true);
+    expect(isInstanceNotFoundResponse(400, "outro erro qualquer")).toBe(false);
+  });
+
+  it("outros status nunca contam", () => {
+    expect(isInstanceNotFoundResponse(500, "does not exist")).toBe(false);
+    expect(isInstanceNotFoundResponse(403, "")).toBe(false);
   });
 });

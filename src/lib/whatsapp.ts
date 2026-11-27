@@ -96,6 +96,38 @@ export function formatBrazilianPhoneForDisplay(phone: string): string {
   return phone;
 }
 
+// Causa raiz real investigada: envio de WhatsApp falhando com 404 ("Application
+// not found"/"instance does not exist", a Evolution não é consistente sobre o
+// texto) para uma instância que a tela de Conexões mostrava "Conectado" —
+// porque o status exibido vem de /instance/connectionState (endpoint
+// DIFERENTE, consultado só quando alguém abre a tela ou clica "verificar"),
+// que pode continuar respondendo "open" para uma instância que já está
+// quebrada pro ENVIO de verdade (/message/sendText) — mesma classe de
+// inconsistência "instância fantasma" já documentada em whatsapp-instance.ts,
+// só que nesse outro endpoint. Antes desta classe de erro, sendWhatsappMessage
+// lançava um Error genérico pra QUALQUER falha — o chamador (dispatchOneMessage,
+// dispatch.ts) não tinha como distinguir "instância quebrada" de qualquer
+// outra falha, então nunca corrigia Clinic.whatsappStatus; a tela continuava
+// mostrando o último status bom, sem nenhuma relação com o que estava
+// realmente acontecendo no envio.
+export class EvolutionInstanceNotFoundError extends Error {
+  constructor(instanceName: string) {
+    super(`A instância "${instanceName}" não existe (ou não está carregada) na Evolution API.`);
+    this.name = "EvolutionInstanceNotFoundError";
+  }
+}
+
+// A Evolution não é consistente entre endpoints/versões sobre o status e o
+// texto usados pra "essa instância não existe" — confirmado em produção com
+// pelo menos três formatos reais: 404 puro, 400 "does not exist" (ver
+// isInstanceNotFoundResponse em whatsapp-instance.ts, mesmo critério) e,
+// agora, 404 com {"message":"Application not found"} no endpoint de ENVIO
+// (/message/sendText). Por isso qualquer 404 já conta — não dá pra confiar
+// no texto da mensagem pra esse status, só pro 400.
+export function isInstanceNotFoundResponse(status: number, body: string): boolean {
+  return status === 404 || (status === 400 && /does not exist/i.test(body));
+}
+
 export function evolutionBaseConfig() {
   const baseUrl = process.env.EVOLUTION_API_URL;
   const apiKey = process.env.EVOLUTION_API_KEY;
@@ -145,6 +177,9 @@ export async function sendWhatsappMessage(instanceName: string | null | undefine
 
   if (!res.ok) {
     const body = await res.text();
+    if (isInstanceNotFoundResponse(res.status, body)) {
+      throw new EvolutionInstanceNotFoundError(instanceName);
+    }
     throw new Error(`Falha ao enviar WhatsApp via Evolution API (${res.status}): ${body}`);
   }
 }

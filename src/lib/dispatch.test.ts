@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { EvolutionInstanceNotFoundError } from "@/lib/whatsapp";
 
 // Mocks minimalistas — mesmo padrão de conversation-pipeline.test.ts: só as
 // peças que dispatchDueMessages realmente usa recebem implementação de
@@ -11,6 +12,7 @@ const messageDeleteManyMock = vi.fn();
 const conversationUpdateMock = vi.fn();
 const conversationFindUniqueMock = vi.fn();
 const appointmentFindUniqueMock = vi.fn();
+const clinicUpdateMock = vi.fn();
 vi.mock("@/lib/prisma", () => ({
   prisma: {
     message: {
@@ -25,6 +27,9 @@ vi.mock("@/lib/prisma", () => ({
     },
     appointment: {
       findUnique: (...args: unknown[]) => appointmentFindUniqueMock(...args),
+    },
+    clinic: {
+      update: (...args: unknown[]) => clinicUpdateMock(...args),
     },
     // Suporta as duas formas usadas por dispatch.ts: a forma em array (passo
     // WHATSAPP, sem ramificação) e a forma interativa/callback (passo
@@ -62,9 +67,13 @@ vi.mock("@/lib/instagram", () => ({
 }));
 
 const sendWhatsappMessageMock = vi.fn();
-vi.mock("@/lib/whatsapp", () => ({
-  sendWhatsappMessage: (...args: unknown[]) => sendWhatsappMessageMock(...args),
-}));
+vi.mock("@/lib/whatsapp", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/whatsapp")>();
+  return {
+    ...actual,
+    sendWhatsappMessage: (...args: unknown[]) => sendWhatsappMessageMock(...args),
+  };
+});
 
 vi.mock("@/lib/uploads", () => ({
   toPublicUploadUrl: (url: string) => url,
@@ -975,6 +984,112 @@ describe("dispatchDueMessages — confirmação de agendamento por WhatsApp (ret
     expect(result.failed).toBe(1);
     expect(sendWhatsappMessageMock).toHaveBeenCalledTimes(1);
     expect(messageUpdateMock).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: "FAILED" }) }));
+  });
+});
+
+// Causa raiz real investigada: envio de WhatsApp falhando (404 "Application
+// not found" — instância quebrada na Evolution, ver EvolutionInstanceNotFoundError
+// em whatsapp.ts) enquanto a tela de Conexões continuava mostrando
+// "Conectado", porque o status ali vem de /instance/connectionState — um
+// endpoint DIFERENTE do de envio, que pode responder "open" pra essa MESMA
+// instância quebrada. Estes testes provam que, agora, o próprio envio que
+// falhou corrige Clinic.whatsappStatus na hora (nunca precisa de retry nem
+// de alguém reabrir a tela pra isso acontecer).
+describe("dispatchDueMessages — instância da Evolution quebrada corrige Clinic.whatsappStatus na hora", () => {
+  let sendingClaims: Set<string>;
+
+  function buildWhatsappMessage(overrides: Partial<Record<string, unknown>> = {}) {
+    return {
+      id: "msg-whatsapp-ghost-1",
+      conversationId: "conv-1",
+      channel: "WHATSAPP",
+      sender: "AI",
+      content: "Oi, Maria! Seu horário na Clínica Bela Vida está confirmado para amanhã às 15h.",
+      mediaUrl: null,
+      pendingAttendanceStep: null,
+      clinicContactCard: null,
+      instagramConfirmationCard: null,
+      isAppointmentConfirmation: true,
+      createdAt: new Date("2026-10-09T10:00:00.000Z"),
+      scheduledFor: new Date("2026-10-09T10:00:00.000Z"),
+      conversation: {
+        clinicId: "clinic-1",
+        lead: { phone: "5511987654321", igScopedId: "ig-scoped-1" },
+        clinic: {
+          id: "clinic-1",
+          whatsappInstanceName: "clinica-demo",
+          instagramAccount: { accessTokenEnc: "enc-token", igUserId: "ig-user-1" },
+        },
+      },
+      ...overrides,
+    };
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.useFakeTimers();
+    sendingClaims = new Set();
+    messageUpdateManyMock.mockImplementation(async (args: { where?: { id?: string }; data?: Record<string, unknown> }) => {
+      const id = args?.where?.id;
+      if (args?.data?.status === "SENDING") {
+        if (!id || sendingClaims.has(id)) return { count: 0 };
+        sendingClaims.add(id);
+        return { count: 1 };
+      }
+      return { count: 1 };
+    });
+    messageUpdateMock.mockResolvedValue({});
+    conversationUpdateMock.mockResolvedValue({});
+    clinicUpdateMock.mockResolvedValue({});
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("confirmação de agendamento (com retry): instância quebrada NUNCA insiste 3x (não é transitório) e corrige o status na 1ª falha", async () => {
+    const message = buildWhatsappMessage();
+    messageFindManyMock.mockResolvedValueOnce([message]);
+    sendWhatsappMessageMock.mockRejectedValue(new EvolutionInstanceNotFoundError("clinica-demo"));
+
+    const result = await dispatchDueMessages();
+
+    expect(result.sent).toBe(0);
+    expect(result.failed).toBe(1);
+    expect(sendWhatsappMessageMock).toHaveBeenCalledTimes(1); // sem retry — não é transitório
+    expect(messageUpdateMock).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ status: "FAILED", failReason: expect.stringContaining("não existe") }) })
+    );
+    expect(clinicUpdateMock).toHaveBeenCalledWith({
+      where: { id: "clinic-1" },
+      data: { whatsappStatus: "close", whatsappStatusCheckedAt: expect.any(Date) },
+    });
+  });
+
+  it("Follow-up por WhatsApp (sem retry, de sempre): instância quebrada também corrige o status", async () => {
+    const message = buildWhatsappMessage({ isAppointmentConfirmation: false, sender: "SYSTEM" });
+    messageFindManyMock.mockResolvedValueOnce([message]);
+    sendWhatsappMessageMock.mockRejectedValue(new EvolutionInstanceNotFoundError("clinica-demo"));
+
+    const result = await dispatchDueMessages();
+
+    expect(result.failed).toBe(1);
+    expect(sendWhatsappMessageMock).toHaveBeenCalledTimes(1);
+    expect(clinicUpdateMock).toHaveBeenCalledWith({
+      where: { id: "clinic-1" },
+      data: { whatsappStatus: "close", whatsappStatusCheckedAt: expect.any(Date) },
+    });
+  });
+
+  it("qualquer OUTRA falha (ex.: fora do ar passageiro): nunca toca em Clinic.whatsappStatus — só a instância quebrada corrige", async () => {
+    const message = buildWhatsappMessage({ isAppointmentConfirmation: false, sender: "SYSTEM" });
+    messageFindManyMock.mockResolvedValueOnce([message]);
+    sendWhatsappMessageMock.mockRejectedValue(new Error("Evolution API: fora do ar"));
+
+    const result = await dispatchDueMessages();
+
+    expect(result.failed).toBe(1);
+    expect(clinicUpdateMock).not.toHaveBeenCalled();
   });
 });
 

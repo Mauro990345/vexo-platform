@@ -1,4 +1,6 @@
-import { evolutionBaseConfig } from "@/lib/whatsapp";
+import { evolutionBaseConfig, EvolutionInstanceNotFoundError, isInstanceNotFoundResponse } from "@/lib/whatsapp";
+
+export { EvolutionInstanceNotFoundError };
 
 // Gerenciamento de instâncias na Evolution API — uma instância por clínica
 // (número de WhatsApp próprio, isolado das demais). Só a criação/pareamento
@@ -29,13 +31,6 @@ const REQUEST_TIMEOUT_MS = 8_000;
 // (tipicamente a MESMA instância fantasma barrando o nome de ser reusado).
 // ensureWhatsappQrForClinic (whatsapp-connection.ts) reage a cada um dos
 // dois pra se recuperar sozinho, sem precisar abrir o Manager.
-export class EvolutionInstanceNotFoundError extends Error {
-  constructor(instanceName: string) {
-    super(`A instância "${instanceName}" não existe (ou não está carregada) na Evolution API.`);
-    this.name = "EvolutionInstanceNotFoundError";
-  }
-}
-
 export class EvolutionInstanceNameInUseError extends Error {
   constructor(instanceName: string) {
     super(`O nome "${instanceName}" já está em uso na Evolution API.`);
@@ -43,13 +38,11 @@ export class EvolutionInstanceNameInUseError extends Error {
   }
 }
 
-// A Evolution 2.3.7 não é consistente entre 400 e 404 pra "essa instância
-// não existe" (confirmado em produção: os dois apareceram pro mesmo caso de
-// instância fantasma) — por isso checa os dois status, e só confia no texto
-// da mensagem quando o status for 400 (um 404 puro já é confiável sozinho).
-function isInstanceNotFoundResponse(status: number, body: string): boolean {
-  return status === 404 || (status === 400 && /does not exist/i.test(body));
-}
+// isInstanceNotFoundResponse/EvolutionInstanceNotFoundError agora moram em
+// whatsapp.ts (ver comentário grande lá) — sendWhatsappMessage precisava do
+// MESMO critério pra classificar a mesma falha no endpoint de envio, não só
+// aqui (connect/delete). Reexportada acima pra não precisar mudar quem já
+// importa EvolutionInstanceNotFoundError daqui (whatsapp-connection.ts).
 
 function isNameInUseResponse(body: string): boolean {
   return /already in use/i.test(body);
