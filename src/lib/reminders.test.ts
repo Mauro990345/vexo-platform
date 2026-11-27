@@ -46,6 +46,13 @@ function buildAppointment(overrides: Partial<Record<string, unknown>> = {}) {
   return {
     id: "appt-1",
     scheduledAt: new Date(NOW.getTime() + 24 * 60 * 60 * 1000),
+    // Marcado bem antes (dias atrás) por padrão — mais de 24h de
+    // antecedência, pra não disparar sozinha a nova regra de "marcado em
+    // cima da hora" nos testes que não são sobre ela (ver describe
+    // dedicado abaixo). createdAt cai no mesmo valor por padrão porque
+    // scheduleConfirmedAt só existe a partir desta mudança.
+    scheduleConfirmedAt: new Date(NOW.getTime() - 5 * 24 * 60 * 60 * 1000),
+    createdAt: new Date(NOW.getTime() - 5 * 24 * 60 * 60 * 1000),
     lead: { id: "lead-1", name: "Maria Lima", phone: "21998223038", igScopedId: "ig-scoped-1" },
     clinic: {
       reminderConfig: null,
@@ -256,5 +263,140 @@ describe("processReminders — lembrete também grava em Message (visível pra I
 
     expect(result.sent).toBe(2);
     expect(messageCreateMock).toHaveBeenCalledTimes(2);
+  });
+});
+
+// Pedido explícito: lembrete mais longo (maior valor configurado) nunca sai
+// quando o lead marcou com 24h ou menos de antecedência — senão ele chega
+// poucas horas depois de marcar, deixando óbvio que é automático.
+describe("processReminders — regra de antecedência (24h ou menos ao marcar)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+    sendInstagramMessageMock.mockResolvedValue({ messageId: "ig-msg-1" });
+    reminderLogCreateMock.mockResolvedValue({});
+    conversationFindFirstMock.mockResolvedValue(null);
+    messageCreateMock.mockResolvedValue({});
+    ensureLeadFirstNameFromInstagramMock.mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("marcado com 18h de antecedência (exemplo do pedido): só o lembrete de 3h sai, nunca o de 12h", async () => {
+    const scheduledAt = new Date(NOW.getTime() + 3 * 60 * 60 * 1000); // bate o gatilho do lembrete de 3h agora
+    const appt = buildAppointment({
+      scheduledAt,
+      scheduleConfirmedAt: new Date(scheduledAt.getTime() - 18 * 60 * 60 * 1000), // marcado 18h antes
+      clinic: {
+        reminderConfig: { firstMessageTemplate: null, secondMessageTemplate: null, hoursBefore: [12, 3] },
+        instagramAccount: { accessTokenEnc: "enc-token", igUserId: "ig-user-1" },
+      },
+    });
+    appointmentFindManyMock.mockResolvedValue([appt]);
+
+    const result = await processReminders();
+
+    expect(result.sent).toBe(1);
+    expect(reminderLogCreateMock).toHaveBeenCalledWith({
+      data: { appointmentId: "appt-1", hoursBefore: 3, channel: "instagram" },
+    });
+  });
+
+  it("marcado com 42h de antecedência (exemplo do pedido): os dois lembretes saem normalmente", async () => {
+    const scheduledAt = new Date(NOW.getTime() + 3 * 60 * 60 * 1000); // bate o gatilho dos dois agora
+    const appt = buildAppointment({
+      scheduledAt,
+      scheduleConfirmedAt: new Date(scheduledAt.getTime() - 42 * 60 * 60 * 1000),
+      clinic: {
+        reminderConfig: { firstMessageTemplate: null, secondMessageTemplate: null, hoursBefore: [12, 3] },
+        instagramAccount: { accessTokenEnc: "enc-token", igUserId: "ig-user-1" },
+      },
+    });
+    appointmentFindManyMock.mockResolvedValue([appt]);
+
+    const result = await processReminders();
+
+    expect(result.sent).toBe(2);
+  });
+
+  it("marcado exatamente com 24h de antecedência: ainda conta como 'curto' — só o lembrete mais curto sai", async () => {
+    const scheduledAt = new Date(NOW.getTime() + 2 * 60 * 60 * 1000);
+    const appt = buildAppointment({
+      scheduledAt,
+      scheduleConfirmedAt: new Date(scheduledAt.getTime() - 24 * 60 * 60 * 1000),
+      clinic: {
+        reminderConfig: { firstMessageTemplate: null, secondMessageTemplate: null, hoursBefore: [12, 3] },
+        instagramAccount: { accessTokenEnc: "enc-token", igUserId: "ig-user-1" },
+      },
+    });
+    appointmentFindManyMock.mockResolvedValue([appt]);
+
+    const result = await processReminders();
+
+    expect(result.sent).toBe(1);
+    expect(reminderLogCreateMock).toHaveBeenCalledWith({
+      data: { appointmentId: "appt-1", hoursBefore: 3, channel: "instagram" },
+    });
+  });
+
+  it("lembrete cujo horário já tinha passado quando o agendamento foi marcado: não sai (mesmo sendo o lembrete curto)", async () => {
+    // Marcado só 2h antes da avaliação: na hora de marcar, o horário do
+    // lembrete de 3h antes já tinha passado (seria antes de marcar).
+    const scheduledAt = new Date(NOW.getTime() + 1 * 60 * 60 * 1000); // avaliação em 1h
+    const appt = buildAppointment({
+      scheduledAt,
+      scheduleConfirmedAt: new Date(scheduledAt.getTime() - 2 * 60 * 60 * 1000), // marcado 2h antes
+      clinic: {
+        reminderConfig: { firstMessageTemplate: null, secondMessageTemplate: null, hoursBefore: [12, 3] },
+        instagramAccount: { accessTokenEnc: "enc-token", igUserId: "ig-user-1" },
+      },
+    });
+    appointmentFindManyMock.mockResolvedValue([appt]);
+
+    const result = await processReminders();
+
+    expect(result.sent).toBe(0);
+    expect(sendInstagramMessageMock).not.toHaveBeenCalled();
+  });
+
+  it("sem scheduleConfirmedAt (agendamento antigo): usa createdAt como aproximação", async () => {
+    const scheduledAt = new Date(NOW.getTime() + 3 * 60 * 60 * 1000); // bate o gatilho do lembrete de 3h agora
+    const appt = buildAppointment({
+      scheduledAt,
+      scheduleConfirmedAt: null,
+      createdAt: new Date(scheduledAt.getTime() - 18 * 60 * 60 * 1000),
+      clinic: {
+        reminderConfig: { firstMessageTemplate: null, secondMessageTemplate: null, hoursBefore: [12, 3] },
+        instagramAccount: { accessTokenEnc: "enc-token", igUserId: "ig-user-1" },
+      },
+    });
+    appointmentFindManyMock.mockResolvedValue([appt]);
+
+    const result = await processReminders();
+
+    expect(result.sent).toBe(1);
+    expect(reminderLogCreateMock).toHaveBeenCalledWith({
+      data: { appointmentId: "appt-1", hoursBefore: 3, channel: "instagram" },
+    });
+  });
+
+  it("só um lembrete configurado: a regra de 24h não se aplica (nada pra 'só mandar o mais curto')", async () => {
+    const scheduledAt = new Date(NOW.getTime() + 3 * 60 * 60 * 1000); // bate o gatilho do lembrete de 3h agora
+    const appt = buildAppointment({
+      scheduledAt,
+      scheduleConfirmedAt: new Date(scheduledAt.getTime() - 10 * 60 * 60 * 1000), // marcado 10h antes
+      clinic: {
+        reminderConfig: { firstMessageTemplate: null, secondMessageTemplate: null, hoursBefore: [3] },
+        instagramAccount: { accessTokenEnc: "enc-token", igUserId: "ig-user-1" },
+      },
+    });
+    appointmentFindManyMock.mockResolvedValue([appt]);
+
+    const result = await processReminders();
+
+    expect(result.sent).toBe(1);
   });
 });

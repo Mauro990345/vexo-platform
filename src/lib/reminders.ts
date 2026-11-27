@@ -48,6 +48,17 @@ export async function processReminders(): Promise<{ sent: number }> {
     if (!appt.lead) continue; // defesa a mais — já filtrado no where acima
     const hoursBeforeList = appt.clinic.reminderConfig?.hoursBefore ?? [24, 3];
 
+    // Pedido explícito: o lembrete mais longo (ex.: 12h ou 24h antes, o
+    // maior valor configurado) não pode chegar poucas horas depois de o
+    // lead marcar — isso deixa óbvio que é automático. confirmedAt é o
+    // instante da confirmação de horário mais recente (novo agendamento OU
+    // remarcação — ver scheduleConfirmedAt no schema); agendamentos
+    // antigos sem esse campo caem pra createdAt.
+    const confirmedAt = appt.scheduleConfirmedAt ?? appt.createdAt;
+    const advanceMs = appt.scheduledAt.getTime() - confirmedAt.getTime();
+    const ADVANCE_CUTOFF_MS = 24 * 60 * 60 * 1000;
+    const longestHoursBefore = hoursBeforeList.length > 1 ? Math.max(...hoursBeforeList) : null;
+
     // Resolvido no máximo UMA VEZ por agendamento (não por lembrete — 1º e
     // 2º lembrete são do MESMO agendamento, mesmo nome, mesma data),
     // preguiçosamente (só quando um lembrete realmente vai ser enviado
@@ -57,7 +68,16 @@ export async function processReminders(): Promise<{ sent: number }> {
     let primeiroNome: string | null | undefined;
 
     for (const [index, hoursBefore] of hoursBeforeList.entries()) {
+      // Marcado com 24h ou menos de antecedência: o lembrete mais longo
+      // (maior valor configurado) nunca sai, só o(s) mais curto(s) — regra
+      // de produto explícita, independente de o horário dele já ter
+      // passado ou não.
+      if (longestHoursBefore !== null && hoursBefore === longestHoursBefore && advanceMs <= ADVANCE_CUTOFF_MS) continue;
+
       const triggerAt = new Date(appt.scheduledAt.getTime() - hoursBefore * 60 * 60 * 1000);
+      // Horário deste lembrete já tinha passado no momento em que o
+      // agendamento foi confirmado — nunca manda um lembrete "atrasado".
+      if (triggerAt <= confirmedAt) continue;
       if (now < triggerAt) continue; // ainda não chegou a hora deste lembrete
       if (now >= appt.scheduledAt) continue; // já passou do horário do agendamento
 

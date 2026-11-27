@@ -2235,6 +2235,7 @@ export async function handleInboundInstagramMessage(
                   // ela sozinha impede a sequência de disparar de novo,
                   // então não precisa condicionar esta escrita a ela.
                   attendancePromptSentAt: new Date(),
+                  scheduleConfirmedAt: new Date(),
                 },
               });
             }
@@ -2258,6 +2259,7 @@ export async function handleInboundInstagramMessage(
                 googleEventId,
                 status: "SCHEDULED",
                 attendancePromptSentAt: new Date(),
+                scheduleConfirmedAt: new Date(),
               },
             });
           }
