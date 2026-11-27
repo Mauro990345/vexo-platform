@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { parseBrazilLocalDateTime } from "@/lib/timezone";
 
 // Mocks minimalistas — mesmo padrão de dispatch.test.ts: só as peças que
 // processReminders realmente usa recebem implementação de verdade.
@@ -398,5 +399,130 @@ describe("processReminders — regra de antecedência (24h ou menos ao marcar)",
     const result = await processReminders();
 
     expect(result.sent).toBe(1);
+  });
+});
+
+// Pedido explícito: lembrete nunca de madrugada — se cair antes das 7h de
+// Brasília, empurra pras 7h; se depois disso sobrar menos de 2h até a
+// avaliação, não envia. Mesmos três exemplos do pedido do usuário.
+describe("processReminders — nunca antes das 7h de Brasília", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.useFakeTimers();
+    sendInstagramMessageMock.mockResolvedValue({ messageId: "ig-msg-1" });
+    reminderLogCreateMock.mockResolvedValue({});
+    conversationFindFirstMock.mockResolvedValue(null);
+    messageCreateMock.mockResolvedValue({});
+    ensureLeadFirstNameFromInstagramMock.mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("exemplo 1: marcou às 15h pra amanhã às 9h (18h) — o lembrete de 3h cairia às 6h, sai às 7h (2h antes)", async () => {
+    const scheduledAt = parseBrazilLocalDateTime("2026-10-10T09:00");
+    const confirmedAt = parseBrazilLocalDateTime("2026-10-09T15:00");
+    const appt = buildAppointment({
+      scheduledAt,
+      scheduleConfirmedAt: confirmedAt,
+      clinic: {
+        reminderConfig: { firstMessageTemplate: null, secondMessageTemplate: null, hoursBefore: [12, 3] },
+        instagramAccount: { accessTokenEnc: "enc-token", igUserId: "ig-user-1" },
+      },
+    });
+    appointmentFindManyMock.mockResolvedValue([appt]);
+
+    // Ainda não deu 7h — não sai às 6h (hora "crua" do lembrete).
+    vi.setSystemTime(parseBrazilLocalDateTime("2026-10-10T06:00"));
+    expect((await processReminders()).sent).toBe(0);
+
+    // Deu 7h — sai agora, empurrado.
+    vi.setSystemTime(parseBrazilLocalDateTime("2026-10-10T07:00"));
+    const result = await processReminders();
+    expect(result.sent).toBe(1);
+    expect(reminderLogCreateMock).toHaveBeenCalledWith({
+      data: { appointmentId: "appt-1", hoursBefore: 3, channel: "instagram" },
+    });
+  });
+
+  it("exemplo 2: marcou às 15h pra amanhã às 8h — o lembrete de 3h cairia às 5h, empurraria pras 7h, mas sobraria só 1h: não envia", async () => {
+    const scheduledAt = parseBrazilLocalDateTime("2026-10-10T08:00");
+    const confirmedAt = parseBrazilLocalDateTime("2026-10-09T15:00");
+    const appt = buildAppointment({
+      scheduledAt,
+      scheduleConfirmedAt: confirmedAt,
+      clinic: {
+        reminderConfig: { firstMessageTemplate: null, secondMessageTemplate: null, hoursBefore: [12, 3] },
+        instagramAccount: { accessTokenEnc: "enc-token", igUserId: "ig-user-1" },
+      },
+    });
+    appointmentFindManyMock.mockResolvedValue([appt]);
+
+    vi.setSystemTime(parseBrazilLocalDateTime("2026-10-10T07:00"));
+    expect((await processReminders()).sent).toBe(0);
+
+    // Nem em nenhum outro momento antes da avaliação.
+    vi.setSystemTime(parseBrazilLocalDateTime("2026-10-10T07:59"));
+    expect((await processReminders()).sent).toBe(0);
+    expect(sendInstagramMessageMock).not.toHaveBeenCalled();
+  });
+
+  it("exemplo 3: marcou às 15h pra depois de amanhã às 9h (42h) — os dois saem; 12h às 21h do dia anterior (sem empurrar), 3h empurrado pras 7h", async () => {
+    const scheduledAt = parseBrazilLocalDateTime("2026-10-11T09:00");
+    const confirmedAt = parseBrazilLocalDateTime("2026-10-09T15:00");
+    const appt = buildAppointment({
+      scheduledAt,
+      scheduleConfirmedAt: confirmedAt,
+      clinic: {
+        reminderConfig: { firstMessageTemplate: null, secondMessageTemplate: null, hoursBefore: [12, 3] },
+        instagramAccount: { accessTokenEnc: "enc-token", igUserId: "ig-user-1" },
+      },
+    });
+    appointmentFindManyMock.mockResolvedValue([appt]);
+
+    // 21h do dia anterior: horário do 1º lembrete (12h antes), já não é
+    // madrugada, não precisa empurrar.
+    vi.setSystemTime(parseBrazilLocalDateTime("2026-10-10T21:00"));
+    expect((await processReminders()).sent).toBe(1);
+    expect(reminderLogCreateMock).toHaveBeenCalledWith({
+      data: { appointmentId: "appt-1", hoursBefore: 12, channel: "instagram" },
+    });
+
+    // Simula o 1º lembrete já registrado (ReminderLog real, não mockado,
+    // teria essa linha) antes do 2º ciclo — senão o mock devolveria o mesmo
+    // agendamento "virgem" e o 12h sairia de novo.
+    appointmentFindManyMock.mockResolvedValue([{ ...appt, reminderLogs: [{ hoursBefore: 12 }] }]);
+
+    // 7h do dia da avaliação: horário do 2º lembrete (3h antes, cairia às
+    // 6h) empurrado pras 7h.
+    vi.setSystemTime(parseBrazilLocalDateTime("2026-10-11T07:00"));
+    const result = await processReminders();
+    expect(result.sent).toBe(1);
+    expect(reminderLogCreateMock).toHaveBeenCalledWith({
+      data: { appointmentId: "appt-1", hoursBefore: 3, channel: "instagram" },
+    });
+  });
+
+  it("lembrete que já cai às 7h ou depois: não é afetado (continua saindo no horário exato)", async () => {
+    const scheduledAt = parseBrazilLocalDateTime("2026-10-10T20:00");
+    const confirmedAt = parseBrazilLocalDateTime("2026-10-09T15:00"); // >24h de antecedência
+    const appt = buildAppointment({
+      scheduledAt,
+      scheduleConfirmedAt: confirmedAt,
+      clinic: {
+        reminderConfig: { firstMessageTemplate: null, secondMessageTemplate: null, hoursBefore: [12, 3] },
+        instagramAccount: { accessTokenEnc: "enc-token", igUserId: "ig-user-1" },
+      },
+    });
+    appointmentFindManyMock.mockResolvedValue([appt]);
+
+    // 12h antes de 20h = 8h, já depois das 7h — sai no horário exato.
+    vi.setSystemTime(parseBrazilLocalDateTime("2026-10-10T08:00"));
+    const result = await processReminders();
+    expect(result.sent).toBe(1);
+    expect(reminderLogCreateMock).toHaveBeenCalledWith({
+      data: { appointmentId: "appt-1", hoursBefore: 12, channel: "instagram" },
+    });
   });
 });
